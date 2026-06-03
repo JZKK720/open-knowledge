@@ -98,6 +98,52 @@ describe('Guard precision: valid MDX survives protectFromMdx() unchanged', () =>
   });
 });
 
+describe('Guard precision: self-closing canonical media tags are length-independent', () => {
+  const GUARD_OPEN = '';
+  const CANONICAL = ['img', 'video', 'audio'] as const;
+
+  test('long alt does not guard self-closing canonical tags', () => {
+    for (const tag of CANONICAL) {
+      const desc = 'a lone sailboat on calm rippled water under high cirrus '.repeat(16);
+      const mdx = `<${tag} src="m.ext" alt="${desc}" />`;
+      expect(mdx.length).toBeGreaterThan(256);
+      expect(protectFromMdx(mdx)[0]).toBe('<');
+    }
+  });
+
+  test('data-URI src does not guard self-closing <img/>', () => {
+    const mdx = `<img src="data:image/png;base64,${'A'.repeat(2000)}" alt="x" />`;
+    expect(protectFromMdx(mdx)[0]).toBe('<');
+  });
+
+  test('bare void form (no slash) stays guarded regardless of length', () => {
+    const mdx = `<img src="x.png" alt="${'a'.repeat(900)}">`;
+    expect(protectFromMdx(mdx)[0]).toBe(GUARD_OPEN);
+  });
+
+  test('adjacent long self-closing tags each pass through', () => {
+    const alt = 'descriptive caption text '.repeat(20); // ~500 chars each
+    const mdx = `<img src="a.png" alt="${alt}" />\n\n<img src="b.png" alt="${alt}" />`;
+    const out = protectFromMdx(mdx);
+    expect(out[0]).toBe('<'); // first opener not guarded
+    expect(out).not.toContain(GUARD_OPEN); // neither opener guarded
+  });
+
+  test(
+    'PBT: self-closing canonical media tags are never guarded at arbitrary attribute length',
+    () => {
+      fc.assert(
+        fc.property(fc.constantFrom(...CANONICAL), fc.integer({ min: 0, max: 4000 }), (tag, n) => {
+          const mdx = `<${tag} src="x.ext" alt="${'a'.repeat(n)}" />`;
+          expect(protectFromMdx(mdx)[0]).toBe('<');
+        }),
+        { numRuns: NUM_RUNS, seed: 42 },
+      );
+    },
+    TIMEOUT,
+  );
+});
+
 describe('Guard: `<mark>` paired-JSX exemption paths', () => {
   test('paired `<mark>text</mark>` opener is not PUA-protected', () => {
     const protected_ = protectFromMdx('<mark>text</mark>');

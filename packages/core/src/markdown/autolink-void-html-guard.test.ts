@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
 import { sharedExtensions } from '../extensions/shared.ts';
 import { MarkdownManager } from './index.ts';
 
@@ -6,6 +7,17 @@ const mdManager = new MarkdownManager({ extensions: sharedExtensions });
 
 function roundTrip(md: string): string {
   return mdManager.serialize(mdManager.parse(md));
+}
+
+function collectText(node: JSONContent): string {
+  let out = node.type === 'text' && typeof node.text === 'string' ? node.text : '';
+  for (const child of node.content ?? []) out += collectText(child);
+  return out;
+}
+
+function renderedAsLiteralText(md: string): boolean {
+  const text = collectText(mdManager.parse(md));
+  return text.includes('<img') || text.includes('<video') || text.includes('<audio');
 }
 
 describe('R23: autolink regression fix', () => {
@@ -41,6 +53,47 @@ describe('R23: void HTML regression fix', () => {
 
   test('<br/> self-closing parses without error', () => {
     expect(() => mdManager.parse('Line<br/>break.\n')).not.toThrow();
+  });
+});
+
+describe('R23: self-closing media tags render at any length', () => {
+  const longAlt = 'a lone sailboat on calm rippled water under high cirrus clouds '.repeat(6);
+
+  test('long-alt <img/> is not literal text', () => {
+    const md = `<img src="./photo.jpg" alt="${longAlt}" width="320" />\n`;
+    expect(md.length).toBeGreaterThan(256);
+    expect(renderedAsLiteralText(md)).toBe(false);
+  });
+
+  test('data-URI <img/> is not literal text', () => {
+    expect(
+      renderedAsLiteralText(`<img src="data:image/png;base64,${'A'.repeat(800)}" alt="x" />\n`),
+    ).toBe(false);
+  });
+
+  test('long <video/> and <audio/> are not literal text', () => {
+    expect(renderedAsLiteralText(`<video src="v.mp4" controls aria-label="${longAlt}" />\n`)).toBe(
+      false,
+    );
+    expect(renderedAsLiteralText(`<audio src="a.mp3" controls aria-label="${longAlt}" />\n`)).toBe(
+      false,
+    );
+  });
+
+  test('bare void <img> (no slash) stays literal text regardless of length', () => {
+    expect(renderedAsLiteralText(`<img src="x.png" alt="${longAlt}">\n`)).toBe(true);
+  });
+
+  test('two long self-closing <img/> separated by a caption both render', () => {
+    const md = `## Photos\n\n<img src="./a.jpg" alt="${longAlt}" width="320" />\n\n*caption*\n\n<img src="./b.jpg" alt="${longAlt}" width="480" />\n`;
+    expect(renderedAsLiteralText(md)).toBe(false);
+  });
+
+  test('long self-closing <img/> round-trips with src and alt intact', () => {
+    const md = `<img src="./photo.jpg" alt="${longAlt}" width="320" />\n`;
+    const out = roundTrip(md);
+    expect(out).toContain('./photo.jpg');
+    expect(out).toContain('high cirrus');
   });
 });
 

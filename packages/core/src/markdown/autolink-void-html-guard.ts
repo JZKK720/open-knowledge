@@ -66,6 +66,31 @@ function indexSelfClose(source: string): number[] {
   return positions;
 }
 
+function indexGreaterThan(source: string): number[] {
+  const positions: number[] = [];
+  let i = source.indexOf('>');
+  while (i !== -1) {
+    positions.push(i);
+    i = source.indexOf('>', i + 1);
+  }
+  return positions;
+}
+
+function isSelfClosingTagAt(
+  offset: number,
+  result: string,
+  greaterThanOffsets: number[],
+  paragraphBreaks: number[],
+): boolean {
+  const gtIdx = lowerBound(greaterThanOffsets, offset);
+  if (gtIdx >= greaterThanOffsets.length) return false;
+  const tagClose = greaterThanOffsets[gtIdx];
+  const pbIdx = lowerBound(paragraphBreaks, offset);
+  const nextBlankLine = pbIdx < paragraphBreaks.length ? paragraphBreaks[pbIdx] : result.length;
+  if (tagClose >= nextBlankLine) return false; // tag never closes before a blank line
+  return result[tagClose - 1] === '/';
+}
+
 export function protectFromMdx(source: string): string {
   let result = source;
 
@@ -101,6 +126,7 @@ export function protectFromMdx(source: string): string {
   const closeTagOffsets = indexUppercaseCloseTagsByName(result);
   const paragraphBreaks = indexParagraphBreaks(result);
   const selfCloseOffsets = indexSelfClose(result);
+  const greaterThanOffsets = indexGreaterThan(result);
 
   result = result.replace(/</g, (match, offset) => {
     const lookahead = result.slice(offset, offset + 256);
@@ -110,8 +136,12 @@ export function protectFromMdx(source: string): string {
       return GUARD_OPEN; // Incomplete close tag — protect
     }
 
-    const lowercaseCanonicalMatch = /^<([a-z][a-z0-9]*)([^>]*)\/>/.exec(lookahead);
-    if (lowercaseCanonicalMatch && LOWERCASE_JSX_CANONICAL_TAGS.has(lowercaseCanonicalMatch[1])) {
+    const lowercaseNameMatch = /^<([a-z][a-z0-9]*)/.exec(lookahead);
+    if (
+      lowercaseNameMatch &&
+      LOWERCASE_JSX_CANONICAL_TAGS.has(lowercaseNameMatch[1]) &&
+      isSelfClosingTagAt(offset, result, greaterThanOffsets, paragraphBreaks)
+    ) {
       return match;
     }
 
