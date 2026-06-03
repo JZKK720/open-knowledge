@@ -1,0 +1,183 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+  "plugins": [
+    "./biome-plugins/microcopy-ellipsis.grit",
+    "./biome-plugins/no-loosely-typed-webcontents-ipc.grit",
+    "./biome-plugins/no-resolved-value-theme-source.grit",
+    "./biome-plugins/no-unportaled-editor-content.grit"
+  ],
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noReactForwardRef": "error"
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "react": {
+                "importNames": ["useCallback", "useMemo", "memo"],
+                "message": "The highlighted React API is flagged.\nWe use the React Compiler, which automatically memoizes where needed.\nIn 99% of cases, manual memoization is unnecessary."
+              }
+            },
+            "patterns": [
+              {
+                "group": "react",
+                "importNamePattern": "useContext",
+                "message": "Use the `use()` hook instead."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Apple-Event / IPC roundtrip toPass budget enforcement is scoped to
+      // the desktop-smoke files (and the plugin's own fixture for testing).
+      // packages/app's *.e2e.ts files drive Chromium in-process, NOT macOS
+      // `open(1)` Apple-Event dispatch, so their sub-15s toPass budgets are
+      // legitimate (fast in-process roundtrip, no Launch Services latency).
+      // Pairs with `tests/smoke/calibration.test.ts` Invariant B, which is
+      // scoped to the same surface via `TOPASS_BUDGET_FILES`.
+      "includes": [
+        "packages/desktop/tests/smoke/deep-link.e2e.ts",
+        "packages/desktop/tests/smoke/external-link.e2e.ts",
+        "biome-plugins/__fixtures__/playwright-topass-budget.fixture.tsx"
+      ],
+      "plugins": ["./biome-plugins/playwright-topass-budget.grit"]
+    },
+    {
+      // UI primitives discipline (see PR #937 retrospective). Scoped to
+      // packages/{app,desktop,plugin}/src/**/*.tsx — production UI surfaces.
+      // Exemptions:
+      //  - packages/app/src/editor/** — ProseMirror NodeViews + chrome legitimately
+      //    render raw HTML for measurement / PM-managed DOM (matches the existing
+      //    a11y/useSemanticElements suppressions in editor/*).
+      //  - packages/app/src/components/ui/** — these ARE the shadcn primitive
+      //    wrappers; they must render raw HTML by definition.
+      //  - *.test.tsx / *.dom.test.tsx — test fixtures aren't user-facing UI.
+      // Pre-rule backlog (files outside the exemptions that pre-date the rule)
+      // is annotated via `// biome-ignore-all lint/plugin/no-raw-html-interactive-element:`
+      // at the top of each offender file — the comment list is the visible
+      // migration backlog. New files cannot opt out: PR review treats the
+      // suppression header as a backlog marker, not a free pass.
+      "includes": [
+        "packages/app/src/**/*.tsx",
+        "packages/desktop/src/**/*.tsx",
+        "packages/plugin/src/**/*.tsx",
+        "!packages/app/src/editor/**",
+        "!packages/app/src/components/ui/**",
+        "!**/*.test.tsx",
+        "!**/*.dom.test.tsx",
+        "biome-plugins/__fixtures__/no-raw-html-interactive-element.fixture.tsx"
+      ],
+      "plugins": ["./biome-plugins/no-raw-html-interactive-element.grit"]
+    },
+    {
+      // Internal developer tooling for the static-string audit. Uses ts-morph's
+      // untyped node accessors, embeds `${...}` placeholder literals, and a few
+      // safe non-null assertions — none of which affect production code.
+      "includes": ["packages/app/scripts/audit-strings/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noTemplateCurlyInString": "off",
+            "noAssignInExpressions": "off",
+            "noShadowRestrictedNames": "off"
+          },
+          "style": {
+            "noNonNullAssertion": "off"
+          },
+          "complexity": {
+            "noUselessSwitchCase": "off"
+          },
+          "correctness": {
+            "noUnusedFunctionParameters": "off"
+          }
+        }
+      }
+    },
+    {
+      // lume-qa is a macOS-VM E2E test harness (Electron CDP + AX driver).
+      // It deliberately uses post-guard non-null assertions — e.g.
+      // `scenario.verification!.rungs!` after a `hasRungs` predicate, and
+      // `app.axBundleId!` after `getAxApp()` has already validated the field —
+      // because the guards live one call-frame up and the compiler can't see
+      // through them. It also assembles shell-command strings via `+`
+      // concatenation in a few spots where a template literal reads no better.
+      // These are test-harness style allowances, not production code; the
+      // assertions encode invariants the surrounding guards enforce, so
+      // stripping the `!` (or rewriting to `?.`) would change semantics.
+      // Correctness rules (e.g. noUnusedVariables) stay ON for this tree.
+      "includes": ["packages/desktop/tests/lume-qa/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off",
+            "useTemplate": "off"
+          }
+        }
+      }
+    }
+  ],
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/.next",
+      "!**/.source",
+      "!**/.turbo",
+      "!**/tmp",
+      "!**/test-results",
+      "!**/playwright-report",
+      "!**/next-env.d.ts",
+      "!.claude",
+      // .agents/skills, .codex/skills under public/open-knowledge/
+      // are real dirs of per-skill symlinks back to the repo-root canonical
+      // at ../../../.agents/skills/<skill>. Without these excludes biome
+      // traverses through the symlinks and lints files outside this subtree's
+      // scope (including team-skills sources whose syntax is owned by
+      // upstream). Skill formatting is owned by cross-harness-skills-sync.
+      "!.agents/skills",
+      "!.codex/skills",
+      "!.bun",
+      "!specs",
+      "!reports",
+      "!evidence",
+      "!meta",
+      "!docs/bun.lock",
+      "!worktrees",
+      "!**/rehype-plugins/fixtures",
+      "!**/tests/perf/results",
+      "!**/tests/perf/playwright-results",
+      "!packages/desktop/out",
+      "!packages/desktop/dist-desktop",
+      "!packages/app/src/locales/**/messages.ts"
+    ]
+  }
+}

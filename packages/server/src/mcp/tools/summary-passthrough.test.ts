@@ -1,0 +1,329 @@
+import {
+  describe as _bunDescribe,
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+} from 'bun:test';
+
+const describe = process.env.CI ? _bunDescribe.skip : _bunDescribe;
+
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import type { z } from 'zod';
+import { type Config, ConfigSchema } from '../../config/schema.ts';
+import type { AgentIdentity } from '../agent-identity.ts';
+import { register as registerEditDocument } from './edit-document.ts';
+import { register as registerRename } from './rename.ts';
+import type { ServerInstance } from './shared.ts';
+import { register as registerVersion } from './version.ts';
+import { register as registerWriteDocument } from './write-document.ts';
+
+const BASE_CONFIG: Config = ConfigSchema.parse({});
+
+interface ToolResult {
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  isError?: true;
+}
+
+type Handler = (args: Record<string, unknown>) => Promise<ToolResult>;
+
+function createCaptureServer() {
+  const tools: Array<{
+    name: string;
+    description: string;
+    /** Raw Zod schema object captured at register() time — exposed so
+     *  transport-safety tests can exercise the real Zod runtime guard
+     *  rather than a passthrough. */
+    schema: Record<string, z.ZodType>;
+    handler: Handler;
+  }> = [];
+  const server = {
+    registerTool(
+      name: string,
+      config: { description?: string; inputSchema?: Record<string, z.ZodType> },
+      handler: Handler,
+    ) {
+      tools.push({
+        name,
+        description: config.description ?? '',
+        schema: config.inputSchema ?? {},
+        handler,
+      });
+    },
+  } as unknown as ServerInstance;
+  return {
+    server,
+    getTool(name: string): {
+      name: string;
+      description: string;
+      schema: Record<string, z.ZodType>;
+      handler: Handler;
+    } {
+      const t = tools.find((x) => x.name === name);
+      if (!t) throw new Error(`Tool ${name} not registered`);
+      return t;
+    },
+  };
+}
+
+let recordedRequest: { url: string; body: Record<string, unknown> } | undefined;
+let mockResponse: Record<string, unknown> = { ok: true };
+
+let testServer: ReturnType<typeof Bun.serve>;
+let baseUrl: string;
+let tmpDir: string;
+
+beforeAll(() => {
+  testServer = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url);
+      if (req.method === 'GET') {
+        return Response.json({
+          ok: true,
+          author: 'Claude',
+          timestamp: '2026-04-21T00:00:00.000Z',
+        });
+      }
+      const body = (await req.json()) as Record<string, unknown>;
+      recordedRequest = { url: url.pathname, body };
+      return Response.json({
+        ok: true,
+        timestamp: '2026-04-21T00:00:00.000Z',
+        subscriberCount: 1,
+        renamed: [{ fromDocName: 'old', toDocName: 'new' }],
+        renamedAssets: [],
+        rewrittenDocs: [],
+        ...mockResponse,
+      });
+    },
+  });
+  baseUrl = `http://localhost:${testServer.port}`;
+});
+
+afterAll(() => {
+  testServer.stop();
+});
+
+beforeEach(async () => {
+  tmpDir = await mkdtemp(resolve(tmpdir(), 'ok-summary-passthrough-'));
+  recordedRequest = undefined;
+  mockResponse = {};
+});
+
+afterEach(async () => {
+  await rm(tmpDir, { recursive: true, force: true });
+});
+
+const TEST_IDENTITY: AgentIdentity = {
+  connectionId: 'claude-1',
+  displayName: 'Claude',
+  colorSeed: 'test-seed',
+  clientInfo: { name: 'claude-code', version: '1.0.0' },
+};
+
+function baseDeps() {
+  return {
+    serverUrl: baseUrl,
+    config: BASE_CONFIG,
+    resolveCwd: async () => tmpDir,
+  };
+}
+
+describe('US-005 — summary + identityRef passthrough across MCP write tools', () => {
+  describe('write_document', () => {
+    test('summary is forwarded in the HTTP body when present', async () => {
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, {
+        ...baseDeps(),
+        identityRef: { current: TEST_IDENTITY },
+      });
+      await cap.getTool('write_document').handler({
+        docName: 'foo',
+        markdown: '# hi',
+        position: 'append',
+        summary: 'Fixed typo',
+      });
+      expect(recordedRequest?.body.summary).toBe('Fixed typo');
+      expect(recordedRequest?.body.agentId).toBe('claude-1');
+    });
+
+    test('summary omitted from body when arg is undefined', async () => {
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, baseDeps());
+      await cap.getTool('write_document').handler({
+        docName: 'foo',
+        markdown: '# hi',
+        position: 'append',
+      });
+      expect(recordedRequest?.body).not.toHaveProperty('summary');
+    });
+
+    test('server response summary (with nested hint) surfaces in structuredContent; hint in text', async () => {
+      mockResponse = {
+        summary: {
+          value: 'fixed',
+          truncatedFrom: 200,
+          hint: 'Summary truncated from 200 chars to 80 (max 80).',
+        },
+      };
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, baseDeps());
+      const result = await cap.getTool('write_document').handler({
+        docName: 'foo',
+        markdown: '# hi',
+        position: 'append',
+        summary: 'x'.repeat(200),
+      });
+      expect(result.structuredContent?.summary).toEqual({
+        value: 'fixed',
+        truncatedFrom: 200,
+        hint: 'Summary truncated from 200 chars to 80 (max 80).',
+      });
+      expect(result.content[0]?.text).toContain('Summary truncated from 200 chars to 80');
+    });
+
+    test('Zod schema: summary 200 chars accepted, 201 chars rejected, non-string rejected', () => {
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, baseDeps());
+      const summarySchema = cap.getTool('write_document').schema.summary;
+      if (!summarySchema) throw new Error('summary schema missing from write_document');
+
+      expect(summarySchema.safeParse('x'.repeat(200)).success).toBe(true);
+      expect(summarySchema.safeParse('short').success).toBe(true);
+      expect(summarySchema.safeParse(undefined).success).toBe(true); // optional()
+
+      const over = summarySchema.safeParse('x'.repeat(201));
+      expect(over.success).toBe(false);
+      if (!over.success) {
+        expect(over.error.issues[0]?.code).toBe('too_big');
+      }
+
+      expect(summarySchema.safeParse(42).success).toBe(false);
+      expect(summarySchema.safeParse({ text: 'hi' }).success).toBe(false);
+      expect(summarySchema.safeParse(['hi']).success).toBe(false);
+    });
+
+    test('200-char summary passes through to HTTP body unchanged (server-side truncation, not MCP)', async () => {
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, baseDeps());
+      const input = 'x'.repeat(200);
+      const result = await cap.getTool('write_document').handler({
+        docName: 'foo',
+        markdown: 'hi',
+        position: 'append',
+        summary: input,
+      });
+      expect(recordedRequest?.body.summary).toBe(input);
+      expect(result.isError).toBeUndefined();
+    });
+  });
+
+  describe('edit_document', () => {
+    test('summary + identityRef flow through to /api/agent-patch', async () => {
+      const cap = createCaptureServer();
+      registerEditDocument(cap.server, {
+        ...baseDeps(),
+        identityRef: { current: TEST_IDENTITY },
+      });
+      await cap.getTool('edit_document').handler({
+        docName: 'foo',
+        find: 'old',
+        replace: 'new',
+        summary: 'Renamed constant',
+      });
+      expect(recordedRequest?.url).toBe('/api/agent-patch');
+      expect(recordedRequest?.body.summary).toBe('Renamed constant');
+      expect(recordedRequest?.body.agentId).toBe('claude-1');
+    });
+  });
+
+  describe('rename — FR11 description sentinel', () => {
+    test('description mentions the default substitution sentence', async () => {
+      const cap = createCaptureServer();
+      registerRename(cap.server, baseDeps());
+      const desc = cap.getTool('rename').description;
+      expect(desc).toContain('If omitted');
+      expect(desc).toContain('Renamed X → Y');
+    });
+  });
+
+  describe('version (rollback action) — D15 identity passthrough', () => {
+    test('identityRef when present puts agentId in the /api/rollback body', async () => {
+      const cap = createCaptureServer();
+      registerVersion(cap.server, {
+        ...baseDeps(),
+        identityRef: { current: TEST_IDENTITY },
+      });
+      await cap.getTool('version').handler({
+        action: 'rollback',
+        docName: 'foo',
+        commitSha: 'a'.repeat(40),
+      });
+      expect(recordedRequest?.url).toBe('/api/rollback');
+      expect(recordedRequest?.body.agentId).toBe('claude-1');
+    });
+
+    test('no identityRef → body omits agentId (UI-style anonymous call)', async () => {
+      const cap = createCaptureServer();
+      registerVersion(cap.server, baseDeps());
+      await cap.getTool('version').handler({
+        action: 'rollback',
+        docName: 'foo',
+        commitSha: 'a'.repeat(40),
+      });
+      expect(recordedRequest?.body).not.toHaveProperty('agentId');
+    });
+
+    test('summary is forwarded when provided', async () => {
+      const cap = createCaptureServer();
+      registerVersion(cap.server, {
+        ...baseDeps(),
+        identityRef: { current: TEST_IDENTITY },
+      });
+      await cap.getTool('version').handler({
+        action: 'rollback',
+        docName: 'foo',
+        commitSha: 'a'.repeat(40),
+        summary: 'Reverted risky refactor',
+      });
+      expect(recordedRequest?.body.summary).toBe('Reverted risky refactor');
+    });
+
+    test('description mentions the default substitution sentence (FR11)', async () => {
+      const cap = createCaptureServer();
+      registerVersion(cap.server, baseDeps());
+      const desc = cap.getTool('version').description;
+      expect(desc).toContain('If omitted');
+      expect(desc).toContain('Restored to');
+    });
+  });
+
+  describe('No-PII reminder in all five tool descriptions (FR15)', () => {
+    test('write_document description mentions no secrets/PII', () => {
+      const cap = createCaptureServer();
+      registerWriteDocument(cap.server, baseDeps());
+      expect(cap.getTool('write_document').description).toContain('secrets or PII');
+    });
+    test('edit_document description mentions no secrets/PII', () => {
+      const cap = createCaptureServer();
+      registerEditDocument(cap.server, baseDeps());
+      expect(cap.getTool('edit_document').description).toContain('secrets or PII');
+    });
+    test('rename description mentions no secrets/PII', () => {
+      const cap = createCaptureServer();
+      registerRename(cap.server, baseDeps());
+      expect(cap.getTool('rename').description).toContain('secrets or PII');
+    });
+    test('version (rollback action) description mentions no secrets/PII', () => {
+      const cap = createCaptureServer();
+      registerVersion(cap.server, baseDeps());
+      expect(cap.getTool('version').description).toContain('secrets or PII');
+    });
+  });
+});

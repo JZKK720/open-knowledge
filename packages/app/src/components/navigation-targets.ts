@@ -1,0 +1,220 @@
+import {
+  DOCUMENT_OPEN_BYTE_LIMIT,
+  type InlineAssetMediaKind,
+  isDocumentOverOpenByteLimit,
+  toWikiLinkSlug,
+} from '@inkeep/open-knowledge-core';
+import { normalizeDocNameInput } from '@/lib/doc-paths';
+import { computeAncestors } from './file-tree-utils';
+
+export type ResolvedNavigationTarget =
+  | {
+      kind: 'doc';
+      target: string;
+      docName: string;
+    }
+  | {
+      kind: 'folder-index';
+      target: string;
+      folderPath: string;
+      docName: string;
+      noteKind: 'canonical-index' | 'legacy-folder-note';
+    }
+  | {
+      kind: 'folder';
+      target: string;
+      folderPath: string;
+    }
+  | {
+      kind: 'asset';
+      target: string;
+      assetPath: string;
+      mediaKind: InlineAssetMediaKind | null;
+    }
+  | {
+      kind: 'large-file';
+      target: string;
+      docName: string;
+      size: number;
+      limit: number;
+    }
+  | {
+      kind: 'missing';
+      target: string;
+    };
+
+interface DocumentSizeMeta {
+  size?: number;
+}
+
+function normalizeTargetPath(target: string): { normalizedTarget: string; expectsFolder: boolean } {
+  const trimmed = target.trim();
+  return {
+    normalizedTarget: normalizeDocNameInput(trimmed).replace(/\/+$/g, ''),
+    expectsFolder: /\/+$/.test(trimmed),
+  };
+}
+
+export function deriveKnownFolderPaths(docNames: Iterable<string>): Set<string> {
+  const folderPaths = new Set<string>();
+  for (const docName of docNames) {
+    for (const ancestor of computeAncestors(docName)) {
+      folderPaths.add(ancestor);
+    }
+  }
+  return folderPaths;
+}
+
+function slugResolve(
+  normalizedTarget: string,
+  pagesBySlug: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  if (!pagesBySlug) return undefined;
+  const slug = toWikiLinkSlug(normalizedTarget);
+  if (!slug) return undefined;
+  return pagesBySlug.get(slug);
+}
+
+function basenameResolve(
+  normalizedTarget: string,
+  pagesByBasename: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  if (!pagesByBasename) return undefined;
+  if (normalizedTarget.includes('/')) return undefined;
+  const slug = toWikiLinkSlug(normalizedTarget);
+  if (!slug) return undefined;
+  return pagesByBasename.get(slug);
+}
+
+export function resolveNavigationTarget(
+  target: string,
+  options: {
+    pages: ReadonlySet<string>;
+    folderPaths?: ReadonlySet<string>;
+    pagesBySlug?: ReadonlyMap<string, string>;
+    pagesByBasename?: ReadonlyMap<string, string>;
+  },
+): ResolvedNavigationTarget {
+  const { normalizedTarget, expectsFolder } = normalizeTargetPath(target);
+  if (!normalizedTarget) {
+    return { kind: 'missing', target: normalizedTarget };
+  }
+
+  if (!expectsFolder && options.pages.has(normalizedTarget)) {
+    return {
+      kind: 'doc',
+      target: normalizedTarget,
+      docName: normalizedTarget,
+    };
+  }
+
+  if (!expectsFolder) {
+    const slugMatchDocName = slugResolve(normalizedTarget, options.pagesBySlug);
+    if (slugMatchDocName) {
+      return {
+        kind: 'doc',
+        target: slugMatchDocName,
+        docName: slugMatchDocName,
+      };
+    }
+  }
+
+  const canonicalIndexDocName = `${normalizedTarget}/index`;
+  if (options.pages.has(canonicalIndexDocName)) {
+    return {
+      kind: 'folder-index',
+      target: normalizedTarget,
+      folderPath: normalizedTarget,
+      docName: canonicalIndexDocName,
+      noteKind: 'canonical-index',
+    };
+  }
+
+  const leaf = normalizedTarget.split('/').pop();
+  const legacyFolderNoteDocName = leaf ? `${normalizedTarget}/${leaf}` : null;
+  if (legacyFolderNoteDocName && options.pages.has(legacyFolderNoteDocName)) {
+    return {
+      kind: 'folder-index',
+      target: normalizedTarget,
+      folderPath: normalizedTarget,
+      docName: legacyFolderNoteDocName,
+      noteKind: 'legacy-folder-note',
+    };
+  }
+
+  if (!expectsFolder) {
+    const basenameMatchDocName = basenameResolve(normalizedTarget, options.pagesByBasename);
+    if (basenameMatchDocName) {
+      return {
+        kind: 'doc',
+        target: basenameMatchDocName,
+        docName: basenameMatchDocName,
+      };
+    }
+  }
+
+  const knownFolderPaths = options.folderPaths ?? deriveKnownFolderPaths(options.pages);
+  if (knownFolderPaths.has(normalizedTarget)) {
+    return {
+      kind: 'folder',
+      target: normalizedTarget,
+      folderPath: normalizedTarget,
+    };
+  }
+
+  return {
+    kind: 'missing',
+    target: normalizedTarget,
+  };
+}
+
+export function downgradeFolderIndexForHashNav(
+  target: ResolvedNavigationTarget,
+): ResolvedNavigationTarget {
+  if (target.kind !== 'folder-index') return target;
+  return {
+    kind: 'folder',
+    target: target.folderPath,
+    folderPath: target.folderPath,
+  };
+}
+
+export function largeFileNavigationTarget(
+  docName: string,
+  size: number | null | undefined,
+  limit = DOCUMENT_OPEN_BYTE_LIMIT,
+): ResolvedNavigationTarget | null {
+  if (typeof size !== 'number' || !isDocumentOverOpenByteLimit(size, limit)) return null;
+  return {
+    kind: 'large-file',
+    target: docName,
+    docName,
+    size,
+    limit,
+  };
+}
+
+export function withLargeFileOpenGuard(
+  target: ResolvedNavigationTarget,
+  pageMeta: ReadonlyMap<string, DocumentSizeMeta>,
+  limit = DOCUMENT_OPEN_BYTE_LIMIT,
+): ResolvedNavigationTarget {
+  if (target.kind !== 'doc' && target.kind !== 'folder-index') return target;
+  return (
+    largeFileNavigationTarget(target.docName, pageMeta.get(target.docName)?.size, limit) ?? target
+  );
+}
+
+export function docNameForNavigationTarget(target: ResolvedNavigationTarget): string | null {
+  switch (target.kind) {
+    case 'doc':
+    case 'folder-index':
+    case 'large-file':
+      return target.docName;
+    case 'missing':
+      return target.target;
+    case 'asset':
+    case 'folder':
+      return null;
+  }
+}

@@ -1,0 +1,150 @@
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import {
+  extractFrontmatterTags,
+  FRONTMATTER_TAG_GRAMMAR_HINT,
+  FRONTMATTER_TAG_VALUE_RE,
+  isValidFrontmatterTagValue,
+} from './tags.ts';
+
+describe('FRONTMATTER_TAG_VALUE_RE', () => {
+  test('accepts shapes the inline promoter accepts', () => {
+    expect(FRONTMATTER_TAG_VALUE_RE.test('typescript')).toBe(true);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('proj/team/2026')).toBe(true);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('a-b_c')).toBe(true);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('a1')).toBe(true);
+  });
+
+  test('rejects digit-leading, empty, and whitespace shapes', () => {
+    expect(FRONTMATTER_TAG_VALUE_RE.test('123')).toBe(false);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('')).toBe(false);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('foo bar')).toBe(false);
+    expect(FRONTMATTER_TAG_VALUE_RE.test('-leading-dash')).toBe(false);
+  });
+});
+
+describe('extractFrontmatterTags', () => {
+  test('returns empty for empty input', () => {
+    expect(extractFrontmatterTags('')).toEqual([]);
+    expect(extractFrontmatterTags('   \n')).toEqual([]);
+  });
+
+  test('returns empty when tags key is absent', () => {
+    expect(extractFrontmatterTags('title: Hello\ncluster: x\n')).toEqual([]);
+  });
+
+  test('extracts a flat list', () => {
+    expect(extractFrontmatterTags('tags: [showcase, demo]\n')).toEqual(['showcase', 'demo']);
+  });
+
+  test('accepts a single scalar string and treats it as a one-element list', () => {
+    expect(extractFrontmatterTags('tags: showcase\n')).toEqual(['showcase']);
+  });
+
+  test('strips a leading # tolerated on Obsidian-emit imports', () => {
+    expect(extractFrontmatterTags('tags: ["#showcase", "#demo"]\n')).toEqual(['showcase', 'demo']);
+  });
+
+  test('preserves hierarchy slashes', () => {
+    expect(extractFrontmatterTags('tags: [proj/team, proj/team/2026]\n')).toEqual([
+      'proj/team',
+      'proj/team/2026',
+    ]);
+  });
+
+  test('drops invalid entries with a warning rather than failing the whole list', () => {
+    const warn = spyOn(console, 'warn').mockImplementation(mock(() => {}));
+    try {
+      const out = extractFrontmatterTags('tags: [valid, "with space", "123digit", another]\n');
+      expect(out).toEqual(['valid', 'another']);
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('coerces non-string scalars and applies the per-entry tag regex', () => {
+    expect(extractFrontmatterTags('tags: [valid, 42, true, also]\n')).toEqual([
+      'valid',
+      'true',
+      'also',
+    ]);
+  });
+
+  test('returns empty when frontmatter parse fails', () => {
+    expect(extractFrontmatterTags(': : : invalid yaml')).toEqual([]);
+  });
+
+  test('returns empty when tags is null', () => {
+    expect(extractFrontmatterTags('tags: null\n')).toEqual([]);
+  });
+});
+
+describe('isValidFrontmatterTagValue', () => {
+  test('accepts every canonical valid shape', () => {
+    for (const value of [
+      'showcase',
+      'demo',
+      'q1-recap',
+      'proj/team',
+      'proj/team/2026',
+      'snake_case',
+      'kebab-case',
+      'Mixed_Case',
+      'a',
+    ]) {
+      expect(isValidFrontmatterTagValue(value)).toBe(true);
+    }
+  });
+
+  test('rejects leading-digit values (year-only tags fail)', () => {
+    expect(isValidFrontmatterTagValue('2026')).toBe(false);
+    expect(isValidFrontmatterTagValue('42')).toBe(false);
+    expect(isValidFrontmatterTagValue('1q-recap')).toBe(false);
+  });
+
+  test('rejects whitespace-containing values', () => {
+    expect(isValidFrontmatterTagValue('hello world')).toBe(false);
+    expect(isValidFrontmatterTagValue(' leading-space')).toBe(false);
+    expect(isValidFrontmatterTagValue('trailing-space ')).toBe(false);
+    expect(isValidFrontmatterTagValue('tab\there')).toBe(false);
+  });
+
+  test('rejects special-char values outside the grammar', () => {
+    expect(isValidFrontmatterTagValue('hello!')).toBe(false);
+    expect(isValidFrontmatterTagValue('foo@bar')).toBe(false);
+    expect(isValidFrontmatterTagValue('a.b')).toBe(false);
+    expect(isValidFrontmatterTagValue('a:b')).toBe(false);
+    expect(isValidFrontmatterTagValue('a+b')).toBe(false);
+  });
+
+  test('rejects empty + non-string values', () => {
+    expect(isValidFrontmatterTagValue('')).toBe(false);
+    // @ts-expect-error — runtime guard against non-string callers
+    expect(isValidFrontmatterTagValue(undefined)).toBe(false);
+    // @ts-expect-error
+    expect(isValidFrontmatterTagValue(null)).toBe(false);
+    // @ts-expect-error
+    expect(isValidFrontmatterTagValue(42)).toBe(false);
+  });
+
+  test('strips a single leading `#` (Obsidian-shape input) before validating', () => {
+    expect(isValidFrontmatterTagValue('#showcase')).toBe(true);
+    expect(isValidFrontmatterTagValue('#proj/team')).toBe(true);
+    expect(isValidFrontmatterTagValue('##showcase')).toBe(false);
+  });
+
+  test('agrees with the FRONTMATTER_TAG_VALUE_RE constant (single source of truth)', () => {
+    for (const value of ['showcase', '2026', 'hello world', '']) {
+      const stripped = value.startsWith('#') ? value.slice(1) : value;
+      expect(isValidFrontmatterTagValue(value)).toBe(FRONTMATTER_TAG_VALUE_RE.test(stripped));
+    }
+  });
+});
+
+describe('FRONTMATTER_TAG_GRAMMAR_HINT', () => {
+  test('is a user-facing string describing the grammar', () => {
+    expect(FRONTMATTER_TAG_GRAMMAR_HINT.length).toBeGreaterThan(0);
+    expect(FRONTMATTER_TAG_GRAMMAR_HINT).toContain('letter');
+    expect(FRONTMATTER_TAG_GRAMMAR_HINT).toContain('digit');
+  });
+});

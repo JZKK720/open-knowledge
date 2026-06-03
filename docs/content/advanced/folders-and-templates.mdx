@@ -1,0 +1,139 @@
+---
+title: Folders and templates
+description: Describe a folder with its own properties, and offer reusable templates that give new documents their starting content and properties.
+---
+
+Folders organize a project the same way they do on your computer: a place to group related docs. Open Knowledge adds two things on top: a folder can **describe itself** (its own properties, exactly like a document's), and it can offer a set of **templates** for new documents.
+
+Click any folder in the sidebar to open its **overview**: a page listing what's inside, plus two cards: **Folder properties** and **Templates available**.
+
+## Properties, in one minute
+
+Every doc can carry a bit of structured information at the top: a `status`, an `owner`, a `tags` list, a date. Open Knowledge calls these its **properties**. In the raw markdown file they live in a `---`-fenced block at the very top, which markdown tools call *frontmatter*; the **Properties** panel in the editor edits them as ordinary form fields, so you never touch that block by hand. See [Editor → Properties](/docs/features/editor#properties) for the basics.
+
+A doc's properties are its own: exactly what's written in that file, nothing injected from elsewhere. The tedious part is setting the same starting properties on every new doc in a folder, which is what **templates** solve (below).
+
+## Folder properties
+
+The **Folder properties** card on a folder's overview page describes the folder *itself*. It works exactly like a document's properties: add any property you like. `title`, `description`, and `tags` are the common ones (they show up in navigation, search, and the folder overview, and give an AI assistant a one-line sense of what the folder is for), but the card is open-shape: a `status`, an `owner`, whatever fits.
+
+Folder properties are **self-only**: they describe their own folder and nothing else. They are not inherited by the documents inside the folder, and they do not flow into subfolders. A `posts/` folder described as "Blog posts" stays a description of `posts/`; opening a doc under `posts/` shows only that doc's own properties.
+
+Click **Add a property**, give it a name and a value, and it's saved to the folder. Because folder properties describe the folder and don't flow into its docs, this is *not* the place to give the *documents* in a folder shared starting properties; use a template for that instead.
+
+## Templates
+
+A template is a reusable starting point for a new document: a heading skeleton, a checklist, a layout you fill in every time, optionally with starting properties baked in. Create a template once, and every new document made from it starts with that content. Templates are available both to you (in the New File dialog) and to AI assistants working in your project.
+
+A template is just a markdown file. It lives at `.ok/templates/<name>.md` inside your project, with a little information at the top: its name and description.
+
+### Create a template
+
+There are two places to create a template, depending on how widely you want it to apply.
+
+**For one folder**: open the folder's overview page and find the **Templates available** card, then click **New template**. The template is created in that folder and applies to documents created there and in its subfolders.
+
+**For the whole project**: open Settings (`Cmd/Ctrl-,`) → **This project** → **Project templates** → **New template**. The template is created at the project root and applies everywhere.
+
+Either way, the **New template** dialog asks for:
+
+- **Name**: the human-readable name, shown wherever a template is picked. Required.
+- **Filename**: derived automatically from the name (`Blog post` → `blog-post.md`). Click **Edit** to set it yourself. The filename is the id agents use, and it cannot be changed after the template is created.
+- **Description**: an optional one-line summary shown under the name.
+- **Starter content**: the markdown that becomes the new document's content.
+
+### Use a template
+
+When you create a new file, the **New File** dialog shows a **Start from** picker listing every template that applies to the target folder. Pick one and the new document opens pre-filled with that template's starter content. Pick **Blank note** for an empty document.
+
+### Auto-filled placeholders
+
+A template body may use two placeholders, filled in automatically when a document is created:
+
+- `{{date}}`: today's date, in `YYYY-MM-DD` form.
+- `{{user}}`: the display name of the person or agent creating the document.
+
+```md title=".ok/templates/standup.md"
+---
+title: Daily standup
+description: Standup notes scaffold
+---
+
+# Standup — {{date}}
+
+Recorded by {{user}}
+
+## Yesterday
+
+## Today
+
+## Blockers
+```
+
+These two are the only placeholders Open Knowledge fills in. Any other `{{...}}` is rejected when the template is saved, so a template never quietly grows its own mini-language.
+
+### Give new documents their own properties
+
+The standup template above produces documents with just a body: a heading and some sections, no [properties](#properties-in-one-minute). This is also how you give every new doc in a folder the same **starting properties** (a `status`, a date, a `tags` array): add a second properties block (the same `---`-fenced frontmatter) at the very top of the **Starter content**:
+
+```md title=".ok/templates/daily.md"
+---
+title: Daily entry
+description: Daily journal entry.
+---
+---
+title: {{date}}
+status: draft
+tags: [daily]
+---
+
+## Morning intentions
+
+(...)
+```
+
+The first block is the template's own info: the name and description shown in the picker. The second block becomes the new document's own properties, written as real bytes into the file. Open Knowledge removes only the first block when a document is created, so everything else in the Starter content (including a properties block at the top) becomes the new document exactly as written. Because these are the new doc's *own* properties, the doc owns them outright: editing one doc never touches another.
+
+### Edit and delete
+
+In both the folder card and the Settings list, click a template row to edit its name, description, or starter content, or use the row's menu to **Edit** or **Delete**. Editing an **inherited** template edits the file in the ancestor folder that owns it, which affects every folder under that ancestor; the dialog calls this out.
+
+Deleting a template removes the `.ok/templates/<name>.md` file. Folders and agents that referenced it fall back to an inherited template of the same name, if one exists, or report the template as missing.
+
+## How templates reach subfolders
+
+Templates flow **downhill**: a template on `posts/` applies to `posts/`, `posts/2026/`, `posts/2026/drafts/`, and every folder beneath it. When you create a document, Open Knowledge starts at the document's own folder and walks up to the top of the project, gathering the templates each folder along the way offers:
+
+- Templates from the document's **own folder** are marked **local**.
+- Templates from a **folder above it** are marked **inherited**.
+
+When two folders offer a template with the same filename, the **closest folder wins**. So a template at the project root (`.ok/templates/`) is available everywhere; a template in `marketing/posts/.ok/templates/` is available only under `marketing/posts/`.
+
+Folder *properties* do not behave this way: they describe only their own folder (no inheritance up or down).
+
+## Templates and AI agents
+
+Agents create documents from templates the same way you do. Through MCP, an agent calls:
+
+```text
+write_document({ docName: "posts/launch", template: "blog-post" })
+```
+
+Open Knowledge finds the `blog-post` template the same way the New File dialog does: the agent gets the one that applies to `posts/`. The template's **starter content** becomes the new document; the template's own name and description stay behind as template info and are not copied into the document.
+
+This is why a template's **Name** matters: it is the label an agent reads when choosing which template fits the document it is about to create.
+
+## Where it's stored
+
+You never have to edit these files by hand (the folder overview page is the front door), but for the curious:
+
+- A folder's own properties live in `<folder>/.ok/frontmatter.yml` (open-shape: any keys; `title` / `description` / `tags` are the conventional ones).
+- Templates live in `<folder>/.ok/templates/<name>.md`.
+
+A folder only gets a `.ok/` directory once you give it a description or its first template; folders with nothing special stay plain. See the [Configuration reference](/docs/reference/configuration#folder-properties) for the file formats, and the [MCP reference](/docs/reference/mcp) for the `folder_config` and `write_document` tools that set the same things from an AI agent.
+
+## See also
+
+- [Editor](/docs/features/editor): the Properties panel and the file sidebar.
+- [Configuration](/docs/reference/configuration): the `.ok/` file formats behind these settings.
+- [MCP reference](/docs/reference/mcp): the `write_document` tool and templates.

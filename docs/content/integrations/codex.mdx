@@ -1,0 +1,26 @@
+---
+title: Codex
+description: Use Open Knowledge with OpenAI Codex.
+---
+
+Open Knowledge plugs into Codex through MCP.
+
+## Install
+
+The Open Knowledge desktop app handles wiring. On first launch (or any time you open a project for the first time), the consent dialog detects Codex on your machine, lists it as one of the editors it can configure, and writes the MCP server entry plus the project skill for you.
+
+It registers the MCP server in Codex's user config (`~/.codex/config.toml`) and project config (`.codex/config.toml`), and installs the Open Knowledge skill so Codex can call the MCP tools. Re-trigger the dialog by deleting `~/.ok/mcp-status.json` and relaunching.
+
+## Verify
+
+Open the project in Codex and ask:
+
+> List all the docs in this project.
+
+The agent should call `exec` (e.g. `ls`) and respond with your knowledge base. If you don't see the tool, restart Codex.
+
+## Open with AI
+
+From the editor, **Open with AI ▸ Codex** dispatches the current file, folder, or project to Codex in one click. Three entry points: the editor header's sparkle icon, the sidebar's right-click menu (file / folder / empty space), and the macOS **File → Open with AI** menu.
+
+Codex receives a short prompt asking it to open the target in Open Knowledge's web preview. The agent then grounds the rest of the conversation through MCP. See [Editor → Open with AI](/docs/features/editor#open-with-ai) for the full UX.

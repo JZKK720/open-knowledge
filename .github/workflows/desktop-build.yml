@@ -1,0 +1,276 @@
+name: Desktop build
+
+# M2 per specs/2026-04-11-electron-desktop-app/SPEC.md §14:
+# Produces a Universal DMG (arm64 + x64 merged). When Apple Developer cert
+# + notary credentials are configured as repo secrets, the DMG is signed with
+# Developer ID, notarized via xcrun notarytool, stapled, and fuse-verified
+# (D17 paranoid post-sign check). When secrets are absent, the workflow runs
+# `build:mac:unsigned` explicitly and uploads the artifact under a name that
+# encodes the unsigned state — consumers can filter by prefix to avoid
+# shipping an unsigned build as if it were a release.
+#
+# Trigger: `workflow_dispatch` only for this iteration. We will add a
+# `pull_request` trigger scoped to `packages/desktop/**` changes once the
+# signed path has been green at least once in CI. macOS runner minutes are
+# ~10× more expensive than ubuntu — PR-triggering only makes sense after
+# M2 is closing the DOD loop.
+#
+# Required secrets (when ready to sign — wire via Settings → Secrets):
+#   CSC_LINK                    Base64-encoded .p12 containing the Developer
+#                               ID Application cert + private key. Generate:
+#                                 base64 -i developer-id.p12 | pbcopy
+#                               CSC_LINK is the signal used here to decide
+#                               signed-vs-unsigned — without it, the workflow
+#                               runs `build:mac:unsigned` and names the
+#                               artifact accordingly.
+#   CSC_KEY_PASSWORD            Password used to export the .p12.
+#   APPLE_ID                    Apple ID email that owns the Developer
+#                               Program membership.
+#   APPLE_APP_SPECIFIC_PASSWORD App-specific password from appleid.apple.com
+#                               (NOT the Apple ID login password). 16 chars,
+#                               xxxx-xxxx-xxxx-xxxx format.
+#   APPLE_TEAM_ID               10-char Team ID from developer.apple.com/account
+#                               (e.g. "ABCDE12345"). Must stay stable forever
+#                               per R16 — it anchors the Keychain ACL.
+#
+# App Store Connect API key alternative (simpler for org-level rotation):
+# replace APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID with
+# APPLE_API_KEY (path to .p8) + APPLE_API_KEY_ID [+ APPLE_API_ISSUER]. The
+# issuer is required only for Team keys — Individual keys rejected it with
+# 401 Unauthorized per @electron/notarize's NotaryToolApiKeyCredentials
+# type (lib/types.d.ts). The afterSign script auto-detects which credential
+# shape is present and fails loud if any shape is partial rather than
+# silently skipping. APPLE_* credentials are gated on `CSC_LINK` being
+# set (signed mode) — in unsigned mode they are explicitly not passed to
+# electron-builder so an operator who sets APPLE_* but forgets CSC_LINK
+# cannot accidentally attempt to notarize an ad-hoc-signed .app.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# NOTE: cancel-in-progress is `false` because a mid-notarize cancel is costly.
+# Apple notary submissions take 1-5 minutes of wall-clock and don't resume
+# cleanly — cancellation leaves a half-stapled bundle and the next attempt
+# starts from scratch. workflow_dispatch is manual so accidental re-dispatch
+# is rare, and re-runs are cheap compared to the wasted notary round-trip.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos-dmg:
+    # macos-26 is Apple Silicon (Tahoe) with Xcode 26.x preinstalled. Apple
+    # Silicon is required for Universal DMG lipo merging (arm64 + x64 →
+    # universal) per D29 — a universal DMG built on an Intel-only runner has
+    # historically produced broken arm64 slices (electron-builder #6891).
+    # Xcode 26+ is required because electron-builder compiles
+    # `build/okglass.icon` into `Assets.car` via Apple's `actool`, which only
+    # ships with Xcode 26+.
+    runs-on: macos-26
+    # 45 min budget. Local `bun run build:mac:unsigned` baseline on M3 Max
+    # is ~3-4 min wall-clock; CI runners are ~2× slower; signing +
+    # notarization adds 2-5 min of Apple round-trip on top. 45 min leaves
+    # headroom for cold cache and notary-service queue spikes.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Node 24 matches the existing ci.yml / release.yml pattern —
+      # turbo's `^build` pulls in the app via workspace deps that resolve
+      # to `.ts` sources; Node 22.6+ strips TypeScript types natively.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: ".bun-version"
+
+      # Turbo cache keeps `build` fast across runs. Keying on bun.lock
+      # warm-caches across commits that don't change dependencies — cold
+      # cache only when the lockfile actually moves. `github.sha` in the
+      # restore-keys fallback still picks up same-commit re-runs.
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-desktop-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-desktop-
+
+      - name: Install dependencies
+        # ELECTRON_SKIP_REBUILD=0 overrides the default CI skip in
+        # packages/desktop/scripts/postinstall.mjs — we *need* the native
+        # modules rebuilt against Electron's Node ABI for a packaged build.
+        env:
+          ELECTRON_SKIP_REBUILD: "0"
+        run: bash scripts/bun-install-ci.sh
+
+      # electron-builder.yml's `extraResources` rule copies from
+      # `packages/cli/dist/public/`, which the CLI's `build:assets` populates
+      # via `cp -r ../app/dist dist/public`. The CLI does not declare the
+      # app as a workspace dep (app is private, and the CLI ships the
+      # compiled bundle — not a package reference), so turbo's `^build`
+      # runs them in parallel by default. Without explicit sequencing, cli's
+      # `build:assets` races app's vite build and can fail (no `app/dist`
+      # yet) or copy stale content. Use turbo's `--filter=@inkeep/...`
+      # which DOES respect the `^build` graph (so server + core build
+      # before app), and run the two filters in sequence to enforce
+      # app → cli ordering.
+      #
+      # `bun run --filter=...` was the previous approach; it does not
+      # honor turbo's dep graph (only runs the named package's `build`
+      # script in isolation). After the workspace started shipping
+      # `.mjs` builds for `@inkeep/open-knowledge-server` and
+      # `@inkeep/open-knowledge-core` (specs/2026-04-24-desktop-packaging-
+      # first-boot/), Vite's config loader in app-build resolves those
+      # workspace deps via `exports.default → ./dist/index.mjs`. Without
+      # an upstream `^build`, the `dist/` doesn't exist yet → "Failed to
+      # resolve entry for package @inkeep/open-knowledge-server".
+      - name: Build workspace (produces packages/cli/dist/public for extraResources)
+        run: |
+          bunx turbo run build --filter=@inkeep/open-knowledge-app
+          bunx turbo run build --filter=@inkeep/open-knowledge
+
+      # Decide signed-vs-unsigned path BEFORE invoking electron-builder so
+      # the artifact can be named to match. We key off CSC_LINK alone: it's
+      # the Developer ID cert, so its absence means we cannot produce a
+      # signed build regardless of what notarization creds exist. Missing
+      # notarization creds with CSC_LINK present would be caught by
+      # afterSign.mjs's partial-credential guard.
+      - name: Detect signing mode
+        id: signmode
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if [[ -n "${CSC_LINK}" ]]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+            echo "::notice::Signing creds present — building signed + notarized + stapled + fuse-verified DMG."
+          else
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+            echo "::notice::CSC_LINK absent — building unsigned DMG. Artifact will be labeled 'unsigned'."
+          fi
+
+      # Materialize App Store Connect API key (Option B notarization shape).
+      # @electron/notarize's NotaryToolApiKeyCredentials types `appleApiKey` as
+      # a filesystem path to the .p8 file — not the PEM contents. CI runners
+      # have no .p8 on disk; the secret holds the key material. Decode here
+      # and rewrite APPLE_API_KEY to point at the materialized file.
+      #
+      # Accepts either format the operator stored:
+      #   - Raw PEM (.p8 contents starting with `-----BEGIN PRIVATE KEY-----`)
+      #   - Base64 of the .p8 (single-line, survives copy/paste cleanly —
+      #     recommended; generate with `base64 -i AuthKey_XXXX.p8 | pbcopy`)
+      #
+      # No-op when APPLE_API_KEY is unset (Option A password creds path runs
+      # instead). Gated on signed mode so unsigned smoke runs don't waste a
+      # step writing creds that won't be used.
+      - name: Materialize App Store Connect API key
+        if: steps.signmode.outputs.mode == 'signed'
+        env:
+          APPLE_API_KEY_VALUE: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          if [[ -z "$APPLE_API_KEY_VALUE" ]]; then
+            echo "::notice::APPLE_API_KEY secret not set — Option A (APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID) path will run if those creds are present. afterSign.mjs fails loud on partial creds."
+            exit 0
+          fi
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          if [[ "$APPLE_API_KEY_VALUE" == *"BEGIN PRIVATE KEY"* ]] || [[ "$APPLE_API_KEY_VALUE" == *"BEGIN EC PRIVATE KEY"* ]]; then
+            printf '%s' "$APPLE_API_KEY_VALUE" > "$KEY_PATH"
+          else
+            if ! printf '%s' "$APPLE_API_KEY_VALUE" | base64 -d > "$KEY_PATH" 2>/dev/null; then
+              echo "::error::APPLE_API_KEY is neither a PEM nor valid base64. Re-export from App Store Connect → Users and Access → Integrations → Team Keys, then either paste the .p8 contents directly OR run 'base64 -i AuthKey_XXXX.p8 | pbcopy' and paste."
+              exit 1
+            fi
+          fi
+          if ! head -c 5 "$KEY_PATH" | grep -q "^-----"; then
+            echo "::error::Materialized .p8 does not begin with '-----'. Secret was likely double-encoded or corrupted in transit."
+            exit 1
+          fi
+          chmod 600 "$KEY_PATH"
+          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "::notice::APPLE_API_KEY materialized to $KEY_PATH"
+
+      # Step A: vite/main/preload bundles via electron-vite. Always identical
+      # for signed and unsigned modes.
+      - name: Build electron-vite bundles
+        working-directory: packages/desktop
+        run: bun run build:desktop
+
+      # Force-install both darwin-arm64 and darwin-x64 prebuilt binaries for
+      # @napi-rs/keyring before electron-builder's universal merge runs. Bun
+      # under workspace conditions only installs the host-arch optionalDependency
+      # (cpu constraint), so the darwin-x64 binary is missing on an arm64
+      # runner. @electron/universal's lipo merge then either errors or hangs
+      # waiting for x64 inputs that don't exist.
+      #
+      # NOTE: electron-builder.yml is currently arm64-only (`target.arch:
+      # [arm64]`), so this step is effectively a no-op for the smoke build.
+      # Kept in place because (a) it's idempotent and adds <1s, (b) it
+      # unblocks a future flip to universal target without another mirror
+      # cycle. Documented for the next reader who'd otherwise wonder why.
+      - name: Force-install darwin keyring prebuilds for universal merge
+        working-directory: packages/desktop
+        run: node scripts/prepare-universal.mjs
+
+      # Step B: package via electron-builder. Split from step A across
+      # separate runner steps (rather than chained via && in a single shell)
+      # because empirically — verified across runs 24920389870 (combined,
+      # broken) and 24923907843 (split, correct) — chaining `bun run build:desktop
+      # && electron-builder ...` in one shell produces an asar containing a
+      # stale workspace-dep `package.json` (the pre-`exports.development` /
+      # pre-`files: ["dist", "src"]` snapshot) and omits `dist/`. Same
+      # commands as separate workflow steps produce a correct asar with the
+      # current `package.json` + the built `dist/`. Root cause not fully
+      # characterized — most likely bun.run's workspace-state caching across
+      # the `&&` boundary, or electron-builder's bun-mode walker reading from
+      # a snapshot taken when bun's wrapper opened the script. Specs/2026-04-24-
+      # desktop-packaging-first-boot/ §10 OQ4 captures the open question;
+      # the empirical fix (separate steps) is sufficient for shipping.
+      - name: Package DMG (${{ steps.signmode.outputs.mode }})
+        env:
+          CSC_LINK: ${{ steps.signmode.outputs.mode == 'signed' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ steps.signmode.outputs.mode == 'signed' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ steps.signmode.outputs.mode == 'signed' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.signmode.outputs.mode == 'signed' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.signmode.outputs.mode == 'signed' && secrets.APPLE_TEAM_ID || '' }}
+          # APPLE_API_KEY itself is NOT set here — the materialize step above
+          # writes the .p8 to disk and pushes APPLE_API_KEY=<path> into
+          # $GITHUB_ENV so it flows through to this step. Setting it again
+          # at step-level would override that path with the raw secret value
+          # and break @electron/notarize's path-based contract.
+          APPLE_API_KEY_ID: ${{ steps.signmode.outputs.mode == 'signed' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ steps.signmode.outputs.mode == 'signed' && secrets.APPLE_API_ISSUER || '' }}
+          # In unsigned mode, force electron-builder to skip its keychain
+          # auto-discovery (mirrors `-c.mac.identity=null` in the script).
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.signmode.outputs.mode == 'unsigned' && 'false' || '' }}
+        working-directory: packages/desktop
+        run: |
+          if [[ "${{ steps.signmode.outputs.mode }}" == "unsigned" ]]; then
+            bunx electron-builder --mac --publish never -c.mac.identity=null
+          else
+            bunx electron-builder --mac --publish never
+          fi
+
+      # Gate on success() — on build failure, there is no DMG, so running
+      # the upload step would stack a second "no files found" error on top
+      # of the real build error and dilute CI signal. The GHA run log
+      # already captures failure diagnostics and is retained 90 days.
+      - name: Upload DMG artifact
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # Encode signed-vs-unsigned in the artifact name so downstream
+          # consumers (release automation in M7, humans pulling for smoke
+          # on another Mac) can filter by prefix without inspecting the
+          # DMG signature. Unsigned DMGs can run locally after `xattr -cr`
+          # but must never be shipped as if they were a release build.
+          name: open-knowledge-macos-${{ steps.signmode.outputs.mode }}-${{ github.sha }}
+          path: |
+            packages/desktop/dist-desktop/*.dmg
+            packages/desktop/dist-desktop/*.dmg.blockmap
+            packages/desktop/dist-desktop/latest-mac.yml
+          retention-days: 14
+          if-no-files-found: error

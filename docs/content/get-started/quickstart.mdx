@@ -1,0 +1,86 @@
+---
+title: Quickstart
+description: Get your Agent maintained knowledge base up and running in less than five minutes.
+---
+
+<Callout type="info" title="Prerequisites">
+  - **macOS.** Windows and Linux are not yet supported.
+  - **`git`.** Open Knowledge initializes a git repo for your project (used for the timeline and recovery features). Pre-installed via Xcode Command Line Tools on most macOS machines; install with `xcode-select --install` if missing.
+</Callout>
+
+<Steps>
+
+<Step>
+
+### Install the desktop app
+
+Download Open Knowledge for macOS. Open the DMG, drag **Open Knowledge** to **Applications**, and launch it.
+
+<DownloadButton href="https://github.com/inkeep/open-knowledge-legacy/releases/latest/download/Open-Knowledge-arm64.dmg" label="Download for macOS" />
+
+_Apple Silicon (M1 and later) only for now; Intel Macs are not yet supported._
+
+</Step>
+
+<Step>
+
+### Pick a project
+
+Click **Pick Existing Project** to choose one, or click **Create New Project** to scaffold a fresh one. You can also **Clone from GitHub** to pull down a remote repo.
+
+The first-launch consent dialog detects every MCP-capable editor on your machine (Claude Code, Cursor, Codex, Claude Desktop) and offers to wire them up to Open Knowledge.
+
+</Step>
+
+<Step>
+
+### Open the project in your AI tool
+
+Click the <OpenWithAiButton /> button and select your preferred tool. This dispatches the current file, folder, or project to your chosen agent with a starter prompt.
+
+If your tool prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+
+</Step>
+
+<Step>
+
+### Ask the agent to edit a doc
+
+Opening a project initializes the Open Knowledge MCP tools for that project. From then on, your agent prefers Open Knowledge's tool wrappers over its built-in file operations, so its edits keep your front matter consistent and your links intact.
+
+Try one of these:
+
+> Add a new note explaining how this project handles authentication.
+
+> Search for any docs that mention OAuth.
+
+> List the recent docs.
+
+Or something structural:
+
+> Set up a `specs/` folder and gather all my specifications into it. Give them consistent front matter so I can query them easily.
+
+</Step>
+
+<Step>
+
+### Look around
+
+The editor's sidebar shows every doc in your knowledge base. Each doc has:
+
+- A WYSIWYG body and a source-mode toggle
+- A frontmatter panel for properties
+- A timeline of recent edits with per-burst diffs and selective rollback
+- Backlinks to other docs that reference it
+
+Right-click anywhere in the sidebar (empty space, a folder, or a file) to create, reveal, rename, hide, delete (to Trash), and **Open with AI**. The full feature tour is under [Features](/docs/features/editor).
+
+</Step>
+
+</Steps>
+
+## What's next
+
+- Per-editor setup details: [Integrations](/docs/integrations/claude-code)
+- Tools the agent has access to: [MCP](/docs/reference/mcp)
+- Configure Open Knowledge: [Configuration](/docs/reference/configuration)

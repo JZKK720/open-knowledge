@@ -1,0 +1,480 @@
+// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge-legacy/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
+
+import type { MessageDescriptor } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { ChevronRight } from 'lucide-react';
+import type React from 'react';
+import { useEffect, useId, useState } from 'react';
+import { toast as sonnerToast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+import { type ConsentStore, consentStore as defaultConsentStore } from '@/lib/consent-store';
+import type {
+  OkMcpWiringEditorId,
+  OkOnboardingProbeContentResult,
+  OkOnboardingShowPayload,
+  OkOnboardingWarningKind,
+} from '@/lib/desktop-bridge-types';
+import { isContentDirSafe, relativeToProject } from '@/lib/project-paths';
+
+const PROBE_THROTTLE_MS = 750;
+
+const WARNING_COPY: Record<OkOnboardingWarningKind, MessageDescriptor> = {
+  root: msg`You picked the filesystem root (/). Scaffolding here will scan every file on this machine — make sure that's what you want.`,
+  home: msg`You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files.`,
+  'home-documents': msg`You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope.`,
+  'home-desktop': msg`You picked ~/Desktop. Open Knowledge will index everything on your desktop.`,
+  'home-downloads': msg`You picked ~/Downloads. Files there are usually transient — consider a stable folder instead.`,
+  'volumes-mount': msg`This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects.`,
+  'drive-root': msg`This looks like a drive root (e.g., C:\\). Scaffolding here will scan an entire drive.`,
+};
+
+interface ConsentDialogBodyProps {
+  store?: ConsentStore;
+  toast?: ToastImpl;
+  payload?: OkOnboardingShowPayload;
+}
+
+export interface ToastImpl {
+  error(message: string): void;
+}
+
+const defaultToast: ToastImpl = {
+  error: (message) => sonnerToast.error(message),
+};
+
+function ConsentDialogBody({
+  store = defaultConsentStore,
+  toast = defaultToast,
+  payload,
+}: ConsentDialogBodyProps = {}) {
+  const snapshot = payload ?? store.getSnapshot();
+  if (!snapshot) return null;
+  return <ConsentDialogForm payload={snapshot} store={store} toast={toast} />;
+}
+
+interface ConsentDialogFormProps {
+  payload: OkOnboardingShowPayload;
+  store: ConsentStore;
+  toast: ToastImpl;
+}
+
+function ConsentDialogForm({ payload, store, toast }: ConsentDialogFormProps) {
+  const { t } = useLingui();
+  const initGit = true;
+  const formId = useId();
+  const [contentDir, setContentDir] = useState(payload.defaultContentDir);
+  const [additionalIgnores, setAdditionalIgnores] = useState('');
+  const [editorIds, setEditorIds] = useState<ReadonlySet<OkMcpWiringEditorId>>(
+    () => new Set(payload.editorOptions.map((e) => e.id)),
+  );
+  const [sharing, setSharing] = useState<'shared' | 'local-only'>('shared');
+  const sharingDisabled = !initGit && payload.gitState === 'absent';
+  const [probe, setProbe] = useState<OkOnboardingProbeContentResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isContentDirSafe(contentDir)) {
+      setProbe(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      const bridge = window.okDesktop;
+      if (!bridge) return;
+      bridge.onboarding
+        .probeContent({ contentDir })
+        .then((result) => {
+          if (!cancelled) setProbe(result);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            const message = err instanceof Error ? err.message : t`probe failed`;
+            setProbe({ ok: false, error: message });
+          }
+        });
+    }, PROBE_THROTTLE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [contentDir, t]);
+
+  const contentDirSafe = isContentDirSafe(contentDir);
+  const startDisabled = busy || !contentDirSafe;
+
+  const projectDir = payload.projectDir;
+  const pickedRelative =
+    relativeToProject(payload.projectDir, payload.pickedPath) ?? payload.pickedPath;
+
+  function toggleEditor(id: OkMcpWiringEditorId) {
+    setEditorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function onBrowseContentDir() {
+    const bridge = window.okDesktop;
+    if (!bridge) return;
+    let picked: string | null;
+    try {
+      picked = await bridge.dialog.openFolder({ defaultPath: payload.projectDir });
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : t`Could not open folder picker`);
+      return;
+    }
+    if (picked === null) return;
+    const relative = relativeToProject(payload.projectDir, picked);
+    if (relative === null) {
+      setBrowseError(t`Selection must be inside the project`);
+      return;
+    }
+    setBrowseError(null);
+    setContentDir(relative);
+  }
+
+  async function onConfirm() {
+    setBusy(true);
+    const result = await store.confirm({
+      initGit,
+      contentDir,
+      additionalIgnores,
+      editorIds: Array.from(editorIds),
+      sharing,
+    });
+    if (!result.ok) {
+      toast.error(result.error);
+      setBusy(false);
+    }
+  }
+
+  function onSubmit(e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    e.preventDefault();
+    if (startDisabled) return;
+    void onConfirm();
+  }
+
+  async function onCancel() {
+    setBusy(true);
+    const result = await store.cancel();
+    if (!result.ok) {
+      toast.error(result.error);
+      setBusy(false);
+    }
+  }
+
+  function onOpenChange(open: boolean) {
+    if (!open && !busy) void onCancel();
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            <Trans>Open this folder with Open Knowledge</Trans>
+          </DialogTitle>
+          <DialogDescription>
+            <Trans>
+              Open Knowledge will create a <code>.ok/</code> folder here to track this project's
+              metadata.
+            </Trans>
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogBody className="space-y-6">
+          {payload.gitRootPromoted ? (
+            <p className="text-1sm text-muted-foreground">
+              <Trans>
+                Open Knowledge initializes at <code>{projectDir}</code> — the parent of{' '}
+                <code>{pickedRelative}</code> because it contains a <code>.git</code> folder (one
+                .ok/ per git repo). <code>Content directory</code> defaults to <code>.</code> (the
+                whole repo); type a sub-folder to narrow it.
+              </Trans>
+            </p>
+          ) : null}
+
+          {payload.warnings.length > 0 ? (
+            <div
+              role="alert"
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+            >
+              {payload.warnings.map((w) => (
+                <p key={w.kind} className="mb-1 last:mb-0">
+                  {t(WARNING_COPY[w.kind])}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          <form id={formId} onSubmit={onSubmit} data-testid="consent-form" className="space-y-6">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="consent-content-dir" className="text-sm font-medium">
+                <Trans>Content directory</Trans>
+              </label>
+              <div className="flex items-stretch gap-2">
+                <Input
+                  id="consent-content-dir"
+                  value={contentDir}
+                  onChange={(e) => {
+                    setContentDir(e.target.value);
+                    setBrowseError(null);
+                  }}
+                  disabled={busy}
+                  aria-invalid={!contentDirSafe}
+                  data-testid="consent-content-dir"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void onBrowseContentDir()}
+                  data-testid="consent-content-dir-browse"
+                >
+                  <Trans>Browse</Trans>
+                </Button>
+              </div>
+              {browseError !== null ? (
+                <p
+                  className="text-1sm text-destructive"
+                  data-testid="consent-content-dir-browse-error"
+                >
+                  {browseError}
+                </p>
+              ) : !contentDirSafe ? (
+                <p className="text-1sm text-destructive" data-testid="consent-content-dir-error">
+                  <Trans>Content directory must be inside the project</Trans>
+                </p>
+              ) : (
+                <ProbePreview probe={probe} />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="consent-additional-ignores" className="text-sm font-medium">
+                <Trans>Ignore patterns</Trans>
+              </label>
+              <Textarea
+                id="consent-additional-ignores"
+                value={additionalIgnores}
+                onChange={(e) => setAdditionalIgnores(e.target.value)}
+                disabled={busy}
+                placeholder={'tmp/\n*.draft.md'}
+                rows={3}
+                data-testid="consent-additional-ignores"
+              />
+              <p className="text-1sm text-muted-foreground">
+                <Trans>
+                  One pattern per line — appended to <code>.okignore</code>.
+                </Trans>
+              </p>
+            </div>
+
+            <fieldset className="flex flex-col space-y-2 pb-2">
+              <legend className="text-sm font-medium">
+                <Trans>Connect to AI tools</Trans>
+              </legend>
+              <p className="text-1sm text-muted-foreground">
+                <Trans>
+                  Writes a project-MCP config for each selected tool; Claude also gets{' '}
+                  <code>.claude/launch.json</code>.
+                </Trans>
+              </p>
+              {payload.editorOptions.map((editor) => {
+                const checkboxId = `consent-editor-${editor.id}-cb`;
+                return (
+                  <label
+                    key={editor.id}
+                    htmlFor={checkboxId}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      checked={editorIds.has(editor.id)}
+                      onCheckedChange={() => toggleEditor(editor.id)}
+                      disabled={busy}
+                      data-testid={`consent-editor-${editor.id}`}
+                    />
+                    <span>{editor.label}</span>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid={`consent-editor-${editor.id}-scope`}
+                    >
+                      {editor.hasProjectConfig ? (
+                        <Trans comment="Scope tag next to an AI tool — config is written at both project and user level">
+                          (project + user)
+                        </Trans>
+                      ) : (
+                        <Trans comment="Scope tag next to an AI tool — config is written at user level only">
+                          (user-level only)
+                        </Trans>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </fieldset>
+
+            <fieldset className="flex flex-col space-y-2 pb-2" data-testid="consent-sharing">
+              <legend className="text-sm font-medium">
+                <Trans>Share OK config with my team?</Trans>
+              </legend>
+              <p className="text-1sm text-muted-foreground">
+                <Trans>
+                  <code>.ok/</code>, <code>.mcp.json</code> (and per-editor variants), project
+                  skills, and <code>.claude/launch.json</code>. Switch later in Settings → Config
+                  sharing, or from the command line with{' '}
+                  <code>ok config-sharing share|unshare</code>.
+                </Trans>
+              </p>
+              <RadioGroup
+                value={sharing}
+                onValueChange={(v) => setSharing(v as 'shared' | 'local-only')}
+                disabled={busy}
+                className="gap-2"
+              >
+                <label
+                  htmlFor={`${formId}-sharing-shared`}
+                  className="flex items-start gap-2 text-sm"
+                >
+                  <RadioGroupItem
+                    id={`${formId}-sharing-shared`}
+                    value="shared"
+                    data-testid="consent-sharing-shared"
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      <Trans>Share with my team</Trans>
+                    </span>
+                    <span className="block text-1sm text-muted-foreground">
+                      <Trans>OK config is committed alongside content (default).</Trans>
+                    </span>
+                  </span>
+                </label>
+                <label
+                  htmlFor={`${formId}-sharing-local-only`}
+                  className="flex items-start gap-2 text-sm"
+                >
+                  <RadioGroupItem
+                    id={`${formId}-sharing-local-only`}
+                    value="local-only"
+                    disabled={sharingDisabled}
+                    data-testid="consent-sharing-local-only"
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      <Trans>Local only on this machine</Trans>
+                    </span>
+                    <span className="block text-1sm text-muted-foreground">
+                      {sharingDisabled ? (
+                        <Trans>
+                          Requires a git repository — pick a different folder or enable git init.
+                        </Trans>
+                      ) : (
+                        <Trans>
+                          OK config stays on this machine via <code>.git/info/exclude</code>{' '}
+                          (per-clone, not committed).
+                        </Trans>
+                      )}
+                    </span>
+                  </span>
+                </label>
+              </RadioGroup>
+            </fieldset>
+          </form>
+        </DialogBody>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className="font-mono uppercase"
+            onClick={() => void onCancel()}
+            disabled={busy}
+            data-testid="consent-cancel"
+          >
+            <Trans>Cancel</Trans>
+          </Button>
+          <Button type="submit" form={formId} disabled={startDisabled} data-testid="consent-start">
+            <Trans comment="Primary button — begins scaffolding the project">Start</Trans>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProbePreview({ probe }: { probe: OkOnboardingProbeContentResult | null }) {
+  const { t } = useLingui();
+  if (probe === null) {
+    return (
+      <p className="text-1sm text-muted-foreground" data-testid="consent-preview">
+        <Trans>Counting markdown files</Trans>
+      </p>
+    );
+  }
+  if (!probe.ok) {
+    const errorDetail = probe.error;
+    return (
+      <p className="text-1sm text-muted-foreground" data-testid="consent-preview">
+        <Trans>Preview unavailable: {errorDetail}</Trans>
+      </p>
+    );
+  }
+  const countDisplay = probe.truncated ? '≥ 50,000' : String(probe.count);
+  const countLine = t`Found ${countDisplay} markdown files`;
+  if (probe.sample.length === 0) {
+    return (
+      <p className="text-1sm text-muted-foreground" data-testid="consent-preview">
+        {countLine}
+      </p>
+    );
+  }
+  const remaining = probe.truncated ? null : probe.count - probe.sample.length;
+  return (
+    <Collapsible data-testid="consent-preview">
+      <CollapsibleTrigger className="flex items-center gap-1 text-1sm text-muted-foreground hover:text-foreground [&[data-state=open]>svg]:rotate-90">
+        <ChevronRight
+          className="size-3 transition-transform motion-reduce:transition-none"
+          aria-hidden
+        />
+        <span>{countLine}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-1 pl-4 text-1sm text-muted-foreground">
+        <ul className="space-y-1.5 font-mono">
+          {probe.sample.map((path) => (
+            <li key={path}>{path}</li>
+          ))}
+        </ul>
+        {probe.truncated || (remaining !== null && remaining > 0) ? (
+          <p className="mt-1 italic">
+            {probe.truncated ? <Trans>and more</Trans> : <Trans>and {remaining} more</Trans>}
+          </p>
+        ) : null}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export default ConsentDialogBody;

@@ -1,0 +1,66 @@
+---
+title: MCP
+description: Tools the Open Knowledge MCP server exposes to AI agents.
+---
+
+The MCP server gives AI agents structured access to your knowledge base. Only `exec` is truly server-free: its shell-style reads run fs-direct against the disk and work even when the editor is down. Every other read tool (`search`, `links`, `get_history`, etc.) and all write tools route through the Hocuspocus server, which Open Knowledge starts for you on the first write.
+
+## Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `exec` | Read-only shell (`cat`, `ls`, `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut`); reads return frontmatter, backlinks, and recent history. Fs-direct; works without the server. |
+| `search` | Ranked workspace search (title boost + body BM25 + recency; same engine the cmd-K palette uses) |
+| `links` | Wiki-link graph. `kind` selects: `backlinks`, `forward`, `dead`, `orphans`, `hubs`, or `suggest`. Accepts an array (e.g. `["dead", "orphans", "hubs"]`) to fetch several views in one call |
+| `get_history` | Version timeline for a doc |
+| `get_config` | Read `.ok/config.yml` |
+| `get_components` | Details for the canonical authoring components |
+| `get_preview_url` | Resolve the browser-reachable preview URL. Per-response `previewUrl` fields elsewhere are route-only (`/#/<doc>`); call this when you need the full openable URL |
+| `write_document` | Write a doc body and/or frontmatter. `position` selects `replace` (full rewrite; the only mode that touches frontmatter), `append`, or `prepend` |
+| `edit_document` | Find-and-replace inside a doc body |
+| `edit_frontmatter` | Set, create, or delete frontmatter properties (JSON Merge Patch) |
+| `delete_document` | Delete a doc |
+| `rename` | Rename a doc or folder and rewrite every affected link |
+| `version` | `action` selects: `save` a project checkpoint, or `rollback` a doc to an earlier version |
+| `folder_config` | `action` selects: `set-rule` (folder's own frontmatter, open-shape like a doc's), `write-template`, or `delete-template` |
+| `ingest` | Capture an external URL or file as reference material |
+| `research` | Gather sources and write provisional findings |
+| `consolidate` | Promote research into a canonical article |
+| `discover` | Set up an existing repo: extract conventions, seed folder rules and templates |
+| `list_conflicts` | List every doc currently tracked in a merge-conflict state. Returns each doc's `lifecycle: { status, reason }` so you can detect conflict state proactively |
+| `get_conflict_content` | Read the base / ours / theirs stages of a conflicted doc |
+| `resolve_conflict` | Write a chosen resolution (`mine` / `theirs` / `content`) and commit |
+
+## Instantiating from a template
+
+`write_document` accepts a `template` argument that resolves against the cascade of templates available for the target document's parent folder, using the same folder-up walk the [Folders and templates](/docs/advanced/folders-and-templates#templates) page describes. The template body becomes the new document's content; the template's own info block (its name and description) is stripped, so it doesn't bleed onto the document. Document-shaped frontmatter belongs *in the body*; see [Give new documents their own properties](/docs/advanced/folders-and-templates#give-new-documents-their-own-properties).
+
+`template` and `markdown` are mutually exclusive: passing both errors with `TEMPLATE_AND_MARKDOWN_BOTH_SET`. With `template`, `position` is forced to `replace` (initial create semantics).
+
+## Editing frontmatter
+
+Use `edit_frontmatter` for frontmatter edits: it applies a JSON Merge Patch (set or create a key with a value, delete a key by passing `null`). `edit_document` is body-only and refuses find/replace patterns that touch frontmatter; `write_document` with `position: "replace"` is the only write mode that includes the `---\n…\n---` block (other positions ignore any frontmatter in the payload).
+
+## Edit summaries
+
+The write tools (`write_document`, `edit_document`, `edit_frontmatter`, `rename`, `version`) accept an optional `summary` describing the intent of the edit, e.g. `"Fixed token-refresh race"`. Summaries appear on the document's timeline so readers can scan recent agent activity.
+
+Cap is 80 characters. Avoid secrets and PII; summaries persist to git history.
+
+## Conflict-aware writes
+
+Every mutating tool (`write_document`, `edit_document`, `edit_frontmatter`, `delete_document`, `rename`, `version`, `folder_config`, and agent undo) refuses to mutate a doc whose GitHub-sync state is `conflict`.
+
+To recover, call `get_conflict_content` to inspect the merge stages, then `resolve_conflict` with one of:
+
+- `mine`: write the `git show :2:<file>` stage (your committed version, last commit before the merge).
+- `theirs`: write the `git show :3:<file>` stage (their committed version).
+- `content`: write the exact bytes you supply (for example, a merged result you composed by reading both stages).
+
+To detect conflict state proactively without waiting for a 409, call `list_conflicts`; it enumerates every conflicted doc with its `lifecycle: { status, reason }`.
+
+## Preview links
+
+Read and write tools return a `previewUrl` for any doc they touched, but **those are route-only** (`/#/<doc>` with no host:port), meant to identify the doc, not to be opened as-is. Hosts that want to open the editor (Claude Code Desktop's `preview_start`, terminal `open <url>`) call `get_preview_url` to resolve the full URL once per session. The editor refocuses automatically on subsequent writes.
+
+`get_preview_url` always carries an `autoOpen` boolean (top-level on its response) reflecting the user's [`appearance.preview.autoOpen`](/docs/reference/configuration) preference. The write tools (`write_document`, `edit_document`, `edit_frontmatter`) carry the same boolean on the `warning` object, which fires only when no browser is attached to the preview. In the common case (a browser is attached), the write response has no `warning` and no `autoOpen` field. Agents honor `autoOpen` before navigating: `true` (default) follows the host-capability routing in the bundled skill; `false` means the user is managing their own preview window, so the agent surfaces the URL on request but does not open or refresh anything. The value is resolved fresh on every tool call, so a mid-session toggle propagates within 0–1 calls, with no client restart.

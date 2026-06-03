@@ -1,0 +1,166 @@
+
+import { json } from '@codemirror/lang-json';
+import { type Language, StreamLanguage } from '@codemirror/language';
+import { toml } from '@codemirror/legacy-modes/mode/toml';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { basicDarkInit, basicLightInit } from '@uiw/codemirror-theme-basic';
+import { basicSetup } from 'codemirror';
+import { useTheme } from 'next-themes';
+import { useEffect, useRef, useState } from 'react';
+
+const darkTheme = basicDarkInit({
+  settings: {
+    background: 'var(--background)',
+    gutterBackground: 'var(--muted)',
+  },
+});
+
+const lightTheme = basicLightInit({
+  settings: {
+    background: 'var(--background)',
+    gutterBackground: 'var(--muted)',
+  },
+});
+
+function pickLanguageExtension(extension: string): Language | null {
+  switch (extension.toLowerCase()) {
+    case 'json':
+      return json().language;
+    case 'toml':
+      return StreamLanguage.define(toml);
+    default:
+      return null;
+  }
+}
+
+interface TextViewerProps {
+  src: string;
+  fileName: string;
+  extension: string;
+}
+
+type FetchState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; content: string };
+
+function useAssetText(src: string): FetchState {
+  const { t } = useLingui();
+  const [state, setState] = useState<FetchState>({ status: 'loading' });
+  useEffect(() => {
+    let cancelled = false;
+    const ctrl = new AbortController();
+    setState({ status: 'loading' });
+    fetch(src, { credentials: 'same-origin', signal: ctrl.signal })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          const status = resp.status;
+          throw new Error(t`Failed to load file (HTTP ${status})`);
+        }
+        return resp.text();
+      })
+      .then((content) => {
+        if (cancelled) return;
+        setState({ status: 'loaded', content });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+        const message = err instanceof Error ? err.message : t`Failed to load file`;
+        setState({ status: 'error', message });
+      });
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [src, t]);
+  return state;
+}
+
+export function TextViewer({ src, fileName, extension }: TextViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const { resolvedTheme } = useTheme();
+  const fetchState = useAssetText(src);
+  const loadedContent = fetchState.status === 'loaded' ? fetchState.content : null;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (loadedContent === null) return;
+
+    const language = pickLanguageExtension(extension);
+    const theme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
+    const extensions = [
+      basicSetup,
+      ...(language ? [language] : []),
+      EditorView.editable.of(true),
+      EditorState.readOnly.of(true),
+      EditorView.lineWrapping,
+      theme,
+    ];
+
+    const view = new EditorView({
+      state: EditorState.create({ doc: loadedContent, extensions }),
+      parent: containerRef.current,
+    });
+    viewRef.current = view;
+
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+  }, [loadedContent, extension, resolvedTheme]);
+
+  if (fetchState.status === 'loading') {
+    return (
+      <main
+        className="flex h-full min-h-0 flex-col items-center justify-center bg-background text-muted-foreground text-sm"
+        aria-label={fileName}
+        data-text-viewer=""
+        data-text-viewer-state="loading"
+        data-text-viewer-extension={extension}
+      >
+        <span>
+          <Trans>Loading {fileName}</Trans>
+        </span>
+      </main>
+    );
+  }
+
+  if (fetchState.status === 'error') {
+    return (
+      <main
+        className="flex h-full min-h-0 flex-col items-center justify-center gap-2 bg-background p-4 text-center"
+        aria-label={fileName}
+        data-text-viewer=""
+        data-text-viewer-state="error"
+        data-text-viewer-extension={extension}
+      >
+        <div className="font-medium text-sm">
+          <Trans>Couldn't load {fileName}</Trans>
+        </div>
+        <div className="text-muted-foreground text-xs">{fetchState.message}</div>
+        <a
+          href={src}
+          className="mt-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          <Trans>Open file</Trans>
+        </a>
+      </main>
+    );
+  }
+
+  return (
+    <main
+      className="flex h-full min-h-0 flex-col bg-background"
+      aria-label={fileName}
+      data-text-viewer=""
+      data-text-viewer-state="loaded"
+      data-text-viewer-extension={extension}
+    >
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-auto" />
+    </main>
+  );
+}

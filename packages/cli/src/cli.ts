@@ -1,0 +1,137 @@
+#!/usr/bin/env node
+
+
+if (process.argv.includes('--no-color')) {
+  process.env.NO_COLOR = '1';
+  delete process.env.FORCE_COLOR;
+} else if (process.argv.includes('--color')) {
+  process.env.FORCE_COLOR = '1';
+  delete process.env.NO_COLOR;
+}
+
+import { spawn } from 'node:child_process';
+import type { Config } from '@inkeep/open-knowledge-server';
+import { Command } from 'commander';
+import { authCommand } from './commands/auth/index.ts';
+import { bugReportCommand } from './commands/bug-report.ts';
+import { cleanCommand } from './commands/clean.ts';
+import { cloneCommand } from './commands/clone.ts';
+import { configCommand } from './commands/config.ts';
+import { createRealDetectDeps, detectDesktop, launchDesktop } from './commands/desktop-dispatch.ts';
+import { diagnoseCommand } from './commands/diagnose.ts';
+import { initCommand } from './commands/init.ts';
+import { installSkillCommand } from './commands/install-skill.ts';
+import { mcpCommand } from './commands/mcp.ts';
+import { openCommand } from './commands/open.ts';
+import { previewCommand } from './commands/preview.ts';
+import { psCommand } from './commands/ps.ts';
+import { pullCommand } from './commands/pull.ts';
+import { pushCommand } from './commands/push.ts';
+import { repairSkillsCommand } from './commands/repair-skills.ts';
+import { seedCommand } from './commands/seed.ts';
+import { shareCommand } from './commands/share/index.ts';
+import { sharingCommand } from './commands/sharing/index.ts';
+import { runStartCommand, startCommand } from './commands/start.ts';
+import { statusCommand } from './commands/status.ts';
+import { stopCommand } from './commands/stop.ts';
+import { syncCommand } from './commands/sync.ts';
+import { uiCommand } from './commands/ui.ts';
+import { PACKAGE_VERSION } from './constants.ts';
+import { loadConfig } from './index.ts';
+
+const program = new Command();
+
+import { createFileLogger } from '@inkeep/open-knowledge-server';
+
+import type { Logger as PinoLoggerInstance } from 'pino';
+
+let resolvedConfig: Config;
+let cliLogger: PinoLoggerInstance | undefined;
+
+export function getCliLogger(): PinoLoggerInstance | undefined {
+  return cliLogger;
+}
+
+program
+  .name('open-knowledge')
+  .description('Local-first knowledge base with CRDT collaboration')
+  .version(PACKAGE_VERSION)
+  .option('--cwd <path>', 'Working directory')
+  .option('--log-level <level>', 'Log level', 'info')
+  .option('--no-color', 'Disable color output')
+  .option('--color', 'Force color output')
+  .hook('preAction', (thisCommand) => {
+    const opts = thisCommand.opts();
+    const cwd = opts.cwd as string | undefined;
+    if (cwd !== undefined) {
+      process.chdir(cwd);
+    }
+    const { config } = loadConfig(cwd);
+    resolvedConfig = config;
+
+    const commandName = thisCommand.args?.[0] ?? thisCommand.name() ?? 'cli';
+    cliLogger = createFileLogger({
+      name: 'cli',
+      project: (config as { project?: { name?: string } }).project?.name ?? undefined,
+    });
+    cliLogger.info({ command: commandName, cwd: process.cwd() }, 'cli command started');
+  });
+
+program.action(async () => {
+  const decision = detectDesktop(createRealDetectDeps());
+
+  if (decision.available) {
+    launchDesktop({ spawn });
+    return;
+  }
+
+  await runStartCommand(resolvedConfig, {});
+});
+
+const start = startCommand(() => resolvedConfig);
+program.addCommand(start);
+
+const mcp = mcpCommand(() => resolvedConfig);
+program.addCommand(mcp);
+
+program.addCommand(initCommand());
+
+program.addCommand(seedCommand());
+
+program.addCommand(installSkillCommand());
+
+program.addCommand(repairSkillsCommand());
+
+const preview = previewCommand(() => resolvedConfig);
+program.addCommand(preview);
+
+const ui = uiCommand(() => resolvedConfig);
+program.addCommand(ui);
+
+program.addCommand(openCommand());
+
+program.addCommand(stopCommand(() => resolvedConfig));
+program.addCommand(cleanCommand(() => resolvedConfig));
+program.addCommand(statusCommand(() => resolvedConfig));
+
+program.addCommand(psCommand());
+
+program.addCommand(diagnoseCommand());
+
+program.addCommand(bugReportCommand());
+
+program.addCommand(configCommand());
+
+program.addCommand(authCommand());
+
+program.addCommand(cloneCommand(() => resolvedConfig));
+
+program.addCommand(syncCommand(() => resolvedConfig));
+program.addCommand(pushCommand(() => resolvedConfig));
+program.addCommand(pullCommand(() => resolvedConfig));
+
+program.addCommand(shareCommand());
+
+program.addCommand(sharingCommand());
+
+await program.parseAsync(process.argv, { from: 'node' });

@@ -1,0 +1,57 @@
+---
+title: Configuration
+description: The .ok/config.yml schema and environment variables.
+---
+
+Open Knowledge reads YAML config from three places:
+
+- **Project**: `./.ok/config.yml` (this project, committed to git)
+- **User**: `~/.ok/global.yml` (every project on your machine)
+- **Project-local**: `./.ok/local/config.yml` (this project on this machine; gitignored). Holds per-machine-per-project preferences such as `autoSync.enabled`. Maintained by the editor (auto-sync onboarding modal, sync popover, Settings pane Sync section); you don't normally hand-edit it.
+
+All files are optional; defaults cover everything.
+
+You can edit config two ways:
+
+- **Settings pane** in the editor: Cmd/Ctrl-, or App menu → Settings…
+- **Your IDE**: `.ok/config.yml` ships with a `$schema` magic comment for autocomplete and validation
+
+Edits made anywhere reflect everywhere; an open Settings pane refreshes live.
+
+## Schema
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `content.dir` | string | `"."` | Content directory, relative to project root. Defaults to `.` (the project root) even when `.ok/` is scaffolded at the git working-tree root from a sub-folder, so opened folder and content scope align by default. To narrow scope to a sub-folder, uncomment `content.dir` in `.ok/config.yml` post-init. Excluded paths live in `.okignore`; see [Ignore patterns](/docs/features/ignore-patterns). |
+| `appearance.theme` | `"light" \| "dark" \| "system"` | (unset) | Editor theme. |
+| `appearance.sidebar.showHiddenFiles` | boolean | `false` | Show files whose path segments start with `.`. Server-side `.gitignore` / `.okignore` filters still apply. Lives in project-local config. Toggled from the sidebar's right-click menu or the macOS **View → Show Hidden Files** item. |
+| `appearance.sidebar.showAllFiles` | boolean | `false` | Bypass every ignore filter, including both the client dot-segment drop and the server's `.gitignore` / `.okignore` / built-in exclusions. Surfaces every file on disk under the content directory (synthetic system docs stay hidden). Lives in project-local config. Toggled from the sidebar's right-click menu or the macOS **View → Show All Files** item. |
+| `autoSync.enabled` | `boolean \| null` | `null` | Per-machine git auto-sync toggle. Lives in project-local config. `null` means "unanswered"; the editor's onboarding modal triggers on first remote-detected open. |
+| `editor.wordWrap` | boolean | `true` | Soft-wrap long lines in the source-mode CodeMirror editor. User-scope: a personal preference, not project-shared. Toggle from the Settings pane. |
+| `appearance.preview.autoOpen` | boolean | `true` | Whether the agent should open or refresh the Open Knowledge preview when it edits a doc through the MCP. Default `true` lets the agent route the preview by host capability: the host's in-app browser (Cursor preview pane, Codex's built-in browser, Claude Code Desktop) when one exists, the system browser otherwise. Set `false` to keep the agent's hands off your preview window. This is useful when you're already viewing the doc in OK Desktop, a browser tab on a second display, a non-default browser, or any flow where your extensions / accessibility tooling only work in your own browser. The agent then surfaces the URL on request but does not navigate. User-scope; the change takes effect on the next preview-related tool call. Toggle from **Settings → Preferences → "Open preview when agent edits"**. |
+| `preview.scriptSrc` | `"cdn-allowlist" \| "inline-only"` | `"cdn-allowlist"` | Content Security Policy `script-src` for the code-block HTML preview iframe. `cdn-allowlist` lets preview embeds load library `<script src>` tags from a fixed set of trusted static CDNs (cdnjs, jsDelivr, unpkg, esm.sh), so interactive embeds like chart.js render. The allowlist is fixed: only `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, `unpkg.com`, and `esm.sh` are permitted and custom origins can't be added. If a script from another origin is blocked (a `script-src` CSP error in the browser console), inline the library directly in the code block or load a copy one of these CDNs hosts. `inline-only` is the strict policy a cloud / multi-tenant deployment opts into: inline scripts only, no external script origins. Project-scoped (committed `config.yml`) so collaborators share one policy, and AI agents can't change it. Every other preview-iframe protection (`connect-src 'none'`, sandboxed null-origin frame, etc.) holds under both values. |
+
+## Folder properties
+
+A folder's own metadata lives in that folder's `.ok/` directory, not in `config.yml`: its own open-shape frontmatter (any keys; `title` / `description` / `tags` are the conventional ones) in `.ok/frontmatter.yml`, and its templates in `.ok/templates/`. Folder properties describe only their own folder: they are not inherited by the docs inside it. (Templates do resolve leaf-to-root, so a root template is available in every subfolder.) Set them from the editor's **Folder properties** pane, or via the `folder_config` MCP tool. See [Folders and templates](/docs/advanced/folders-and-templates#folder-properties) for the full walkthrough.
+
+## Ignore patterns
+
+Path exclusions live in a project-root `.okignore` file using gitignore syntax. `.gitignore` rules are honored automatically alongside it, and a leading `!` re-includes a file `.gitignore` excluded. Edit patterns from the **Ignore patterns** section of the Settings pane, the right-click menu in the file tree, or by hand in any editor; the running server picks up changes without a restart. See [Ignore patterns](/docs/features/ignore-patterns) for the full UX.
+
+## Precedence
+
+CLI flags (when running the bundled `ok` CLI) > environment variables > project-local config > project config > user config > defaults. Leaf values at higher levels override the same leaf below; arrays replace, they don't concatenate.
+
+## Environment variables
+
+| Variable | Sets |
+| --- | --- |
+| `PORT` | Server port |
+| `OK_MCP_AUTOSTART` | Set to `0` to disable MCP auto-start |
+| `OK_SHOWALL_MAX_ENTRIES` | Max entries the **Show all files** disk walk returns before it stops and marks the list truncated (default `50000`) |
+| `OPEN_KNOWLEDGE_GITHUB_CLIENT_ID` | Override the GitHub OAuth App client ID |
+
+## Verifying changes
+
+The Settings pane validates `.ok/config.yml` against the schema as you edit and surfaces errors inline. The **Ignore patterns** section shows a live count of files each pattern matches, so you can confirm scope changes without leaving the editor.

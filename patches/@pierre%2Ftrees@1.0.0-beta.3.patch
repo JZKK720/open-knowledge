@@ -1,0 +1,26 @@
+diff --git a/dist/render/FileTree.d.ts b/dist/render/FileTree.d.ts
+index 949ab40e12ec7e9d1aa644cf12ee0fd510e6aeb2..0131c67f10dc318fa305f974f77e8243395bd422 100644
+--- a/dist/render/FileTree.d.ts
++++ b/dist/render/FileTree.d.ts
+@@ -11,6 +11,7 @@ declare class FileTree implements FileTreeMutationHandle, FileTreeSearchSessionH
+   getFileTreeContainer(): HTMLElement | undefined;
+   getItem(path: string): FileTreeItemHandle | null;
+   getFocusedItem(): FileTreeItemHandle | null;
++  getFocusedIndex(): number;
+   getFocusedPath(): string | null;
+   getSelectedPaths(): readonly string[];
+   getComposition(): FileTreeCompositionOptions | undefined;
+diff --git a/dist/render/FileTree.js b/dist/render/FileTree.js
+index 95778fc6e74ef7262a54ffd473e670a6be14786c..d39b43e84a33187ebdec7c67348ca0999a06556f 100644
+--- a/dist/render/FileTree.js
++++ b/dist/render/FileTree.js
+@@ -144,6 +144,9 @@ var FileTree = class {
+ 	getFocusedItem() {
+ 		return this.#controller.getFocusedItem();
+ 	}
++	getFocusedIndex() {
++		return this.#controller.getFocusedIndex();
++	}
+ 	getFocusedPath() {
+ 		return this.#controller.getFocusedPath();
+ 	}

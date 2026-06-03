@@ -1,0 +1,261 @@
+appId: com.inkeep.open-knowledge
+productName: Open Knowledge
+copyright: Copyright © 2026 Inkeep
+
+# Pin the Electron version explicitly — bun's workspace hoisting puts
+# node_modules/electron at repo root (not in packages/desktop/node_modules),
+# and electron-builder's auto-version-detection walks the package manifest
+# tree and refuses to infer from a caret range. electron-userland/electron-
+# builder#3984 is the canonical reference. Keep this byte-identical to the
+# "electron" devDep in packages/desktop/package.json — that devDep is
+# pinned exact (no caret) so the packaged runtime and the version used by
+# electron-rebuild / native-module ABI compilation cannot drift.
+electronVersion: "41.2.1"
+
+directories:
+  output: dist-desktop
+  buildResources: build
+
+# Core-assert: the CLI's build:assets step produces packages/cli/dist/public/
+# (Vite build of packages/app/, copied by `cp -r ../app/dist dist/public`).
+# We consume that output directly — no separate renderer build for the app.
+files:
+  - "out/**/*"
+  - "!**/*.map"
+
+extraResources:
+  - from: "../cli/dist/public"
+    to: "app"
+    filter: ["**/*"]
+  # M6a: ship the CLI bundle + wrapper so the packaged .app can host
+  # `ok` on PATH via ELECTRON_RUN_AS_NODE=1. Filter keeps cli/dist/public/**
+  # intact — `ok ui` from the wrapper reads it via $APP_PATH/Contents/
+  # Resources/cli/dist/public/ (distinct consumer from the React bundle
+  # copy above that the BrowserWindow loads from Contents/Resources/app/).
+  # Two copies, deliberately — see SPEC §5 AC1.11 and OQ-22.
+  - from: "../cli/dist"
+    to: "cli/dist"
+    filter:
+      - "**/*"
+      - "!**/*.map"
+      # Post-review Minor #21: tsdown emits `.d.mts` + `.d.mts.map` for
+      # every source module. TypeScript declarations have no runtime
+      # function inside the packaged `.app` and add ~12 MB of dead
+      # weight (tiny info-leak surface too — internal type names
+      # minable from a customer .app). Exclude both shapes.
+      - "!**/*.d.mts"
+      - "!**/*.d.mts.map"
+      - "!**/*.d.ts"
+      - "!**/*.d.ts.map"
+  - from: "resources/cli/bin/ok.sh"
+    to: "cli/bin/ok.sh"
+  # `@inkeep/open-knowledge-server`'s `version-constants.ts` reads its
+  # neighbouring `package.json` at module load to populate `RUNTIME_VERSION`
+  # (the value written into `server.lock`'s `runtimeVersion`). The CLI bundles
+  # the server source into `cli/dist/`, so the resolution walks `dist/../` and
+  # expects `cli/package.json` adjacent. Without this rule the file is missing
+  # in the shipped `.app` and every lock writes `runtimeVersion: "0.0.0-unknown"`,
+  # which collapses cross-install drift diagnostics. Coverage:
+  # `tests/unit/electron-builder-cli-pkgjson.test.ts`.
+  - from: "../cli/package.json"
+    to: "cli/package.json"
+  # Top-level discoverable third-party attribution. The same file ships inside
+  # cli/dist via the rule above; this places a copy at the Resources root so
+  # license reviewers and an eventual in-app About panel can find it without
+  # crawling cli/dist/. Electron's own LICENSE + LICENSES.chromium.html are
+  # placed by electron-builder automatically and cover Electron + Chromium.
+  - from: "../cli/dist/THIRD_PARTY_NOTICES.md"
+    to: "THIRD_PARTY_NOTICES.md"
+  # The bundled CLI (`cli/dist/cli.mjs`) keeps `@napi-rs/keyring` EXTERNAL
+  # (tsdown `neverBundle` — it ships a native .node binary). At runtime its ESM
+  # resolver walks its OWN tree (`cli/dist` → `cli` → `Resources` → …) and
+  # NEVER reaches `app.asar.unpacked/node_modules/`, where the app's copy lives.
+  # Without a copy on the CLI's path, `import('@napi-rs/keyring')` in
+  # `createTokenStore` throws ERR_MODULE_NOT_FOUND and auth silently downgrades
+  # to the plaintext `~/.ok/auth.yml` file backend. Ship the wrapper + the arm64
+  # platform binary into `cli/node_modules/` so the CLI resolves the keychain.
+  # Sourced from the Bun-hoisted workspace root (`../../node_modules`). arm64
+  # only: matches the arm64-only DMG (`mac.target`) and avoids the
+  # @electron/universal lipo-merge collision documented under `mac:`.
+  # Coverage: tests/unit/electron-builder-cli-native-deps.test.ts.
+  - from: "../../node_modules/@napi-rs/keyring"
+    to: "cli/node_modules/@napi-rs/keyring"
+    filter: ["**/*"]
+  - from: "../../node_modules/@napi-rs/keyring-darwin-arm64"
+    to: "cli/node_modules/@napi-rs/keyring-darwin-arm64"
+    filter: ["**/*"]
+
+asarUnpack:
+  - "**/*.node"
+  - "**/@parcel/watcher/**"
+  - "**/@parcel/watcher-*/**"
+  # @parcel/watcher/wrapper.js lands in app.asar.unpacked/ via the rule above,
+  # but Node's module resolver from a file inside app.asar.unpacked/ walks
+  # real-filesystem `node_modules` only — it cannot cross into the sibling
+  # app.asar/ to resolve transitive requires. So every runtime JS dep of
+  # @parcel/watcher must also be unpacked, or `require('picomatch')` from
+  # wrapper.js fails with MODULE_NOT_FOUND at server boot and the server
+  # silently falls back to chokidar/fs.watch — the degraded macOS path that
+  # drops bulk creates and deletes (Finder Duplicate via clonefile, rm -rf
+  # cascades from `git pull`, etc.). Coverage:
+  # tests/unit/electron-builder-parcel-watcher-deps.test.ts.
+  - "**/picomatch/**"
+  - "**/is-glob/**"
+  - "**/is-extglob/**"
+  - "**/detect-libc/**"
+  - "**/@napi-rs/keyring/**"
+  - "**/@napi-rs/keyring-*/**"
+  - "**/simple-git/**"
+
+mac:
+  category: public.app-category.productivity
+  # Icon Composer bundle — packages the appearance variants (Default, Dark,
+  # Clear/Tinted light+dark) into a single source. electron-builder compiles
+  # this via `actool` into an `Assets.car` asset catalog at package time and
+  # wires it through `CFBundleIconName`, so macOS 26+ users get system-driven
+  # Liquid Glass appearance switching automatically.
+  #
+  # Build-host requirements: macOS 26+ with Xcode 26+ installed (actool is
+  # part of the Xcode command-line tools).
+  #
+  # Dev-mode `app.dock.setIcon()` still needs a flat PNG fallback
+  # (`build/icon.png`) because Electron's runtime nativeImage API can't
+  # consume `.icon` bundles yet — tracked in electron/electron#48476.
+  icon: build/okglass.icon
+  # Apple-Silicon-only target (TEMPORARY). The previous Universal config
+  # (`arch: [universal]`) tripped @electron/universal's lipo merger on
+  # @napi-rs/keyring's per-arch native binary — the arm64 prebuild
+  # (`keyring.darwin-arm64.node`) ends up at the same path in both slices,
+  # which the merger treats as "duplicate but not covered by x64ArchFiles"
+  # and rejects:
+  #
+  #   ⨯ Detected file "...@napi-rs/keyring-darwin-arm64/keyring.darwin-arm64.node"
+  #     that's the same in both x64 and arm64 builds and not covered by the
+  #     x64ArchFiles rule: "undefined"
+  #
+  # Failed run: 25479422451 on inkeep/open-knowledge-legacy.
+  #
+  # Restore Universal once the arch-filter rule is in place — the proper
+  # fix is either (a) an `x64ArchFiles` glob that names the keyring module
+  # path so Universal's merger picks one slice deterministically, or (b)
+  # invoking @electron/universal with the `singleArchFiles` option for the
+  # native module. Both require validation against the keyring spec's
+  # Pass 0 expectations. For now we ship arm64-only DMG/ZIP so the beta
+  # cadence has a working artifact and electron-updater on the beta
+  # channel can flow.
+  target:
+    - target: dmg
+      arch: [arm64]
+    # `.zip` is required by the electron-updater / Squirrel.Mac swap path.
+    # MacUpdater.ts:~89 calls `findFile(files, "zip", ["pkg", "dmg"])` — it
+    # downloads the ZIP variant (not the DMG) and pipes it to Squirrel.Mac
+    # for the in-place swap. Without this target, auto-update would surface
+    # ERR_UPDATER_ZIP_FILE_NOT_FOUND at every check.
+    - target: zip
+      arch: [arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  # Helper processes (Renderer / GPU / Plugin / utility-process.fork) MUST
+  # use a helper-only plist that excludes restricted entitlements (notably
+  # `com.apple.developer.associated-domains`) and the main-app file-access
+  # entitlements. Helpers do not carry an embedded `.provisionprofile`;
+  # macOS 26.4.x AMFI rejects helpers that claim profile-restricted
+  # entitlements (SIGKILL — parent observes `exit_code=9`). See
+  # `build/entitlements.mac.inherit.plist` for the full contract +
+  # `tests/unit/entitlements-helper-split.test.ts` for the drift guard.
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # Developer-ID provisioning profile that grants the
+  # `com.apple.developer.associated-domains` entitlement at codesign time.
+  # Apple-Silicon-only Developer-ID build (NOT Mac App Store), so the profile
+  # lives at the top-level `mac.provisioningProfile` key (not `mac.mas.*`).
+  # The profile binary is committed at `build/embedded.provisionprofile`
+  # (12,497 bytes, CMS-signed) — Developer-ID provisioning profiles are NOT
+  # secrets per Apple convention (every signed Electron app on macOS commits
+  # one — VS Code, Zed, Notion all follow the same pattern).
+  #
+  # Profile metadata (verify via `security cms -D -i build/embedded.provisionprofile | plutil -p -`):
+  #   AppIDName: Open Knowledge
+  #   TeamIdentifier: 6NZGSG335T
+  #   application-identifier: 6NZGSG335T.com.inkeep.open-knowledge
+  #   com.apple.developer.associated-domains: *  (wildcard — accepts any
+  #     applinks: declaration in the binary's entitlements plist)
+  #   ExpirationDate: 2044-05-10
+  #   ProvisionsAllDevices: true
+  #
+  # Without this profile, codesign rejects the embedded
+  # `com.apple.developer.associated-domains` entitlement at notarize time
+  # ("not authorized to use restricted entitlement").
+  provisioningProfile: build/embedded.provisionprofile
+  # `NSUserActivityTypes` declares which Handoff/Universal Link activity
+  # types the app handles. Without this key in Info.plist, macOS silently
+  # drops `continue-activity` events for inbound Universal Link clicks even
+  # when the entitlement + AASA file are in place — `LSOpenURLsWithRole
+  # error -10810` is the symptom in console.app.
+  # `NSUserActivityTypeBrowsingWeb` is Apple's reserved type for tapped-URL
+  # Handoff (the only flow this app uses). Adding new types here requires a
+  # provisioning-profile re-issue, so keep the list minimal.
+  extendInfo:
+    NSUserActivityTypes:
+      - NSUserActivityTypeBrowsingWeb
+  # Notarization is invoked from `scripts/afterSign.mjs` per spec §8.9 (custom
+  # afterSign pipeline) — NOT electron-builder's built-in notarize. Setting
+  # `mac.notarize: true` would double-notarize. The afterSign script gates on
+  # env vars (APPLE_ID/APPLE_TEAM_ID/APPLE_APP_SPECIFIC_PASSWORD or
+  # APPLE_API_KEY triplet) and skips gracefully when absent — the unsigned
+  # smoke path for M2 scaffolding before cert procurement completes.
+  # Helper bundle for the detached server. Lands the Info.plist that
+  # declares `LSUIElement=true` so macOS LaunchServices launches the
+  # spawned server process without a Dock tile — without this, the
+  # re-exec into the parent's MacOS binary triggers LaunchServices to
+  # pin a stuck "exec" Dock placeholder for the child's lifetime. The
+  # MacOS binary slot at
+  # `Frameworks/Open Knowledge Server.app/Contents/MacOS/Open Knowledge Helper`
+  # is populated by `scripts/afterPack.mjs` (clones the Electron Helper
+  # stub for its correct rpath). The executable basename MUST stay
+  # `Open Knowledge Helper` (Electron's canonical generic-helper name) —
+  # see `src/main/resolve-detached-spawn-args.ts` for the SIGTRAP cause.
+  extraFiles:
+    - from: build/helper-bundle/Info.plist
+      to: Frameworks/Open Knowledge Server.app/Contents/Info.plist
+
+dmg:
+  # `dmg.sign: true` is already the electron-builder default — kept explicit to
+  # document that we've thought about the unsigned path. `build:mac:unsigned`
+  # passes `-c.mac.identity=null`, which cascades: `dmg-builder/out/dmg.js:63-69`
+  # reads `qualifier = packager.platformSpecificBuildOptions.identity` and
+  # early-returns ("explicitly disabled if set to null") without attempting
+  # a keychain lookup. So `dmg.sign: true` + `mac.identity=null` = no-op on
+  # the DMG codesign step, no cert required. Verify before upgrading
+  # electron-builder or dmg-builder: confirm the null-identity short-circuit
+  # is still present in `dmg-builder/out/dmg.js:signDmg()`.
+  sign: true
+  # Stable, version-less asset name so the share-splash `releases/latest/
+  # download/...` URL resolves across releases. electron-builder's default
+  # (`${productName}-${version}-${arch}.${ext}`) embeds the version in the
+  # filename, which makes `latest/download/Open-Knowledge.dmg` 404 — the
+  # actual asset is `Open-Knowledge-0.4.1-arm64.dmg`. The arch suffix stays
+  # because we only ship arm64 today; an x64 / universal build would need
+  # a parallel artifactName + a splash decision rule.
+  artifactName: ${productName}-${arch}.${ext}
+
+# Flip fuses (D17 LOCKED, spec §8.9) on the packed .app before code signing.
+afterPack: scripts/afterPack.mjs
+# Post-sign: @electron/notarize → stapler validate → @electron/fuses read verify.
+afterSign: scripts/afterSign.mjs
+
+protocols:
+  - name: Open Knowledge URL
+    schemes: [openknowledge]
+    role: Editor
+
+publish:
+  - provider: github
+    owner: inkeep
+    repo: open-knowledge
+    # Explicit default — beta builds override at the CLI via
+    # `--config.publish.channel=beta`, which routes the manifest to
+    # `beta-mac.yml` instead of `latest-mac.yml`. Keeping this explicit so
+    # the channel intent is grep-able rather than relying on the implicit
+    # no-channel-field default.
+    channel: latest

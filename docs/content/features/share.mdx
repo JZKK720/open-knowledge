@@ -1,0 +1,51 @@
+---
+title: Share links
+description: Copy a link to any doc and send it to a teammate. Open Knowledge handles the GitHub round-trip, the deep link, and the branch on the other end.
+---
+
+Every doc in Open Knowledge has a Share button in the editor toolbar. Click it and the app copies a `https://openknowledge.ai/d/…` URL to your clipboard. Anyone you send it to lands on a splash page that knows the project and file, and a single click opens the doc in their copy of Open Knowledge.
+
+## Sending a share link
+
+Click the Share button to copy a deep link to your file to clipboard. The sharing functionality is backed by GitHub and requires that your project has a remote origin.
+
+### Without a remote
+
+If the project has no `origin` configured, the Share button opens the **Publish to GitHub** wizard. The wizard:
+
+1. Lists the GitHub accounts and orgs you can push to.
+2. Validates the repo name as you type; name collisions, SAML SSO blocks, and rate-limit errors all surface inline.
+3. On submit, creates the repository through GitHub's API, sets it as `origin`, and runs the initial `git push`.
+4. Once the push lands, copies the share URL to your clipboard automatically.
+
+If the push fails after the repo was created (auth lost mid-flow, network blip), the wizard shows a **Retry push** affordance. The GitHub-side repo isn't recreated, only the push is retried.
+
+## Opening a share link
+
+The recipient clicks the URL and lands on a splash page showing the file name, the `owner/repo` path, and the branch from which the file was shared.
+
+Two CTAs sit on the splash page:
+
+- **Open in Open Knowledge** fires the deep link and opens the Open Knowledge desktop app.
+- **Download for macOS** downloads the arm64 DMG for users who do not yet have the desktop app.
+
+## What the desktop app does when it receives the link
+
+The deep link arrives at the desktop app's handler, which runs a three-question receive flow:
+
+1. **Q1: Do you already have this repo?** The app scans recent projects for one whose `gitRemoteUrl` matches the share's `owner/repo`. A hit silently routes to that project (no dialog, the window just opens and focuses the doc).
+2. **Q2: Clone or locate?** If Q1 misses, a dialog asks "Clone to a new folder" or "I already have it locally". The locate path lets you point at an existing folder.
+3. **Q3: Clone.** On the clone path, the app runs an auth check, asks where to put the folder, then runs `git clone -b <share-branch>` so the new checkout lands on the right branch before opening.
+
+### Receiving on a different branch
+
+If you have the repo open locally but on a different branch, the app falls through to a branch-switch dialog instead of silently opening the wrong content. Behavior depends on whether the shared file exists on your current branch:
+
+- **File exists on both branches.** The dialog offers `Open on <current-branch>` or `Switch to <share-branch> and open`.
+- **File only on the share's branch.** The dialog offers `Switch to <share-branch> and open` plus Cancel.
+
+### Receiving without push permission
+
+If the shared repo is one your GitHub account can't push to (you're not a collaborator on a public repo, or you have read-only access on a private one), Open Knowledge skips the usual "Enable auto-sync?" prompt and shows the sync toggle as disabled with a clear inline reason instead of letting you turn on a sync that would just fail with a 403. The same disabled state with the same reason text appears in **Settings → Sync**. If the project owner grants you write access later, click the sync indicator to re-check; Open Knowledge will pick up the change without an app restart. See [GitHub sync: GitHub-side blockers](/docs/features/github-sync#github-side-blockers) for the full set of permission shapes the sync UI handles.
+
+See [GitHub sync](/docs/features/github-sync) for how to automatically sync changes to GitHub, and [Timeline and recovery](/docs/features/timeline-and-recovery) for per-doc history once the doc is open.

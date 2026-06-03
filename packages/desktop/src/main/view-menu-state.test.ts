@@ -1,0 +1,54 @@
+import { describe, expect, test } from 'bun:test';
+import { mergeViewMenuState } from './view-menu-state';
+
+describe('mergeViewMenuState — two-publisher non-clobbering contract', () => {
+  const initial = {
+    showHiddenFiles: false,
+    showAllFiles: false,
+    canExpandAll: true,
+    canCollapseAll: true,
+    sidebarVisible: true,
+    docPanelVisible: true,
+  } as const;
+
+  test('EditorArea push (docPanelVisible only) preserves FileSidebar fields', () => {
+    const afterFileSidebar = mergeViewMenuState(initial, {
+      showHiddenFiles: true,
+      showAllFiles: true,
+      canExpandAll: false,
+      canCollapseAll: false,
+      sidebarVisible: false,
+    });
+
+    const afterEditorArea = mergeViewMenuState(afterFileSidebar, {
+      docPanelVisible: false,
+    });
+
+    expect(afterEditorArea).toEqual({
+      showHiddenFiles: true,
+      showAllFiles: true,
+      canExpandAll: false,
+      canCollapseAll: false,
+      sidebarVisible: false,
+      docPanelVisible: false,
+    });
+  });
+
+  test('FileSidebar push (5 fields) preserves EditorArea docPanelVisible', () => {
+    const afterEditorArea = mergeViewMenuState(initial, {
+      docPanelVisible: false,
+    });
+
+    const afterFileSidebar = mergeViewMenuState(afterEditorArea, {
+      showHiddenFiles: true,
+      showAllFiles: false,
+      canExpandAll: false,
+      canCollapseAll: true,
+      sidebarVisible: false,
+    });
+
+    expect(afterFileSidebar.docPanelVisible).toBe(false);
+    expect(afterFileSidebar.showHiddenFiles).toBe(true);
+    expect(afterFileSidebar.sidebarVisible).toBe(false);
+  });
+});

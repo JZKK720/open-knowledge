@@ -1,0 +1,152 @@
+import { Trans, useLingui } from '@lingui/react/macro';
+import { InheritedBadge } from '@/components/FrontmatterRow';
+import { TemplateFormFields, useTemplateForm } from '@/components/TemplateForm';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  type TemplateDetail,
+  type TemplateMenuEntry,
+  useTemplate,
+} from '@/hooks/use-folder-config';
+
+interface Props {
+  folderPath: string;
+  template: TemplateMenuEntry | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}
+
+export function TemplateEditDialog({ folderPath, template, onOpenChange, onSaved }: Props) {
+  const { t } = useLingui();
+  const open = template !== null;
+  const templateLabel = template?.title ?? template?.name ?? t`Template`;
+
+  function handleClose() {
+    onOpenChange(false);
+  }
+
+  function handleSaved() {
+    onSaved();
+    handleClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => (next ? null : handleClose())}>
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trans>Edit {templateLabel}</Trans>
+            {template?.scope === 'inherited' && template ? (
+              <InheritedBadge
+                source={template.source_folder}
+                target={`templates/${template.name}.md`}
+              />
+            ) : null}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {template?.description ?? t`Edit template`}
+          </DialogDescription>
+        </DialogHeader>
+        {template ? (
+          <TemplateEditBody
+            key={`${template.source_folder}::${template.name}`}
+            folderPath={folderPath}
+            template={template}
+            onCancel={handleClose}
+            onSaved={handleSaved}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TemplateEditBody({
+  folderPath,
+  template,
+  onCancel,
+  onSaved,
+}: {
+  folderPath: string;
+  template: TemplateMenuEntry;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const state = useTemplate(folderPath, template.name);
+
+  if (state.status === 'loading' || state.status === 'idle') {
+    return (
+      <DialogBody className="overflow-y-auto subtle-scrollbar">
+        <div className="space-y-3">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      </DialogBody>
+    );
+  }
+  if (state.status === 'error') {
+    const errorMessage = state.message;
+    return (
+      <DialogBody className="overflow-y-auto subtle-scrollbar">
+        <p role="alert" className="text-sm text-destructive">
+          <Trans>Failed to load template: {errorMessage}</Trans>
+        </p>
+      </DialogBody>
+    );
+  }
+  return <TemplateEditForm detail={state.data} onCancel={onCancel} onSaved={onSaved} />;
+}
+
+function TemplateEditForm({
+  detail,
+  onCancel,
+  onSaved,
+}: {
+  detail: TemplateDetail;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const fm = detail.frontmatter as Record<string, unknown>;
+  const form = useTemplateForm({
+    mode: 'edit',
+    folderPath: detail.folder,
+    initial: {
+      name: detail.name,
+      title: typeof fm.title === 'string' ? fm.title : '',
+      description: typeof fm.description === 'string' ? fm.description : '',
+      body: detail.body,
+    },
+    onCommitted: onSaved,
+  });
+
+  return (
+    <>
+      <DialogBody className="overflow-y-auto subtle-scrollbar">
+        <TemplateFormFields form={form} />
+      </DialogBody>
+      <DialogFooter>
+        <Button
+          variant="outline"
+          className="font-mono uppercase"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onCancel}
+          disabled={form.isSaving}
+        >
+          <Trans>Cancel</Trans>
+        </Button>
+        <Button onClick={() => void form.submit()} disabled={form.isSaving}>
+          {form.isSaving ? <Trans>Saving</Trans> : <Trans>Save</Trans>}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}

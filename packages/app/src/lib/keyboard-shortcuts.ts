@@ -1,0 +1,935 @@
+import type { MessageDescriptor } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+import { isMacOS } from '@tiptap/core';
+
+export type ShortcutPlatform = 'mac' | 'windowsLinux';
+
+export type ShortcutCategory =
+  | 'general'
+  | 'workspace'
+  | 'search'
+  | 'wysiwyg'
+  | 'source'
+  | 'navigation';
+
+type ShortcutConflictSource = 'Chrome' | 'TipTap' | 'CodeMirror';
+
+interface ShortcutMatchOptions {
+  mod?: boolean;
+  anyMod?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+  allowShiftKey?: boolean;
+  allowExtraModifiers?: boolean;
+}
+
+type ShortcutMatch = ShortcutMatchOptions &
+  (
+    | {
+        key: string;
+        code?: string;
+      }
+    | {
+        key?: string;
+        code: string;
+      }
+  );
+
+interface PlatformShortcutMatches {
+  mac?: ShortcutMatch;
+  windowsLinux?: ShortcutMatch;
+}
+
+type PlatformShortcutMatch = ShortcutMatch | PlatformShortcutMatches;
+
+export interface ShortcutBinding {
+  mac: string;
+  windowsLinux: string;
+  match?: PlatformShortcutMatch;
+}
+
+interface ShortcutConflict {
+  source: ShortcutConflictSource;
+  note: MessageDescriptor;
+}
+
+export interface KeyboardShortcutDefinition {
+  id: string;
+  category: ShortcutCategory;
+  title: MessageDescriptor;
+  description: MessageDescriptor;
+  scope: MessageDescriptor;
+  bindings: ShortcutBinding[];
+  conflicts?: ShortcutConflict[];
+}
+
+type ShortcutTargetLike =
+  | EventTarget
+  | { tagName?: string; isContentEditable?: boolean }
+  | null
+  | undefined;
+
+export interface ShortcutEventLike {
+  target?: ShortcutTargetLike;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey?: boolean;
+  key: string;
+  code?: string;
+}
+
+export const SHORTCUT_CATEGORY_LABELS: Record<ShortcutCategory, MessageDescriptor> = {
+  general: msg`General`,
+  workspace: msg`Workspace`,
+  search: msg`Search`,
+  wysiwyg: msg`Visual editor`,
+  source: msg`Source editor`,
+  navigation: msg`Navigation and suggestions`,
+};
+
+export const SHORTCUT_CATEGORY_ORDER = Object.keys(SHORTCUT_CATEGORY_LABELS) as ShortcutCategory[];
+
+const KEYBOARD_SHORTCUT_DEFINITIONS = [
+  {
+    id: 'command-palette',
+    category: 'general',
+    title: msg`Command palette`,
+    description: msg`Search files, commands, projects, and AI handoff actions.`,
+    scope: msg`Global`,
+    bindings: [
+      {
+        mac: '⌘ K',
+        windowsLinux: 'Ctrl K',
+        match: { key: 'k', mod: true, allowExtraModifiers: true },
+      },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this to search from the page or focus the address bar. Open Knowledge overrides it while the app has focus.`,
+      },
+    ],
+  },
+  {
+    id: 'settings',
+    category: 'general',
+    title: msg`Settings`,
+    description: msg`Open this settings dialog.`,
+    scope: msg`Global outside text fields`,
+    bindings: [{ mac: '⌘ ,', windowsLinux: 'Ctrl ,', match: { key: ',', anyMod: true } }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`On macOS Chrome uses ⌘, for Chrome Settings. In OK Desktop the native app menu captures the shortcut for Open Knowledge settings.`,
+      },
+    ],
+  },
+  {
+    id: 'new-item',
+    category: 'general',
+    title: msg`New file`,
+    description: msg`Create a file from the current document or folder context.`,
+    scope: msg`Global outside text fields`,
+    bindings: [
+      {
+        mac: '⌘ N',
+        windowsLinux: 'Ctrl N',
+        match: { key: 'n', mod: true },
+      },
+      {
+        mac: '⌥⌘ N',
+        windowsLinux: 'Ctrl Alt N',
+        match: { key: 'n', anyMod: true, altKey: true, allowExtraModifiers: true },
+      },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses Ctrl/Cmd+N for new browser windows. OK Desktop captures Ctrl/Cmd+N natively; browser mode can use Ctrl/Cmd+Alt+N outside text fields.`,
+      },
+    ],
+  },
+  {
+    id: 'toggle-files-sidebar',
+    category: 'general',
+    title: msg`Show or hide Files`,
+    description: msg`Toggle the left file sidebar.`,
+    scope: msg`Global`,
+    bindings: [
+      {
+        mac: '⌥⌘ S',
+        windowsLinux: 'Ctrl Alt S',
+        match: { code: 'KeyS', anyMod: true, altKey: true, allowExtraModifiers: true },
+      },
+    ],
+  },
+  {
+    id: 'toggle-document-panel',
+    category: 'general',
+    title: msg`Show or hide document panel`,
+    description: msg`Toggle the right document panel.`,
+    scope: msg`Global`,
+    bindings: [
+      {
+        mac: '⌥⌘ B',
+        windowsLinux: 'Ctrl Alt B',
+        match: { code: 'KeyB', anyMod: true, altKey: true, allowExtraModifiers: true },
+      },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`On macOS Chrome uses ⌘⌥B for Bookmark Manager. OK Desktop captures this through the native View menu.`,
+      },
+    ],
+  },
+  {
+    id: 'open-folder',
+    category: 'workspace',
+    title: msg`Open folder`,
+    description: msg`Open an existing project folder from disk.`,
+    scope: msg`OK Desktop`,
+    bindings: [{ mac: '⌘ O', windowsLinux: 'Ctrl O' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this to open a local file. The shortcut is owned by the OK Desktop native File menu.`,
+      },
+    ],
+  },
+  {
+    id: 'switch-project',
+    category: 'workspace',
+    title: msg`Switch project`,
+    description: msg`Open the Project Navigator.`,
+    scope: msg`OK Desktop`,
+    bindings: [{ mac: '⇧⌘ P', windowsLinux: 'Ctrl Shift P' }],
+  },
+  {
+    id: 'file-tree-duplicate',
+    category: 'workspace',
+    title: msg`Duplicate selected file or folder`,
+    description: msg`Duplicate the focused file-tree item when focus is in the Files sidebar.`,
+    scope: msg`Files sidebar`,
+    bindings: [{ mac: '⌘ D', windowsLinux: 'Ctrl D' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this to bookmark the page. Open Knowledge only handles it when the Files sidebar has focus.`,
+      },
+    ],
+  },
+  {
+    id: 'file-tree-select-all',
+    category: 'workspace',
+    title: msg`Select all files and folders`,
+    description: msg`Select every visible file-tree row when focus is in the Files sidebar.`,
+    scope: msg`Files sidebar`,
+    bindings: [{ mac: '⌘ A', windowsLinux: 'Ctrl A' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome and the page use this to select text or page content. Open Knowledge only handles it when the Files sidebar has focus.`,
+      },
+    ],
+  },
+  {
+    id: 'find',
+    category: 'search',
+    title: msg`Find`,
+    description: msg`Open or close visual-editor find.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: '⌘ F', windowsLinux: 'Ctrl F', match: { key: 'f', mod: true, allowShiftKey: true } },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this for browser find. Open Knowledge overrides it in visual editor mode.`,
+      },
+    ],
+  },
+  {
+    id: 'replace',
+    category: 'search',
+    title: msg`Replace`,
+    description: msg`Open visual-editor find with replace controls expanded.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      {
+        mac: '⌥⌘ F',
+        windowsLinux: 'Ctrl H',
+        match: {
+          mac: { key: 'f', mod: true, altKey: true },
+          windowsLinux: { key: 'h', mod: true },
+        },
+      },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses Ctrl+H for History on Windows/Linux and ⌘⌥F for web search on macOS.`,
+      },
+    ],
+  },
+  {
+    id: 'find-next',
+    category: 'search',
+    title: msg`Find next match`,
+    description: msg`Move to the next visual-editor find result.`,
+    scope: msg`Visual editor find open`,
+    bindings: [
+      { mac: '⌘ G', windowsLinux: 'Ctrl G', match: { key: 'g', mod: true } },
+      { mac: 'F3', windowsLinux: 'F3', match: { key: 'F3' } },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open.`,
+      },
+    ],
+  },
+  {
+    id: 'find-previous',
+    category: 'search',
+    title: msg`Find previous match`,
+    description: msg`Move to the previous visual-editor find result.`,
+    scope: msg`Visual editor find open`,
+    bindings: [
+      { mac: '⇧⌘ G', windowsLinux: 'Ctrl Shift G', match: { key: 'g', mod: true, shiftKey: true } },
+      { mac: 'Shift F3', windowsLinux: 'Shift F3', match: { key: 'F3', shiftKey: true } },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open.`,
+      },
+    ],
+  },
+  {
+    id: 'find-field-navigation',
+    category: 'search',
+    title: msg`Find field navigation`,
+    description: msg`Move through visual-editor find results from the find field.`,
+    scope: msg`Visual editor find input focused`,
+    bindings: [{ mac: 'Enter / Shift Enter', windowsLinux: 'Enter / Shift Enter' }],
+  },
+  {
+    id: 'replace-current-from-field',
+    category: 'search',
+    title: msg`Replace current match from field`,
+    description: msg`Replace the active match from the replace field.`,
+    scope: msg`Visual editor replace input focused`,
+    bindings: [{ mac: 'Enter', windowsLinux: 'Enter' }],
+  },
+  {
+    id: 'format-bold',
+    category: 'wysiwyg',
+    title: msg`Bold`,
+    description: msg`Toggle bold formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌘ B', windowsLinux: 'Ctrl B' }],
+  },
+  {
+    id: 'format-italic',
+    category: 'wysiwyg',
+    title: msg`Italic`,
+    description: msg`Toggle italic formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌘ I', windowsLinux: 'Ctrl I' }],
+  },
+  {
+    id: 'format-underline',
+    category: 'wysiwyg',
+    title: msg`Underline`,
+    description: msg`Toggle underline formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌘ U', windowsLinux: 'Ctrl U' }],
+  },
+  {
+    id: 'format-strike',
+    category: 'wysiwyg',
+    title: msg`Strikethrough`,
+    description: msg`Toggle strikethrough formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⇧⌘ X', windowsLinux: 'Ctrl Shift X' }],
+  },
+  {
+    id: 'format-inline-code',
+    category: 'wysiwyg',
+    title: msg`Inline code`,
+    description: msg`Toggle inline code formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌘ E', windowsLinux: 'Ctrl E' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses ⌘E with its find bar on macOS. The editor binding applies while the visual editor is focused.`,
+      },
+    ],
+  },
+  {
+    id: 'format-highlight',
+    category: 'wysiwyg',
+    title: msg`Highlight`,
+    description: msg`Toggle highlight formatting.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⇧⌘ H', windowsLinux: 'Ctrl Shift H' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`On macOS Chrome uses ⌘⇧H to open the home page. The editor binding applies while the visual editor is focused.`,
+      },
+    ],
+  },
+  {
+    id: 'edit-with-ai',
+    category: 'general',
+    title: msg`Edit with AI`,
+    description: msg`Open the Open with AI menu for the current editor selection.`,
+    scope: msg`Editor selection`,
+    bindings: [
+      {
+        mac: '⇧⌘ I',
+        windowsLinux: 'Ctrl Shift I',
+        match: { key: 'i', mod: true, shiftKey: true },
+      },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses Cmd/Ctrl+Shift+I for DevTools. Open Knowledge handles it in editor selection contexts.`,
+      },
+    ],
+  },
+  {
+    id: 'history-undo-redo',
+    category: 'wysiwyg',
+    title: msg`Undo or redo`,
+    description: msg`Undo or redo visual-editor changes through TipTap collaboration history.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: '⌘ Z', windowsLinux: 'Ctrl Z' },
+      { mac: '⇧⌘ Z / ⌘ Y', windowsLinux: 'Ctrl Shift Z / Ctrl Y' },
+    ],
+    conflicts: [
+      {
+        source: 'TipTap',
+        note: msg`The collaboration extension owns these bindings so undo and redo operate on the shared Yjs-backed editor history.`,
+      },
+    ],
+  },
+  {
+    id: 'heading-paragraph',
+    category: 'wysiwyg',
+    title: msg`Paragraph`,
+    description: msg`Convert the current block to a paragraph.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌥⌘ 0', windowsLinux: 'Ctrl Alt 0' }],
+  },
+  {
+    id: 'heading-levels',
+    category: 'wysiwyg',
+    title: msg`Heading levels`,
+    description: msg`Toggle heading levels 1 through 6.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌥⌘ 1-6', windowsLinux: 'Ctrl Alt 1-6' }],
+  },
+  {
+    id: 'list-bullet',
+    category: 'wysiwyg',
+    title: msg`Bullet list`,
+    description: msg`Toggle a bullet list.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⇧⌘ 8', windowsLinux: 'Ctrl Shift 8' }],
+  },
+  {
+    id: 'list-ordered',
+    category: 'wysiwyg',
+    title: msg`Ordered list`,
+    description: msg`Toggle an ordered list.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⇧⌘ 7', windowsLinux: 'Ctrl Shift 7' }],
+  },
+  {
+    id: 'list-task',
+    category: 'wysiwyg',
+    title: msg`Task list`,
+    description: msg`Toggle a task list.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⇧⌘ 9', windowsLinux: 'Ctrl Shift 9' }],
+  },
+  {
+    id: 'code-block',
+    category: 'wysiwyg',
+    title: msg`Code block`,
+    description: msg`Toggle a fenced code block.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '⌥⌘ C', windowsLinux: 'Ctrl Alt C' }],
+  },
+  {
+    id: 'hard-break',
+    category: 'wysiwyg',
+    title: msg`Hard break`,
+    description: msg`Insert a markdown hard break.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: 'Shift Enter', windowsLinux: 'Shift Enter' },
+      { mac: '⌘ Enter', windowsLinux: 'Ctrl Enter' },
+    ],
+    conflicts: [
+      {
+        source: 'TipTap',
+        note: msg`TipTap also has a base Mod+Enter exit-code binding. Open Knowledge registers its hard-break extension before the base keymap, so hard break wins in normal visual editing.`,
+      },
+    ],
+  },
+  {
+    id: 'move-block',
+    category: 'wysiwyg',
+    title: msg`Move block`,
+    description: msg`Move the current block up or down one position.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: '⇧⌘ ↑', windowsLinux: 'Ctrl Shift ↑' },
+      { mac: '⇧⌘ ↓', windowsLinux: 'Ctrl Shift ↓' },
+    ],
+  },
+  {
+    id: 'list-indent',
+    category: 'wysiwyg',
+    title: msg`Indent or outdent list item`,
+    description: msg`Indent or outdent the current list item.`,
+    scope: msg`Visual editor list item`,
+    bindings: [
+      { mac: 'Tab', windowsLinux: 'Tab' },
+      { mac: 'Shift Tab', windowsLinux: 'Shift Tab' },
+    ],
+    conflicts: [
+      {
+        source: 'TipTap',
+        note: msg`Tables also use Tab and Shift+Tab for cell navigation. The list shortcut only handles events while the cursor is inside a list item.`,
+      },
+    ],
+  },
+  {
+    id: 'list-split-item',
+    category: 'wysiwyg',
+    title: msg`Split list item`,
+    description: msg`Create a new list item from the current list item.`,
+    scope: msg`Visual editor list item`,
+    bindings: [{ mac: 'Enter', windowsLinux: 'Enter' }],
+    conflicts: [
+      {
+        source: 'TipTap',
+        note: msg`Open Knowledge's list item extension handles Enter before TipTap's base split-block keymap while the cursor is inside a list item.`,
+      },
+    ],
+  },
+  {
+    id: 'table-cell-navigation',
+    category: 'wysiwyg',
+    title: msg`Move between table cells`,
+    description: msg`Move to the next or previous table cell.`,
+    scope: msg`Visual editor table`,
+    bindings: [
+      { mac: 'Tab', windowsLinux: 'Tab' },
+      { mac: 'Shift Tab', windowsLinux: 'Shift Tab' },
+    ],
+  },
+  {
+    id: 'table-delete-selection',
+    category: 'wysiwyg',
+    title: msg`Delete selected table`,
+    description: msg`Delete a table when the active table cell selection covers the full table.`,
+    scope: msg`Visual editor table selection`,
+    bindings: [
+      { mac: 'Backspace / Delete', windowsLinux: 'Backspace / Delete' },
+      { mac: '⌘ Backspace / ⌘ Delete', windowsLinux: 'Ctrl Backspace / Ctrl Delete' },
+    ],
+    conflicts: [
+      {
+        source: 'TipTap',
+        note: msg`TipTap's table extension handles these bindings only when the selected cells cover the whole table.`,
+      },
+    ],
+  },
+  {
+    id: 'delete-atom',
+    category: 'wysiwyg',
+    title: msg`Delete adjacent chip`,
+    description: msg`Delete an adjacent wiki-link or tag chip.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: 'Backspace', windowsLinux: 'Backspace' },
+      { mac: 'Delete', windowsLinux: 'Delete' },
+    ],
+  },
+  {
+    id: 'slash-menu',
+    category: 'navigation',
+    title: msg`Slash command menu`,
+    description: msg`Open the insert menu in an empty or active text position.`,
+    scope: msg`Visual editor`,
+    bindings: [{ mac: '/', windowsLinux: '/' }],
+  },
+  {
+    id: 'suggestion-navigation',
+    category: 'navigation',
+    title: msg`Suggestion menu navigation`,
+    description: msg`Move through slash, wiki-link, tag, and path suggestions; accept or dismiss the active suggestion.`,
+    scope: msg`Suggestion menu open`,
+    bindings: [
+      { mac: '↑ / ↓', windowsLinux: '↑ / ↓' },
+      { mac: 'Enter / Tab', windowsLinux: 'Enter / Tab' },
+      { mac: 'Esc', windowsLinux: 'Esc' },
+    ],
+  },
+  {
+    id: 'component-navigation',
+    category: 'navigation',
+    title: msg`Component boundary navigation`,
+    description: msg`Select, enter, or leave block components and fallback source blocks from keyboard boundaries.`,
+    scope: msg`Visual editor`,
+    bindings: [
+      { mac: '↑ / ↓ / ← / →', windowsLinux: '↑ / ↓ / ← / →' },
+      { mac: 'Enter / Esc', windowsLinux: 'Enter / Esc' },
+    ],
+  },
+  {
+    id: 'source-indent',
+    category: 'source',
+    title: msg`Indent or outdent source`,
+    description: msg`Indent or outdent source editor lines.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: 'Tab', windowsLinux: 'Tab' },
+      { mac: 'Shift Tab', windowsLinux: 'Shift Tab' },
+    ],
+  },
+  {
+    id: 'source-navigation',
+    category: 'source',
+    title: msg`Source navigation and selection`,
+    description: msg`Move the cursor or extend selection through CodeMirror's standard source-editor navigation keymap.`,
+    scope: msg`Source editor`,
+    bindings: [
+      {
+        mac: 'Arrow keys / Option Arrow / Command Arrow',
+        windowsLinux: 'Arrow keys / Ctrl Arrow / Home / End',
+      },
+      { mac: 'Page Up / Page Down', windowsLinux: 'Page Up / Page Down' },
+      { mac: 'Shift with movement keys', windowsLinux: 'Shift with movement keys' },
+    ],
+  },
+  {
+    id: 'source-editing',
+    category: 'source',
+    title: msg`Source editing`,
+    description: msg`Insert, delete, move, copy, and indent source editor lines through CodeMirror's default keymap.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: 'Enter / Shift Enter / ⌘ Enter', windowsLinux: 'Enter / Shift Enter / Ctrl Enter' },
+      { mac: 'Backspace / Delete', windowsLinux: 'Backspace / Delete' },
+      { mac: '⌥ Backspace / ⌥ Delete', windowsLinux: 'Ctrl Backspace / Ctrl Delete' },
+      { mac: '⌥ ↑ / ⌥ ↓', windowsLinux: 'Alt ↑ / Alt ↓' },
+      { mac: '⇧⌥ ↑ / ⇧⌥ ↓', windowsLinux: 'Shift Alt ↑ / Shift Alt ↓' },
+      { mac: '⇧⌘ K', windowsLinux: 'Ctrl Shift K' },
+    ],
+  },
+  {
+    id: 'source-history',
+    category: 'source',
+    title: msg`Source undo or redo`,
+    description: msg`Undo, redo, or undo selection changes through CodeMirror history.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: '⌘ Z', windowsLinux: 'Ctrl Z' },
+      { mac: '⇧⌘ Z', windowsLinux: 'Ctrl Y / Ctrl Shift Z' },
+      { mac: '⌘ U / ⇧⌘ U', windowsLinux: 'Ctrl U / Alt U' },
+    ],
+  },
+  {
+    id: 'source-select-all',
+    category: 'source',
+    title: msg`Select all source`,
+    description: msg`Select the full source document.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: '⌘ A', windowsLinux: 'Ctrl A' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome and the page use this to select page content. CodeMirror handles it while source editor focus is inside the page.`,
+      },
+    ],
+  },
+  {
+    id: 'source-multi-cursor',
+    category: 'source',
+    title: msg`Source multi-cursor and multi-select`,
+    description: msg`Add cursors or select matching occurrences through CodeMirror.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: '⌥⌘ ↑ / ⌥⌘ ↓', windowsLinux: 'Ctrl Alt ↑ / Ctrl Alt ↓' },
+      { mac: '⇧⌘ L', windowsLinux: 'Ctrl Shift L' },
+    ],
+  },
+  {
+    id: 'source-search',
+    category: 'source',
+    title: msg`Source search`,
+    description: msg`Open CodeMirror search in source editor mode.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: '⌘ F', windowsLinux: 'Ctrl F' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this for browser find. CodeMirror handles it while source editor focus is inside the page.`,
+      },
+    ],
+  },
+  {
+    id: 'source-toggle-comment',
+    category: 'source',
+    title: msg`Toggle source comment`,
+    description: msg`Toggle a source comment through CodeMirror.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: '⌘ /', windowsLinux: 'Ctrl /' },
+      { mac: 'Shift Alt A', windowsLinux: 'Shift Alt A' },
+    ],
+  },
+  {
+    id: 'source-select-next-occurrence',
+    category: 'source',
+    title: msg`Select next occurrence`,
+    description: msg`Add the next matching source selection.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: '⌘ D', windowsLinux: 'Ctrl D' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this to bookmark the page. CodeMirror handles it only while source editor focus is inside the page.`,
+      },
+    ],
+  },
+  {
+    id: 'source-goto-line',
+    category: 'source',
+    title: msg`Go to line`,
+    description: msg`Open CodeMirror's go-to-line prompt.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: '⌥⌘ G', windowsLinux: 'Ctrl Alt G' }],
+  },
+  {
+    id: 'source-find-results',
+    category: 'source',
+    title: msg`Source find results`,
+    description: msg`Navigate CodeMirror source search results or dismiss the search panel.`,
+    scope: msg`Source editor search panel`,
+    bindings: [
+      { mac: '⌘ G / ⇧⌘ G', windowsLinux: 'Ctrl G / Ctrl Shift G' },
+      { mac: 'F3 / Shift F3', windowsLinux: 'F3 / Shift F3' },
+      { mac: 'Esc', windowsLinux: 'Esc' },
+    ],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses these for browser find. CodeMirror handles them while source editor search is active.`,
+      },
+    ],
+  },
+  {
+    id: 'source-folding',
+    category: 'source',
+    title: msg`Fold or unfold source`,
+    description: msg`Fold, unfold, fold all, or unfold all source ranges.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: '⌥⌘ [ / ⌥⌘ ]', windowsLinux: 'Ctrl Shift [ / Ctrl Shift ]' },
+      { mac: 'Ctrl Alt [ / Ctrl Alt ]', windowsLinux: 'Ctrl Alt [ / Ctrl Alt ]' },
+    ],
+  },
+  {
+    id: 'source-completion',
+    category: 'source',
+    title: msg`Start source completion`,
+    description: msg`Open, navigate, accept, or dismiss CodeMirror completion suggestions.`,
+    scope: msg`Source editor`,
+    bindings: [
+      { mac: 'Ctrl Space', windowsLinux: 'Ctrl Space' },
+      { mac: '⌥ ` / ⌥ I', windowsLinux: 'Ctrl Space' },
+      { mac: '↑ / ↓ / Page Up / Page Down', windowsLinux: '↑ / ↓ / Page Up / Page Down' },
+      { mac: 'Enter / Esc', windowsLinux: 'Enter / Esc' },
+    ],
+  },
+  {
+    id: 'source-tab-focus-mode',
+    category: 'source',
+    title: msg`Toggle source tab focus mode`,
+    description: msg`Let Tab leave the source editor instead of indenting.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: 'Shift Alt M', windowsLinux: 'Ctrl M' }],
+  },
+  {
+    id: 'source-lint-panel',
+    category: 'source',
+    title: msg`Open source lint panel`,
+    description: msg`Open CodeMirror's lint diagnostics panel.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: '⇧⌘ M', windowsLinux: 'Ctrl Shift M' }],
+    conflicts: [
+      {
+        source: 'Chrome',
+        note: msg`Chrome uses this for profile or user switching. CodeMirror handles it only while source editor focus is inside the page.`,
+      },
+    ],
+  },
+  {
+    id: 'source-next-diagnostic',
+    category: 'source',
+    title: msg`Next source diagnostic`,
+    description: msg`Move to the next CodeMirror lint diagnostic.`,
+    scope: msg`Source editor`,
+    bindings: [{ mac: 'F8', windowsLinux: 'F8' }],
+  },
+] as const satisfies readonly KeyboardShortcutDefinition[];
+
+export type KeyboardShortcutId = (typeof KEYBOARD_SHORTCUT_DEFINITIONS)[number]['id'];
+
+export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcutDefinition[] =
+  KEYBOARD_SHORTCUT_DEFINITIONS;
+
+function getShortcut(id: KeyboardShortcutId): KeyboardShortcutDefinition {
+  const shortcut = KEYBOARD_SHORTCUTS.find((item) => item.id === id);
+  if (!shortcut) throw new Error(`Unknown keyboard shortcut: ${id}`);
+  return shortcut;
+}
+
+function currentShortcutPlatform(): ShortcutPlatform {
+  return isMacOS() ? 'mac' : 'windowsLinux';
+}
+
+const SPOKEN_SHORTCUT_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/⌘/g, ' Command '],
+  [/⌥/g, ' Option '],
+  [/⇧/g, ' Shift '],
+  [/⌃/g, ' Control '],
+  [/↑/g, ' Up Arrow '],
+  [/↓/g, ' Down Arrow '],
+  [/←/g, ' Left Arrow '],
+  [/→/g, ' Right Arrow '],
+  [/\[/g, ' Left Bracket '],
+  [/\]/g, ' Right Bracket '],
+  [/,/g, ' Comma '],
+  [/\bCtrl\b/g, ' Control '],
+];
+
+export function formatShortcutTextLabel(shortcut: string): string {
+  return shortcut
+    .split(' / ')
+    .map((part) =>
+      SPOKEN_SHORTCUT_REPLACEMENTS.reduce(
+        (label, [pattern, replacement]) => label.replace(pattern, replacement),
+        part,
+      )
+        .replaceAll(/\s+/g, ' ')
+        .trim(),
+    )
+    .join(' or ');
+}
+
+export function formatShortcutBinding(
+  binding: ShortcutBinding,
+  platform: ShortcutPlatform = currentShortcutPlatform(),
+): string {
+  return platform === 'mac' ? binding.mac : binding.windowsLinux;
+}
+
+export function formatShortcutBindingLabel(
+  binding: ShortcutBinding,
+  platform: ShortcutPlatform = currentShortcutPlatform(),
+): string {
+  return formatShortcutTextLabel(formatShortcutBinding(binding, platform));
+}
+
+export function formatShortcut(
+  id: KeyboardShortcutId,
+  platform: ShortcutPlatform = currentShortcutPlatform(),
+): string {
+  return formatShortcutBinding(getShortcut(id).bindings[0], platform);
+}
+
+export function formatShortcutLabel(
+  id: KeyboardShortcutId,
+  platform: ShortcutPlatform = currentShortcutPlatform(),
+): string {
+  return formatShortcutBindingLabel(getShortcut(id).bindings[0], platform);
+}
+
+export function isEditableShortcutTarget(target: ShortcutTargetLike): boolean {
+  if (!target || typeof target !== 'object') return false;
+  if ('isContentEditable' in target && target.isContentEditable === true) return true;
+  if (!('tagName' in target)) return false;
+  const tagName = String(target.tagName).toUpperCase();
+  return tagName === 'INPUT' || tagName === 'TEXTAREA';
+}
+
+export function matchesKeyboardShortcut(
+  event: ShortcutEventLike,
+  id: KeyboardShortcutId,
+  platform: ShortcutPlatform = currentShortcutPlatform(),
+): boolean {
+  const shortcut = getShortcut(id);
+  return shortcut.bindings.some((binding) => {
+    const match = resolveMatch(binding.match, platform);
+    return match ? matchesBinding(event, match, platform) : false;
+  });
+}
+
+function resolveMatch(
+  match: PlatformShortcutMatch | undefined,
+  platform: ShortcutPlatform,
+): ShortcutMatch | null {
+  if (!match) return null;
+  if (isShortcutMatch(match)) return match;
+  return match[platform] ?? null;
+}
+
+function isShortcutMatch(match: PlatformShortcutMatch): match is ShortcutMatch {
+  return 'key' in match || 'code' in match;
+}
+
+function matchesBinding(
+  event: ShortcutEventLike,
+  match: ShortcutMatch,
+  platform: ShortcutPlatform,
+): boolean {
+  if (match.key && event.key.toLowerCase() !== match.key.toLowerCase()) return false;
+  if (match.code && event.code !== match.code) return false;
+
+  const expectedMeta = match.mod ? platform === 'mac' : false;
+  const expectedCtrl = match.mod ? platform === 'windowsLinux' : false;
+  const expectedAlt = match.altKey ?? false;
+  const expectedShift = match.shiftKey ?? false;
+
+  if (match.allowExtraModifiers) {
+    if (match.anyMod && !event.metaKey && !event.ctrlKey) return false;
+    if (expectedMeta && !event.metaKey) return false;
+    if (expectedCtrl && !event.ctrlKey) return false;
+    if (expectedAlt && !event.altKey) return false;
+    if (expectedShift && !event.shiftKey) return false;
+    return true;
+  }
+
+  const modMatches = match.anyMod
+    ? event.metaKey || event.ctrlKey
+    : event.metaKey === expectedMeta && event.ctrlKey === expectedCtrl;
+
+  return (
+    modMatches &&
+    event.altKey === expectedAlt &&
+    (match.allowShiftKey || Boolean(event.shiftKey) === expectedShift)
+  );
+}

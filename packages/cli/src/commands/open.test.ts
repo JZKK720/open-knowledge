@@ -1,0 +1,160 @@
+import { describe, expect, test } from 'bun:test';
+import { createRealOpenDeps, type OpenDeps, runOpen, scrubElectronRunAsNode } from './open.ts';
+
+function makeDeps(overrides: Partial<OpenDeps> = {}): {
+  deps: OpenDeps;
+  opened: string[];
+  logs: string[];
+  errors: string[];
+} {
+  const opened: string[] = [];
+  const logs: string[] = [];
+  const errors: string[] = [];
+  const deps: OpenDeps = {
+    detectBundlePath: () => null,
+    resolveBaseUrl: () => null,
+    openTarget: (t) => opened.push(t),
+    log: (m) => logs.push(m),
+    error: (m) => errors.push(m),
+    ...overrides,
+  };
+  return { deps, opened, logs, errors };
+}
+
+describe('runOpen', () => {
+  test('doc with a desktop bundle → openknowledge:// deep link, exit 0', () => {
+    const { deps, opened } = makeDeps({
+      detectBundlePath: () => '/Applications/Open Knowledge.app',
+    });
+    const code = runOpen('bim-brain/log', { project: '/abs/proj' }, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['openknowledge://open?project=%2Fabs%2Fproj&doc=bim-brain%2Flog']);
+  });
+
+  test('doc, no bundle but UI running → browser route, exit 0', () => {
+    const { deps, opened } = makeDeps({
+      detectBundlePath: () => null,
+      resolveBaseUrl: () => 'http://localhost:5173',
+    });
+    const code = runOpen('specs/foo/SPEC', { project: '/p' }, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['http://localhost:5173/#/specs/foo/SPEC']);
+  });
+
+  test('doc, neither desktop nor UI → error, exit 1, nothing opened', () => {
+    const { deps, opened, errors } = makeDeps();
+    const code = runOpen('foo', { project: '/p' }, deps);
+    expect(code).toBe(1);
+    expect(opened).toEqual([]);
+    expect(errors).toHaveLength(1);
+  });
+
+  test('folder takes the browser route even when a desktop bundle is present', () => {
+    const { deps, opened } = makeDeps({
+      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      resolveBaseUrl: () => 'http://localhost:5173',
+    });
+    const code = runOpen('specs/foo', { folder: true, project: '/p' }, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['http://localhost:5173/#/specs/foo/']);
+  });
+
+  test('trailing slash infers folder intent without --folder', () => {
+    const { deps, opened } = makeDeps({ resolveBaseUrl: () => 'http://localhost:5173' });
+    const code = runOpen('specs/foo/', {}, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['http://localhost:5173/#/specs/foo/']);
+  });
+
+  test('folder with no UI running → error, exit 1', () => {
+    const { deps, errors } = makeDeps({ resolveBaseUrl: () => null });
+    const code = runOpen('specs/foo', { folder: true, project: '/p' }, deps);
+    expect(code).toBe(1);
+    expect(errors).toHaveLength(1);
+  });
+
+  test('empty target (bare slash) → error, exit 1', () => {
+    const { deps, errors } = makeDeps();
+    const code = runOpen('/', {}, deps);
+    expect(code).toBe(1);
+    expect(errors).toHaveLength(1);
+  });
+
+  test.each([
+    ['..', '../sibling'],
+    ['nested ..', 'a/../b'],
+    ['leading slash', '/abs/doc'],
+    ['backslash', 'a\\b'],
+  ])('rejects names the desktop parser would drop (%s) instead of false success', (_label, name) => {
+    const { deps, opened, errors } = makeDeps({
+      detectBundlePath: () => '/Applications/Open Knowledge.app',
+    });
+    const code = runOpen(name, { project: '/p' }, deps);
+    expect(code).toBe(1);
+    expect(opened).toEqual([]);
+    expect(errors).toHaveLength(1);
+  });
+
+  test('rejects unsafe folder names too', () => {
+    const { deps, opened, errors } = makeDeps({ resolveBaseUrl: () => 'http://localhost:5173' });
+    const code = runOpen('specs/..', { folder: true, project: '/p' }, deps);
+    expect(code).toBe(1);
+    expect(opened).toEqual([]);
+    expect(errors).toHaveLength(1);
+  });
+
+  test('doc deep link encodes the whole name including the slash (%2F)', () => {
+    const { deps, opened } = makeDeps({
+      detectBundlePath: () => '/Applications/Open Knowledge.app',
+    });
+    const code = runOpen('notes/My Doc#1', { project: '/p' }, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['openknowledge://open?project=%2Fp&doc=notes%2FMy%20Doc%231']);
+  });
+
+  test('browser route encodes per-segment, preserving the slash', () => {
+    const { deps, opened } = makeDeps({ resolveBaseUrl: () => 'http://localhost:5173' });
+    const code = runOpen('notes/My Doc#1', { project: '/p' }, deps);
+    expect(code).toBe(0);
+    expect(opened).toEqual(['http://localhost:5173/#/notes/My%20Doc%231']);
+  });
+});
+
+describe('createRealOpenDeps wiring', () => {
+  test('detectBundlePath collapses a bundlePath-absent DetectResult to null (the force-browser/no-bundle contract)', () => {
+    const deps = createRealOpenDeps(() => ({ available: false, reason: 'force-browser' }));
+    expect(deps.detectBundlePath()).toBeNull();
+  });
+
+  test('detectBundlePath returns the bundle path when detect reports one', () => {
+    const deps = createRealOpenDeps(() => ({
+      available: true,
+      reason: 'available',
+      bundlePath: '/Applications/Open Knowledge.app',
+    }));
+    expect(deps.detectBundlePath()).toBe('/Applications/Open Knowledge.app');
+  });
+
+  test('detectBundlePath returns the bundle path when available:false but bundlePath is set', () => {
+    const deps = createRealOpenDeps(() => ({
+      available: false,
+      reason: 'headless',
+      bundlePath: '/Applications/Open Knowledge.app',
+    }));
+    expect(deps.detectBundlePath()).toBe('/Applications/Open Knowledge.app');
+  });
+});
+
+describe('scrubElectronRunAsNode', () => {
+  test('removes ELECTRON_RUN_AS_NODE so the spawned target does not inherit it', () => {
+    const scrubbed = scrubElectronRunAsNode({ ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin' });
+    expect(scrubbed.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(scrubbed.PATH).toBe('/usr/bin');
+  });
+
+  test('does not mutate the input env', () => {
+    const input = { ELECTRON_RUN_AS_NODE: '1' };
+    scrubElectronRunAsNode(input);
+    expect(input.ELECTRON_RUN_AS_NODE).toBe('1');
+  });
+});

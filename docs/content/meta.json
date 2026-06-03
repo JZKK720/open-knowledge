@@ -1,0 +1,18 @@
+{
+  "title": "Open Knowledge",
+  "icon": "LuBookOpen",
+  "pages": [
+    "---GET STARTED---",
+    "...get-started",
+    "---INTEGRATIONS---",
+    "...integrations",
+    "---FEATURES---",
+    "...features",
+    "---ADVANCED---",
+    "...advanced",
+    "---WORKFLOWS---",
+    "...workflows",
+    "---REFERENCE---",
+    "...reference"
+  ]
+}

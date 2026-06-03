@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta name="color-scheme" content="light dark" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Open Knowledge</title>
+  <!--
+    Editor-mode FOUC prevention. Reads the persisted mode synchronously
+    before React mounts so the first painted frame shows the user's
+    preferred editor (avoids flashing WYSIWYG before switching to Source).
+    Paired consumer: `src/editor/use-editor-mode.ts` (hook reads
+    `window.__OK_EDITOR_MODE__` once in its useState initializer).
+    Spec: specs/2026-04-21-editor-mode-persistence/SPEC.md §7.2.
+    Script body is on a single line with no inner newlines — biome's HTML
+    formatter reindents inline-script content on every pass (+4 spaces/run),
+    producing an infinite deny-loop at pre-commit. No-inner-newline form has
+    nothing for the formatter to reindent.
+  -->
+  <script>(() => { let mode = 'wysiwyg'; try { const raw = localStorage.getItem('ok-editor-mode-v1'); if (raw === 'wysiwyg' || raw === 'source') mode = raw; } catch {} window.__OK_EDITOR_MODE__ = mode; })();</script>
+  <!--
+    Theme FOUC prevention. Reads the persisted theme synchronously before
+    React mounts so the first painted frame is in the user's chosen theme
+    (avoids the native-pref → user-pref flip when the OS preference
+    disagrees with the user's choice). Paired consumer: next-themes
+    <ThemeProvider storageKey='ok-theme-v1'> in `src/main.tsx` — keep keys
+    in sync. next-themes stores the value as a plain string, not JSON.
+
+    The inline <style> below paints the html background to match the
+    body's resolved background (body uses `bg-sidebar` per globals.css).
+    The placeholders __OK_CHROME_BG_LIGHT__ / __OK_CHROME_BG_DARK__ are
+    substituted at build time by chromeTokensVitePlugin (resolves the
+    Tailwind v4 `--sidebar` OKLCH values to sRGB hex via culori). Single
+    source of truth for chrome bg — no hand-maintained drift between
+    this file and packages/core/src/constants/chrome.ts.
+
+    The `electron-mode` class is added when `window.okDesktop` is
+    present (preload bridge runs before any inline page script). Paired
+    consumer: globals.css `html.electron-mode` rules — render the outer
+    canvas (html / body / sidebar wrapper / sidebar inner) alpha-aware
+    so the BrowserWindow's vibrancy material shows through. Web mode
+    (no `window.okDesktop`) skips the class so chrome stays solid.
+
+    Single-line script body — same biome HTML-formatter constraint as
+    the editor-mode FOUC above.
+  -->
+  <script>(() => { let t = 'system'; try { const r = localStorage.getItem('ok-theme-v1'); if (r === 'light' || r === 'dark' || r === 'system') t = r; } catch {} let dark = t === 'dark'; if (t === 'system') { try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch {} } if (dark) document.documentElement.classList.add('dark'); if (window.okDesktop) document.documentElement.classList.add('electron-mode'); })();</script>
+  <style>html { background-color: __OK_CHROME_BG_LIGHT__ } html.dark { background-color: __OK_CHROME_BG_DARK__ }</style>
+</head>
+
+<body class="antialiased">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

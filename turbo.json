@@ -1,0 +1,192 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**"]
+    },
+    "build:desktop": {
+      "dependsOn": ["^build", "@inkeep/open-knowledge#build"],
+      "outputs": ["out/**"]
+    },
+    "dev:electron": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "build:desktop:dir": {
+      "dependsOn": ["build:desktop"],
+      "outputs": ["dist-desktop/**"],
+      "env": ["ELECTRON_CACHE", "ELECTRON_MIRROR"]
+    },
+    "rebuild:native": {
+      "cache": false,
+      "dependsOn": []
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": ["src/**/*.ts", "src/**/*.tsx"]
+    },
+    "test:dom": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "tests/dom/**/*.ts",
+        "scripts/run-test-dom.sh",
+        "../core/src/**/*.ts",
+        "../server/src/**/*.ts"
+      ]
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "src/editor/**/*.ts",
+        "src/editor/**/*.tsx",
+        "tests/integration/**/*.ts",
+        "tests/stress/**/*.e2e.ts",
+        "tests/visual/**/*.e2e.ts",
+        "tests/a11y/**/*.e2e.ts",
+        "tests/stress/_helpers/**/*.ts",
+        "../server/src/**/*.ts",
+        "../core/src/**/*.ts"
+      ]
+    },
+    "test:conversion": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "src/editor/**/*.ts",
+        "src/editor/**/*.tsx",
+        "tests/integration/conversion-fidelity.test.ts",
+        "tests/integration/test-harness.ts",
+        "../core/src/**/*.ts",
+        "../server/src/**/*.ts"
+      ]
+    },
+    "test:fidelity": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "tests/fidelity/**/*.ts",
+        "tests/fidelity/**/*.json",
+        "src/editor/**/*.ts",
+        "../core/src/**/*.ts",
+        "../core/src/markdown/fixtures/**/*.json",
+        "../../patches/@handlewithcare%2Fremark-prosemirror@0.1.5.patch"
+      ],
+      "env": ["STRESS_FIDELITY"]
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:visual": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:perf": {
+      "dependsOn": [],
+      "cache": true,
+      "inputs": [
+        "src/editor/**/*.ts",
+        "src/editor/**/*.tsx",
+        "tests/stress/component-blocks.perf.test.ts",
+        "../core/src/**/*.ts"
+      ]
+    },
+    "test:a11y": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:perf:bench": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "src/markdown/**/*.ts",
+        "src/markdown/fixtures/perf/*.md",
+        "tests/perf/markdown-bench.test.ts"
+      ],
+      "env": ["RUN_BENCH", "BENCH_RUNNER_CLASS"]
+    },
+    "test:perf:fallback": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "src/markdown/**/*.ts",
+        "src/markdown/fixtures/perf/*.md",
+        "src/markdown/parse-with-fallback.test.ts"
+      ],
+      "env": ["RUN_BENCH"]
+    },
+    "test:perf:r15-guard": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "src/markdown/autolink-void-html-guard.ts",
+        "src/markdown/autolink-void-html-guard.perf.test.ts"
+      ],
+      "env": ["RUN_BENCH"]
+    },
+    "test:perf:regression:unit": {
+      "dependsOn": [],
+      "cache": true,
+      "inputs": ["tests/perf/regression-gate.ts", "tests/perf/regression-gate.test.ts"]
+    },
+    "test:perf:regression": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "src/markdown/**/*.ts",
+        "src/markdown/fixtures/perf/*.md",
+        "tests/perf/markdown-bench.test.ts",
+        "tests/perf/regression-gate.ts",
+        "tests/perf/run-regression-gate.ts",
+        "tests/perf/baseline.json"
+      ],
+      "env": ["RUN_BENCH", "BENCH_RUNNER_CLASS"]
+    },
+    "test:health:unit": {
+      "dependsOn": [],
+      "cache": true,
+      "inputs": [
+        "src/metrics/parse-health.ts",
+        "src/markdown/**/*.ts",
+        "tests/health/parse-health-gate.ts",
+        "tests/health/parse-health-gate.test.ts"
+      ]
+    },
+    "test:health": {
+      "dependsOn": [],
+      "cache": true,
+      "inputs": [
+        "src/metrics/parse-health.ts",
+        "src/markdown/**/*.ts",
+        "src/markdown/fixtures/**",
+        "tests/health/parse-health-gate.ts",
+        "tests/health/baseline.json"
+      ]
+    },
+    "test:perf:sessions": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "tests/integration/per-session-um-perf.test.ts",
+        "../server/src/**/*.ts",
+        "../core/src/**/*.ts"
+      ]
+    },
+    "perf:profile": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": ["src/lib/perf/**/*.ts", "src/lib/perf/**/*.tsx", "tests/perf/**/*.ts"],
+      "passThroughEnv": ["DISPLAY", "OK_PERF_TARGET"]
+    }
+  }
+}

@@ -1,0 +1,264 @@
+import { describe, expect, test } from 'bun:test';
+import {
+  formatShortcut,
+  formatShortcutBindingLabel,
+  formatShortcutLabel,
+  isEditableShortcutTarget,
+  KEYBOARD_SHORTCUTS,
+  matchesKeyboardShortcut,
+} from './keyboard-shortcuts';
+
+describe('keyboard shortcut registry', () => {
+  test('uses unique shortcut ids', () => {
+    const ids = KEYBOARD_SHORTCUTS.map((shortcut) => shortcut.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('formats platform-specific shortcut labels', () => {
+    expect(formatShortcut('command-palette', 'mac')).toBe('⌘ K');
+    expect(formatShortcut('command-palette', 'windowsLinux')).toBe('Ctrl K');
+    expect(formatShortcut('new-item', 'mac')).toBe('⌘ N');
+    expect(formatShortcut('new-item', 'windowsLinux')).toBe('Ctrl N');
+    expect(formatShortcut('edit-with-ai', 'mac')).toBe('⇧⌘ I');
+  });
+
+  test('formats spoken shortcut labels for accessible names', () => {
+    expect(formatShortcutLabel('toggle-files-sidebar', 'mac')).toBe('Option Command S');
+    expect(formatShortcutLabel('toggle-files-sidebar', 'windowsLinux')).toBe('Control Alt S');
+    expect(
+      formatShortcutBindingLabel(
+        { mac: '⌥⌘ ↑ / ⌥⌘ ↓', windowsLinux: 'Ctrl Alt ↑ / Ctrl Alt ↓' },
+        'mac',
+      ),
+    ).toBe('Option Command Up Arrow or Option Command Down Arrow');
+    expect(formatShortcutLabel('source-folding', 'mac')).toBe(
+      'Option Command Left Bracket or Option Command Right Bracket',
+    );
+    expect(formatShortcutLabel('source-folding', 'windowsLinux')).toBe(
+      'Control Shift Left Bracket or Control Shift Right Bracket',
+    );
+  });
+
+  test('matches settings shortcut exactly and excludes Alt combinations', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, key: ',' },
+        'settings',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: true, key: ',' },
+        'settings',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, key: ',' },
+        'settings',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, key: ',' },
+        'settings',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
+  test('matches CmdOrCtrl renderer shortcuts regardless of detected platform', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: true, key: 's', code: 'KeyS' },
+        'toggle-files-sidebar',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: true, key: 's', code: 'KeyS' },
+        'toggle-files-sidebar',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
+  test('matches new file primary shortcut per platform and browser-safe fallback', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, key: 'n', code: 'KeyN' },
+        'new-item',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, key: 'n', code: 'KeyN' },
+        'new-item',
+        'windowsLinux',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: true, key: 'n', code: 'KeyN' },
+        'new-item',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: true, key: 'n', code: 'KeyN' },
+        'new-item',
+        'windowsLinux',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'N', code: 'KeyN' },
+        'new-item',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
+  test('matches command palette with allowed extra modifiers and rejects missing mod', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'k' },
+        'command-palette',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, key: 'k' },
+        'command-palette',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
+  test('matches source-aware replace shortcuts per platform', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: true, key: 'f' },
+        'replace',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, key: 'h' },
+        'replace',
+        'windowsLinux',
+      ),
+    ).toBe(true);
+  });
+
+  test('matches find-next and find-previous with strict shift handling', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, key: 'g' },
+        'find-next',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'g' },
+        'find-next',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'g' },
+        'find-previous',
+        'mac',
+      ),
+    ).toBe(true);
+  });
+
+  test('matches F3 find navigation alternates with strict shift handling', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, key: 'F3' },
+        'find-next',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, shiftKey: true, key: 'F3' },
+        'find-next',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, shiftKey: true, key: 'F3' },
+        'find-previous',
+        'mac',
+      ),
+    ).toBe(true);
+  });
+
+  test('matches find shortcut with Shift held through allowShiftKey', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'f' },
+        'find',
+        'mac',
+      ),
+    ).toBe(true);
+  });
+
+  test('matches Edit with AI shortcut only with Cmd/Ctrl+Shift+I', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'I' },
+        'edit-with-ai',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, shiftKey: true, key: 'i' },
+        'edit-with-ai',
+        'windowsLinux',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, key: 'k' },
+        'edit-with-ai',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, key: 'i' },
+        'edit-with-ai',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: true, shiftKey: true, key: 'i' },
+        'edit-with-ai',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
+  test('detects editable shortcut targets', () => {
+    expect(isEditableShortcutTarget({ tagName: 'INPUT' })).toBe(true);
+    expect(isEditableShortcutTarget({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(isEditableShortcutTarget({ isContentEditable: true })).toBe(true);
+    expect(isEditableShortcutTarget({ tagName: 'BUTTON' })).toBe(false);
+  });
+});
