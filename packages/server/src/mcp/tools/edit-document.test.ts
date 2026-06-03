@@ -71,6 +71,7 @@ const requestBodies: unknown[] = [];
 let mockSubscriberCount: number | undefined = 1;
 let mockSystemSubscriberCount: number | undefined = 1;
 let mockErrorEnvelope: { status: number; body: Record<string, unknown> } | undefined;
+let mockWarning: Record<string, unknown> | undefined;
 
 beforeAll(() => {
   testServer = Bun.serve({
@@ -100,6 +101,7 @@ beforeAll(() => {
           ...(mockSystemSubscriberCount !== undefined
             ? { systemSubscriberCount: mockSystemSubscriberCount }
             : {}),
+          ...(mockWarning !== undefined ? { warning: mockWarning } : {}),
         });
       }
 
@@ -120,6 +122,7 @@ beforeEach(async () => {
   mockSubscriberCount = 1;
   mockSystemSubscriberCount = 1;
   mockErrorEnvelope = undefined;
+  mockWarning = undefined;
 });
 
 afterEach(async () => {
@@ -161,6 +164,56 @@ describe('edit_document MCP tool', () => {
       offset: 42,
     });
     expect(result.content[0]?.text).toBe('Edit applied successfully.');
+  });
+
+  test('relays a content-divergence warning as structuredContent.contentDivergence + a text line', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 20,
+      actualBytes: 27,
+      byteDelta: 7,
+      divergenceType: 'patch-content-mismatch',
+      currentState: { kind: 'inline', content: 'what actually landed\nextra\n' },
+      hint: 'currentState carries the converged content.',
+    };
+
+    const result = await getTool().handler({ docName: 'notes', find: 'a', replace: 'b' });
+
+    expect(result.structuredContent?.contentDivergence).toMatchObject({
+      kind: 'content-divergence',
+      byteDelta: 7,
+      divergenceType: 'patch-content-mismatch',
+      currentState: { kind: 'inline', content: 'what actually landed\nextra\n' },
+    });
+    expect(result.content[0]?.text).toContain('⚠ Content divergence');
+  });
+
+  test('drops a malformed server warning at the safeParse boundary', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 20,
+      actualBytes: 27,
+      byteDelta: 'seven',
+    };
+
+    const result = await getTool().handler({ docName: 'notes', find: 'a', replace: 'b' });
+
+    expect(result.structuredContent?.contentDivergence).toBeUndefined();
+    expect(result.content[0]?.text).not.toContain('⚠ Content divergence');
+  });
+
+  test('ignores a non-divergence server warning (preview-attach lives on its own key)', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = { action: 'attach-preview-once', previewUrl: '/#/notes' };
+
+    const result = await getTool().handler({ docName: 'notes', find: 'a', replace: 'b' });
+
+    expect(result.structuredContent?.contentDivergence).toBeUndefined();
   });
 
   test('omits offset when the caller uses first-match mode', async () => {

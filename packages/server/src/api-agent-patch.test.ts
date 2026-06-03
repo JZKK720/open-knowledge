@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { Hocuspocus } from '@hocuspocus/server';
+import type * as Y from 'yjs';
 import {
   AGENT_WRITE_ORIGIN,
   AgentSessionManager,
@@ -175,6 +176,62 @@ describe('POST /api/agent-patch', () => {
       expect(ytext.toString()).toBe(
         '# Notes\n\nProject Alpha (linked) appears first. Later, Project Alpha appears second.\n',
       );
+    } finally {
+      await sessionManager.closeAll();
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('POST /api/agent-patch — surgical/incremental write shape', () => {
+  test('a small find/replace produces a minimal Y.Text delta, not a whole-doc overwrite', async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ok-api-agent-patch-shape-'));
+    const contentDir = join(projectDir, 'content');
+    mkdirSync(contentDir, { recursive: true });
+
+    const hocuspocus = new Hocuspocus({ quiet: true });
+    const sessionManager = new AgentSessionManager(hocuspocus);
+
+    try {
+      const session = await sessionManager.getSession('test-doc');
+      const ytext = session.dc.document.getText('source');
+      const seed =
+        '# Heading\n\n' +
+        'Alpha paragraph one with several words of filler content here.\n\n' +
+        'Beta paragraph two with the TARGET token buried in the middle.\n\n' +
+        'Gamma paragraph three with several more words of filler content here.\n';
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, seed, 'replace');
+      }, AGENT_WRITE_ORIGIN);
+      expect(ytext.toString()).toBe(seed);
+      const wholeDocLen = seed.length;
+
+      let insertCharCount = 0;
+      let deleteCharCount = 0;
+      const observer = (event: Y.YTextEvent): void => {
+        for (const change of event.changes.delta) {
+          if (change.insert && typeof change.insert === 'string') {
+            insertCharCount += change.insert.length;
+          }
+          if (change.delete) deleteCharCount += change.delete;
+        }
+      };
+      ytext.observe(observer);
+      const response = await callAgentPatch(hocuspocus, sessionManager, contentDir, {
+        docName: 'test-doc',
+        find: 'TARGET',
+        replace: 'REPLACED-TOKEN',
+      });
+      ytext.unobserve(observer);
+
+      expect(response.status).toBe(200);
+      expect(ytext.toString()).toBe(seed.replace('TARGET', 'REPLACED-TOKEN'));
+      const newDocLen = ytext.toString().length;
+
+      expect(deleteCharCount).toBeLessThan(wholeDocLen);
+      expect(insertCharCount).toBeLessThan(newDocLen);
+      expect(deleteCharCount).toBeLessThan(64);
+      expect(insertCharCount).toBeLessThan(64);
     } finally {
       await sessionManager.closeAll();
       rmSync(projectDir, { recursive: true, force: true });

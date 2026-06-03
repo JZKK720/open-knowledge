@@ -57,6 +57,29 @@ export const SummaryResponseFieldSchema = z
   .loose() satisfies StandardSchemaV1;
 export type SummaryResponseField = z.infer<typeof SummaryResponseFieldSchema>;
 
+export const ContentDivergenceCurrentStateSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('inline'), content: z.string() }),
+  z.object({
+    kind: z.literal('truncated'),
+    byteLength: z.number().int().nonnegative(),
+    hint: z.string(),
+  }),
+]);
+export type ContentDivergenceCurrentState = z.infer<typeof ContentDivergenceCurrentStateSchema>;
+
+export const ContentDivergenceWarningSchema = z
+  .object({
+    kind: z.literal('content-divergence'),
+    intendedBytes: z.number().int().nonnegative(),
+    actualBytes: z.number().int().nonnegative(),
+    byteDelta: z.number().int(),
+    divergenceType: z.string().optional(),
+    currentState: ContentDivergenceCurrentStateSchema.optional(),
+    hint: z.string().optional(),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type ContentDivergenceWarning = z.infer<typeof ContentDivergenceWarningSchema>;
+
 export const OrphanHintSchema = z
   .object({
     type: z.literal('orphan'),
@@ -81,6 +104,7 @@ export const AgentWriteMdSuccessSchema = z
     systemSubscriberCount: z.number().int().nonnegative(),
     hints: z.array(OrphanHintSchema).optional(),
     summary: SummaryResponseFieldSchema.optional(),
+    warning: ContentDivergenceWarningSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentWriteMdSuccess = z.infer<typeof AgentWriteMdSuccessSchema>;
@@ -91,6 +115,7 @@ export const AgentPatchSuccessSchema = z
     subscriberCount: z.number().int().nonnegative(),
     systemSubscriberCount: z.number().int().nonnegative(),
     summary: SummaryResponseFieldSchema.optional(),
+    warning: ContentDivergenceWarningSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentPatchSuccess = z.infer<typeof AgentPatchSuccessSchema>;

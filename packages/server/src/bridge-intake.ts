@@ -78,21 +78,32 @@ export function replaceRawBody(
   rawContent: string,
   embedResolver?: EmbedResolverArg,
 ): void {
-  const xmlFragment = document.getXmlFragment('default');
-  const ytext = document.getText('source');
+  withSpanSync(
+    'bridge.replaceRawBody',
+    {
+      attributes: {
+        'body.bytes': rawContent.length,
+        'doc.name': document.guid,
+      },
+    },
+    () => {
+      const xmlFragment = document.getXmlFragment('default');
+      const ytext = document.getText('source');
 
-  const { body } = stripFrontmatter(rawContent);
-  const parsedJson = mdManager.parseWithFallback(body, buildParseOpts(embedResolver));
-  const pmNode = schema.nodeFromJSON(parsedJson);
+      const { body } = stripFrontmatter(rawContent);
+      const parsedJson = mdManager.parseWithFallback(body, buildParseOpts(embedResolver));
+      const pmNode = schema.nodeFromJSON(parsedJson);
 
-  const currentText = ytext.toString();
-  if (currentText !== rawContent) {
-    ytext.delete(0, currentText.length);
-    ytext.insert(0, rawContent);
-  }
+      const currentText = ytext.toString();
+      if (currentText !== rawContent) {
+        ytext.delete(0, currentText.length);
+        ytext.insert(0, rawContent);
+      }
 
-  const meta = { mapping: new Map(), isOMark: new Map() };
-  updateYFragment(document, xmlFragment, pmNode, meta);
+      const meta = { mapping: new Map(), isOMark: new Map() };
+      updateYFragment(document, xmlFragment, pmNode, meta);
+    },
+  );
 }
 
 export function deriveFragmentFromYtext(document: Y.Doc, embedResolver?: EmbedResolverArg): void {

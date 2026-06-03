@@ -712,3 +712,193 @@ describe('conflict-aware write gate (FR9 a, d)', () => {
     _resetDocExtensionsForTests();
   });
 });
+
+describe('applyAgentMarkdownWrite — position: "replace" atomic-overwrite contract (PRD-6667)', () => {
+  test('replace overwrites prior bytes atomically — full delete + full insert, not DMP-incremental merge', async () => {
+    const session = await manager.getSession('doc-replace-shape.md', 'agent-shape');
+    const ytext = session.dc.document.getText('source');
+
+    const seed = 'aaaa bbbb cccc\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, seed, 'replace');
+    }, session.origin);
+    expect(ytext.toString()).toBe(seed);
+
+    let insertCharCount = 0;
+    let deleteCharCount = 0;
+    const observer = (event: Y.YTextEvent): void => {
+      for (const change of event.changes.delta) {
+        if (change.insert && typeof change.insert === 'string') {
+          insertCharCount += change.insert.length;
+        }
+        if (change.delete) deleteCharCount += change.delete;
+      }
+    };
+    ytext.observe(observer);
+
+    const replacePayload = 'aaaa bbbb cccc and extra\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, replacePayload, 'replace');
+    }, session.origin);
+    ytext.unobserve(observer);
+
+    expect(insertCharCount).toBe(replacePayload.length);
+    expect(deleteCharCount).toBe(seed.length);
+  });
+
+  test("position 'patch' (edit_document) writes incrementally and clears on empty body (not a no-op)", async () => {
+    const session = await manager.getSession('doc-patch-incremental.md', 'agent-patch-inc');
+    const ytext = session.dc.document.getText('source');
+
+    const seed = 'aaaa bbbb cccc\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, seed, 'replace');
+    }, session.origin);
+    expect(ytext.toString()).toBe(seed);
+
+    let insertCharCount = 0;
+    let deleteCharCount = 0;
+    const observer = (event: Y.YTextEvent): void => {
+      for (const change of event.changes.delta) {
+        if (change.insert && typeof change.insert === 'string') {
+          insertCharCount += change.insert.length;
+        }
+        if (change.delete) deleteCharCount += change.delete;
+      }
+    };
+    ytext.observe(observer);
+    const patchedBody = 'aaaa XXXX cccc\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, patchedBody, 'patch');
+    }, session.origin);
+    ytext.unobserve(observer);
+
+    expect(ytext.toString()).toBe(patchedBody);
+    expect(deleteCharCount).toBeLessThan(seed.length);
+    expect(insertCharCount).toBeLessThan(patchedBody.length);
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, '', 'patch');
+    }, session.origin);
+    expect(ytext.toString()).toBe('');
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, 'restored\n', 'replace');
+    }, session.origin);
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, '', 'append');
+    }, session.origin);
+    expect(ytext.toString()).toBe('restored\n');
+  });
+
+  test('single-writer replace lands payload bytes verbatim in Y.Text', async () => {
+    const session = await manager.getSession('doc-replace-verbatim.md', 'agent-verbatim');
+    const ytext = session.dc.document.getText('source');
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, '# Heading\n\nOld body text.\n', 'replace');
+    }, session.origin);
+
+    const payload = '# Heading\n\nCompletely different body text.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, payload, 'replace');
+    }, session.origin);
+
+    expect(ytext.toString()).toBe(payload);
+  });
+
+  test('replace with FM in payload supersedes existing FM', async () => {
+    const session = await manager.getSession('doc-fm-payload.md', 'agent-fm-payload');
+    const ytext = session.dc.document.getText('source');
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, '---\ntitle: Old\n---\nOld body.\n', 'replace');
+    }, session.origin);
+    expect(ytext.toString()).toContain('title: Old');
+
+    const payload = '---\ntitle: New\n---\nNew body.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, payload, 'replace');
+    }, session.origin);
+
+    expect(ytext.toString()).toBe(payload);
+    expect(ytext.toString()).toContain('title: New');
+    expect(ytext.toString()).not.toContain('title: Old');
+  });
+
+  test('replace with body-only payload preserves existing FM', async () => {
+    const session = await manager.getSession('doc-fm-preserve.md', 'agent-fm-preserve');
+    const ytext = session.dc.document.getText('source');
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(
+        session.dc.document,
+        '---\ntitle: Existing\n---\nOriginal body.\n',
+        'replace',
+      );
+    }, session.origin);
+
+    const bodyOnly = 'Body-only replacement, no FM.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, bodyOnly, 'replace');
+    }, session.origin);
+
+    expect(ytext.toString()).toContain('title: Existing');
+    expect(ytext.toString()).toContain('Body-only replacement, no FM.');
+    expect(ytext.toString()).not.toContain('Original body.');
+  });
+
+  test('replace with content identical to current state is a no-op (idempotent)', async () => {
+    const session = await manager.getSession('doc-idempotent.md', 'agent-idempotent');
+    const ytext = session.dc.document.getText('source');
+
+    const content = '# Heading\n\nBody paragraph.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, content, 'replace');
+    }, session.origin);
+
+    let mutationCount = 0;
+    const observer = (): void => {
+      mutationCount++;
+    };
+    ytext.observe(observer);
+
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, content, 'replace');
+    }, session.origin);
+    ytext.unobserve(observer);
+
+    expect(mutationCount).toBe(0);
+    expect(ytext.toString()).toBe(content);
+  });
+
+  test('returns undefined when ytext matches intent (Site A negative path)', async () => {
+    const session = await manager.getSession('doc-gate-negative.md', 'agent-gate-negative');
+    let divergence: unknown;
+    session.dc.document.transact(() => {
+      divergence = applyAgentMarkdownWrite(session.dc.document, '# Heading\n\nBody.\n', 'replace');
+    }, session.origin);
+    expect(divergence).toBeUndefined();
+  });
+
+  test('session.um.undo() after a replace restores prior bytes (one atomic UM frame)', async () => {
+    const session = await manager.getSession('doc-replace-undo.md', 'agent-replace-undo');
+    const ytext = session.dc.document.getText('source');
+
+    const seed = '# Seed Heading\n\nSeed body text.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, seed, 'replace');
+    }, session.origin);
+    session.um.stopCapturing();
+
+    const replacement = '# Replacement Heading\n\nDifferent body content.\n';
+    session.dc.document.transact(() => {
+      applyAgentMarkdownWrite(session.dc.document, replacement, 'replace');
+    }, session.origin);
+    expect(ytext.toString()).toBe(replacement);
+
+    const undone = applyAgentUndo(session, 'last');
+    expect(undone).toBe(true);
+    expect(ytext.toString()).toBe(seed);
+  });
+});

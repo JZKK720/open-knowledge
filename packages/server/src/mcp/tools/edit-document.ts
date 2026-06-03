@@ -1,4 +1,4 @@
-import { renderInventoryFooter } from '@inkeep/open-knowledge-core';
+import { ContentDivergenceWarningSchema, renderInventoryFooter } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import { resolveLockDir } from '../../config/paths.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
@@ -26,6 +26,8 @@ const BASE_DESCRIPTION = [
   '- `replace` — Replacement text.',
   '- `offset` — Optional JavaScript string offset of the exact occurrence to patch. Stale offsets return an error; re-fetch via `links({ kind: "suggest", docName })`.',
   '- `summary` — Optional one-line user-outcome (≤80 chars). Avoid secrets or PII — persisted to git history.',
+  '',
+  'Responses may include `structuredContent.contentDivergence` (`{kind: "content-divergence", intendedBytes, actualBytes, byteDelta, divergenceType, currentState, hint}`) when the converged Y.Text doesn\'t match the bytes your splice composed to. The patch still landed; you do NOT need to re-read — `currentState` carries the converged document inline (or a truncation marker over the soft cap).',
 ].join('\n');
 
 export const DESCRIPTION = `${BASE_DESCRIPTION}\n${renderInventoryFooter()}`;
@@ -118,12 +120,28 @@ export function register(server: ServerInstance, deps: EditDocumentDeps): void {
           : undefined;
       const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
 
+      const contentDivergenceParse = ContentDivergenceWarningSchema.safeParse(result.warning);
+      const contentDivergence = contentDivergenceParse.success
+        ? contentDivergenceParse.data
+        : undefined;
+
       const lines: string[] = ['Edit applied successfully.'];
       if (noPreviewAnywhere && !preview) lines.push(START_UI_TEXT_HINT);
       if (summaryHint) lines.push(summaryHint);
+      if (contentDivergence) {
+        lines.push(
+          `⚠ Content divergence: ${contentDivergence.actualBytes} actual bytes vs ${contentDivergence.intendedBytes} intended (byteDelta=${contentDivergence.byteDelta}). ${contentDivergence.hint ?? 'currentState carries the converged content (re-read only if it is truncated).'}`,
+        );
+      }
       const text = lines.join('\n');
 
-      if (!preview && !noPreviewAnywhere && !noPreviewOnThisDoc && !summaryResult) {
+      if (
+        !preview &&
+        !noPreviewAnywhere &&
+        !noPreviewOnThisDoc &&
+        !summaryResult &&
+        !contentDivergence
+      ) {
         return textResult(text);
       }
 
@@ -137,6 +155,9 @@ export function register(server: ServerInstance, deps: EditDocumentDeps): void {
       }
       if (summaryResult) {
         structured.summary = summaryResult;
+      }
+      if (contentDivergence) {
+        structured.contentDivergence = contentDivergence;
       }
       return textPlusStructured(text, structured);
     },

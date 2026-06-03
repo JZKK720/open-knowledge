@@ -54,6 +54,7 @@ let mockSubscriberCount: number | undefined = 1;
 let mockSystemSubscriberCount: number | undefined = 1;
 let lastWriteRequest: Record<string, unknown> | undefined;
 let mockErrorEnvelope: { status: number; body: Record<string, unknown> } | undefined;
+let mockWarning: Record<string, unknown> | undefined;
 
 beforeAll(() => {
   testServer = Bun.serve({
@@ -72,6 +73,7 @@ beforeAll(() => {
           ...(mockSystemSubscriberCount !== undefined
             ? { systemSubscriberCount: mockSystemSubscriberCount }
             : {}),
+          ...(mockWarning !== undefined ? { warning: mockWarning } : {}),
         });
       }
       return new Response('Not found', { status: 404 });
@@ -92,6 +94,7 @@ beforeEach(async () => {
   mockSystemSubscriberCount = 1;
   lastWriteRequest = undefined;
   mockErrorEnvelope = undefined;
+  mockWarning = undefined;
 });
 
 afterEach(async () => {
@@ -478,6 +481,82 @@ describe('write_document — template instantiation (FR5)', () => {
     expect(lastWriteRequest?.markdown).not.toContain('title: Dossier template');
     expect(lastWriteRequest?.markdown).not.toContain('tags:');
     expect(lastWriteRequest?.markdown).toContain('## Summary');
+  });
+});
+
+describe('write_document — content-divergence relay', () => {
+  test('single-doc: relays the server warning as structuredContent.contentDivergence + a text line', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 18,
+      actualBytes: 25,
+      byteDelta: 7,
+      divergenceType: 'replace-content-mismatch',
+      currentState: { kind: 'inline', content: 'what actually landed\n' },
+      hint: 'currentState carries the converged content.',
+    };
+
+    const result = await getTool().handler({
+      docName: 'notes',
+      markdown: 'hello',
+      position: 'replace',
+    });
+
+    expect(result.structuredContent?.contentDivergence).toMatchObject({
+      kind: 'content-divergence',
+      byteDelta: 7,
+      divergenceType: 'replace-content-mismatch',
+      currentState: { kind: 'inline', content: 'what actually landed\n' },
+    });
+    expect(result.content[0]?.text).toContain('⚠ Content divergence');
+  });
+
+  test('batch: surfaces per-doc contentDivergence from the r.raw.warning path', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 10,
+      actualBytes: 14,
+      byteDelta: 4,
+      divergenceType: 'append-content-mismatch',
+      currentState: { kind: 'inline', content: 'batch landed\n' },
+      hint: 'currentState carries the converged content.',
+    };
+
+    const result = await getTool().handler({
+      docs: [{ docName: 'docs/test', markdown: 'hello', position: 'append' }],
+    } as Parameters<RegisteredTool['handler']>[0]);
+
+    const s = result.structuredContent as {
+      documents: Array<{ docName: string; contentDivergence?: Record<string, unknown> }>;
+    };
+    expect(s.documents[0]?.contentDivergence).toMatchObject({
+      kind: 'content-divergence',
+      byteDelta: 4,
+      divergenceType: 'append-content-mismatch',
+    });
+  });
+
+  test('drops a malformed server warning at the safeParse boundary (single-doc)', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps());
+    mockWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 18,
+      actualBytes: 25,
+      byteDelta: 'seven',
+    };
+
+    const result = await getTool().handler({
+      docName: 'notes',
+      markdown: 'hello',
+      position: 'replace',
+    });
+
+    expect(result.structuredContent?.contentDivergence).toBeUndefined();
   });
 });
 

@@ -9,15 +9,25 @@ import {
 export { colorFromSeed } from '@inkeep/open-knowledge-core';
 
 import * as Y from 'yjs';
-import { composeAndWriteRawBody, deriveFragmentFromYtext } from './bridge-intake.ts';
+import {
+  composeAndWriteRawBody,
+  deriveFragmentFromYtext,
+  replaceRawBody,
+} from './bridge-intake.ts';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import { DocInConflictError, isDocInConflict } from './conflict-errors.ts';
+import {
+  type AgentWriteContentDivergence,
+  evaluateContentDivergence,
+} from './content-divergence-gate.ts';
 import { getDocExtension, stripDocExtension } from './doc-extensions.ts';
 import { FrontmatterMalformedError } from './frontmatter-malformed-error.ts';
 import { recordFrontmatterEditSurface } from './frontmatter-telemetry.ts';
 import { getLogger } from './logger.ts';
 import type { PairedWriteOrigin } from './server-observers.ts';
 import { setActiveSpanAttributes, withSpanSync } from './telemetry.ts';
+
+export type { AgentWriteContentDivergence };
 
 const log = getLogger('agent-sessions');
 
@@ -41,16 +51,16 @@ function docNameToFile(docName: string): string {
 export function applyAgentMarkdownWrite(
   document: Document,
   markdown: string,
-  position: 'append' | 'prepend' | 'replace',
+  position: 'append' | 'prepend' | 'replace' | 'patch',
   embedResolver?: {
     resolveEmbed: (basename: string, sourcePath: string) => string | null;
     sourcePath: string;
   },
-): void {
+): AgentWriteContentDivergence | undefined {
   if (isDocInConflict(document)) {
     throw new DocInConflictError({ file: docNameToFile(document.name) });
   }
-  withSpanSync(
+  return withSpanSync(
     'agent.applyAgentMarkdownWrite',
     {
       attributes: {
@@ -59,19 +69,31 @@ export function applyAgentMarkdownWrite(
         'agent.markdown.bytes': markdown.length,
       },
     },
-    () => applyAgentMarkdownWriteInner(document, markdown, position, embedResolver),
+    () => {
+      const divergence = applyAgentMarkdownWriteInner(document, markdown, position, embedResolver);
+      if (divergence !== undefined) {
+        setActiveSpanAttributes({
+          'agent.content_divergent': true,
+          'agent.intended_bytes': divergence.intendedBytes,
+          'agent.actual_bytes': divergence.actualBytes,
+          'agent.byte_delta': divergence.byteDelta,
+          'agent.divergence_type': divergence.divergenceType,
+        });
+      }
+      return divergence;
+    },
   );
 }
 
 function applyAgentMarkdownWriteInner(
   document: Document,
   markdown: string,
-  position: 'append' | 'prepend' | 'replace',
+  position: 'append' | 'prepend' | 'replace' | 'patch',
   embedResolver?: {
     resolveEmbed: (basename: string, sourcePath: string) => string | null;
     sourcePath: string;
   },
-): void {
+): AgentWriteContentDivergence | undefined {
   try {
     const ytext = document.getText('source');
     const currentYText = ytext.toString();
@@ -87,6 +109,10 @@ function applyAgentMarkdownWriteInner(
     let newBody: string;
     switch (position) {
       case 'replace':
+        finalFm = payloadFm || existingFm;
+        newBody = payloadBody;
+        break;
+      case 'patch':
         finalFm = payloadFm || existingFm;
         newBody = payloadBody;
         break;
@@ -118,7 +144,14 @@ function applyAgentMarkdownWriteInner(
     }
 
     const newContent = prependFrontmatter(finalFm, newBody);
-    composeAndWriteRawBody(document, newContent, 'agent', embedResolver);
+    if (position === 'replace') {
+      replaceRawBody(document, newContent, embedResolver);
+    } else {
+      composeAndWriteRawBody(document, newContent, 'agent', embedResolver);
+    }
+
+    const actualYText = document.getText('source').toString();
+    return evaluateContentDivergence(actualYText, newContent, position);
   } catch (err) {
     if (!(err instanceof FrontmatterMalformedError)) {
       log.error(

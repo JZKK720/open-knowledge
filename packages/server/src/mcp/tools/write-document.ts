@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import {
+  ContentDivergenceWarningSchema,
   normalizeBridge,
   renderInventoryFooter,
   stripFrontmatter,
@@ -44,6 +45,8 @@ const BASE_DESCRIPTION = [
   '- `template` — Template name. Mutually exclusive with `markdown`.',
   '- `position` — `append` | `prepend` | `replace`. Optional for a new doc (defaults to `replace`); required for an existing doc. Forced to `replace` with `template`.',
   '- `summary` — Optional one-line user-outcome (≤80 chars). Avoid secrets or PII — persisted to git history.',
+  '',
+  'Responses may include a content-divergence warning when the converged Y.Text doesn\'t match the bytes your payload composed to. The write still landed; you do NOT need to re-read — `currentState` carries the converged document inline (`{kind:"inline", content}`, or `{kind:"truncated", byteLength, hint}` over the soft cap). Single-doc shape: `structuredContent.contentDivergence = { kind: "content-divergence", intendedBytes, actualBytes, byteDelta, divergenceType, currentState, hint }`. Batch shape: per-doc `structuredContent.documents[].contentDivergence` with the same field set.',
 ].join('\n');
 
 export const DESCRIPTION = `${BASE_DESCRIPTION}\n${renderInventoryFooter()}`;
@@ -336,11 +339,14 @@ export function register(server: ServerInstance, deps: WriteDocumentDeps): void 
         const documents = results.map((r) => {
           if (!r.ok) return { docName: r.docName, ok: false as const, error: r.error };
           const preview = resolvePreviewUrl(r.docName, { lockDir });
+          const divergenceParse = ContentDivergenceWarningSchema.safeParse(r.raw.warning);
+          const divergence = divergenceParse.success ? divergenceParse.data : undefined;
           return {
             docName: r.docName,
             ok: true as const,
             position: r.position,
             ...(preview ? { previewUrl: preview.url } : {}),
+            ...(divergence ? { contentDivergence: divergence } : {}),
           };
         });
         const okCount = documents.filter((d) => d.ok).length;
@@ -351,7 +357,11 @@ export function register(server: ServerInstance, deps: WriteDocumentDeps): void 
           if (emptyAppendNoOpNote(r.position, spec.markdown)) {
             return `No change to ${spec.docName} — empty ${r.position}, document unchanged.`;
           }
-          return `Wrote ${spec.docName} (${r.position}).`;
+          const d = documents[i];
+          const base = `Wrote ${spec.docName} (${r.position}).`;
+          return d?.ok && d.contentDivergence
+            ? `${base} ⚠ Content divergence: ${d.contentDivergence.actualBytes} actual vs ${d.contentDivergence.intendedBytes} intended (byteDelta=${d.contentDivergence.byteDelta}).`
+            : base;
         });
         const perDocNotes = args.docs.flatMap((spec, i) => {
           const r = results[i];
@@ -410,6 +420,11 @@ export function register(server: ServerInstance, deps: WriteDocumentDeps): void 
           : undefined;
       const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
 
+      const contentDivergenceParse = ContentDivergenceWarningSchema.safeParse(result.warning);
+      const contentDivergence = contentDivergenceParse.success
+        ? contentDivergenceParse.data
+        : undefined;
+
       const noOpNote = emptyAppendNoOpNote(w.position, args.markdown);
       const lines: string[] = [
         noOpNote ??
@@ -427,9 +442,21 @@ export function register(server: ServerInstance, deps: WriteDocumentDeps): void 
           if (hint.message) lines.push(hint.message);
         }
       }
+      if (contentDivergence) {
+        lines.push(
+          `⚠ Content divergence: ${contentDivergence.actualBytes} actual bytes vs ${contentDivergence.intendedBytes} intended (byteDelta=${contentDivergence.byteDelta}). ${contentDivergence.hint ?? 'currentState carries the converged content (re-read only if it is truncated).'}`,
+        );
+      }
       const text = lines.join('\n');
 
-      if (!preview && !noPreviewAnywhere && !noPreviewOnThisDoc && !hints && !summaryResult) {
+      if (
+        !preview &&
+        !noPreviewAnywhere &&
+        !noPreviewOnThisDoc &&
+        !hints &&
+        !summaryResult &&
+        !contentDivergence
+      ) {
         return textResult(text);
       }
 
@@ -446,6 +473,9 @@ export function register(server: ServerInstance, deps: WriteDocumentDeps): void 
       }
       if (summaryResult) {
         structured.summary = summaryResult;
+      }
+      if (contentDivergence) {
+        structured.contentDivergence = contentDivergence;
       }
       return textPlusStructured(text, structured);
     },

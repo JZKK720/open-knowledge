@@ -1,3 +1,4 @@
+import { ContentDivergenceWarningSchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import type { AgentIdentity } from '../agent-identity.ts';
 import { resolvePreviewUrlForTool } from './preview-url.ts';
@@ -28,6 +29,8 @@ export const DESCRIPTION = [
   '- `docName` — Required for `rollback`. Document name, typically without extension; trailing `.md`/`.mdx` is stripped.',
   '- `commitSha` — Required for `rollback`. 40-character SHA from the shadow-repo timeline.',
   '- `summary` — Optional rollback summary (≤80 chars). If omitted, defaults to "Restored to <sha-short>". Avoid secrets or PII — summaries persist to git history.',
+  '',
+  'A `rollback` response may include `structuredContent.contentDivergence` (`{kind: "content-divergence", intendedBytes, actualBytes, byteDelta, divergenceType, currentState, hint}`) when the restored `Y.Text` does not byte-match the target-version bytes. The rollback still landed; `currentState` carries the converged document inline (or a truncation marker over the soft cap), so you do NOT need to re-read.',
 ].join('\n');
 
 export interface VersionDeps {
@@ -158,6 +161,11 @@ async function handleRollback(args: VersionArgs, url: string, cwd: string, deps:
       : undefined;
   const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
 
+  const contentDivergenceParse = ContentDivergenceWarningSchema.safeParse(result.warning);
+  const contentDivergence = contentDivergenceParse.success
+    ? contentDivergenceParse.data
+    : undefined;
+
   const author = typeof versionResult.author === 'string' ? versionResult.author : undefined;
   const timestamp =
     typeof versionResult.timestamp === 'string' ? versionResult.timestamp : undefined;
@@ -166,6 +174,11 @@ async function handleRollback(args: VersionArgs, url: string, cwd: string, deps:
     `Restored "${docName}" to version ${args.commitSha.slice(0, 8)}${provenance}. The change has been applied to all connected editors.`,
   ];
   if (summaryHint) textLines.push(summaryHint);
+  if (contentDivergence) {
+    textLines.push(
+      `⚠ Content divergence: ${contentDivergence.actualBytes} actual bytes vs ${contentDivergence.intendedBytes} intended (byteDelta=${contentDivergence.byteDelta}). ${contentDivergence.hint ?? 'currentState carries the converged content (re-read only if it is truncated).'}`,
+    );
+  }
 
   const preview = await resolvePreviewUrlForTool(
     docName,
@@ -179,5 +192,6 @@ async function handleRollback(args: VersionArgs, url: string, cwd: string, deps:
     previewUrl: preview?.url ?? null,
     ...(preview ? { previewUrlSource: preview.source } : {}),
     ...(summaryResult ? { summary: summaryResult } : {}),
+    ...(contentDivergence ? { contentDivergence } : {}),
   });
 }

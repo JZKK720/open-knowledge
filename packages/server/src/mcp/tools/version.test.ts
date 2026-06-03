@@ -79,6 +79,7 @@ let baseUrl: string;
 let tmpDir: string;
 const seenRequests: string[] = [];
 const seenBodies: Array<Record<string, unknown>> = [];
+let mockRollbackWarning: Record<string, unknown> | undefined;
 
 beforeAll(() => {
   testServer = Bun.serve({
@@ -109,6 +110,7 @@ beforeAll(() => {
         return Response.json({
           ok: true,
           ...(summaryShape ? { summary: summaryShape } : {}),
+          ...(mockRollbackWarning !== undefined ? { warning: mockRollbackWarning } : {}),
         });
       }
       return new Response('Not found', { status: 404 });
@@ -125,6 +127,7 @@ beforeEach(async () => {
   tmpDir = await mkdtemp(resolve(tmpdir(), 'ok-version-test-'));
   seenRequests.length = 0;
   seenBodies.length = 0;
+  mockRollbackWarning = undefined;
 });
 
 afterEach(async () => {
@@ -223,6 +226,55 @@ describe('version — action=rollback (per-doc restore)', () => {
     });
     expect(result.content[0]?.text).toContain('Restored "notes"');
     expect(result.content[0]?.text).toContain('01234567');
+  });
+
+  test('relays a rollback content-divergence warning as structuredContent.contentDivergence + a text line', async () => {
+    bindTestUiLock(tmpDir);
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps(baseUrl, tmpDir));
+    mockRollbackWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 40,
+      actualBytes: 33,
+      byteDelta: -7,
+      divergenceType: 'rollback-content-mismatch',
+      currentState: { kind: 'inline', content: 'restored body bytes\n' },
+      hint: 'currentState carries the converged content.',
+    };
+
+    const result = await getTool().handler({
+      action: 'rollback',
+      docName: 'notes',
+      commitSha: SHA,
+    });
+
+    expect(result.structuredContent?.contentDivergence).toMatchObject({
+      kind: 'content-divergence',
+      byteDelta: -7,
+      divergenceType: 'rollback-content-mismatch',
+      currentState: { kind: 'inline', content: 'restored body bytes\n' },
+    });
+    expect(result.content[0]?.text).toContain('⚠ Content divergence');
+  });
+
+  test('drops a malformed rollback warning at the safeParse boundary', async () => {
+    const { server, getTool } = createFakeServer();
+    register(server, makeDeps(baseUrl, tmpDir));
+    mockRollbackWarning = {
+      kind: 'content-divergence',
+      intendedBytes: 40,
+      actualBytes: 33,
+      byteDelta: 'minus seven',
+    };
+
+    const result = await getTool().handler({
+      action: 'rollback',
+      docName: 'notes',
+      commitSha: SHA,
+    });
+
+    expect(result.structuredContent?.contentDivergence).toBeUndefined();
+    expect(result.content[0]?.text).not.toContain('⚠ Content divergence');
   });
 
   test('normalizes trailing .md from docName before history + rollback requests', async () => {

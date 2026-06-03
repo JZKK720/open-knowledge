@@ -185,6 +185,7 @@ import { type AgentPresenceBroadcaster, BROADCASTER_EVICTION_MS } from './agent-
 import {
   AgentSessionCapacityError,
   type AgentSessionManager,
+  type AgentWriteContentDivergence,
   applyAgentMarkdownWrite,
   applyAgentUndo,
   iconFromClientName,
@@ -208,6 +209,10 @@ import {
   applyTemplateWrite,
   type TemplateFrontmatter,
 } from './content/templates-write.ts';
+import {
+  evaluateContentDivergence,
+  toContentDivergenceWarning,
+} from './content-divergence-gate.ts';
 import { recordContributor } from './contributor-tracker.ts';
 import { deriveDetection, embedProbeRing, recordEmbedProbe } from './embed-probe.ts';
 import {
@@ -478,6 +483,51 @@ function renameAttributionCounter(): ReturnType<ReturnType<typeof getMeter>['cre
     });
   }
   return _renameAttributionCounter;
+}
+
+let _agentWriteGateFiredCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
+  null;
+function agentWriteGateFiredCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
+  if (!_agentWriteGateFiredCounter) {
+    _agentWriteGateFiredCounter = getMeter().createCounter('ok.agent_write.gate_fired_total', {
+      description:
+        'Count of agent writes that ran the Site A content-divergence gate (denominator for the divergence rate). Bounded label: handler ∈ {agent-write-md, agent-patch, rollback}.',
+    });
+  }
+  return _agentWriteGateFiredCounter;
+}
+
+let _agentWriteContentDivergenceCounter: ReturnType<
+  ReturnType<typeof getMeter>['createCounter']
+> | null = null;
+function agentWriteContentDivergenceCounter(): ReturnType<
+  ReturnType<typeof getMeter>['createCounter']
+> {
+  if (!_agentWriteContentDivergenceCounter) {
+    _agentWriteContentDivergenceCounter = getMeter().createCounter(
+      'ok.agent_write.content_divergence_total',
+      {
+        description:
+          'Count of agent writes whose converged Y.Text diverged from the composed intent (numerator for the divergence rate). Bounded labels: handler ∈ {agent-write-md, agent-patch, rollback}, divergence_type.',
+      },
+    );
+  }
+  return _agentWriteContentDivergenceCounter;
+}
+
+type DivergenceHandler = 'agent-write-md' | 'agent-patch' | 'rollback';
+
+function recordContentDivergenceGate(
+  handler: DivergenceHandler,
+  divergence: AgentWriteContentDivergence | undefined,
+): void {
+  agentWriteGateFiredCounter().add(1, { handler });
+  if (divergence !== undefined) {
+    agentWriteContentDivergenceCounter().add(1, {
+      handler,
+      divergence_type: divergence.divergenceType,
+    });
+  }
 }
 
 export function __resetRenameTelemetryForTesting(): void {
@@ -3054,6 +3104,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         });
         const timestamp = new Date().toISOString();
 
+        let writeDivergence: AgentWriteContentDivergence | undefined;
+
         try {
           const icon = iconFromClientName(clientName);
           const color = AGENT_ICON_COLORS[icon] ?? colorFromSeed(colorSeed ?? agentId);
@@ -3067,7 +3119,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
           captureEffect(session.dc.document.getText('source'), agentId, colorSeed, clientName);
           session.dc.document.transact(() => {
-            applyAgentMarkdownWrite(
+            writeDivergence = applyAgentMarkdownWrite(
               session.dc.document,
               body.markdown,
               position,
@@ -3084,6 +3136,21 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               description: `Added (${agentName}): ${body.markdown.trim().slice(0, 50)}`,
             });
           }, session.origin);
+          if (writeDivergence !== undefined) {
+            console.warn(
+              JSON.stringify({
+                event: 'agent-write-content-divergence',
+                'doc.name': resolvedDocName,
+                position,
+                intendedBytes: writeDivergence.intendedBytes,
+                actualBytes: writeDivergence.actualBytes,
+                byteDelta: writeDivergence.byteDelta,
+                'agent.id': agentId,
+                'agent.client_name': clientName,
+              }),
+            );
+          }
+          recordContentDivergenceGate('agent-write-md', writeDivergence);
           recordContributor(
             resolvedDocName,
             agentId,
@@ -3137,6 +3204,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             systemSubscriberCount,
             ...(hints ? { hints } : {}),
             ...(summaryResponse ? { summary: summaryResponse } : {}),
+            ...(writeDivergence !== undefined
+              ? { warning: toContentDivergenceWarning(writeDivergence) }
+              : {}),
           },
           { handler: 'agent-write-md' },
         );
@@ -4227,6 +4297,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         let notFound = false;
         let staleTarget = false;
         let fmIntersect = false;
+        let patchDivergence: AgentWriteContentDivergence | undefined;
         try {
           const icon = iconFromClientName(clientName);
           const color = AGENT_ICON_COLORS[icon] ?? colorFromSeed(colorSeed ?? agentId);
@@ -4277,10 +4348,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             const newFull =
               currentFull.slice(0, pos) + replace + currentFull.slice(pos + find.length);
             const { body: newBody } = stripFrontmatter(newFull);
-            applyAgentMarkdownWrite(
+            patchDivergence = applyAgentMarkdownWrite(
               session.dc.document,
               newBody,
-              'replace',
+              'patch',
               options.resolveEmbed
                 ? { resolveEmbed: options.resolveEmbed, sourcePath: docName }
                 : undefined,
@@ -4294,6 +4365,20 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               description: `Patched (${agentName}): ${find.slice(0, 50)}`,
             });
           }, session.origin);
+          if (patchDivergence !== undefined) {
+            console.warn(
+              JSON.stringify({
+                event: 'agent-write-content-divergence',
+                'doc.name': docName,
+                position: 'patch',
+                intendedBytes: patchDivergence.intendedBytes,
+                actualBytes: patchDivergence.actualBytes,
+                byteDelta: patchDivergence.byteDelta,
+                'agent.id': agentId,
+                'agent.client_name': clientName,
+              }),
+            );
+          }
           if (!notFound && !staleTarget && !fmIntersect) {
             const { stored: storedSummary } = summaryResponseFields(normalizedSummary);
             recordContributor(
@@ -4307,6 +4392,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             );
             incrementAgentWriteCalls();
             countNormalizedSummary(normalizedSummary);
+            recordContentDivergenceGate('agent-patch', patchDivergence);
           }
         } finally {
           agentPresenceBroadcaster?.touchMode(agentId, 'idle');
@@ -4377,6 +4463,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             subscriberCount,
             systemSubscriberCount,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
+            ...(patchDivergence !== undefined
+              ? { warning: toContentDivergenceWarning(patchDivergence) }
+              : {}),
           },
           { handler: 'agent-patch' },
         );
@@ -5307,9 +5396,32 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const rollbackEmbedResolver = options.resolveEmbed
           ? { resolveEmbed: options.resolveEmbed, sourcePath: docName }
           : undefined;
+        let rollbackDivergence: AgentWriteContentDivergence | undefined;
         document.transact(() => {
           replaceRawBody(document, markdown, rollbackEmbedResolver);
+          rollbackDivergence = evaluateContentDivergence(
+            document.getText('source').toString(),
+            markdown,
+            'rollback',
+          );
         }, ROLLBACK_ORIGIN);
+        if (rollbackDivergence !== undefined) {
+          console.warn(
+            JSON.stringify({
+              event: 'agent-write-content-divergence',
+              'doc.name': docName,
+              position: 'rollback',
+              intendedBytes: rollbackDivergence.intendedBytes,
+              actualBytes: rollbackDivergence.actualBytes,
+              byteDelta: rollbackDivergence.byteDelta,
+              'actor.kind': actor.kind,
+              ...(actor.kind === 'agent' || actor.kind === 'principal'
+                ? { 'actor.writer_id': actor.writerId }
+                : {}),
+            }),
+          );
+        }
+        recordContentDivergenceGate('rollback', rollbackDivergence);
 
         let summaryResponse: SummaryResponse | undefined;
         switch (actor.kind) {
@@ -5398,6 +5510,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             restoredFrom: commitSha,
             timestamp,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
+            ...(rollbackDivergence !== undefined
+              ? { warning: toContentDivergenceWarning(rollbackDivergence) }
+              : {}),
           },
           { handler: 'rollback' },
         );
