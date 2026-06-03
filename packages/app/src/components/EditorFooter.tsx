@@ -9,19 +9,31 @@ import type { DocumentStats } from '@/lib/document-stats';
 
 interface EditorFooterProps {
   stats: DocumentStats;
+  /** Selection-scoped stats. When non-null, the stats group reflects the
+   *  current selection (prefixed "Selected"); when null it shows `stats`
+   *  (whole document). */
+  selectionStats?: DocumentStats | null;
   /** Stats group renders only when there's a real doc scope. When false and
    *  identity is also empty, the footer renders nothing. */
   showStats?: boolean;
 }
 
-export function EditorFooter({ stats, showStats = true }: EditorFooterProps) {
+export function EditorFooter({ stats, selectionStats, showStats = true }: EditorFooterProps) {
   const { t } = useLingui();
   const identity = useEditorFooterIdentity();
   if (!showStats && identity === null) return null;
-  const { words, chars, tokens } = stats;
+  const active = selectionStats ?? stats;
+  const isSelection = selectionStats != null;
+  const { words, chars, tokens } = active;
   return (
     <section
-      aria-label={showStats ? t`Document statistics` : t`Editor status bar`}
+      aria-label={
+        !showStats
+          ? t`Editor status bar`
+          : isSelection
+            ? t`Selection statistics`
+            : t`Document statistics`
+      }
       className="relative flex h-6 shrink-0 items-center justify-between gap-3 bg-background px-3 text-2xs text-muted-foreground"
     >
       <div
@@ -33,17 +45,25 @@ export function EditorFooter({ stats, showStats = true }: EditorFooterProps) {
       </span>
       {showStats ? (
         <span className="flex items-center shrink-0 gap-3">
+          {isSelection ? (
+            <span
+              className="font-medium text-foreground/70"
+              data-testid="editor-footer-selected-label"
+            >
+              {t`Selected`}
+            </span>
+          ) : null}
           <span>
-            <span className="tabular-nums">{stats.words.toLocaleString()}</span>{' '}
+            <span className="tabular-nums">{active.words.toLocaleString()}</span>{' '}
             <Plural value={words} one="word" other="words" />
           </span>
           <span>
-            <span className="tabular-nums">{stats.chars.toLocaleString()}</span>{' '}
+            <span className="tabular-nums">{active.chars.toLocaleString()}</span>{' '}
             <Plural value={chars} one="char" other="chars" />
           </span>
           <span>
-            {stats.tokens > 0 ? '~' : ''}
-            <span className="tabular-nums">{stats.tokens.toLocaleString()}</span>{' '}
+            {active.tokens > 0 ? '~' : ''}
+            <span className="tabular-nums">{active.tokens.toLocaleString()}</span>{' '}
             <Plural value={tokens} one="token" other="tokens" />
           </span>
         </span>

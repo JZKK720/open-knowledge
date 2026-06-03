@@ -44,6 +44,11 @@ import { uploadDecorationPlugin } from './image-upload/index.ts';
 import { getMountId } from './mount-id-registry';
 import { mountTiptapEditorPromise } from './mount-promise';
 import { markUserTyping } from './observers';
+import {
+  publishSelectionStats,
+  SELECTION_STATS_DEBOUNCE_MS,
+  selectionStatsFromWysiwyg,
+} from './selection-stats';
 import { TableCellHandles } from './table-controls/TableCellHandles';
 import { attachTypingBurstDetector } from './typing-burst-detector';
 import { getEditorView } from './utils/get-editor-view';
@@ -330,6 +335,29 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
     if (!docName) return;
     registerEditor(docName, editor);
     return () => unregisterEditor(docName, editor);
+  }, [editor, provider]);
+
+  useEffect(() => {
+    const docName = provider.configuration.name;
+    if (!docName) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const publish = () => {
+      timer = null;
+      publishSelectionStats(docName, 'wysiwyg', selectionStatsFromWysiwyg(editor));
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(publish, SELECTION_STATS_DEBOUNCE_MS);
+    };
+    publish();
+    editor.on('selectionUpdate', schedule);
+    editor.on('update', schedule);
+    return () => {
+      if (timer) clearTimeout(timer);
+      editor.off('selectionUpdate', schedule);
+      editor.off('update', schedule);
+      publishSelectionStats(docName, 'wysiwyg', null);
+    };
   }, [editor, provider]);
 
   useEffect(() => {

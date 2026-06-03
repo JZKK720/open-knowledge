@@ -4817,6 +4817,10 @@ msgstr "Select the full source document."
 msgid "Select, enter, or leave block components and fallback source blocks from keyboard boundaries."
 msgstr "Select, enter, or leave block components and fallback source blocks from keyboard boundaries."
 
+#: src/components/EditorFooter.tsx
+msgid "Selected"
+msgstr "Selected"
+
 #: src/components/GraphPanel.tsx
 msgid "Selected graph item"
 msgstr "Selected graph item"
@@ -4828,6 +4832,10 @@ msgstr "Selected in graph"
 #: src/components/ConsentDialogBody.tsx
 msgid "Selection must be inside the project"
 msgstr "Selection must be inside the project"
+
+#: src/components/EditorFooter.tsx
+msgid "Selection statistics"
+msgstr "Selection statistics"
 
 #: src/editor/slash-command/items.tsx
 msgid "Separator"

@@ -24,6 +24,11 @@ import { type CmCacheEntry, mountCmEditor, parkCmEditor } from './editor-cache';
 import { getMountId } from './mount-id-registry';
 import { markUserTyping } from './observers';
 import {
+  publishSelectionStats,
+  SELECTION_STATS_DEBOUNCE_MS,
+  selectionStatsFromSource,
+} from './selection-stats';
+import {
   clearPendingSourceNavigation,
   consumePendingSourceNavigation,
 } from './source-editor-navigation';
@@ -137,6 +142,7 @@ export function SourceEditor({
         container,
         sizeStats,
         factory: (el) => {
+          let selectionStatsTimer: ReturnType<typeof setTimeout> | null = null;
           const sourceClipboard = createSourceClipboardExtension({
             ydoc: provider.document,
             ytext,
@@ -156,6 +162,18 @@ export function SourceEditor({
               }),
               createSourcePolishExtension(),
               sourceClipboard,
+              EditorView.updateListener.of((update) => {
+                if (!update.selectionSet && !update.docChanged) return;
+                if (selectionStatsTimer !== null) clearTimeout(selectionStatsTimer);
+                selectionStatsTimer = setTimeout(() => {
+                  selectionStatsTimer = null;
+                  publishSelectionStats(
+                    resolvedDocName,
+                    'source',
+                    selectionStatsFromSource(update.view),
+                  );
+                }, SELECTION_STATS_DEBOUNCE_MS);
+              }),
               EditorView.domEventHandlers({
                 keydown: (event, view) => {
                   if (!sourceModeActiveRef.current) return false;
@@ -182,6 +200,7 @@ export function SourceEditor({
             ],
           });
           const view = new EditorView({ state, parent: el });
+          publishSelectionStats(resolvedDocName, 'source', selectionStatsFromSource(view));
           const dom = view.contentDOM;
           dom.addEventListener('keydown', mark);
           dom.addEventListener('paste', mark);

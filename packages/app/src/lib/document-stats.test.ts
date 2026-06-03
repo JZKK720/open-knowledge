@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { computeBodyStats } from './document-stats';
+import { computeBodyStats, computeSelectionStats, EMPTY_STATS } from './document-stats';
 
 describe('computeBodyStats', () => {
   test('empty string returns zeros', () => {
@@ -149,5 +149,54 @@ describe('computeBodyStats', () => {
     const stats = computeBodyStats(md);
     expect(stats.words).toBe(5);
     expect(stats.chars).toBe('card body text\nnote body'.length);
+  });
+});
+
+describe('computeSelectionStats', () => {
+  test('empty / whitespace selection returns EMPTY_STATS', () => {
+    expect(computeSelectionStats('', { isMarkdown: false })).toEqual(EMPTY_STATS);
+    expect(computeSelectionStats('   \n ', { isMarkdown: false })).toEqual(EMPTY_STATS);
+    expect(computeSelectionStats('', { isMarkdown: true })).toEqual(EMPTY_STATS);
+  });
+
+  test('WYSIWYG selection (isMarkdown:false) counts visible text directly', () => {
+    expect(computeSelectionStats('hello world', { isMarkdown: false })).toEqual({
+      words: 2,
+      chars: 11,
+      tokens: 3,
+    });
+  });
+
+  test('WYSIWYG selection does not strip syntax — PM text is already visible', () => {
+    expect(computeSelectionStats('## Hello', { isMarkdown: false })).toEqual({
+      words: 1,
+      chars: 8,
+      tokens: 2,
+    });
+  });
+
+  test('source selection (isMarkdown:true) strips syntax like the doc counter', () => {
+    expect(computeSelectionStats('## Hello', { isMarkdown: true })).toEqual({
+      words: 1,
+      chars: 5,
+      tokens: 2,
+    });
+    expect(computeSelectionStats('**bold** and *italic*', { isMarkdown: true })).toEqual({
+      words: 3,
+      chars: 15,
+      tokens: 4,
+    });
+  });
+
+  test('same passage counts identically in both modes (visible-text parity)', () => {
+    expect(computeSelectionStats('## Hello', { isMarkdown: true })).toEqual(
+      computeSelectionStats('Hello', { isMarkdown: false }),
+    );
+  });
+
+  test('CJK selection routes to the segmenter', () => {
+    expect(computeSelectionStats('这是一个测试文档', { isMarkdown: false }).words).toBeGreaterThan(
+      1,
+    );
   });
 });

@@ -431,6 +431,7 @@
     "Bdha5y": ["Publishing..."],
     "BeWTQy": ["Loading starter packs"],
     "BgV29F": ["Visual editor find input focused"],
+    "Bv5a9_": ["Selection statistics"],
     "Bx4EXG": ["Actions for ", ["label"]],
     "By-7Pn": ["Toggle a bullet list."],
     "BymzO4": ["Document outline"],
@@ -1866,6 +1867,7 @@
       " (inherited from folder properties; not editable here)"
     ],
     "yjExfe": ["Branch <0>", ["shareBranch"], "</0> is checked out in:"],
+    "ylXj1N": ["Selected"],
     "ynIa4S": ["Visual editor list item"],
     "ypw6My": ["Showing top ", ["0"], " headings — keep typing to narrow"],
     "ysxgu8": ["project"],

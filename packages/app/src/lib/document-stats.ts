@@ -118,14 +118,26 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / ratio);
 }
 
-export function computeBodyStats(fullText: string): DocumentStats {
-  if (!fullText) return { words: 0, chars: 0, tokens: 0 };
-  const { body } = stripFrontmatter(fullText);
-  if (!body.trim()) return { words: 0, chars: 0, tokens: 0 };
-  const visible = extractVisibleText(body);
+function countStats(visible: string): DocumentStats {
   if (!visible) return { words: 0, chars: 0, tokens: 0 };
   const words = NON_SPACE_SCRIPT_RE.test(visible)
     ? countWordsBySegmenter(visible)
     : countWordsByWhitespace(visible);
   return { words, chars: visible.length, tokens: estimateTokens(visible) };
+}
+
+export function computeBodyStats(fullText: string): DocumentStats {
+  if (!fullText) return { words: 0, chars: 0, tokens: 0 };
+  const { body } = stripFrontmatter(fullText);
+  if (!body.trim()) return { words: 0, chars: 0, tokens: 0 };
+  return countStats(extractVisibleText(body));
+}
+
+export function computeSelectionStats(
+  text: string,
+  { isMarkdown }: { isMarkdown: boolean },
+): DocumentStats {
+  const trimmed = text.trim();
+  if (!trimmed) return EMPTY_STATS;
+  return countStats(isMarkdown ? extractVisibleText(text) : trimmed);
 }

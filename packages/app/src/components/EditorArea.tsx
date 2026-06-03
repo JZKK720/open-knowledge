@@ -30,6 +30,7 @@ import { mountPromiseHasResolved } from '@/editor/mount-promise';
 import { syncPromiseHasResolved } from '@/editor/sync-promise';
 import { useDocumentStats } from '@/hooks/use-document-stats';
 import { useLifecycleStatus } from '@/hooks/use-lifecycle-status';
+import { useSelectionStats } from '@/hooks/use-selection-stats';
 import { docNameFromHash, hashFromDocName } from '@/lib/doc-hash';
 import { getInitialDocPanelWidth, writeDocPanelWidth } from '@/lib/doc-panel-width-store';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
@@ -111,6 +112,10 @@ function EditorAreaInner({
   const { openDocumentTransition } = useDocumentTransition();
   const { requestAddProperty } = useProperties();
   const stats = useDocumentStats(activeProvider, activeDocName);
+  const selectionStats = useSelectionStats(
+    activeDocName,
+    editorMode === 'source' ? 'source' : 'wysiwyg',
+  );
   const syncStatus = useSyncStatus(activeProvider);
   const isConnected = syncStatus === 'connected' || syncStatus === 'synced';
   const lifecycleStatus = useLifecycleStatus(activeDocName);
@@ -457,7 +462,7 @@ function EditorAreaInner({
           />
         )}
       </div>
-      <EditorFooter stats={stats} showStats={showStats} />
+      <EditorFooter stats={stats} selectionStats={selectionStats} showStats={showStats} />
     </div>
   );
 
