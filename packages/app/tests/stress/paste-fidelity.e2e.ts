@@ -475,7 +475,7 @@ test.describe('Vendor HTML fixtures → structured content through Branch D', ()
 
   test('QA-039 Slack fixture strips c-message_kit__* / c-timestamp classes', async ({ page }) => {
     await pasteWithMimes(page, {
-      'text/plain': 'Hey team — can we ship the clipboard feature this week? @nick thoughts?',
+      'text/plain': 'Hey team — can we ship the clipboard feature this week? @ada thoughts?',
       'text/html': fixture('slack-sample.html'),
     });
     await expect(async () => {
@@ -506,13 +506,13 @@ test.describe('Vendor HTML fixtures → structured content through Branch D', ()
     page,
   }) => {
     await pasteWithMimes(page, {
-      'text/plain': "This references abc123 and CC's @nickgomez.\nSee also issue #42.",
+      'text/plain': "This references abc123 and CC's @octocat.\nSee also issue #42.",
       'text/html': fixture('github-comment-sample.html'),
     });
     await expect(async () => {
       const content = await getYText(page);
       expect(content).toContain('abc123');
-      expect(content).toContain('nickgomez');
+      expect(content).toContain('octocat');
       expect(content).not.toContain('data-hovercard');
       expect(content).not.toContain('class="commit-link"');
     }).toPass({ timeout: 5_000 });

@@ -36,7 +36,7 @@ describe('rehypeStripGsheetsWrapper', () => {
     const serialized = JSON.stringify(mdast);
     expect(serialized).toContain('Name');
     expect(serialized).toContain('Role');
-    expect(serialized).toContain('Nick');
+    expect(serialized).toContain('Ada');
     expect(serialized).toContain('CTO');
   });
 

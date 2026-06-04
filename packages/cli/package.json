@@ -1,6 +1,7 @@
 {
   "name": "@inkeep/open-knowledge",
   "version": "0.9.1",
+  "license": "GPL-3.0-or-later",
   "private": false,
   "type": "module",
   "repository": {
@@ -34,8 +35,9 @@
     "build:app": "cp -r ../app/dist dist/public",
     "build:skill-asset": "bun ../server/scripts/build-skill-bundles.ts && mkdir -p dist/assets/skills && cp -R ../server/dist/assets/skills/discovery ../server/dist/assets/skills/project dist/assets/skills/ && if [ -d ../server/dist/assets/skills/packs ]; then cp -R ../server/dist/assets/skills/packs dist/assets/skills/; fi",
     "build:notices": "mkdir -p dist && cp ../../THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md",
+    "build:license": "mkdir -p dist && cp ../../LICENSE dist/LICENSE",
     "build:schema": "bun --conditions=development scripts/build-config-schema.mjs",
-    "build:assets": "bun run build:app && bun run build:skill-asset && bun run build:notices && bun run build:schema",
+    "build:assets": "bun run build:app && bun run build:skill-asset && bun run build:notices && bun run build:license && bun run build:schema",
     "build": "bun run build:cli && bun run build:assets",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "bun run build:schema && bun test",

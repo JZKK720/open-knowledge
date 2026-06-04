@@ -18,9 +18,9 @@ afterEach(async () => {
 });
 
 const writer: WriterIdentity = {
-  id: 'principal-nick',
-  name: 'Nick',
-  email: 'nick@test.com',
+  id: 'principal-ada',
+  name: 'Ada',
+  email: 'ada@test.com',
 };
 
 describe('gcShadowBranches', () => {

@@ -172,9 +172,9 @@ describe('commitWip', () => {
   let contentDir: string;
 
   const writer: WriterIdentity = {
-    id: 'human-nick',
-    name: 'Nick Gomez',
-    email: 'nick@example.com',
+    id: 'human-ada',
+    name: 'Ada Lovelace',
+    email: 'ada@example.com',
   };
 
   beforeEach(async () => {
@@ -249,7 +249,7 @@ describe('commitWip', () => {
     const agentSha = await commitWip(shadow, agent, 'content/docs', 'WIP: agent edit');
 
     const sg = shadowGit(shadow);
-    const humanRef = (await sg.raw('rev-parse', 'refs/wip/main/human-nick')).trim();
+    const humanRef = (await sg.raw('rev-parse', 'refs/wip/main/human-ada')).trim();
     const agentRef = (await sg.raw('rev-parse', 'refs/wip/main/agent-cursor')).trim();
 
     expect(humanRef).toBe(humanSha);
@@ -270,8 +270,8 @@ describe('commitWip', () => {
     );
 
     const sg = shadowGit(shadow);
-    const mainRef = (await sg.raw('rev-parse', 'refs/wip/main/human-nick')).trim();
-    const featureRef = (await sg.raw('rev-parse', 'refs/wip/feature/xyz/human-nick')).trim();
+    const mainRef = (await sg.raw('rev-parse', 'refs/wip/main/human-ada')).trim();
+    const featureRef = (await sg.raw('rev-parse', 'refs/wip/feature/xyz/human-ada')).trim();
 
     expect(mainRef).toBe(mainSha);
     expect(featureRef).toBe(featureSha);
@@ -516,9 +516,9 @@ describe('saveVersion', () => {
   let contentDir: string;
 
   const human: WriterIdentity = {
-    id: 'human-nick',
-    name: 'Nick Gomez',
-    email: 'nick@example.com',
+    id: 'human-ada',
+    name: 'Ada Lovelace',
+    email: 'ada@example.com',
   };
 
   const agent: WriterIdentity = {
@@ -563,14 +563,14 @@ describe('saveVersion', () => {
     await commitWip(shadow, human, 'content/docs', 'WIP: edit');
 
     const sg = shadowGit(shadow);
-    const wipBefore = (await sg.raw('rev-parse', 'refs/wip/main/human-nick')).trim();
+    const wipBefore = (await sg.raw('rev-parse', 'refs/wip/main/human-ada')).trim();
     expect(wipBefore).toHaveLength(40);
 
     await saveVersion(shadow, 'content/docs', [human]);
 
     let wipExists = true;
     try {
-      await sg.raw('rev-parse', 'refs/wip/main/human-nick');
+      await sg.raw('rev-parse', 'refs/wip/main/human-ada');
     } catch {
       wipExists = false;
     }
@@ -712,8 +712,8 @@ describe('saveInMemoryCheckpoint (bridge-correctness SPEC §6 R7a)', () => {
 
   test('does NOT touch refs/wip/* — distinct from saveVersion', async () => {
     const writer: WriterIdentity = {
-      id: 'human-nick',
-      name: 'Nick',
+      id: 'human-ada',
+      name: 'Ada',
       email: 'n@example.com',
     };
     const contentDir = resolve(projectRoot, 'content/docs');
@@ -721,7 +721,7 @@ describe('saveInMemoryCheckpoint (bridge-correctness SPEC §6 R7a)', () => {
     await commitWip(shadow, writer, 'content/docs', 'WIP: setup');
 
     const sg = shadowGit(shadow);
-    const wipShaBefore = (await sg.raw('rev-parse', 'refs/wip/main/human-nick')).trim();
+    const wipShaBefore = (await sg.raw('rev-parse', 'refs/wip/main/human-ada')).trim();
 
     await saveInMemoryCheckpoint(shadow, 'content/docs', {
       kind: 'bridge-merge-loss',
@@ -731,7 +731,7 @@ describe('saveInMemoryCheckpoint (bridge-correctness SPEC §6 R7a)', () => {
       metadata: { lostSubstrings: ['foo'] },
     });
 
-    const wipShaAfter = (await sg.raw('rev-parse', 'refs/wip/main/human-nick')).trim();
+    const wipShaAfter = (await sg.raw('rev-parse', 'refs/wip/main/human-ada')).trim();
     expect(wipShaAfter).toBe(wipShaBefore); // unchanged
   });
 

@@ -35,7 +35,7 @@ interface BuildAwarenessUserInput {
  * branch; `coeditor` is preserved across every branch.
  *
  * `formatPresenceLabel` polishes Unix-style git-config names like
- * `miles-kt-inkeep` → `Miles Kt Inkeep` so the cursor label, tooltip, and
+ * `ada-kt-lovelace` → `Ada Kt Lovelace` so the cursor label, tooltip, and
  * any future name-rendering surface stay consistent with the avatar's
  * `computeInitials` polish — single transform at the publish boundary
  * instead of per-consumer divergence.

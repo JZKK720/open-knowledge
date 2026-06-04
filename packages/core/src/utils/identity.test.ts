@@ -84,12 +84,12 @@ describe('colorFromSeed', () => {
 });
 
 describe('computeInitials', () => {
-  test('hyphenated Unix username: miles-kt-inkeep → MK', () => {
-    expect(computeInitials('miles-kt-inkeep')).toBe('MK');
+  test('hyphenated Unix username: ada-kt-lovelace → AK', () => {
+    expect(computeInitials('ada-kt-lovelace')).toBe('AK');
   });
 
-  test('full name with hyphenated surname: Miles Kaming-Thanassi → MK', () => {
-    expect(computeInitials('Miles Kaming-Thanassi')).toBe('MK');
+  test('full name with hyphenated surname: Ada Lovelace-King → AL', () => {
+    expect(computeInitials('Ada Lovelace-King')).toBe('AL');
   });
 
   test('single word: Miles → MI', () => {
@@ -112,14 +112,14 @@ describe('computeInitials', () => {
   });
 
   test('result is always at most 2 characters', () => {
-    for (const name of ['Miles Kaming-Thanassi', 'miles-kt-inkeep', 'MilesKT', 'A B C D E']) {
+    for (const name of ['Ada Lovelace-King', 'ada-kt-lovelace', 'MilesKT', 'A B C D E']) {
       expect(computeInitials(name).length).toBeLessThanOrEqual(2);
     }
   });
 
   test('result is always uppercase', () => {
-    expect(computeInitials('miles-kt-inkeep')).toBe(
-      computeInitials('miles-kt-inkeep').toUpperCase(),
+    expect(computeInitials('ada-kt-lovelace')).toBe(
+      computeInitials('ada-kt-lovelace').toUpperCase(),
     );
     expect(computeInitials('john bird')).toBe('JB');
   });

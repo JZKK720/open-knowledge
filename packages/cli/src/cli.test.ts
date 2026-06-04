@@ -35,3 +35,29 @@ describe('CLI argv parsing', () => {
     expect(stdout.startsWith('[')).toBe(true);
   }, 30_000);
 });
+
+describe('CLI --version notice', () => {
+  test('--version emits the version plus the GPL copyright / free-software / no-warranty trio', () => {
+    const result = Bun.spawnSync({
+      cmd: [
+        'bun',
+        '--conditions=development',
+        '-e',
+        `
+        process.argv = [process.execPath, process.cwd() + '/src/cli.ts', '--version'];
+        await import('./src/cli.ts');
+        `,
+      ],
+      cwd: CLI_PACKAGE_ROOT,
+      env: { ...process.env, NO_COLOR: '1' },
+    });
+
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toMatch(/Copyright \(C\) \d{4} Inkeep, Inc\./);
+    expect(stdout).toContain('GPL-3.0-or-later');
+    expect(stdout).toMatch(/free software/i);
+    expect(stdout).toMatch(/NO WARRANTY/);
+  }, 30_000);
+});

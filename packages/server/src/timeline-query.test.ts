@@ -55,9 +55,9 @@ async function setup() {
 }
 
 const human: WriterIdentity = {
-  id: 'human-nick',
-  name: 'Nick Gomez',
-  email: 'nick@example.com',
+  id: 'human-ada',
+  name: 'Ada Lovelace',
+  email: 'ada@example.com',
 };
 
 const agent: WriterIdentity = {

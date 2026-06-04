@@ -80,6 +80,7 @@ import type {
 } from '../shared/ipc-channels.ts';
 import { createHandler } from '../shared/ipc-handler.ts';
 import { registerPendingDelivery, sendToRenderer } from '../shared/ipc-send.ts';
+import { buildAboutPanelOptions } from './about-panel.ts';
 import { appendOkIgnoreSync } from './append-okignore.ts';
 import { openAssetSafely, revealAssetSafely } from './asset-allowlist.ts';
 import { popAssetMenu } from './asset-menu.ts';
@@ -2190,6 +2191,8 @@ function bootPrimaryInstance(): void {
   app
     .whenReady()
     .then(async () => {
+      app.setAboutPanelOptions(buildAboutPanelOptions(app.getVersion()));
+
       const gitOutcome = await ensureGitAvailable({
         assertGitAvailable,
         showMessageBox: async (opts) =>

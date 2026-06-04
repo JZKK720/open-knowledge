@@ -66,6 +66,12 @@ extraResources:
   # placed by electron-builder automatically and cover Electron + Chromium.
   - from: "../cli/dist/THIRD_PARTY_NOTICES.md"
     to: "THIRD_PARTY_NOTICES.md"
+  # The project's own GPLv3 license text at the Resources root, alongside the
+  # third-party notices, so the About panel and license reviewers can find it.
+  # electron-builder places Electron's own LICENSE separately; that covers
+  # Electron + Chromium only, not Open Knowledge itself.
+  - from: "../../LICENSE"
+    to: "LICENSE"
   # The bundled CLI (`cli/dist/cli.mjs`) keeps `@napi-rs/keyring` EXTERNAL
   # (tsdown `neverBundle` — it ships a native .node binary). At runtime its ESM
   # resolver walks its OWN tree (`cli/dist` → `cli` → `Resources` → …) and

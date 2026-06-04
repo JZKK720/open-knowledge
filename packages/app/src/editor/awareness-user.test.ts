@@ -16,7 +16,7 @@ const identity: Identity = {
 
 const gitConfigPrincipal: Principal = {
   id: 'principal-git-1',
-  display_name: 'miles-kt-inkeep',
+  display_name: 'ada-kt-lovelace',
   display_email: 'miles@example.com',
   source: 'git-config',
   created_at: '2026-04-27T00:00:00.000Z',
@@ -54,7 +54,7 @@ describe('buildAwarenessUser — state (b): principal.source === "git-config"', 
   test('publishes polished display_name, deterministic color, principalId', () => {
     const user = buildAwarenessUser({ principal: gitConfigPrincipal, identity });
     expect(user.type).toBe('human');
-    expect(user.name).toBe('Miles Kt Inkeep');
+    expect(user.name).toBe('Ada Kt Lovelace');
     expect(user.color).toBe(colorFromSeed(gitConfigPrincipal.id, HUMAN_COLORS));
     expect(user.coeditor).toBe('cursor');
     expect(user.tabId).toBe('tab-uuid-abc');
@@ -63,10 +63,10 @@ describe('buildAwarenessUser — state (b): principal.source === "git-config"', 
 
   test('passes already-spaced names through formatPresenceLabel unchanged', () => {
     const user = buildAwarenessUser({
-      principal: { ...gitConfigPrincipal, display_name: 'Miles Kaming-Thanassi' },
+      principal: { ...gitConfigPrincipal, display_name: 'Ada Lovelace-King' },
       identity,
     });
-    expect(user.name).toBe('Miles Kaming-Thanassi');
+    expect(user.name).toBe('Ada Lovelace-King');
   });
 
   test('color is deterministic — same principal id always maps to the same palette entry', () => {

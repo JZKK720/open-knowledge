@@ -38,7 +38,7 @@ describe('rehypeStripGithubHovercard', () => {
     const serialized = JSON.stringify(mdast);
     expect(serialized).toContain('github.com/owner/repo/commit/abc123def456');
     expect(serialized).toContain('abc123');
-    expect(serialized).toContain('@nickgomez');
+    expect(serialized).toContain('@octocat');
     expect(serialized).toContain('#42');
   });
 
