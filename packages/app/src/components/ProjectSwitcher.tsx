@@ -1,6 +1,6 @@
 import { Trans, useLingui } from '@lingui/react/macro';
 import { ChevronsUpDown, FolderOpen, GitBranch, LayoutGrid, Plus, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +34,14 @@ export function ProjectSwitcher({ bridge }: ProjectSwitcherProps) {
   const [search, setSearch] = useState('');
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const branch = useCurrentBranch();
+
+  const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
+  const sawPointerDownRef = useRef(false);
+
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next);
+    if (!next) setSearch('');
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -86,25 +94,17 @@ export function ProjectSwitcher({ bridge }: ProjectSwitcherProps) {
 
   return (
     <>
-      <DropdownMenu
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setSearch('');
-        }}
-      >
-        {/*
-          Bare trigger — do NOT wrap in a Radix <Tooltip>. The project path is
-          surfaced via the native `title` attribute instead. A Radix Tooltip
-          here breaks the dropdown: once the tooltip has opened on hover,
-          clicking the trigger races the tooltip layer's pointerdown-teardown
-          against the dropdown's open on the macOS desktop host, and the menu
-          never stays open (the trigger shows its click state but nothing
-          opens). The native title has no layer to tear down, so the dropdown
-          opens cleanly. This is the mirror of the EditorHeader Open-with-AI
-          trigger, which is bare for the same class of pointer-interaction
-          reason.
-        */}
+      {/*
+        Non-modal (matches the Cloud/Sync Popover, which is non-modal and works
+        normally). In the macOS desktop app, outside-click dismissal relies on a
+        `pointerdown` Chromium does not deliver here (see the trigger onClick
+        below), and a modal dropdown additionally disables pointer events on the
+        rest of the chrome while open — together that left the menu impossible
+        to dismiss by clicking out. Non-modal keeps the rest of the UI live and
+        restores outside-click dismissal; the menu still closes on item-select,
+        Escape, or re-clicking the trigger.
+      */}
+      <DropdownMenu open={open} onOpenChange={handleOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
             className={cn(
@@ -114,6 +114,24 @@ export function ProjectSwitcher({ bridge }: ProjectSwitcherProps) {
             data-testid="project-switcher-trigger"
             aria-label={t`Open project menu`}
             title={bridge.config.projectPath}
+            onPointerDown={
+              isElectronHost
+                ? () => {
+                    sawPointerDownRef.current = true;
+                  }
+                : undefined
+            }
+            onClick={
+              isElectronHost
+                ? () => {
+                    if (sawPointerDownRef.current) {
+                      sawPointerDownRef.current = false;
+                      return;
+                    }
+                    handleOpenChange(!open);
+                  }
+                : undefined
+            }
           >
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate">{bridge.config.projectName}</span>
