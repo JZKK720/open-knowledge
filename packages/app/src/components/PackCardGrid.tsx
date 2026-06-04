@@ -13,7 +13,7 @@ const PACK_ICONS: Record<OkPackId, React.ComponentType<{ className?: string }>> 
   'plain-notes': StickyNote,
   worldbuilding: Compass,
   'writing-pipeline': PenLine,
-  gbrain: Network,
+  'entity-vault': Network,
 };
 
 function iconForPack(id: string): React.ComponentType<{ className?: string }> {

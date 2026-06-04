@@ -12,6 +12,20 @@ const STARTER_FOLDERS = KNOWLEDGE_BASE_PACK.folders;
 const STARTER_TEMPLATES = KNOWLEDGE_BASE_PACK.templates;
 const LOG_MD_TEMPLATE = KNOWLEDGE_BASE_PACK.rootFiles?.['log.md'];
 if (!LOG_MD_TEMPLATE) throw new Error('knowledge-base pack is missing log.md');
+const ENTITY_VAULT_PACK = STARTER_PACKS['entity-vault'];
+
+function stripTemplateMetadata(body: string): string {
+  const match = /^---\n[\s\S]*?\n---\n([\s\S]*)$/.exec(body);
+  if (!match?.[1]) throw new Error('template missing outer metadata frontmatter');
+  return match[1];
+}
+
+function documentFrontmatter(body: string): string {
+  const documentBody = stripTemplateMetadata(body);
+  const match = /^---\n([\s\S]*?)\n---/.exec(documentBody);
+  if (!match?.[1]) throw new Error('template missing document frontmatter');
+  return match[1];
+}
 
 describe('STARTER_FOLDERS — Karpathy three-layer starter pack', () => {
   test('ships exactly three starter folders in Karpathy-layer order', () => {
@@ -125,7 +139,7 @@ describe('STARTER_PACKS — all packs structural validation', () => {
   test('STARTER_PACK_IDS contains exactly the 6 expected packs (pinned to detect silent additions/deletions)', () => {
     expect(STARTER_PACK_IDS.length).toBe(6);
     expect([...STARTER_PACK_IDS].sort()).toEqual([
-      'gbrain',
+      'entity-vault',
       'knowledge-base',
       'plain-notes',
       'software-lifecycle',
@@ -286,6 +300,61 @@ describe('STARTER_PACKS — all packs structural validation', () => {
         );
       }
     }
+  });
+});
+
+describe('Entity vault pack — GBrain-compatible Markdown shape', () => {
+  test('uses entity-vault as the only canonical pack id (no gbrain alias)', () => {
+    expect(ENTITY_VAULT_PACK.id).toBe('entity-vault');
+    expect((STARTER_PACKS as Record<string, unknown>).gbrain).toBeUndefined();
+  });
+
+  test('metadata ties Entity vault to GBrain compatibility without a replacement-engine claim', () => {
+    expect(ENTITY_VAULT_PACK.name).toBe('Entity vault (GBrain-compatible)');
+    expect(ENTITY_VAULT_PACK.description).toContain('people, companies, meetings, and concepts');
+    expect(ENTITY_VAULT_PACK.description).toContain('GBrain-compatible Markdown');
+    expect(ENTITY_VAULT_PACK.description).toContain('OK handles editing and review');
+    expect(ENTITY_VAULT_PACK.description).not.toContain('Gbrain');
+  });
+
+  test('entity templates keep title + type in the generated document frontmatter', () => {
+    const expectedTypes: Record<string, string> = {
+      person: 'person',
+      company: 'company',
+      concept: 'concept',
+      meeting: 'meeting',
+      original: 'original',
+      transcript: 'transcript',
+    };
+    for (const [templateName, expectedType] of Object.entries(expectedTypes)) {
+      const body = ENTITY_VAULT_PACK.templates[templateName];
+      expect(body, `missing ${templateName} template`).toBeDefined();
+      const fm = documentFrontmatter(body ?? '');
+      expect(fm, `${templateName} generated doc frontmatter missing title`).toMatch(
+        /^title:\s*\S/m,
+      );
+      expect(fm, `${templateName} generated doc frontmatter missing type`).toContain(
+        `type: ${expectedType}`,
+      );
+    }
+  });
+
+  test('compiled-truth dossier templates use the explicit timeline separator and parseable dated bullets', () => {
+    for (const templateName of ['person', 'company', 'concept']) {
+      const documentBody = stripTemplateMetadata(ENTITY_VAULT_PACK.templates[templateName] ?? '');
+      expect(documentBody).toContain('--- timeline ---');
+      expect(documentBody).toMatch(/^- \*\*\{\{date\}\}\*\* \| source \| @\{\{user\}\} — .+/m);
+      expect(documentBody).not.toMatch(/\{\{date\}\}: First entry/);
+    }
+  });
+
+  test('template guidance prefers path-qualified wikilinks where entity identity matters', () => {
+    expect(ENTITY_VAULT_PACK.templates.person).toContain('[[companies/acme|Acme]]');
+    expect(ENTITY_VAULT_PACK.templates.company).toContain('[[people/jane-founder|Jane Founder]]');
+    expect(ENTITY_VAULT_PACK.templates.meeting).toContain('[[companies/jane-co|Jane Co]]');
+    expect(ENTITY_VAULT_PACK.templates.meeting).toContain(
+      '[[concepts/agent-runtime-observability|agent-runtime observability]]',
+    );
   });
 });
 

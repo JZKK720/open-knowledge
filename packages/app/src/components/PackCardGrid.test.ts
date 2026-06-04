@@ -22,7 +22,7 @@ describe('PackCardGrid source-level guards', () => {
       "'plain-notes'",
       'worldbuilding',
       "'writing-pipeline'",
-      'gbrain',
+      "'entity-vault'",
     ]) {
       expect(SRC).toContain(id);
     }

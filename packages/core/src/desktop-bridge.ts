@@ -253,7 +253,7 @@ type OkPackId =
   | 'plain-notes'
   | 'worldbuilding'
   | 'writing-pipeline'
-  | 'gbrain';
+  | 'entity-vault';
 
 interface OkSeedPlanOptions {
   rootDir?: string;

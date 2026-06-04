@@ -30,7 +30,11 @@ describe('installPackSkill', () => {
     setUpEditor(proj, '.claude');
     setUpEditor(proj, '.cursor');
     setUpEditor(proj, '.agents');
-    expect(installPackSkill(proj, 'gbrain').sort()).toEqual(['Claude Code', 'Codex', 'Cursor']);
+    expect(installPackSkill(proj, 'entity-vault').sort()).toEqual([
+      'Claude Code',
+      'Codex',
+      'Cursor',
+    ]);
   });
 
   test('no-op when no editor is set up (no platform skill present)', () => {
