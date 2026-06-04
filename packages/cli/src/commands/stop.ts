@@ -1,4 +1,3 @@
-
 import { type Config, isProcessAlive, resolveLockDir } from '@inkeep/open-knowledge-server';
 import { Command } from 'commander';
 import { discoverLockDirs } from '../utils/process-scan.ts';

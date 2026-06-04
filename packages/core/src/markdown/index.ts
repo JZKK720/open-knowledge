@@ -1,4 +1,3 @@
-
 import {
   type FromProseMirrorOptions,
   fromPmMark,
@@ -165,7 +164,6 @@ export class MarkdownManager {
   }
 }
 
-
 const registry = createRegistry();
 
 function destructureAttrs(
@@ -214,7 +212,6 @@ function destructureAttrs(
   return result;
 }
 
-
 function hasDirtyDescendant(node: PmNode): boolean {
   let found = false;
   node.descendants((child) => {
@@ -232,7 +229,6 @@ function hasDirtyDescendant(node: PmNode): boolean {
 function effectiveDirty(node: PmNode): boolean {
   return node.attrs.sourceDirty || hasDirtyDescendant(node);
 }
-
 
 function isEmptyMdastParagraph(node: MdastNodes): boolean {
   if (node.type !== 'paragraph') return false;
@@ -297,7 +293,6 @@ function extractTextFromMdastNodes(nodes: MdastNodes[]): string {
   }
   return out;
 }
-
 
 import {
   AUDIO_EXTENSIONS,
@@ -516,7 +511,6 @@ function buildMdastToPmHandlers(
     }));
   }
 
-
   if (m.emphasis) {
     handlers.emphasis = toPmMark(m.emphasis, (node: Emphasis) => ({
       sourceDelimiter: node.data?.sourceDelimiter ?? '*',
@@ -584,7 +578,6 @@ function buildMdastToPmHandlers(
       spread: !!node.spread,
     }));
   }
-
 
   if (m.link) {
     const sourceLiteralMark = m.sourceLiteral;
@@ -871,7 +864,6 @@ function buildMdastToPmHandlers(
     };
   }
 
-
   const blockUnknownHandler = (node: {
     type: string;
     position?: { start: { offset: number }; end: { offset: number } };
@@ -987,7 +979,6 @@ function buildMdastToPmHandlers(
 
   return handlers as RemarkProseMirrorOptions['handlers'];
 }
-
 
 function buildPmToMdastHandlers(schema: Schema): {
   nodeHandlers: FromProseMirrorOptions<string, string>['nodeHandlers'];

@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { markdownToHtml, mdastToHtml } from './mdast-to-html.ts';
 
@@ -107,7 +106,6 @@ describe('mdastToHtml — mdast Root → HTML', () => {
 });
 
 describe('custom-node regression gate — every promoted mdast type emits semantic HTML', () => {
-
   describe('(a) markdownToHtml string-entry — remark-plugin-produced types', () => {
     test('wikiLink bare target emits <a class="wiki-link">', () => {
       const html = markdownToHtml('[[Target]]');

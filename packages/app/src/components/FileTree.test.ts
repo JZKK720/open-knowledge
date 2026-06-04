@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -780,7 +779,6 @@ describe('FileTree — Sidebar rename extension chip (lives next to badge)', () 
 });
 
 describe('FileTree — Sidebar rename extension preservation (US-008 source-level)', () => {
-
   test('FileTree imports the pure validateAndCoerceRenameDestination helper', () => {
     expect(FILETREE_SRC).toMatch(
       /import\s*\{[\s\S]*validateAndCoerceRenameDestination[\s\S]*\}\s*from\s*'@\/components\/file-tree-rename-validation'/,
@@ -853,7 +851,6 @@ describe('FileTree — Sidebar rename extension preservation (US-008 source-leve
 });
 
 describe('FileTree — Post-commit reconciliation error labeling', () => {
-
   test('applyRenamedDocuments is wrapped in its own try/catch (split from the fetch catch)', () => {
     const handlerStart = FILETREE_SRC.indexOf('async function handleTreeRename(');
     const handlerEnd = FILETREE_SRC.indexOf('\n  }\n', handlerStart);
@@ -875,7 +872,6 @@ describe('FileTree — Post-commit reconciliation error labeling', () => {
 });
 
 describe('FileTree — handleDropComplete split try/catch (source-level)', () => {
-
   test('applyRenamedDocuments is wrapped in its own try/catch (split from the fetch catch)', () => {
     const handlerStart = FILETREE_SRC.indexOf('async function handleDropComplete(');
     expect(handlerStart).toBeGreaterThan(-1);

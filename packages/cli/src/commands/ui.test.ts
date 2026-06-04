@@ -1081,7 +1081,6 @@ describe('resolveUiLockCollision', () => {
 });
 
 describe('isNonInteractiveContext — PRD-6704 keepalive gate', () => {
-
   function makeProc(opts: {
     isTTY: boolean;
     port?: string;

@@ -1,4 +1,3 @@
-
 import { ContentDivergenceWarningSchema, renderInventoryFooter } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import { resolveLockDir } from '../../config/paths.ts';

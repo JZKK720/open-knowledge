@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { emptySpaceRowHint } from './OpenInAgentEmptySpaceSubmenu';
 import SRC from './OpenInAgentEmptySpaceSubmenu?raw';

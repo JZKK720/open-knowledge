@@ -1,4 +1,3 @@
-
 import { OK_DIR } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import type { ServerInstance, WorkflowToolDeps } from './shared.ts';

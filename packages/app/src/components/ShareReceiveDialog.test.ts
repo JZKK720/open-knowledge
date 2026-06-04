@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import SRC from './ShareReceiveDialog?raw';
 import METADATA_SRC from './share-metadata-rows?raw';

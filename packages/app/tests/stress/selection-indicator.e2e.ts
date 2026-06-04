@@ -1,4 +1,3 @@
-
 import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import type { ApiHelpers } from './_helpers';
@@ -41,7 +40,6 @@ async function selectFirstJsxComponent(page: Page, componentName: string) {
   }, componentName);
 }
 
-
 test('S1: ArrowDown auto-NodeSelects self-closing Callout below the cursor', async ({
   page,
   api,
@@ -65,7 +63,6 @@ test('S1: ArrowDown auto-NodeSelects self-closing Callout below the cursor', asy
   await expect(firstCallout).toHaveAttribute('data-selection-origin', 'keyboard');
 });
 
-
 test('S1b: ArrowUp auto-NodeSelects self-closing Callout above the cursor', async ({
   page,
   api,
@@ -82,7 +79,6 @@ test('S1b: ArrowUp auto-NodeSelects self-closing Callout above the cursor', asyn
   await expect(callout).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
   await expect(callout).toHaveAttribute('data-selection-origin', 'keyboard');
 });
-
 
 test('S1c: ArrowDown into compound Callout descends into body (no NodeSelect)', async ({
   page,
@@ -111,7 +107,6 @@ test('S1c: ArrowDown into compound Callout descends into body (no NodeSelect)', 
   });
   expect(insideBody).toBe(true);
 });
-
 
 test('S1d: ArrowUp from inside compound Callout exits to TextSelection above', async ({
   page,
@@ -142,7 +137,6 @@ test('S1d: ArrowUp from inside compound Callout exits to TextSelection above', a
   expect(outsideCallout).toBe(true);
 });
 
-
 test('S1e: Esc inside compound Callout enters NodeSelection mode via L1', async ({ page, api }) => {
   await setupDoc(page, api, '<Callout type="note">\n\nbody content\n\n</Callout>\n');
   await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
@@ -164,7 +158,6 @@ test('S1e: Esc inside compound Callout enters NodeSelection mode via L1', async 
     })
     .toBe('NodeSelection');
 });
-
 
 test('S1f: ArrowRight auto-NodeSelects self-closing Callout to the right of the cursor', async ({
   page,
@@ -196,7 +189,6 @@ test('S1f: ArrowRight auto-NodeSelects self-closing Callout to the right of the 
   await expect(callout).toHaveAttribute('data-selection-origin', 'keyboard');
 });
 
-
 test('S1g: ArrowLeft auto-NodeSelects self-closing Callout to the left of the cursor', async ({
   page,
   api,
@@ -227,8 +219,6 @@ test('S1g: ArrowLeft auto-NodeSelects self-closing Callout to the left of the cu
   await expect(callout).toHaveAttribute('data-selection-origin', 'keyboard');
 });
 
-
-
 test('S2: NodeSelection on a Callout emits data-selected=true on its wrapper', async ({
   page,
   api,
@@ -243,7 +233,6 @@ test('S2: NodeSelection on a Callout emits data-selected=true on its wrapper', a
   await expect(callout).toHaveAttribute('data-selected', 'true', { timeout: 5_000 });
   await expect(callout).toHaveAttribute('data-selection-origin', 'pointer');
 });
-
 
 test('S3: nested Callout/Accordion — only innermost paints halo', async ({ page, api }) => {
   await setupDoc(page, api, '<Callout type="note">\n\n<Accordion title="Inner" />\n\n</Callout>\n');
@@ -291,7 +280,6 @@ test('S3b: outer-NodeSelection on Callout with nested Accordion — only outer p
   expect(selectedCount).toBe(1);
 });
 
-
 test('S4: dragstart/dragend toggles data-dragging', async ({ page, api }) => {
   await setupDoc(page, api, '<img src="/p.png" alt="Draggable" />\n');
   await page.waitForSelector('.jsx-component-wrapper');
@@ -306,7 +294,6 @@ test('S4: dragstart/dragend toggles data-dragging', async ({ page, api }) => {
   await card.dispatchEvent('dragend');
   await expect(card).not.toHaveAttribute('data-dragging', 'true', { timeout: 2_000 });
 });
-
 
 test('S5: forced-colors emulation shows non-transparent halo border', async ({ page, api }) => {
   await page.emulateMedia({ forcedColors: 'active' });
@@ -325,7 +312,6 @@ test('S5: forced-colors emulation shows non-transparent halo border', async ({ p
   expect(borderColor).not.toBe('rgba(0, 0, 0, 0)');
 });
 
-
 test('S6: prefers-reduced-motion:reduce → halo transition-duration is 0s', async ({
   page,
   api,
@@ -340,7 +326,6 @@ test('S6: prefers-reduced-motion:reduce → halo transition-duration is 0s', asy
   });
   expect(transitionDuration === '0s' || transitionDuration === '').toBe(true);
 });
-
 
 test('S7: selecting a Callout/Accordion renders no breadcrumb chrome', async ({ page, api }) => {
   await setupDoc(
@@ -366,7 +351,6 @@ test('S7: selecting a Callout/Accordion renders no breadcrumb chrome', async ({ 
   await expect(page.locator('nav[aria-label="Block ancestor navigation"]')).toHaveCount(0);
 });
 
-
 test('S8: aria-live textContent announces the selected block', async ({ page, api }) => {
   await setupDoc(
     page,
@@ -380,7 +364,6 @@ test('S8: aria-live textContent announces the selected block', async ({ page, ap
   const liveRegion = page.locator('[role="status"][aria-live="polite"]');
   await expect(liveRegion).toContainText('Selected: Accordion', { timeout: 2_000 });
 });
-
 
 test('S9: three-axis composition — dragging dominates over selected + needs-config', async ({
   page,
@@ -418,7 +401,6 @@ test('S9: three-axis composition — dragging dominates over selected + needs-co
   await card.dispatchEvent('dragend');
 });
 
-
 test('S9b: alt="" decorative opt-in does NOT fire data-needs-config', async ({ page, api }) => {
   await setupDoc(page, api, '<img src="/p.png" alt="" />\n');
   await page.waitForSelector('.jsx-component-wrapper[data-component-type="img"]');
@@ -427,7 +409,6 @@ test('S9b: alt="" decorative opt-in does NOT fire data-needs-config', async ({ p
   await expect(wrapper).not.toHaveAttribute('data-needs-config', 'true', { timeout: 5_000 });
 });
 
-
 test('S9c: descriptive alt does NOT fire data-needs-config', async ({ page, api }) => {
   await setupDoc(page, api, '<img src="/p.png" alt="A picnic table at dusk" />\n');
   await page.waitForSelector('.jsx-component-wrapper[data-component-type="img"]');
@@ -435,7 +416,6 @@ test('S9c: descriptive alt does NOT fire data-needs-config', async ({ page, api 
   const wrapper = page.locator('.jsx-component-wrapper[data-component-type="img"]').first();
   await expect(wrapper).not.toHaveAttribute('data-needs-config', 'true', { timeout: 5_000 });
 });
-
 
 type InsetCase = { fixture: string; componentType: string };
 const INSET_CASES: InsetCase[] = [
@@ -479,7 +459,6 @@ for (const { fixture, componentType } of INSET_CASES) {
   });
 }
 
-
 test('S12: halo z-index is -1 and .component-children is fully visible when selected', async ({
   page,
   api,
@@ -520,7 +499,6 @@ test('S12: halo z-index is -1 and .component-children is fully visible when sele
   expect(contentState.height).toBeGreaterThan(0);
 });
 
-
 type CalloutCase = { type: string };
 const CALLOUT_TYPES: CalloutCase[] = [
   { type: 'info' },
@@ -552,8 +530,6 @@ for (const { type } of CALLOUT_TYPES) {
     expect(borderColor).not.toBe('');
   });
 }
-
-
 
 test('S14: tr.setMeta(SELECTION_ORIGIN_META_KEY) sets data-selection-origin=programmatic', async ({
   page,
@@ -593,7 +569,6 @@ test('S14: tr.setMeta(SELECTION_ORIGIN_META_KEY) sets data-selection-origin=prog
   await expect(card).toHaveAttribute('data-selection-origin', 'programmatic');
 });
 
-
 test('S16: axe-core — zero critical violations on selection-layer surfaces', async ({
   page,
   api,
@@ -628,7 +603,6 @@ test('S16: axe-core — zero critical violations on selection-layer surfaces', a
   }
   expect(blocking.length).toBe(0);
 });
-
 
 test('S18: rapid selection changes coalesce into a single aria-live announcement', async ({
   page,
@@ -711,7 +685,6 @@ test('S18: rapid selection changes coalesce into a single aria-live announcement
   expect(contentMutations.length).toBeGreaterThanOrEqual(1);
   expect(contentMutations.length).toBeLessThan(3);
 });
-
 
 test('S19: clicking inside nested CM forwards focus as NodeSelection on rawMdxFallback', async ({
   page,

@@ -1,4 +1,3 @@
-
 import { validateDocName } from '@inkeep/open-knowledge-core';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -8,7 +7,6 @@ export type ServerInstance = McpServer;
 export type ConfigOrResolver = Config | ((cwd?: string) => Promise<Config>);
 export const ROUTED_CWD_DESCRIPTION =
   'Absolute host path inside the target Open Knowledge project. Required when the MCP server is registered globally (e.g. `npx @inkeep/open-knowledge mcp` once at the host level, routing per call), unless the MCP client advertises exactly one root via the `roots` capability — that single root is then used as the implicit `cwd`. Optional when the server is anchored to a single project (the per-project HTTP MCP server defaults to its configured project root).';
-
 
 const SUMMARY_TRANSPORT_CAP = 200;
 
@@ -57,7 +55,6 @@ export function textPlusStructured<T>(text: string, structured: T, isError?: boo
 
 export const HOCUSPOCUS_NOT_RUNNING_ERROR =
   'Error: Hocuspocus server is not running. Start it with `ok start`, then retry.\nFor disk-only writes without real-time sync, use your native Edit tool directly.';
-
 
 type WorkflowRole = 'ingest' | 'research' | 'consolidate';
 

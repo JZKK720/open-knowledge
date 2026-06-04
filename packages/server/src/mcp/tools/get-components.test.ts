@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { type Config, ConfigSchema } from '../../config/schema.ts';
 import { register } from './get-components.ts';

@@ -11,7 +11,6 @@ import {
   storeRenameSnapshot,
 } from '@/editor/editor-cache';
 
-
 function WarmContentFallbackReplica({ html }: { html: string }) {
   return (
     <div className="tiptap-editor h-full pointer-events-none" aria-hidden="true">
@@ -23,7 +22,6 @@ function WarmContentFallbackReplica({ html }: { html: string }) {
     </div>
   );
 }
-
 
 function WarmFallbackHost({ docName }: { docName: string }) {
   const [warmSnapshot] = useState(() => peekRenameSnapshot(docName));
@@ -47,7 +45,6 @@ function WarmFallbackHost({ docName }: { docName: string }) {
 }
 
 const baseSnap = (html: string): RenameSnapshot => ({ html, scrollTop: 0, selection: null });
-
 
 describe('WarmContentFallback DOM geometry', () => {
   let consoleErrorSpy: ReturnType<typeof spyOn>;
@@ -163,7 +160,6 @@ describe('rename-snapshot store → warm-fallback selection contract', () => {
   });
 });
 
-
 describe('warm-fallback scroll restoration', () => {
   let scrollContainer: HTMLDivElement;
   let consoleErrorSpy: ReturnType<typeof spyOn>;
@@ -219,7 +215,6 @@ describe('warm-fallback scroll restoration', () => {
     expect(scrollContainer.scrollTop).toBe(123);
   });
 });
-
 
 describe('captureRenameSnapshots — scrollTop capture (DOM)', () => {
   let scrollContainer: HTMLDivElement;

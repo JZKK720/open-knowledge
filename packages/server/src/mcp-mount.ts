@@ -1,4 +1,3 @@
-
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { Hocuspocus } from '@hocuspocus/server';
@@ -244,8 +243,7 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
         const pingTimer = setInterval(() => {
           try {
             ws.ping();
-          } catch {
-          }
+          } catch {}
         }, 30_000);
         pingTimer.unref?.();
 

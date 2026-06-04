@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { buildDiscoverBody } from './discover-body.ts';
 import type { ConfigOrResolver, ServerInstance } from './shared.ts';

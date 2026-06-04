@@ -27,7 +27,6 @@ afterAll(async () => {
   await server.cleanup();
 });
 
-
 describe('QA-009: /api/documents symlink metadata', () => {
   test('returns canonical entry with isSymlink=false and alias entry with correct metadata', async () => {
     const res = await fetch(`http://localhost:${server.port}/api/documents`);
@@ -61,7 +60,6 @@ describe('QA-009: /api/documents symlink metadata', () => {
   });
 });
 
-
 describe('QA-010: document read via alias', () => {
   test('reading via alias returns same content as reading via canonical', async () => {
     await agentWriteMd(server.port, '# Canonical Content', {
@@ -86,7 +84,6 @@ describe('QA-010: document read via alias', () => {
   });
 });
 
-
 describe('QA-012: agent-write-md via alias', () => {
   test('writing via alias docName modifies canonical document', async () => {
     await agentWriteMd(server.port, '# Via Alias', { docName: 'foo', position: 'replace' });
@@ -102,7 +99,6 @@ describe('QA-012: agent-write-md via alias', () => {
     expect(aliasBody.content).toBe(body.content);
   });
 });
-
 
 describe('QA-011: agent-write via alias', () => {
   test('raw agent-write with alias docName modifies canonical Y.Doc', async () => {
@@ -120,7 +116,6 @@ describe('QA-011: agent-write via alias', () => {
     expect(body.content).toContain('agent raw write content');
   });
 });
-
 
 describe('QA-013: agent-patch via alias', () => {
   test('patch via alias docName operates on canonical Y.Doc', async () => {
@@ -140,8 +135,6 @@ describe('QA-013: agent-patch via alias', () => {
     expect(body.content).not.toContain('old text here');
   });
 });
-
-
 
 describe('QA-002: alias and canonical API reads resolve to same Y.Doc content', () => {
   test('agent-write via alias is readable via canonical (shared content)', async () => {
@@ -172,7 +165,6 @@ describe('QA-002: alias and canonical API reads resolve to same Y.Doc content', 
   });
 });
 
-
 describe('QA-005: persistence preserves symlink', () => {
   test('after CRDT edit persists, symlink remains intact and target has new content', async () => {
     await agentWriteMd(server.port, '# Persisted via Symlink', {
@@ -191,7 +183,6 @@ describe('QA-005: persistence preserves symlink', () => {
     expect(fooContent).toBe(targetContent);
   });
 });
-
 
 describe('QA-015: self-write detection after symlink resolution', () => {
   test('persistence write does not trigger echo loop via watcher', async () => {

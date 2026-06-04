@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { shouldShowAutoSyncOnboarding } from './auto-sync-onboarding-gate';
 

@@ -1,4 +1,3 @@
-
 import { ConflictEntrySchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';

@@ -1,4 +1,3 @@
-
 import type { Nodes, Paragraph, PhrasingContent, Root, RootContent, Text } from 'mdast';
 import { SKIP, visit } from 'unist-util-visit';
 import type { CommentBlockMdast, CommentMdast } from './mdast-augmentation.ts';

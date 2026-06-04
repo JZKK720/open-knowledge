@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 type ToastFn = { error: ReturnType<typeof mock> };

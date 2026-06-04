@@ -281,13 +281,11 @@ function toStoreFailure(err: unknown): StoreFailure {
   try {
     const c = (err as NodeJS.ErrnoException | null)?.code;
     if (typeof c === 'string') code = c;
-  } catch {
-  }
+  } catch {}
   let message = 'unknown store error';
   try {
     message = err instanceof Error ? err.message : String(err);
-  } catch {
-  }
+  } catch {}
   return { code, message };
 }
 
@@ -336,12 +334,10 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
 
   const storeFailures = new Map<string, StoreFailure>();
 
-
   const gitEnabled = options?.gitEnabled ?? true;
   const commitDebounceMs = options?.commitDebounceMs ?? 15_000;
   const wipRef = options?.wipRef ?? 'refs/wip/main';
   const getCurrentBranch = options?.getCurrentBranch;
-
 
   let gitCommitTimer: ReturnType<typeof setTimeout> | null = null;
   let consecutiveGitFailures = 0;
@@ -572,8 +568,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
     } finally {
       try {
         tracedUnlinkSync(tmpIndex);
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -938,8 +933,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         } catch (e) {
           try {
             tracedUnlinkSync(tmpPath);
-          } catch {
-          }
+          } catch {}
           persistenceDeferCounts.delete(documentName);
           storeFailures.set(documentName, toStoreFailure(e));
           log.error({ err: e, documentName }, `[persistence] Failed to save ${documentName}`);

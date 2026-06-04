@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import GLOBALS from '../../globals.css?raw';
 import SRC from './dialog?raw';

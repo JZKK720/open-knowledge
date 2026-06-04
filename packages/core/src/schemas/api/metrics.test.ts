@@ -321,4 +321,3 @@ describe('InstalledAgentsSuccessSchema', () => {
     ).toBe(false);
   });
 });
-

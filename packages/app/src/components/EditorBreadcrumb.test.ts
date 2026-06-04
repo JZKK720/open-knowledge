@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import SRC from './EditorBreadcrumb?raw';
 

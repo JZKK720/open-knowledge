@@ -1,4 +1,3 @@
-
 import { FRONTMATTER_TAG_VALUE_RE } from '@inkeep/open-knowledge-core';
 import { useLingui } from '@lingui/react/macro';
 import type { NodeViewProps } from '@tiptap/core';

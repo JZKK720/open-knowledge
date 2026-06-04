@@ -1,4 +1,3 @@
-
 import { resolve } from 'node:path';
 import { LOCAL_DIR, OK_DIR } from '@inkeep/open-knowledge-core';
 import { acquireUiLock, updateUiLockPort } from '../../ui-lock.ts';

@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import SRC from './GraphPanel?raw';
 
@@ -9,7 +8,6 @@ const SAFE_AREA_AFFORDANCES: ReadonlyArray<{ marker: string; rationale: string }
     rationale: 'CSS-variable indirection with web-safe 1rem fallback',
   },
 ];
-
 
 describe('GraphPanel — fullscreen-overlay safe-area contract', () => {
   test('expanded-state overlay reserves macOS traffic-light footprint', () => {

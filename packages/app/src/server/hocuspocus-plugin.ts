@@ -98,8 +98,7 @@ export function hocuspocusPlugin(): Plugin {
           if (latestLockDir === null) return;
           try {
             releaseServerLock(latestLockDir);
-          } catch {
-          }
+          } catch {}
         });
       }
 
@@ -155,8 +154,7 @@ export function hocuspocusPlugin(): Plugin {
               const pingTimer = setInterval(() => {
                 try {
                   ws.ping();
-                } catch {
-                }
+                } catch {}
               }, 30_000);
               pingTimer.unref?.();
 
@@ -223,8 +221,7 @@ export function hocuspocusPlugin(): Plugin {
             console.error(`[collab] keepalive handleUpgrade threw for ${req.url}:`, err);
             try {
               socket.destroy();
-            } catch {
-            }
+            } catch {}
           }
           return;
         }
@@ -270,8 +267,7 @@ export function hocuspocusPlugin(): Plugin {
           console.error(`[collab] handleUpgrade threw for ${req.url}:`, err);
           try {
             socket.destroy();
-          } catch {
-          }
+          } catch {}
         }
       });
 

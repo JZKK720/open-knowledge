@@ -1,4 +1,3 @@
-
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { httpAuthQueryTransport } from '@/lib/transports/auth-query-transport';
 import { createTestServer, type TestServer } from '../test-harness';

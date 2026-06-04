@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { resolveLockDir } from '../../config/paths.ts';
 import { armPaneTarget } from '../../pane-target.ts';
@@ -129,8 +128,7 @@ export function register(server: ServerInstance, deps: GetPreviewUrlDeps): void 
       if (args.armPaneTarget && routeFragment) {
         try {
           armPaneTarget(lockDir, routeFragment);
-        } catch {
-        }
+        } catch {}
       }
 
       const armNote =

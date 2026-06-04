@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { getParseHealth, resetParseHealth } from '@inkeep/open-knowledge-core';
 import { onPillRenderError } from './SidebarSearchBar';
@@ -17,7 +16,6 @@ describe('SidebarSearchBar module', () => {
 });
 
 describe('onPillRenderError — Pattern C runtime observability emission', () => {
-
   let warnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {

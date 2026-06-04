@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { contextRowHint } from './OpenInAgentContextSubmenu';
 import SRC from './OpenInAgentContextSubmenu?raw';
