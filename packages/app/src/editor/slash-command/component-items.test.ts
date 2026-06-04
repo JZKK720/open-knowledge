@@ -193,11 +193,11 @@ describe('agent-surface ↔ slash-menu filter parity', () => {
 });
 
 describe('getInlineComponentItems — inline-atom slash entries', () => {
-  test('returns Link-to-a-page, External Link, and Tag entries with unique names', () => {
+  test('returns Link and Tag entries with unique names', () => {
     const items = getInlineComponentItems();
-    expect(items.length).toBe(3);
+    expect(items.length).toBe(2);
     const names = items.map((item) => item.name);
-    expect(names).toEqual(['wikiLink', 'externalLink', 'component-Tag']);
+    expect(names).toEqual(['link', 'component-Tag']);
     expect(new Set(names).size).toBe(names.length);
   });
 
@@ -213,39 +213,16 @@ describe('getInlineComponentItems — inline-atom slash entries', () => {
     expect(tag.aliases).toContain('#');
   });
 
-  test('Link-to-a-page entry re-triggers the [[ page picker by inserting the delimiter', () => {
-    const wiki = getInlineComponentItems().find((item) => item.name === 'wikiLink');
-    expect(wiki).toBeDefined();
-    if (!wiki) return;
-    expect(wiki.label).toBe('Link to a page');
-    expect(wiki.category).toBe('insert');
-    expect(wiki.aliases).toContain('wiki');
-    expect(wiki.aliases).toContain('[[');
-
-    let insertedContent: unknown;
-    const editor = {
-      chain: () => ({
-        focus: () => ({
-          insertContent: (content: unknown) => ({
-            run: () => {
-              insertedContent = content;
-            },
-          }),
-        }),
-      }),
-    };
-    wiki.command(editor as never);
-    expect(insertedContent).toBe('[[');
-  });
-
-  test('External Link entry lands a placeholder link mark and no-ops auto-open without the identity plugin', () => {
-    const external = getInlineComponentItems().find((item) => item.name === 'externalLink');
-    expect(external).toBeDefined();
-    if (!external) return;
-    expect(external.label).toBe('External Link');
-    expect(external.category).toBe('insert');
-    expect(external.aliases).toContain('url');
-    expect(external.aliases).toContain('external');
+  test('Link entry lands an empty placeholder link mark and no-ops auto-open without the identity plugin', () => {
+    const link = getInlineComponentItems().find((item) => item.name === 'link');
+    expect(link).toBeDefined();
+    if (!link) return;
+    expect(link.label).toBe('Link');
+    expect(link.category).toBe('insert');
+    expect(link.aliases).toContain('url');
+    expect(link.aliases).toContain('external');
+    expect(link.aliases).toContain('page');
+    expect(link.aliases).toContain('wiki');
 
     let insertedContent: { type?: string; text?: string; marks?: unknown[] } | undefined;
     let rafScheduled = false;
@@ -268,25 +245,23 @@ describe('getInlineComponentItems — inline-atom slash entries', () => {
           }),
         }),
       };
-      external.command(editor as never);
+      link.command(editor as never);
       expect(insertedContent?.type).toBe('text');
       expect(insertedContent?.text).toBe('link');
-      expect(insertedContent?.marks).toEqual([{ type: 'link', attrs: { href: 'https://' } }]);
+      expect(insertedContent?.marks).toEqual([{ type: 'link', attrs: { href: '' } }]);
       expect(rafScheduled).toBe(false);
     } finally {
       globalThis.requestAnimationFrame = originalRaf;
     }
   });
 
-  test('External Link entry flags the inserted mark and schedules auto-open when mark-identity resolves it', () => {
-    const external = getInlineComponentItems().find((item) => item.name === 'externalLink');
-    expect(external).toBeDefined();
-    if (!external) return;
+  test('Link entry flags the inserted mark and schedules auto-open when mark-identity resolves it', () => {
+    const link = getInlineComponentItems().find((item) => item.name === 'link');
+    expect(link).toBeDefined();
+    if (!link) return;
 
     const getStateSpy = spyOn(markIdentityKey, 'getState').mockReturnValue({
-      byId: new Map([
-        ['m7', { id: 'm7', markType: 'link', from: 1, to: 5, attrs: { href: 'https://' } }],
-      ]),
+      byId: new Map([['m7', { id: 'm7', markType: 'link', from: 1, to: 5, attrs: { href: '' } }]]),
       counter: 7,
     } as never);
 
@@ -306,7 +281,7 @@ describe('getInlineComponentItems — inline-atom slash entries', () => {
           }),
         }),
       };
-      external.command(editor as never);
+      link.command(editor as never);
 
       expect(consumePendingLinkEdit('m7')).toBe(true);
       expect(rafScheduled).toBe(true);

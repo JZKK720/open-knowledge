@@ -2094,8 +2094,8 @@ msgid "External link"
 msgstr "External link"
 
 #: src/editor/slash-command/component-items.tsx
-msgid "External Link"
-msgstr "External Link"
+#~ msgid "External Link"
+#~ msgstr "External Link"
 
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 msgid "External wiki link"
@@ -2902,6 +2902,7 @@ msgid "Light, dark, or follow the OS."
 msgstr "Light, dark, or follow the OS."
 
 #: src/editor/bubble-menu/LinkEditPopover.tsx
+#: src/editor/slash-command/component-items.tsx
 msgid "Link"
 msgstr "Link"
 
@@ -2914,16 +2915,20 @@ msgid "Link target"
 msgstr "Link target"
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to a page"
-msgstr "Link to a page"
+#~ msgid "Link to a page"
+#~ msgstr "Link to a page"
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to an external URL."
-msgstr "Link to an external URL."
+msgid "Link to a page or external URL."
+msgstr "Link to a page or external URL."
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to another page in this project."
-msgstr "Link to another page in this project."
+#~ msgid "Link to an external URL."
+#~ msgstr "Link to an external URL."
+
+#: src/editor/slash-command/component-items.tsx
+#~ msgid "Link to another page in this project."
+#~ msgstr "Link to another page in this project."
 
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Link URL"
@@ -4348,8 +4353,8 @@ msgid "Re-authenticate with GitHub"
 msgstr "Re-authenticate with GitHub"
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Read the <0>docs<1> ↗</1></0> for details."
-msgstr "Read the <0>docs<1> ↗</1></0> for details."
+#~ msgid "Read the <0>docs<1> ↗</1></0> for details."
+#~ msgstr "Read the <0>docs<1> ↗</1></0> for details."
 
 #: src/editor/slash-command/component-items.tsx
 msgid "Read-only copy of a MirrorSource block from another doc. Edit at the source — every Mirror reflects the change live."

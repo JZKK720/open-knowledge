@@ -24,6 +24,21 @@ import {
 
 export type { LinkPathSuggestion } from './link-path-suggestions-core';
 
+const LINK_PATH_SUGGESTION_PANEL_SELECTOR = '[data-ok-link-path-suggestion-panel]';
+
+export function isLinkPathSuggestionPanelTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(LINK_PATH_SUGGESTION_PANEL_SELECTOR) !== null;
+}
+
+export function preventLinkPathSuggestionDialogDismiss(event: {
+  target: EventTarget | null;
+  preventDefault: () => void;
+}) {
+  if (isLinkPathSuggestionPanelTarget(event.target)) {
+    event.preventDefault();
+  }
+}
+
 function suggestionIcon(kind: LinkPathSuggestionKind) {
   switch (kind) {
     case 'page':
@@ -92,8 +107,10 @@ export function LinkPathSuggestionInput({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const listId = useId();
 
+  const emptyTriggered = value.trim() === '';
+  const suggestionValue = emptyTriggered ? '/' : value;
   const suggestions = buildLinkPathSuggestions({
-    value,
+    value: suggestionValue,
     pages,
     folderPaths,
     assetPaths,
@@ -103,11 +120,12 @@ export function LinkPathSuggestionInput({
     .map((suggestion) => `${suggestion.kind}:${suggestion.path}`)
     .join('\u0000');
   const slashTriggered = isSlashPathSuggestionValue(value);
+  const suggestionTriggered = emptyTriggered || slashTriggered;
   const showSuggestionOptions = suggestions.length > 0;
   const showSuggestions =
-    focused && !dismissed && slashTriggered && (showSuggestionOptions || loading);
+    focused && !dismissed && suggestionTriggered && (showSuggestionOptions || loading);
   const showNoMatches =
-    focused && !dismissed && slashTriggered && !loading && !showSuggestionOptions;
+    focused && !dismissed && suggestionTriggered && !loading && !showSuggestionOptions;
   const showSuggestionPanel = showSuggestions || showNoMatches;
   const activeIndex = Math.min(highlightedIndex, Math.max(suggestions.length - 1, 0));
   const activeId = showSuggestionOptions ? `${listId}-option-${activeIndex}` : undefined;
@@ -233,7 +251,9 @@ export function LinkPathSuggestionInput({
       id={listId}
       role="listbox"
       aria-label={t`Path suggestions`}
-      className="fixed z-70 max-h-52 overflow-y-auto overscroll-y-contain rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md subtle-scrollbar"
+      data-ok-layer-spawned=""
+      data-ok-link-path-suggestion-panel=""
+      className="fixed z-70 max-h-52 overflow-y-auto overscroll-y-contain rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md subtle-scrollbar pointer-events-auto"
       onWheel={(event) => {
         event.stopPropagation();
       }}
@@ -304,9 +324,7 @@ export function LinkPathSuggestionInput({
       />
       {/* Manual portal + Floating UI keeps the listbox out of clipped dialog
       bodies and avoids nested Radix Popover focus management in prop panels. */}
-      {suggestionPanel && typeof document !== 'undefined'
-        ? createPortal(suggestionPanel, document.body)
-        : null}
+      {suggestionPanel && createPortal(suggestionPanel, document.body)}
     </div>
   );
 }

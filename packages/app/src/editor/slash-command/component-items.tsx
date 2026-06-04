@@ -463,48 +463,35 @@ function findLinkMarkIdAt(editor: Editor, pos: number): string | null {
 export function getInlineComponentItems(): SlashCommandItem[] {
   return [
     {
-      name: 'wikiLink',
-      label: t`Link to a page`,
+      name: 'link',
+      label: t`Link`,
       icon: Link2,
       category: 'insert',
-      aliases: ['wiki', 'wikilink', '[[', 'internal', 'page', 'backlink', 'cross-link'],
-      description: 'Link to another page (`[[page]]`) — opens a page picker',
+      aliases: [
+        'url',
+        'href',
+        'external',
+        'web',
+        'hyperlink',
+        'wiki',
+        'wikilink',
+        '[[',
+        'internal',
+        'page',
+        'backlink',
+        'cross-link',
+      ],
+      description: 'Link to a page or external URL',
       preview: {
-        description: t`Link to another page in this project.`,
+        description: t`Link to a page or external URL.`,
         render: () => (
-          <p className="text-sm leading-7">
+          <p className="leading-7 text-sm">
             <Trans>
               See{' '}
               <span className="font-medium text-azure-blue underline underline-offset-2 dark:text-sky-blue">
                 Architecture
               </span>{' '}
               for the system overview.
-            </Trans>
-          </p>
-        ),
-      },
-      command: (editor: Editor) => {
-        editor.chain().focus().insertContent('[[').run();
-      },
-    },
-    {
-      name: 'externalLink',
-      label: t`External Link`,
-      icon: ExternalLink,
-      category: 'insert',
-      aliases: ['link', 'url', 'href', 'external', 'web', 'hyperlink'],
-      description: 'Link to an external URL (`https://…`)',
-      preview: {
-        description: t`Link to an external URL.`,
-        render: () => (
-          <p className="text-sm leading-7">
-            <Trans>
-              Read the{' '}
-              <span className="font-medium text-azure-blue underline underline-offset-2 dark:text-sky-blue">
-                docs
-                <span className="text-[0.85em] opacity-60"> ↗</span>
-              </span>{' '}
-              for details.
             </Trans>
           </p>
         ),
@@ -517,7 +504,7 @@ export function getInlineComponentItems(): SlashCommandItem[] {
           .insertContent({
             type: 'text',
             text: 'link',
-            marks: [{ type: 'link', attrs: { href: 'https://' } }],
+            marks: [{ type: 'link', attrs: { href: '' } }],
           })
           .run();
 

@@ -301,119 +301,115 @@ export function NewItemDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody>
-          <div className="space-y-6">
-            {showTemplatePicker && (
-              <div className="flex flex-col gap-2">
-                {/*
-                 * No `htmlFor` on the label — the trigger is a button with
-                 * role="combobox" + a self-referencing aria-labelledby
-                 * ("<label> <trigger>") that concatenates the static "Start
-                 * from" label with the button's own selected-value text. A
-                 * label/htmlFor pair on a button only forwards click → focus,
-                 * not click → open, so it'd surprise users carrying intuition
-                 * from native <select>.
-                 */}
-                <span id={templatePickerLabelId} className="text-sm font-medium">
-                  <Trans>Start from</Trans>
-                </span>
-                {templatesError ? (
-                  <p role="alert" className="text-1sm text-destructive">
-                    <Trans>
-                      Could not load templates: {templatesError}. You can still create a blank note.
-                    </Trans>
-                  </p>
-                ) : null}
-                <TemplatePickerCombobox
-                  triggerId={templatePickerTriggerId}
-                  labelledById={templatePickerLabelId}
-                  open={templatePickerOpen}
-                  onOpenChange={setTemplatePickerOpen}
-                  value={selectedTemplate}
-                  onValueChange={(next) => {
-                    setSelectedTemplate(next);
-                    setTemplateUserPicked(true);
-                  }}
-                  templates={templates}
-                  loading={templatesLoading}
-                />
-                {!templatesLoading && !templatesError && templates.length === 0 ? (
-                  <p className="text-1sm text-muted-foreground">
-                    <Trans>
-                      No templates yet. Add one in this folder's Templates section, or in Settings →
-                      Templates.
-                    </Trans>
-                  </p>
-                ) : null}
-              </div>
-            )}
-            {kind === 'folder' && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium" htmlFor={folderInputId}>
-                  <Trans>Folder name</Trans>
-                </label>
-                <Input
-                  ref={folderInputRef}
-                  id={folderInputId}
-                  value={folderName}
-                  onChange={(e) => {
-                    setFolderName(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="folder-name"
-                  autoFocus
-                  aria-describedby={
-                    error && (errorField === 'folder' || errorField === 'form')
-                      ? errorId
-                      : undefined
-                  }
-                  aria-invalid={
-                    error && (errorField === 'folder' || errorField === 'form') ? true : undefined
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const folderErr = validatePath(folderName.trim());
-                      if (folderErr) {
-                        const detail = t(pathErrorDescriptor(folderErr));
-                        setError(t`Folder name: ${detail}`);
-                        setErrorField('folder');
-                        return;
-                      }
-                      fileInputRef.current?.focus();
-                    }
-                  }}
-                />
-              </div>
-            )}
+        <DialogBody className="space-y-6 pb-1">
+          {showTemplatePicker && (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium" htmlFor={fileInputId}>
-                {kind === 'folder' ? <Trans>First file name</Trans> : <Trans>File name</Trans>}
+              {/*
+               * No `htmlFor` on the label — the trigger is a button with
+               * role="combobox" + a self-referencing aria-labelledby
+               * ("<label> <trigger>") that concatenates the static "Start
+               * from" label with the button's own selected-value text. A
+               * label/htmlFor pair on a button only forwards click → focus,
+               * not click → open, so it'd surprise users carrying intuition
+               * from native <select>.
+               */}
+              <span id={templatePickerLabelId} className="text-sm font-medium">
+                <Trans>Start from</Trans>
+              </span>
+              {templatesError ? (
+                <p role="alert" className="text-1sm text-destructive">
+                  <Trans>
+                    Could not load templates: {templatesError}. You can still create a blank note.
+                  </Trans>
+                </p>
+              ) : null}
+              <TemplatePickerCombobox
+                triggerId={templatePickerTriggerId}
+                labelledById={templatePickerLabelId}
+                open={templatePickerOpen}
+                onOpenChange={setTemplatePickerOpen}
+                value={selectedTemplate}
+                onValueChange={(next) => {
+                  setSelectedTemplate(next);
+                  setTemplateUserPicked(true);
+                }}
+                templates={templates}
+                loading={templatesLoading}
+              />
+              {!templatesLoading && !templatesError && templates.length === 0 ? (
+                <p className="text-1sm text-muted-foreground">
+                  <Trans>
+                    No templates yet. Add one in this folder's Templates section, or in Settings →
+                    Templates.
+                  </Trans>
+                </p>
+              ) : null}
+            </div>
+          )}
+          {kind === 'folder' && (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium" htmlFor={folderInputId}>
+                <Trans>Folder name</Trans>
               </label>
               <Input
-                ref={fileInputRef}
-                id={fileInputId}
-                value={fileName}
-                onChange={(e) => handleFileNameChange(e.target.value)}
-                placeholder="my-note"
-                autoFocus={kind === 'file'}
+                ref={folderInputRef}
+                id={folderInputId}
+                value={folderName}
+                onChange={(e) => {
+                  setFolderName(e.target.value);
+                  setError(null);
+                }}
+                placeholder="folder-name"
+                autoFocus
                 aria-describedby={
-                  error && (errorField === 'file' || errorField === 'form') ? errorId : undefined
+                  error && (errorField === 'folder' || errorField === 'form') ? errorId : undefined
                 }
                 aria-invalid={
-                  error && (errorField === 'file' || errorField === 'form') ? true : undefined
+                  error && (errorField === 'folder' || errorField === 'form') ? true : undefined
                 }
-                onFocus={(e) => selectBasename(e.currentTarget)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isSubmitDisabled) void handleCreate();
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const folderErr = validatePath(folderName.trim());
+                    if (folderErr) {
+                      const detail = t(pathErrorDescriptor(folderErr));
+                      setError(t`Folder name: ${detail}`);
+                      setErrorField('folder');
+                      return;
+                    }
+                    fileInputRef.current?.focus();
+                  }
                 }}
               />
-              {error && (
-                <p id={errorId} role="alert" className="text-1sm text-destructive">
-                  {error}
-                </p>
-              )}
             </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" htmlFor={fileInputId}>
+              {kind === 'folder' ? <Trans>First file name</Trans> : <Trans>File name</Trans>}
+            </label>
+            <Input
+              ref={fileInputRef}
+              id={fileInputId}
+              value={fileName}
+              onChange={(e) => handleFileNameChange(e.target.value)}
+              placeholder="my-note"
+              autoFocus={kind === 'file'}
+              aria-describedby={
+                error && (errorField === 'file' || errorField === 'form') ? errorId : undefined
+              }
+              aria-invalid={
+                error && (errorField === 'file' || errorField === 'form') ? true : undefined
+              }
+              onFocus={(e) => selectBasename(e.currentTarget)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isSubmitDisabled) void handleCreate();
+              }}
+            />
+            {error && (
+              <p id={errorId} role="alert" className="text-1sm text-destructive">
+                {error}
+              </p>
+            )}
           </div>
         </DialogBody>
 

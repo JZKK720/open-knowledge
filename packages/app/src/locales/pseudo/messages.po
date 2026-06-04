@@ -2089,8 +2089,8 @@ msgid "External link"
 msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
-msgid "External Link"
-msgstr ""
+#~ msgid "External Link"
+#~ msgstr ""
 
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 msgid "External wiki link"
@@ -2897,6 +2897,7 @@ msgid "Light, dark, or follow the OS."
 msgstr ""
 
 #: src/editor/bubble-menu/LinkEditPopover.tsx
+#: src/editor/slash-command/component-items.tsx
 msgid "Link"
 msgstr ""
 
@@ -2909,16 +2910,20 @@ msgid "Link target"
 msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to a page"
+#~ msgid "Link to a page"
+#~ msgstr ""
+
+#: src/editor/slash-command/component-items.tsx
+msgid "Link to a page or external URL."
 msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to an external URL."
-msgstr ""
+#~ msgid "Link to an external URL."
+#~ msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Link to another page in this project."
-msgstr ""
+#~ msgid "Link to another page in this project."
+#~ msgstr ""
 
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Link URL"
@@ -4343,8 +4348,8 @@ msgid "Re-authenticate with GitHub"
 msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
-msgid "Read the <0>docs<1> ↗</1></0> for details."
-msgstr ""
+#~ msgid "Read the <0>docs<1> ↗</1></0> for details."
+#~ msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
 msgid "Read-only copy of a MirrorSource block from another doc. Edit at the source — every Mirror reflects the change live."

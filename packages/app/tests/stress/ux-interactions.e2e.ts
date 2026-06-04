@@ -263,10 +263,17 @@ test('markdown link edit dialog preserves page mode while clearing and updates t
   page,
   api,
 }) => {
-  const docName = await openFreshDoc(api, page, 'link-edit');
+  const docName = uniqueDocName('link-edit');
+  const suggestionTarget = uniqueDocName('link-edit-target');
   const doc = '[Beta page](beta.md)';
 
-  await api.replaceDoc(docName, doc);
+  await api.seedDocs([
+    { name: docName, markdown: doc },
+    { name: suggestionTarget, markdown: '# Target\n' },
+  ]);
+  await page.goto(`/#/${docName}`);
+  await waitForProvider(page);
+  await page.waitForSelector('.ProseMirror');
 
   await page.waitForFunction(
     () =>
@@ -299,16 +306,22 @@ test('markdown link edit dialog preserves page mode while clearing and updates t
   await expect(pageLabel).toBeVisible();
   await expect(sectionLabel).toBeVisible();
 
-  await targetInput.fill('sidebar-folder/nested-doc');
+  await targetInput.fill(`/${suggestionTarget}`);
+  const suggestion = page.getByRole('option', { name: `/${suggestionTarget} Page` });
+  await expect(suggestion).toBeVisible();
+  await suggestion.click();
+  await expect(page.getByRole('dialog', { name: 'Edit markdown link' })).toBeVisible();
+  await expect(targetInput).toHaveValue(suggestionTarget);
+
   await page.getByRole('button', { name: 'Save' }).click();
 
   await page.waitForFunction(
-    () =>
+    (target) =>
       window.__activeProvider?.document
         ?.getText('source')
         ?.toString()
-        ?.includes('[Beta page](./sidebar-folder/nested-doc.md)'),
-    null,
+        ?.includes(`[Beta page](./${target}.md)`),
+    suggestionTarget,
     { timeout: 10_000 },
   );
 });

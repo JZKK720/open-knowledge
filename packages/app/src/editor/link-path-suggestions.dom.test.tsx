@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { type LinkPathSuggestion, LinkPathSuggestionInput } from './link-path-suggestions';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import {
+  isLinkPathSuggestionPanelTarget,
+  type LinkPathSuggestion,
+  LinkPathSuggestionInput,
+  preventLinkPathSuggestionDialogDismiss,
+} from './link-path-suggestions';
 
 const pages = new Set(['docs/install', 'guides/bun', 'guides/intro']);
 const folderPaths = new Set(['docs', 'guides']);
 const nativeScrollIntoView = HTMLElement.prototype.scrollIntoView;
+let pointerEventsStyle: HTMLStyleElement | null = null;
 
 function Harness({
   initialValue,
@@ -39,6 +46,8 @@ function Harness({
 
 afterEach(() => {
   cleanup();
+  pointerEventsStyle?.remove();
+  pointerEventsStyle = null;
   if (nativeScrollIntoView) {
     HTMLElement.prototype.scrollIntoView = nativeScrollIntoView;
   } else {
@@ -47,6 +56,15 @@ afterEach(() => {
 });
 
 describe('LinkPathSuggestionInput', () => {
+  test('opens project path suggestions when empty input has focus', () => {
+    render(<Harness initialValue="" />);
+
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Link target' }));
+
+    expect(screen.getByRole('listbox', { name: 'Path suggestions' })).toBeDefined();
+    expect(screen.getByRole('option', { name: '/docs/install Page' })).toBeDefined();
+  });
+
   test('opens project path suggestions when slash input has focus', () => {
     render(<Harness initialValue="/guides" />);
 
@@ -126,6 +144,42 @@ describe('LinkPathSuggestionInput', () => {
     expect(touchMoveEvents).toBe(0);
   });
 
+  test('keeps portaled suggestions interactive inside modal dialogs', () => {
+    pointerEventsStyle = document.createElement('style');
+    pointerEventsStyle.textContent = '.pointer-events-auto { pointer-events: auto; }';
+    document.head.append(pointerEventsStyle);
+
+    render(
+      <Dialog open>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Edit markdown link</DialogTitle>
+          <Harness
+            initialValue="/"
+            harnessPages={new Set(Array.from({ length: 12 }, (_, index) => `docs/${index}`))}
+            harnessFolderPaths={new Set()}
+          />
+        </DialogContent>
+      </Dialog>,
+    );
+
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Link target' }));
+
+    const listbox = screen.getByRole('listbox', { name: 'Path suggestions' });
+    expect(document.body.style.pointerEvents).toBe('none');
+    expect(listbox.parentElement).toBe(document.body);
+    expect(getComputedStyle(listbox).pointerEvents).toBe('auto');
+    expect(isLinkPathSuggestionPanelTarget(listbox)).toBe(true);
+
+    let prevented = false;
+    preventLinkPathSuggestionDialogDismiss({
+      target: listbox,
+      preventDefault: () => {
+        prevented = true;
+      },
+    });
+    expect(prevented).toBe(true);
+  });
+
   test('Escape dismisses the suggestion panel', () => {
     render(<Harness initialValue="/guides" />);
 
@@ -149,6 +203,20 @@ describe('LinkPathSuggestionInput', () => {
 
     fireEvent.change(input, { target: { value: '/guide' } });
 
+    expect(screen.getByRole('listbox', { name: 'Path suggestions' })).toBeDefined();
+  });
+
+  test('Escape dismisses empty-input suggestions and typing reopens them', () => {
+    render(<Harness initialValue="" />);
+
+    const input = screen.getByRole('combobox', { name: 'Link target' });
+    fireEvent.focus(input);
+    expect(screen.getByRole('listbox', { name: 'Path suggestions' })).toBeDefined();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('listbox', { name: 'Path suggestions' })).toBeNull();
+
+    fireEvent.change(input, { target: { value: '/' } });
     expect(screen.getByRole('listbox', { name: 'Path suggestions' })).toBeDefined();
   });
 

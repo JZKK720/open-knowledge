@@ -34,7 +34,11 @@ import {
   handleChipLinkClick,
   toInternalHashHref,
 } from '../internal-link-helpers';
-import { type LinkPathSuggestion, LinkPathSuggestionInput } from '../link-path-suggestions';
+import {
+  type LinkPathSuggestion,
+  LinkPathSuggestionInput,
+  preventLinkPathSuggestionDialogDismiss,
+} from '../link-path-suggestions';
 import { isSafeNavigationUrl } from '../safe-navigation-url';
 import { CopyButton } from './LinkPropPanelCopy';
 import { consumePendingLinkEdit } from './link-edit-autoopen';
@@ -152,7 +156,13 @@ function EditMarkdownLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl" data-ok-layer-spawned="">
+      <DialogContent
+        className="sm:max-w-xl"
+        data-ok-layer-spawned=""
+        onPointerDownOutside={preventLinkPathSuggestionDialogDismiss}
+        onFocusOutside={preventLinkPathSuggestionDialogDismiss}
+        onInteractOutside={preventLinkPathSuggestionDialogDismiss}
+      >
         <DialogHeader>
           <DialogTitle>
             <Trans>Edit markdown link</Trans>
@@ -162,63 +172,61 @@ function EditMarkdownLinkDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody>
-          <div className="space-y-6">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor={targetId}>
-                {docTargetMode ? <Trans>Page</Trans> : <Trans>Link target</Trans>}
-              </label>
-              <LinkPathSuggestionInput
-                id={targetId}
-                value={editTarget}
-                pages={pages}
-                folderPaths={folderPaths}
-                loading={loading}
-                onValueChange={(nextValue) => {
-                  setEditTarget(nextValue);
-                  setEditMode((current) => getMarkdownLinkEditMode(nextValue, current));
-                }}
-                onSuggestionSelect={handlePathSuggestionSelect}
-                placeholder={t`guides/install or https://example.com`}
-                autoFocus
-                onKeyDown={handleKeyDown}
-              />
-            </div>
+        <DialogBody className="space-y-6 pb-1">
+          <div>
+            <label className="mb-1.5 inline-block text-sm font-medium" htmlFor={targetId}>
+              {docTargetMode ? <Trans>Page</Trans> : <Trans>Link target</Trans>}
+            </label>
+            <LinkPathSuggestionInput
+              id={targetId}
+              value={editTarget}
+              pages={pages}
+              folderPaths={folderPaths}
+              loading={loading}
+              onValueChange={(nextValue) => {
+                setEditTarget(nextValue);
+                setEditMode((current) => getMarkdownLinkEditMode(nextValue, current));
+              }}
+              onSuggestionSelect={handlePathSuggestionSelect}
+              placeholder={t`guides/install or https://example.com`}
+              autoFocus
+              onKeyDown={handleKeyDown}
+            />
+          </div>
 
+          <div>
+            <label className="mb-1.5 inline-block text-sm font-medium" htmlFor={labelId}>
+              <Trans>
+                Label <span className="font-normal text-muted-foreground">(visible link text)</span>
+              </Trans>
+            </label>
+            <Input
+              id={labelId}
+              value={editLabel}
+              onChange={(e) => setEditLabel(e.target.value)}
+              placeholder={t`Display text`}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+
+          {docTargetMode ? (
             <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor={labelId}>
+              <label className="mb-1.5 inline-block text-sm font-medium" htmlFor={anchorId}>
                 <Trans>
-                  Label{' '}
-                  <span className="font-normal text-muted-foreground">(visible link text)</span>
+                  Section{' '}
+                  <span className="font-normal text-muted-foreground">
+                    (optional heading anchor)
+                  </span>
                 </Trans>
               </label>
               <Input
-                id={labelId}
-                value={editLabel}
-                onChange={(e) => setEditLabel(e.target.value)}
-                placeholder={t`Display text`}
+                id={anchorId}
+                value={editAnchor}
+                onChange={(e) => setEditAnchor(e.target.value)}
+                placeholder={t`heading-slug`}
                 onKeyDown={handleKeyDown}
               />
-            </div>
-
-            {docTargetMode ? (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium" htmlFor={anchorId}>
-                  <Trans>
-                    Section{' '}
-                    <span className="font-normal text-muted-foreground">
-                      (optional heading anchor)
-                    </span>
-                  </Trans>
-                </label>
-                <Input
-                  id={anchorId}
-                  value={editAnchor}
-                  onChange={(e) => setEditAnchor(e.target.value)}
-                  placeholder={t`heading-slug`}
-                  onKeyDown={handleKeyDown}
-                />
-                {/*
+              {/*
                   Heading-list is plain click-to-toggle buttons — not a
                   WAI-ARIA listbox. Previously declared role="listbox" /
                   role="option" but lacked the matching keyboard model
@@ -226,36 +234,33 @@ function EditMarkdownLinkDialog({
                   role + missing keyboard model as a conflict; native
                   button semantics already match the actual interaction.
                 */}
-                {showHeadings ? (
-                  <div
-                    id={headingListId}
-                    className="mt-1.5 max-h-36 overflow-y-auto subtle-scrollbar rounded-md border border-border bg-muted/30"
-                  >
-                    {headings.map((heading) => (
-                      <button
-                        key={`${heading.slug}-${heading.level}-${heading.text}`}
-                        type="button"
-                        aria-pressed={editAnchor === heading.slug}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-2 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground',
-                          editAnchor === heading.slug && 'bg-accent text-accent-foreground',
-                        )}
-                        style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
-                        onClick={() =>
-                          setEditAnchor(editAnchor === heading.slug ? '' : heading.slug)
-                        }
-                      >
-                        <span className="w-7 shrink-0 font-mono text-[10px] text-muted-foreground">
-                          H{heading.level}
-                        </span>
-                        <span className="truncate">{heading.text}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+              {showHeadings ? (
+                <div
+                  id={headingListId}
+                  className="mt-1.5 max-h-36 overflow-y-auto subtle-scrollbar rounded-md border border-border bg-muted/30"
+                >
+                  {headings.map((heading) => (
+                    <button
+                      key={`${heading.slug}-${heading.level}-${heading.text}`}
+                      type="button"
+                      aria-pressed={editAnchor === heading.slug}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-2 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground',
+                        editAnchor === heading.slug && 'bg-accent text-accent-foreground',
+                      )}
+                      style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
+                      onClick={() => setEditAnchor(editAnchor === heading.slug ? '' : heading.slug)}
+                    >
+                      <span className="w-7 shrink-0 font-mono text-[10px] text-muted-foreground">
+                        H{heading.level}
+                      </span>
+                      <span className="truncate">{heading.text}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </DialogBody>
 
         <DialogFooter>
@@ -301,22 +306,12 @@ export function InternalLinkPropPanel({
   const { addPage, folderPaths, pages, loading } = usePageList();
   const { t } = useLingui();
 
-  if (!info || !href) {
+  if (!info) {
     return null;
   }
 
-  const target = classifyMarkdownHref(href, sourceDocName);
-
-  const displayHref =
-    target?.kind === 'doc'
-      ? `${target.docName}${target.anchor ? `#${target.anchor}` : ''}`
-      : target?.kind === 'anchor'
-        ? `#${target.anchor}`
-        : target?.kind === 'external'
-          ? target.url
-          : href;
-
   const linkText = editor.state.doc.textBetween(info.from, info.to);
+  const target = href ? classifyMarkdownHref(href, sourceDocName) : null;
 
   function handleSave(nextHref: string, nextText: string, labelChanged: boolean) {
     const live = getCurrentMarkInfo(editor.state, nodeId);
@@ -350,6 +345,51 @@ export function InternalLinkPropPanel({
       .run();
     onClose();
   }
+
+  function handleEmptyHrefDialogOpenChange(open: boolean) {
+    if (open) {
+      setEditDialogOpen(true);
+      return;
+    }
+
+    const live = getCurrentMarkInfo(editor.state, nodeId);
+    const liveHref = (live?.attrs?.href as string | undefined) ?? '';
+    if (liveHref) {
+      setEditDialogOpen(false);
+      return;
+    }
+
+    if (live) {
+      editor.chain().focus().deleteRange({ from: live.from, to: live.to }).run();
+    }
+    onClose();
+  }
+
+  const editDialog = (
+    <EditMarkdownLinkDialog
+      open={editDialogOpen}
+      href={href}
+      text={linkText}
+      pages={pages}
+      folderPaths={folderPaths}
+      loading={loading}
+      onOpenChange={href ? setEditDialogOpen : handleEmptyHrefDialogOpenChange}
+      onSave={handleSave}
+    />
+  );
+
+  if (!href) {
+    return <>{editDialog}</>;
+  }
+
+  const displayHref =
+    target?.kind === 'doc'
+      ? `${target.docName}${target.anchor ? `#${target.anchor}` : ''}`
+      : target?.kind === 'anchor'
+        ? `#${target.anchor}`
+        : target?.kind === 'external'
+          ? target.url
+          : href;
 
   function updateMissingLinkHref(docName: string) {
     const live = getCurrentMarkInfo(editor.state, nodeId);
@@ -497,6 +537,8 @@ export function InternalLinkPropPanel({
 
   return (
     <>
+      {editDialog}
+
       <InteractionPropPanel
         kind="internal-link"
         ariaLabel={`${stateLabel.text}: ${displayHref}`}
@@ -588,17 +630,6 @@ export function InternalLinkPropPanel({
           </div>
         </div>
       </InteractionPropPanel>
-
-      <EditMarkdownLinkDialog
-        open={editDialogOpen}
-        href={href}
-        text={linkText}
-        pages={pages}
-        folderPaths={folderPaths}
-        loading={loading}
-        onOpenChange={setEditDialogOpen}
-        onSave={handleSave}
-      />
     </>
   );
 }

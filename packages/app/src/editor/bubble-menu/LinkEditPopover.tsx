@@ -17,8 +17,14 @@ export function LinkEditPopover({ editor }: { editor: Editor }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { folderPaths, loading, pages } = usePageList();
 
-  const isLinkActive = editor.isActive('link');
+  const isLinkActive = editor.state.selection.empty && editor.isActive('link');
   const currentUrl = editor.getAttributes('link').href ?? '';
+
+  function getInitialUrlForLinkInput() {
+    return editor.state.selection.empty && editor.isActive('link')
+      ? (editor.getAttributes('link').href ?? '')
+      : '';
+  }
 
   useEffect(() => {
     function onSelectionUpdate() {
@@ -34,10 +40,9 @@ export function LinkEditPopover({ editor }: { editor: Editor }) {
 
   useEffect(() => {
     if (showInput) {
-      setUrl(currentUrl);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [showInput, currentUrl]);
+  }, [showInput]);
 
   function applyLink() {
     if (url.trim()) {
@@ -152,6 +157,7 @@ export function LinkEditPopover({ editor }: { editor: Editor }) {
           className={isLinkActive ? 'bg-accent text-primary' : 'text-accent-foreground'}
           onMouseDown={(e) => {
             e.preventDefault();
+            setUrl(getInitialUrlForLinkInput());
             setShowInput(true);
           }}
         >

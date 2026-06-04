@@ -39,7 +39,11 @@ import { type CreatePageSeed, createPageFromSeedAndUpdate } from '../../lib/crea
 import { hashFromAssetPath } from '../../lib/doc-hash';
 import { cn } from '../../lib/utils';
 import { handleChipLinkClick, toInternalHashHref } from '../internal-link-helpers';
-import { type LinkPathSuggestion, LinkPathSuggestionInput } from '../link-path-suggestions';
+import {
+  type LinkPathSuggestion,
+  LinkPathSuggestionInput,
+  preventLinkPathSuggestionDialogDismiss,
+} from '../link-path-suggestions';
 import { isSafeNavigationUrl } from '../safe-navigation-url';
 import { CopyButton } from './LinkPropPanelCopy';
 import { useHeadings } from './use-headings';
@@ -128,7 +132,13 @@ function EditWikiLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl" data-ok-layer-spawned="">
+      <DialogContent
+        className="sm:max-w-xl"
+        data-ok-layer-spawned=""
+        onPointerDownOutside={preventLinkPathSuggestionDialogDismiss}
+        onFocusOutside={preventLinkPathSuggestionDialogDismiss}
+        onInteractOutside={preventLinkPathSuggestionDialogDismiss}
+      >
         <DialogHeader>
           <DialogTitle>
             <Trans>Edit wiki link</Trans>
