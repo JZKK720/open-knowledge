@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { formatEntryCounts } from './PackCardGrid';
 import SRC from './PackCardGrid?raw';
@@ -22,7 +23,7 @@ describe('PackCardGrid source-level guards', () => {
       "'plain-notes'",
       'worldbuilding',
       "'writing-pipeline'",
-      'gbrain',
+      "'entity-vault'",
     ]) {
       expect(SRC).toContain(id);
     }

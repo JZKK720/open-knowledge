@@ -72,7 +72,7 @@ Agents use these to repair and densify the graph as they work, instead of lettin
 
 ### Closed-loop grounding
 
-Every factual claim should trace back to a source **inside** the knowledge base. External material is pulled in and cited locally rather than linked off to the open web, so the knowledge base stays self-contained and auditable. This is the backbone of the source-grounded workflows: see [Karpathy's LLM wiki workflow](../workflows/karpathy-llm-wiki.mdx) and the [Gbrain workflow](../workflows/gbrain.mdx).
+Every factual claim should trace back to a source **inside** the knowledge base. External material is pulled in and cited locally rather than linked off to the open web, so the knowledge base stays self-contained and auditable. This is the backbone of the source-grounded workflows: see [Karpathy's LLM wiki workflow](../workflows/karpathy-llm-wiki.mdx) and the [Entity vault (GBrain-compatible) workflow](../workflows/entity-vault.mdx).
 
 <Callout type="info">
   Open Knowledge is unopinionated about which workflow you adopt; these are supported patterns, not requirements. Grounding, backlinks, and the graph tools work the same regardless of how you choose to organize.

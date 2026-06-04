@@ -19,7 +19,8 @@ afterEach(() => {
     if (p) {
       try {
         rmSync(p, { recursive: true, force: true });
-      } catch {}
+      } catch {
+      }
     }
   }
 });
@@ -126,7 +127,7 @@ describe('buildPackSkills', () => {
   test('repo assets — all six starter packs are present to build', () => {
     const packsDir = join(defaultPaths().skillsDir, 'packs');
     const expected = [
-      'gbrain',
+      'entity-vault',
       'knowledge-base',
       'plain-notes',
       'software-lifecycle',
