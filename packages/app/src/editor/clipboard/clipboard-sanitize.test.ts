@@ -37,7 +37,7 @@ describe('isSafeWalkerUrl — allowlist URL classifier', () => {
   test('passes the standard navigation schemes', () => {
     expect(isSafeWalkerUrl('http://example.com')).toBe(true);
     expect(isSafeWalkerUrl('https://example.com')).toBe(true);
-    expect(isSafeWalkerUrl('mailto:nick@example.com')).toBe(true);
+    expect(isSafeWalkerUrl('mailto:user@example.com')).toBe(true);
     expect(isSafeWalkerUrl('tel:+15555555555')).toBe(true);
     expect(isSafeWalkerUrl('ftp://example.com')).toBe(true);
     expect(isSafeWalkerUrl('sms:+15555555555')).toBe(true);

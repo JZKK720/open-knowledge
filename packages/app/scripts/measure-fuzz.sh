@@ -49,7 +49,7 @@
 #     "seedCount":   500,
 #     "seedsFailed": 23,
 #     "rate":        0.046,                    // seedsFailed / seedCount
-#     "invokedBy":   "nick",                   // $USER or CI identifier
+#     "invokedBy":   "ci-user",                // $USER or CI identifier
 #     "context":     "pre-PR-218 baseline",
 #     "failingSeeds":[1776559905522],
 #     "durationMs":  8912000,

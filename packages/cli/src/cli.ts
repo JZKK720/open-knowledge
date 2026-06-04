@@ -37,6 +37,7 @@ import { syncCommand } from './commands/sync.ts';
 import { uiCommand } from './commands/ui.ts';
 import { PACKAGE_VERSION } from './constants.ts';
 import { loadConfig } from './index.ts';
+import { buildVersionNotice } from './version-notice.ts';
 
 const program = new Command();
 
@@ -54,7 +55,7 @@ export function getCliLogger(): PinoLoggerInstance | undefined {
 program
   .name('open-knowledge')
   .description('Local-first knowledge base with CRDT collaboration')
-  .version(PACKAGE_VERSION)
+  .version(buildVersionNotice(PACKAGE_VERSION))
   .option('--cwd <path>', 'Working directory')
   .option('--log-level <level>', 'Log level', 'info')
   .option('--no-color', 'Disable color output')

@@ -16,7 +16,7 @@ describe('rehypeStripSlackClasses', () => {
     });
     const serialized = JSON.stringify(mdast);
     expect(serialized).toContain('ship the clipboard feature');
-    expect(serialized).toContain('@nick');
+    expect(serialized).toContain('@ada');
     expect(serialized).toContain('thoughts');
   });
 

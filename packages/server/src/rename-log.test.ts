@@ -461,9 +461,9 @@ describe('rename-log read primitives (shadow-repo backed)', () => {
   let realShadowDir: string;
 
   const writer: WriterIdentity = {
-    id: 'human-nick',
-    name: 'Nick',
-    email: 'nick@example.com',
+    id: 'human-ada',
+    name: 'Ada',
+    email: 'ada@example.com',
   };
 
   async function checkpointSha(branch = 'main'): Promise<string> {
@@ -1028,9 +1028,9 @@ describe('gcRenameLog (US-008 reachability + rebuild)', () => {
   let shadow: import('./shadow-repo.ts').ShadowHandle;
   let contentRoot: string;
   const writer: WriterIdentity = {
-    id: 'human-nick',
-    name: 'Nick',
-    email: 'nick@example.com',
+    id: 'human-ada',
+    name: 'Ada',
+    email: 'ada@example.com',
   };
 
   beforeEach(async () => {

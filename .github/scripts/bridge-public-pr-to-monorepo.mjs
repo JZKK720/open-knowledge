@@ -4,11 +4,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { applyClaGate } from './cla-gate.mjs';
+
 // Keep the public PR bridge copies code-shape aligned. They ship to
 // separate public repos through Copybara, so they cannot import shared code.
 // Sibling bridge copies:
 // - public/agents/.github/scripts/bridge-public-pr-to-monorepo.mjs
 // - public/agents-optional-local-dev/.github/scripts/bridge-public-pr-to-monorepo.mjs
+// The Open Knowledge copy additionally imports a co-located `cla-gate.mjs` for
+// contributor-CLA enforcement — an OK-only divergence. That module ships to the
+// same repo via Copybara, so the import resolves on the mirror; the "no shared
+// code" rule still holds (no module is shared ACROSS the three repos).
 const BRIDGE_COMMENT_MARKER = '<!-- monorepo-pr-bridge -->';
 
 // Strip x-access-token credentials from any string that might end up in an
@@ -59,7 +65,9 @@ async function githubRequest({
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`${method} ${requestPath} failed (${response.status}): ${text}`);
+    const error = new Error(`${method} ${requestPath} failed (${response.status}): ${text}`);
+    error.status = response.status;
+    throw error;
   }
 
   // .patch and .diff return raw text, not JSON. All other accept types
@@ -444,6 +452,86 @@ async function ensureDraftState({ token, pullRequest, shouldBeDraft }) {
   });
 }
 
+// Read the `license/cla` combined-status state on a commit (cla-assistant posts
+// it on the public PR head). Returns null when the context is absent.
+//
+// `?per_page=100` raises the embedded-statuses ceiling from GitHub's default of
+// 30 to the documented max. The combined-status array holds the latest status
+// per context, so a commit would need >100 distinct status contexts before
+// `license/cla` could fall off the first page — at which point the gate would
+// read null and fail closed (a false hold), never falsely release. The sibling
+// `upsertIssueComment` paginates the same way.
+async function readCommitClaStatus({ token, repo, sha, request = githubRequest }) {
+  const result = await request({
+    token,
+    path: `/repos/${repo}/commits/${sha}/status?per_page=100`,
+  });
+  const cla = (result.statuses ?? []).find((s) => s.context === 'license/cla');
+  return cla ? cla.state : null;
+}
+
+// Check org membership for a public-PR author. GitHub returns 204 for a member
+// and 404 for a non-member (or a membership this token cannot see). Real errors
+// — a 403 when the bridge App lacks `members:read`, or a 5xx — propagate so
+// `applyClaGate` fails closed rather than treating an outage as "not a member".
+async function checkOrgMembership({ token, org, login, request = githubRequest }) {
+  try {
+    await request({ token, path: `/orgs/${org}/members/${encodeURIComponent(login)}` });
+    return true;
+  } catch (error) {
+    if (error?.status === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+// Post a commit status — used for the bridge's own `cla/verified` context on the
+// internal PR head, the signal the agents-private branch ruleset requires.
+async function postCommitStatus({ token, repo, sha, state, context, description, request = githubRequest }) {
+  await request({
+    token,
+    method: 'POST',
+    path: `/repos/${repo}/statuses/${sha}`,
+    body: { state, context, description },
+  });
+}
+
+// Build the GitHub adapter `applyClaGate` consumes. Extracted so the wiring —
+// which token/repo each call uses, and the `cla/verified` context the
+// agents-private ruleset requires — is testable in isolation rather than buried
+// in `syncPublicPr`. `request` is injectable for hermetic tests; production
+// uses the module's `githubRequest`.
+function createClaGateGh({
+  publicToken,
+  publicRepo,
+  internalToken,
+  internalRepo,
+  request = githubRequest,
+}) {
+  // Membership is checked against the org that owns the internal repo (inkeep),
+  // on the internal App token — the only credential that can carry
+  // `members:read`. The public Actions token cannot read org membership.
+  const org = internalRepo.split('/')[0];
+  return {
+    readClaStatus: (pr) =>
+      readCommitClaStatus({ token: publicToken, repo: publicRepo, sha: pr.head.sha, request }),
+    isOrgMember: (login) => checkOrgMembership({ token: internalToken, org, login, request }),
+    setDraft: (pr, shouldBeDraft) =>
+      ensureDraftState({ token: internalToken, pullRequest: pr, shouldBeDraft }),
+    setVerifiedStatus: (pr, state, description) =>
+      postCommitStatus({
+        token: internalToken,
+        repo: internalRepo,
+        sha: pr.head.sha,
+        state,
+        context: 'cla/verified',
+        description,
+        request,
+      }),
+  };
+}
+
 async function syncPublicPr() {
   const publicToken = requireEnv('PUBLIC_TOKEN');
   const internalToken = requireEnv('INTERNAL_TOKEN');
@@ -700,11 +788,6 @@ async function syncPublicPr() {
       path: `/repos/${internalRepo}/pulls/${internalPr.number}`,
       body: { title, body },
     });
-    await ensureDraftState({
-      token: internalToken,
-      pullRequest: internalPr,
-      shouldBeDraft: publicPr.draft,
-    });
   } else {
     internalPr = await githubRequest({
       token: internalToken,
@@ -719,6 +802,17 @@ async function syncPublicPr() {
       },
     });
   }
+
+  // Enforce the contributor CLA. cla-assistant posts `license/cla` on the public
+  // PR, but the bridge re-commits under a new SHA here, so that status can't gate
+  // the internal PR directly. Hold the internal PR (draft + a failing
+  // `cla/verified` status) until signed, re-checked on every sync. This also
+  // takes over draft-state mirroring: shouldBeDraft = publicPr.draft || gated.
+  await applyClaGate({
+    gh: createClaGateGh({ publicToken, publicRepo, internalToken, internalRepo }),
+    publicPr,
+    internalPr,
+  });
 
   await upsertIssueComment({
     token: publicToken,
@@ -834,4 +928,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
 }
 
-export { buildInternalPrBody, buildPublicComment, prefixPatchPaths };
+export {
+  buildInternalPrBody,
+  buildPublicComment,
+  checkOrgMembership,
+  createClaGateGh,
+  postCommitStatus,
+  prefixPatchPaths,
+  readCommitClaStatus,
+};

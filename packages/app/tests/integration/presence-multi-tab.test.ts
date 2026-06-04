@@ -57,7 +57,7 @@ describe('presence dedupe — same principalId', () => {
 
       clientA.provider.awareness?.setLocalStateField('user', {
         type: 'human' as const,
-        name: 'Miles Kaming-Thanassi',
+        name: 'Ada Lovelace-King',
         color: '#f0ece3',
         coeditor: 'standalone',
         tabId: 'tab-a',
@@ -65,7 +65,7 @@ describe('presence dedupe — same principalId', () => {
       });
       clientB.provider.awareness?.setLocalStateField('user', {
         type: 'human' as const,
-        name: 'Miles Kaming-Thanassi',
+        name: 'Ada Lovelace-King',
         color: '#f0ece3',
         coeditor: 'standalone',
         tabId: 'tab-b',
@@ -211,7 +211,7 @@ describe('presence dedupe — different principalIds', () => {
       });
       clientB.provider.awareness?.setLocalStateField('user', {
         type: 'human' as const,
-        name: 'Nick D',
+        name: 'Ada D',
         color: '#dce8fa',
         coeditor: 'standalone',
         tabId: 'tab-b',
@@ -265,7 +265,7 @@ describe('awareness payload shape under each principal-resolution state', () => 
     try {
       clientA.provider.awareness?.setLocalStateField('user', {
         type: 'human' as const,
-        name: 'Miles Kaming-Thanassi',
+        name: 'Ada Lovelace-King',
         color: '#f0ece3',
         coeditor: 'cursor',
         tabId: 'tab-state-b',

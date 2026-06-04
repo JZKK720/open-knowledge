@@ -11,7 +11,7 @@ import {
 
 const validPrincipal = {
   id: 'principal-abc123',
-  display_name: 'Miles Kaming-Thanassi',
+  display_name: 'Ada Lovelace-King',
   display_email: 'miles@example.com',
   source: 'git-config' as const,
   created_at: '2026-04-27T00:00:00.000Z',
@@ -23,7 +23,7 @@ describe('PrincipalSuccessSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.id).toBe('principal-abc123');
-      expect(result.data.display_name).toBe('Miles Kaming-Thanassi');
+      expect(result.data.display_name).toBe('Ada Lovelace-King');
       expect(result.data.source).toBe('git-config');
     }
   });

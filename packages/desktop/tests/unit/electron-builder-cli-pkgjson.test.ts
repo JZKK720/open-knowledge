@@ -34,3 +34,26 @@ describe('electron-builder.yml ships cli/package.json next to cli/dist', () => {
     expect(existsSync(cliPkgJson)).toBe(true);
   });
 });
+
+describe('electron-builder.yml ships the project GPLv3 LICENSE', () => {
+  test('extraResources declares a from: ../../LICENSE -> to: LICENSE rule', () => {
+    const yml = readFileSync(builderYml, 'utf8');
+    const config = parse(yml) as {
+      extraResources?: Array<{ from?: unknown; to?: unknown }>;
+    };
+    const rule = (config.extraResources ?? []).find(
+      (r) => r.from === '../../LICENSE' && r.to === 'LICENSE',
+    );
+    expect(
+      rule,
+      "electron-builder.yml extraResources must stage the project's GPLv3 LICENSE into the " +
+        'packaged .app Resources root so the conveyed desktop app carries its own license text ' +
+        "(electron-builder's auto-placed LICENSE covers Electron/Chromium only).",
+    ).toBeDefined();
+  });
+
+  test('the source LICENSE exists at build time', () => {
+    const okRootLicense = resolve(desktopRoot, '..', '..', 'LICENSE');
+    expect(existsSync(okRootLicense)).toBe(true);
+  });
+});

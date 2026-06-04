@@ -88,3 +88,7 @@ If a maintainer needs to push fixes to your PR during review, they may either as
 ## Public Export Boundary
 
 Only source code, public docs, and build or development scripts are exported here. Internal planning notes, reports, specs, and agent workspace files are intentionally not part of the public mirror.
+
+## License
+
+Open Knowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`). By submitting a contribution, you agree that it is licensed under the same terms.

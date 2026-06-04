@@ -59,3 +59,7 @@ bun run typecheck
 bun run test
 bun run build
 ```
+
+## License
+
+Open Knowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`).

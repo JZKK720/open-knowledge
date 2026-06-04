@@ -2,6 +2,7 @@
   "name": "@inkeep/open-knowledge-desktop",
   "productName": "Open Knowledge",
   "version": "0.9.1",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
