@@ -12,8 +12,6 @@ export type ShortcutCategory =
   | 'source'
   | 'navigation';
 
-type ShortcutConflictSource = 'Chrome' | 'TipTap' | 'CodeMirror';
-
 interface ShortcutMatchOptions {
   mod?: boolean;
   anyMod?: boolean;
@@ -48,11 +46,6 @@ export interface ShortcutBinding {
   match?: PlatformShortcutMatch;
 }
 
-interface ShortcutConflict {
-  source: ShortcutConflictSource;
-  note: MessageDescriptor;
-}
-
 export interface KeyboardShortcutDefinition {
   id: string;
   category: ShortcutCategory;
@@ -60,7 +53,6 @@ export interface KeyboardShortcutDefinition {
   description: MessageDescriptor;
   scope: MessageDescriptor;
   bindings: ShortcutBinding[];
-  conflicts?: ShortcutConflict[];
 }
 
 type ShortcutTargetLike =
@@ -104,12 +96,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
         match: { key: 'k', mod: true, allowExtraModifiers: true },
       },
     ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this to search from the page or focus the address bar. Open Knowledge overrides it while the app has focus.`,
-      },
-    ],
   },
   {
     id: 'settings',
@@ -118,12 +104,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Open this settings dialog.`,
     scope: msg`Global outside text fields`,
     bindings: [{ mac: '⌘ ,', windowsLinux: 'Ctrl ,', match: { key: ',', anyMod: true } }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`On macOS Chrome uses ⌘, for Chrome Settings. In OK Desktop the native app menu captures the shortcut for Open Knowledge settings.`,
-      },
-    ],
   },
   {
     id: 'new-item',
@@ -141,12 +121,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
         mac: '⌥⌘ N',
         windowsLinux: 'Ctrl Alt N',
         match: { key: 'n', anyMod: true, altKey: true, allowExtraModifiers: true },
-      },
-    ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses Ctrl/Cmd+N for new browser windows. OK Desktop captures Ctrl/Cmd+N natively; browser mode can use Ctrl/Cmd+Alt+N outside text fields.`,
       },
     ],
   },
@@ -177,12 +151,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
         match: { code: 'KeyB', anyMod: true, altKey: true, allowExtraModifiers: true },
       },
     ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`On macOS Chrome uses ⌘⌥B for Bookmark Manager. OK Desktop captures this through the native View menu.`,
-      },
-    ],
   },
   {
     id: 'open-folder',
@@ -191,12 +159,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Open an existing project folder from disk.`,
     scope: msg`OK Desktop`,
     bindings: [{ mac: '⌘ O', windowsLinux: 'Ctrl O' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this to open a local file. The shortcut is owned by the OK Desktop native File menu.`,
-      },
-    ],
   },
   {
     id: 'switch-project',
@@ -213,12 +175,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Duplicate the focused file-tree item when focus is in the Files sidebar.`,
     scope: msg`Files sidebar`,
     bindings: [{ mac: '⌘ D', windowsLinux: 'Ctrl D' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this to bookmark the page. Open Knowledge only handles it when the Files sidebar has focus.`,
-      },
-    ],
   },
   {
     id: 'file-tree-select-all',
@@ -227,12 +183,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Select every visible file-tree row when focus is in the Files sidebar.`,
     scope: msg`Files sidebar`,
     bindings: [{ mac: '⌘ A', windowsLinux: 'Ctrl A' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome and the page use this to select text or page content. Open Knowledge only handles it when the Files sidebar has focus.`,
-      },
-    ],
   },
   {
     id: 'find',
@@ -242,12 +192,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     scope: msg`Visual editor`,
     bindings: [
       { mac: '⌘ F', windowsLinux: 'Ctrl F', match: { key: 'f', mod: true, allowShiftKey: true } },
-    ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this for browser find. Open Knowledge overrides it in visual editor mode.`,
-      },
     ],
   },
   {
@@ -266,12 +210,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
         },
       },
     ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses Ctrl+H for History on Windows/Linux and ⌘⌥F for web search on macOS.`,
-      },
-    ],
   },
   {
     id: 'find-next',
@@ -283,12 +221,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
       { mac: '⌘ G', windowsLinux: 'Ctrl G', match: { key: 'g', mod: true } },
       { mac: 'F3', windowsLinux: 'F3', match: { key: 'F3' } },
     ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open.`,
-      },
-    ],
   },
   {
     id: 'find-previous',
@@ -299,12 +231,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     bindings: [
       { mac: '⇧⌘ G', windowsLinux: 'Ctrl Shift G', match: { key: 'g', mod: true, shiftKey: true } },
       { mac: 'Shift F3', windowsLinux: 'Shift F3', match: { key: 'F3', shiftKey: true } },
-    ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open.`,
-      },
     ],
   },
   {
@@ -362,12 +288,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Toggle inline code formatting.`,
     scope: msg`Visual editor`,
     bindings: [{ mac: '⌘ E', windowsLinux: 'Ctrl E' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses ⌘E with its find bar on macOS. The editor binding applies while the visual editor is focused.`,
-      },
-    ],
   },
   {
     id: 'format-highlight',
@@ -376,12 +296,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Toggle highlight formatting.`,
     scope: msg`Visual editor`,
     bindings: [{ mac: '⇧⌘ H', windowsLinux: 'Ctrl Shift H' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`On macOS Chrome uses ⌘⇧H to open the home page. The editor binding applies while the visual editor is focused.`,
-      },
-    ],
   },
   {
     id: 'edit-with-ai',
@@ -396,12 +310,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
         match: { key: 'i', mod: true, shiftKey: true },
       },
     ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses Cmd/Ctrl+Shift+I for DevTools. Open Knowledge handles it in editor selection contexts.`,
-      },
-    ],
   },
   {
     id: 'history-undo-redo',
@@ -412,12 +320,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     bindings: [
       { mac: '⌘ Z', windowsLinux: 'Ctrl Z' },
       { mac: '⇧⌘ Z / ⌘ Y', windowsLinux: 'Ctrl Shift Z / Ctrl Y' },
-    ],
-    conflicts: [
-      {
-        source: 'TipTap',
-        note: msg`The collaboration extension owns these bindings so undo and redo operate on the shared Yjs-backed editor history.`,
-      },
     ],
   },
   {
@@ -478,12 +380,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
       { mac: 'Shift Enter', windowsLinux: 'Shift Enter' },
       { mac: '⌘ Enter', windowsLinux: 'Ctrl Enter' },
     ],
-    conflicts: [
-      {
-        source: 'TipTap',
-        note: msg`TipTap also has a base Mod+Enter exit-code binding. Open Knowledge registers its hard-break extension before the base keymap, so hard break wins in normal visual editing.`,
-      },
-    ],
   },
   {
     id: 'move-block',
@@ -506,12 +402,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
       { mac: 'Tab', windowsLinux: 'Tab' },
       { mac: 'Shift Tab', windowsLinux: 'Shift Tab' },
     ],
-    conflicts: [
-      {
-        source: 'TipTap',
-        note: msg`Tables also use Tab and Shift+Tab for cell navigation. The list shortcut only handles events while the cursor is inside a list item.`,
-      },
-    ],
   },
   {
     id: 'list-split-item',
@@ -520,12 +410,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Create a new list item from the current list item.`,
     scope: msg`Visual editor list item`,
     bindings: [{ mac: 'Enter', windowsLinux: 'Enter' }],
-    conflicts: [
-      {
-        source: 'TipTap',
-        note: msg`Open Knowledge's list item extension handles Enter before TipTap's base split-block keymap while the cursor is inside a list item.`,
-      },
-    ],
   },
   {
     id: 'table-cell-navigation',
@@ -547,12 +431,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     bindings: [
       { mac: 'Backspace / Delete', windowsLinux: 'Backspace / Delete' },
       { mac: '⌘ Backspace / ⌘ Delete', windowsLinux: 'Ctrl Backspace / Ctrl Delete' },
-    ],
-    conflicts: [
-      {
-        source: 'TipTap',
-        note: msg`TipTap's table extension handles these bindings only when the selected cells cover the whole table.`,
-      },
     ],
   },
   {
@@ -657,12 +535,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Select the full source document.`,
     scope: msg`Source editor`,
     bindings: [{ mac: '⌘ A', windowsLinux: 'Ctrl A' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome and the page use this to select page content. CodeMirror handles it while source editor focus is inside the page.`,
-      },
-    ],
   },
   {
     id: 'source-multi-cursor',
@@ -682,12 +554,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Open CodeMirror search in source editor mode.`,
     scope: msg`Source editor`,
     bindings: [{ mac: '⌘ F', windowsLinux: 'Ctrl F' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this for browser find. CodeMirror handles it while source editor focus is inside the page.`,
-      },
-    ],
   },
   {
     id: 'source-toggle-comment',
@@ -707,12 +573,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Add the next matching source selection.`,
     scope: msg`Source editor`,
     bindings: [{ mac: '⌘ D', windowsLinux: 'Ctrl D' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this to bookmark the page. CodeMirror handles it only while source editor focus is inside the page.`,
-      },
-    ],
   },
   {
     id: 'source-goto-line',
@@ -732,12 +592,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
       { mac: '⌘ G / ⇧⌘ G', windowsLinux: 'Ctrl G / Ctrl Shift G' },
       { mac: 'F3 / Shift F3', windowsLinux: 'F3 / Shift F3' },
       { mac: 'Esc', windowsLinux: 'Esc' },
-    ],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses these for browser find. CodeMirror handles them while source editor search is active.`,
-      },
     ],
   },
   {
@@ -779,12 +633,6 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     description: msg`Open CodeMirror's lint diagnostics panel.`,
     scope: msg`Source editor`,
     bindings: [{ mac: '⇧⌘ M', windowsLinux: 'Ctrl Shift M' }],
-    conflicts: [
-      {
-        source: 'Chrome',
-        note: msg`Chrome uses this for profile or user switching. CodeMirror handles it only while source editor focus is inside the page.`,
-      },
-    ],
   },
   {
     id: 'source-next-diagnostic',

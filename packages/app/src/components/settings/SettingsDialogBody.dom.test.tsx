@@ -125,7 +125,7 @@ describe('SettingsDialogBody preferences runtime', () => {
     expect(screen.getByTestId('settings-hotkeys-list')).toBeDefined();
     expect(screen.getByTestId('settings-hotkey-command-palette')).toBeDefined();
     expect(screen.getByText('Command palette')).toBeDefined();
-    expect(screen.getByText(/Chrome uses this to search/)).toBeDefined();
+    expect(screen.queryByText(/Chrome uses this to search/)).toBeNull();
   });
 
   test('keeps long hotkey rows compact when shortcut chips wrap', () => {

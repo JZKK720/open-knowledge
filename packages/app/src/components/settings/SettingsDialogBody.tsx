@@ -230,10 +230,6 @@ function HotkeysSection() {
                 {shortcuts.map((shortcut) => {
                   const shortcutTitleId = `settings-hotkey-${shortcut.id}-title`;
                   const shortcutDescriptionId = `settings-hotkey-${shortcut.id}-description`;
-                  const conflictNoteIds =
-                    shortcut.conflicts?.map(
-                      (conflict) => `settings-hotkey-${shortcut.id}-${conflict.source}-note`,
-                    ) ?? [];
                   const bindingChipCount = shortcut.bindings.reduce(
                     (count, binding) => count + formatShortcutBinding(binding).split(' / ').length,
                     0,
@@ -243,7 +239,7 @@ function HotkeysSection() {
                   return (
                     <li
                       key={shortcut.id}
-                      aria-describedby={[shortcutDescriptionId, ...conflictNoteIds].join(' ')}
+                      aria-describedby={shortcutDescriptionId}
                       aria-labelledby={shortcutTitleId}
                       className={cn(
                         'grid gap-2 border-border border-b px-3 py-3 last:border-b-0',
@@ -264,27 +260,10 @@ function HotkeysSection() {
                             </span>
                             {t(shortcut.scope)}
                           </Badge>
-                          {shortcut.conflicts?.map((conflict) => (
-                            <Badge key={`${shortcut.id}-${conflict.source}`} variant="warning">
-                              <span className="sr-only">
-                                <Trans>Conflict: </Trans>
-                              </span>
-                              {conflict.source}
-                            </Badge>
-                          ))}
                         </div>
                         <p className="text-muted-foreground text-sm" id={shortcutDescriptionId}>
                           {t(shortcut.description)}
                         </p>
-                        {shortcut.conflicts?.map((conflict) => (
-                          <p
-                            key={`${shortcut.id}-${conflict.source}-note`}
-                            className="text-muted-foreground text-xs"
-                            id={`settings-hotkey-${shortcut.id}-${conflict.source}-note`}
-                          >
-                            {t(conflict.note)}
-                          </p>
-                        ))}
                       </div>
                       <div
                         className={cn(

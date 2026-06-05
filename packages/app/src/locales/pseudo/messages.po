@@ -948,64 +948,64 @@ msgid "Choose whether to commit <0>.ok/</0>, <1>.mcp.json</1> (and per-editor va
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome and the page use this to select page content. CodeMirror handles it while source editor focus is inside the page."
-msgstr ""
+#~ msgid "Chrome and the page use this to select page content. CodeMirror handles it while source editor focus is inside the page."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome and the page use this to select text or page content. Open Knowledge only handles it when the Files sidebar has focus."
-msgstr ""
+#~ msgid "Chrome and the page use this to select text or page content. Open Knowledge only handles it when the Files sidebar has focus."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses ⌘E with its find bar on macOS. The editor binding applies while the visual editor is focused."
-msgstr ""
+#~ msgid "Chrome uses ⌘E with its find bar on macOS. The editor binding applies while the visual editor is focused."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses Cmd/Ctrl+Shift+I for DevTools. Open Knowledge handles it in editor selection contexts."
-msgstr ""
+#~ msgid "Chrome uses Cmd/Ctrl+Shift+I for DevTools. Open Knowledge handles it in editor selection contexts."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses Ctrl/Cmd+N for new browser windows. OK Desktop captures Ctrl/Cmd+N natively; browser mode can use Ctrl/Cmd+Alt+N outside text fields."
-msgstr ""
+#~ msgid "Chrome uses Ctrl/Cmd+N for new browser windows. OK Desktop captures Ctrl/Cmd+N natively; browser mode can use Ctrl/Cmd+Alt+N outside text fields."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses Ctrl+H for History on Windows/Linux and ⌘⌥F for web search on macOS."
-msgstr ""
+#~ msgid "Chrome uses Ctrl+H for History on Windows/Linux and ⌘⌥F for web search on macOS."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses these for browser find. CodeMirror handles them while source editor search is active."
-msgstr ""
+#~ msgid "Chrome uses these for browser find. CodeMirror handles them while source editor search is active."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this for browser find. CodeMirror handles it while source editor focus is inside the page."
-msgstr ""
+#~ msgid "Chrome uses this for browser find. CodeMirror handles it while source editor focus is inside the page."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this for browser find. Open Knowledge overrides it in visual editor mode."
-msgstr ""
+#~ msgid "Chrome uses this for browser find. Open Knowledge overrides it in visual editor mode."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this for profile or user switching. CodeMirror handles it only while source editor focus is inside the page."
-msgstr ""
+#~ msgid "Chrome uses this for profile or user switching. CodeMirror handles it only while source editor focus is inside the page."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open."
-msgstr ""
+#~ msgid "Chrome uses this for the browser find bar. Open Knowledge handles it when visual-editor find is open."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this to bookmark the page. CodeMirror handles it only while source editor focus is inside the page."
-msgstr ""
+#~ msgid "Chrome uses this to bookmark the page. CodeMirror handles it only while source editor focus is inside the page."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this to bookmark the page. Open Knowledge only handles it when the Files sidebar has focus."
-msgstr ""
+#~ msgid "Chrome uses this to bookmark the page. Open Knowledge only handles it when the Files sidebar has focus."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this to open a local file. The shortcut is owned by the OK Desktop native File menu."
-msgstr ""
+#~ msgid "Chrome uses this to open a local file. The shortcut is owned by the OK Desktop native File menu."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Chrome uses this to search from the page or focus the address bar. Open Knowledge overrides it while the app has focus."
-msgstr ""
+#~ msgid "Chrome uses this to search from the page or focus the address bar. Open Knowledge overrides it while the app has focus."
+#~ msgstr ""
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Claude Desktop"
@@ -1261,8 +1261,8 @@ msgid "Conflict"
 msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
-msgid "Conflict: "
-msgstr ""
+#~ msgid "Conflict: "
+#~ msgstr ""
 
 #: src/components/settings/AccountSection.tsx
 msgid "Connect a GitHub account to browse and sync your repositories."
@@ -3703,16 +3703,16 @@ msgid "ok ui responded but server.lock has no port yet"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "On macOS Chrome uses ⌘, for Chrome Settings. In OK Desktop the native app menu captures the shortcut for Open Knowledge settings."
-msgstr ""
+#~ msgid "On macOS Chrome uses ⌘, for Chrome Settings. In OK Desktop the native app menu captures the shortcut for Open Knowledge settings."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "On macOS Chrome uses ⌘⇧H to open the home page. The editor binding applies while the visual editor is focused."
-msgstr ""
+#~ msgid "On macOS Chrome uses ⌘⇧H to open the home page. The editor binding applies while the visual editor is focused."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "On macOS Chrome uses ⌘⌥B for Bookmark Manager. OK Desktop captures this through the native View menu."
-msgstr ""
+#~ msgid "On macOS Chrome uses ⌘⌥B for Bookmark Manager. OK Desktop captures this through the native View menu."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 #~ msgid "On macOS Chrome uses ⌘⌥N for split view in the active tab. The shortcut is safest in OK Desktop."
@@ -3906,8 +3906,8 @@ msgid "Open Knowledge will create commits and push them to your remote automatic
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Open Knowledge's list item extension handles Enter before TipTap's base split-block keymap while the cursor is inside a list item."
-msgstr ""
+#~ msgid "Open Knowledge's list item extension handles Enter before TipTap's base split-block keymap while the cursor is inside a list item."
+#~ msgstr ""
 
 #: src/components/GraphPanel.tsx
 msgid "Open link"
@@ -5408,8 +5408,8 @@ msgid "Table"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Tables also use Tab and Shift+Tab for cell navigation. The list shortcut only handles events while the cursor is inside a list item."
-msgstr ""
+#~ msgid "Tables also use Tab and Shift+Tab for cell navigation. The list shortcut only handles events while the cursor is inside a list item."
+#~ msgstr ""
 
 #: src/editor/slash-command/component-items.tsx
 msgid "Tag"
@@ -5508,8 +5508,8 @@ msgid "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "The collaboration extension owns these bindings so undo and redo operate on the shared Yjs-backed editor history."
-msgstr ""
+#~ msgid "The collaboration extension owns these bindings so undo and redo operate on the shared Yjs-backed editor history."
+#~ msgstr ""
 
 #: src/components/SyncStatusBadge.tsx
 msgid "The default branch is protected — pushes need a pull request."
@@ -5657,12 +5657,12 @@ msgid "Timeline"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "TipTap also has a base Mod+Enter exit-code binding. Open Knowledge registers its hard-break extension before the base keymap, so hard break wins in normal visual editing."
-msgstr ""
+#~ msgid "TipTap also has a base Mod+Enter exit-code binding. Open Knowledge registers its hard-break extension before the base keymap, so hard break wins in normal visual editing."
+#~ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "TipTap's table extension handles these bindings only when the selected cells cover the whole table."
-msgstr ""
+#~ msgid "TipTap's table extension handles these bindings only when the selected cells cover the whole table."
+#~ msgstr ""
 
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Title"
