@@ -314,6 +314,13 @@ assertSubset(
   INLINE_RENDERABLE_EXTENSIONS,
 );
 
+export const TEXT_VIEWER_FALLBACK_EXTENSIONS: ReadonlySet<string> = new Set(['base', 'canvas']);
+
+export const LINKABLE_ASSET_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...ASSET_EXTENSIONS,
+  ...TEXT_VIEWER_FALLBACK_EXTENSIONS,
+]);
+
 export function mediaKindForSidebarAssetExtension(ext: string): InlineAssetMediaKind | null {
   const normalized = ext.toLowerCase().replace(/^\./, '');
   if (SIDEBAR_IMAGE_ASSET_EXTENSIONS.has(normalized)) return 'image';
@@ -321,5 +328,6 @@ export function mediaKindForSidebarAssetExtension(ext: string): InlineAssetMedia
   if (SIDEBAR_AUDIO_ASSET_EXTENSIONS.has(normalized)) return 'audio';
   if (SIDEBAR_PDF_ASSET_EXTENSIONS.has(normalized)) return 'pdf';
   if (SIDEBAR_TEXT_ASSET_EXTENSIONS.has(normalized)) return 'text';
+  if (TEXT_VIEWER_FALLBACK_EXTENSIONS.has(normalized)) return 'text';
   return null;
 }

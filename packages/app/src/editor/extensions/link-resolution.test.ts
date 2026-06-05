@@ -121,6 +121,26 @@ describe('computeLinkResolutionState', () => {
     expect(computeLinkResolutionState('/test/nonexistent.png', 'README', cache)).toBe('unresolved');
   });
 
+  test('.canvas href resolves to asset when index contains it', () => {
+    const cache = makeCache({ pages: [], assetPaths: ['vault/Board.canvas'] });
+    expect(computeLinkResolutionState('./Board.canvas', 'vault/note', cache)).toBe('asset');
+  });
+
+  test('.canvas href is unresolved when asset index lacks it', () => {
+    const cache = makeCache({ pages: [], assetPaths: [] });
+    expect(computeLinkResolutionState('./Board.canvas', 'vault/note', cache)).toBe('unresolved');
+  });
+
+  test('.base href resolves to asset when index contains it', () => {
+    const cache = makeCache({ pages: [], assetPaths: ['vault/Characters.base'] });
+    expect(computeLinkResolutionState('./Characters.base', 'vault/note', cache)).toBe('asset');
+  });
+
+  test('.base href is unresolved when asset index lacks it', () => {
+    const cache = makeCache({ pages: [], assetPaths: [] });
+    expect(computeLinkResolutionState('./Characters.base', 'vault/note', cache)).toBe('unresolved');
+  });
+
   test('doc href with cache, target is folder → folder', () => {
     const cache = makeCache({ pages: [], folderPaths: ['subfolder'] });
     expect(computeLinkResolutionState('./subfolder', 'README', cache)).toBe('folder');

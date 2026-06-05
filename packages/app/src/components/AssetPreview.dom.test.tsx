@@ -78,10 +78,11 @@ describe('AssetPreview — image loading-state placeholder (PRD-6638)', () => {
 
   test('renders the "Open file" fallback for mediaKind=null', () => {
     const { container } = render(<AssetPreview assetPath="assets/data.csv" mediaKind={null} />);
-    const anchor = container.querySelector('a[href]');
-    expect(anchor).not.toBeNull();
-    expect(anchor?.getAttribute('href')).toContain('data.csv');
-    expect(anchor?.textContent).toMatch(/open file/i);
+    const openFileBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /open file/i.test(b.textContent ?? ''),
+    );
+    expect(openFileBtn).not.toBeNull();
+    expect(container.querySelector('a[href*="/api/asset"]')).toBeNull();
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('audio')).toBeNull();
     expect(container.querySelector('video')).toBeNull();

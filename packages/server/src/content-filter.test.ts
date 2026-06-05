@@ -654,6 +654,17 @@ describe('ContentFilter', () => {
       expect(filter.isExcluded('docs/config.json')).toBe(false);
     });
 
+    test('.base and .canvas files are admitted when a sibling .md exists', () => {
+      mkdirSync(join(projectDir, 'vault'));
+      writeFileSync(join(projectDir, 'vault', 'note.md'), '# Note');
+
+      const filter = createContentFilter({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('vault/Characters.base')).toBe(false);
+      expect(filter.isExcluded('vault/Board.canvas')).toBe(false);
+      expect(filter.isExcluded('standalone/Characters.base')).toBe(true);
+    });
+
     test('.okignore exclusion takes precedence over sibling-asset rule', () => {
       mkdirSync(join(projectDir, 'docs'));
       writeFileSync(join(projectDir, 'docs', 'guide.md'), '# Guide');

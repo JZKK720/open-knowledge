@@ -1,9 +1,9 @@
 import { realpathSync, type Stats, statSync } from 'node:fs';
 import { extname, normalize, resolve, sep } from 'node:path';
 import {
-  ASSET_EXTENSIONS,
   createCodeFenceTracker,
   type InlineAssetMediaKind,
+  LINKABLE_ASSET_EXTENSIONS,
   mediaKindForSidebarAssetExtension,
   resolveAssetProjectPath,
 } from '@inkeep/open-knowledge-core';
@@ -46,7 +46,7 @@ export function stripHrefDecorations(rawHref: string): string {
 export function isLocalAssetReferenceHref(rawHref: string): boolean {
   const href = stripHrefDecorations(rawHref);
   if (!href || isRemoteOrOpaqueHref(href)) return false;
-  return ASSET_EXTENSIONS.has(extname(href).slice(1).toLowerCase());
+  return LINKABLE_ASSET_EXTENSIONS.has(extname(href).slice(1).toLowerCase());
 }
 
 export function assetReferenceSignature(markdown: string | null): string {
@@ -142,7 +142,7 @@ function resolveReferencedAssetWithinContentDir(args: {
   const href = decodeHrefPath(args.href);
   if (!href || isRemoteOrOpaqueHref(href)) return null;
   const ext = extname(href).slice(1).toLowerCase();
-  if (!ASSET_EXTENSIONS.has(ext)) return null;
+  if (!LINKABLE_ASSET_EXTENSIONS.has(ext)) return null;
 
   const relativeAssetPath = resolveAssetProjectPath(href, args.fromDocName);
   if (!relativeAssetPath) return null;

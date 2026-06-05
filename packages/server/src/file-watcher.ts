@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { type Dirent, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, relative } from 'node:path';
-import { ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
+import { LINKABLE_ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import type { ContentFilter } from './content-filter.ts';
 import {
@@ -774,7 +774,9 @@ export async function handleRawEvents(
   });
 
   const mdEvents = safeEvents.filter((e) => isSupportedDocFile(e.path));
-  const assetEvents = safeEvents.filter((e) => isSupportedAssetFile(e.path, ASSET_EXTENSIONS));
+  const assetEvents = safeEvents.filter((e) =>
+    isSupportedAssetFile(e.path, LINKABLE_ASSET_EXTENSIONS),
+  );
   const folderEvents = updateFolderIndexFromRawEvents(
     safeEvents,
     contentDir,

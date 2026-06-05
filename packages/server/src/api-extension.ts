@@ -87,6 +87,7 @@ import {
   type InlineAssetMediaKind,
   InstallSkillRequestSchema,
   InstallSkillSuccessSchema,
+  LINKABLE_ASSET_EXTENSIONS,
   type LifecycleStatus,
   LinkGraphSuccessSchema,
   LocalOpAuthEmptySuccessSchema,
@@ -1028,9 +1029,7 @@ export async function* streamShowAllEntries(
       }
 
       const assetExt = synthesizeShowAllAssetExt(entry.name);
-      const mediaKind: InlineAssetMediaKind | null = ASSET_EXTENSIONS.has(assetExt)
-        ? mediaKindForSidebarAssetExtension(assetExt)
-        : null;
+      const mediaKind: InlineAssetMediaKind | null = mediaKindForSidebarAssetExtension(assetExt);
       emitted += 1;
       yield {
         kind: 'asset',
@@ -2256,7 +2255,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     const candidates = entries
       .filter((entry) => entry.isFile() && entry.name.startsWith(`${stem}.`))
       .map((entry) => (parent ? `${parent}/${entry.name}` : entry.name))
-      .filter((candidate) => isSupportedAssetFile(candidate, ASSET_EXTENSIONS));
+      .filter((candidate) => isSupportedAssetFile(candidate, LINKABLE_ASSET_EXTENSIONS));
 
     if (candidates.length === 1) return { path: candidates[0], ambiguous: false };
     return { path: assetPath, ambiguous: candidates.length > 1 };
@@ -2355,8 +2354,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             );
           }
           if (
-            !isSupportedAssetFile(fromPath, ASSET_EXTENSIONS) ||
-            !isSupportedAssetFile(destinationAssetPath, ASSET_EXTENSIONS)
+            !isSupportedAssetFile(fromPath, LINKABLE_ASSET_EXTENSIONS) ||
+            !isSupportedAssetFile(destinationAssetPath, LINKABLE_ASSET_EXTENSIONS)
           ) {
             throw new ManagedRenameInvalidRequestError(
               'Asset operations require supported asset extensions.',

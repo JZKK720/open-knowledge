@@ -94,6 +94,43 @@ describe('asset reference extraction', () => {
     expect(isLocalAssetReferenceHref('./doc.md')).toBe(false);
   });
 
+  test('classifies .base and .canvas hrefs as local asset references', () => {
+    expect(isLocalAssetReferenceHref('./Characters.base')).toBe(true);
+    expect(isLocalAssetReferenceHref('Characters.base')).toBe(true);
+    expect(isLocalAssetReferenceHref('./vault/Board.canvas')).toBe(true);
+  });
+
+  test('resolves .base and .canvas hrefs to disk paths', () =>
+    withFixture((dir) => {
+      mkdirSync(join(dir, 'vault'));
+      writeFileSync(join(dir, 'vault', 'Characters.base'), 'fields:\n  - name\n');
+      writeFileSync(join(dir, 'vault', 'Board.canvas'), '{"nodes":[],"edges":[]}\n');
+
+      expect(
+        resolveReferencedAssetPath({
+          contentDir: dir,
+          fromDocName: 'vault/note',
+          href: './Characters.base',
+        }),
+      ).toBe(realpathSync(resolve(dir, 'vault/Characters.base')));
+
+      expect(
+        resolveReferencedAssetPath({
+          contentDir: dir,
+          fromDocName: 'vault/note',
+          href: './Board.canvas',
+        }),
+      ).toBe(realpathSync(resolve(dir, 'vault/Board.canvas')));
+
+      expect(
+        resolveReferencedAssetPath({
+          contentDir: dir,
+          fromDocName: 'vault/note',
+          href: 'Board.canvas',
+        }),
+      ).toBe(realpathSync(resolve(dir, 'vault/Board.canvas')));
+    }));
+
   test('classifies remote or opaque hrefs', () => {
     expect(isRemoteOrOpaqueHref('#section')).toBe(true);
     expect(isRemoteOrOpaqueHref('//cdn.example.com/photo.png')).toBe(true);

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { TextViewer } from '@/components/TextViewer';
 import { Button } from '@/components/ui/button';
 import { LoadingImage } from '@/components/ui/loading-image';
+import { dispatchAssetClick } from '@/editor/asset-dispatch';
 import { Pdf } from '@/editor/components/Pdf';
 
 interface AssetPreviewProps {
@@ -73,10 +74,20 @@ export function AssetPreview({ assetPath, mediaKind }: AssetPreviewProps) {
             </div>
             <div className="max-w-full break-words font-medium text-sm">{fileName}</div>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <a href={src}>
-                  <Trans>Open file</Trans>
-                </a>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void dispatchAssetClick({
+                    url: src,
+                    projectRelPath: assetPath,
+                    ext: rawExtension.toLowerCase(),
+                    title: fileName,
+                    forceOsDelegation: false,
+                  });
+                }}
+              >
+                <Trans>Open file</Trans>
               </Button>
               <Button
                 variant="outline"

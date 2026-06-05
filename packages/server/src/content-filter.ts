@@ -4,7 +4,7 @@ import { readdir, readFile as readFileAsync } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
+import { LINKABLE_ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
 import ignore, { type Ignore } from 'ignore';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import { isSupportedDocFile, stripDocExtension } from './doc-extensions.ts';
@@ -383,7 +383,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
       if (isSupportedDocFile(relativePath)) return false;
 
       const ext = extname(relativePath).slice(1).toLowerCase();
-      if (ASSET_EXTENSIONS.has(ext)) {
+      if (LINKABLE_ASSET_EXTENSIONS.has(ext)) {
         const dir = dirname(relativePath);
         const normalizedDir = dir === '.' ? '' : dir;
         if ((dirCount.get(normalizedDir) ?? 0) > 0) return false;
@@ -770,7 +770,7 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
       if (isRejectedByConfigurableRules(relativePath)) return true;
       if (isSupportedDocFile(relativePath)) return false;
       const ext = extname(relativePath).slice(1).toLowerCase();
-      if (ASSET_EXTENSIONS.has(ext)) {
+      if (LINKABLE_ASSET_EXTENSIONS.has(ext)) {
         const dir = dirname(relativePath);
         const normalizedDir = dir === '.' ? '' : dir;
         if ((dirCount.get(normalizedDir) ?? 0) > 0) return false;

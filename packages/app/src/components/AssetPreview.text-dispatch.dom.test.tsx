@@ -1,11 +1,17 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+
+const dispatchAssetClickStub = mock(async () => {});
+mock.module('@/editor/asset-dispatch', () => ({
+  dispatchAssetClick: dispatchAssetClickStub,
+}));
 
 const { AssetPreview } = await import('./AssetPreview.tsx');
 
 describe('AssetPreview — text-viewer dispatch', () => {
   afterEach(() => {
     cleanup();
+    dispatchAssetClickStub.mockClear();
   });
 
   test('mediaKind=text on a json asset mounts TextViewer (not the fallback)', () => {
@@ -15,11 +21,42 @@ describe('AssetPreview — text-viewer dispatch', () => {
     expect(container.querySelector('[data-testid="asset-preview-open-as-text"]')).toBeNull();
   });
 
-  test('fallback pane exposes both "Open file" + "Open with built-in text editor"', () => {
+  test('mediaKind=text mounts TextViewer for .base (Obsidian Bases)', () => {
+    const { container } = render(
+      <AssetPreview assetPath="vault/Characters.base" mediaKind="text" />,
+    );
+    expect(container.querySelector('[data-text-viewer]')).not.toBeNull();
+    expect(container.querySelector('[data-text-viewer-extension="base"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="asset-preview-open-as-text"]')).toBeNull();
+  });
+
+  test('mediaKind=text mounts TextViewer for .canvas (Obsidian Canvas)', () => {
+    const { container } = render(<AssetPreview assetPath="vault/Board.canvas" mediaKind="text" />);
+    expect(container.querySelector('[data-text-viewer]')).not.toBeNull();
+    expect(container.querySelector('[data-text-viewer-extension="canvas"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="asset-preview-open-as-text"]')).toBeNull();
+  });
+
+  test('fallback pane has no raw <a href="/api/asset"> same-frame nav (FR2)', () => {
     const { container } = render(<AssetPreview assetPath="docs/data.zip" mediaKind={null} />);
-    expect(container.querySelector('a[href*="/api/asset"]')).not.toBeNull();
+    expect(container.querySelector('a[href*="/api/asset"]')).toBeNull();
     expect(container.querySelector('[data-testid="asset-preview-open-as-text"]')).not.toBeNull();
     expect(container.querySelector('[data-text-viewer]')).toBeNull();
+  });
+
+  test('"Open file" button calls dispatchAssetClick (not window navigation)', () => {
+    const { container } = render(<AssetPreview assetPath="docs/report.docx" mediaKind={null} />);
+    const openFileBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /open file/i.test(b.textContent ?? ''),
+    );
+    expect(openFileBtn).not.toBeNull();
+    fireEvent.click(openFileBtn as HTMLButtonElement);
+    expect(dispatchAssetClickStub).toHaveBeenCalledTimes(1);
+    expect(dispatchAssetClickStub.mock.calls[0]?.[0]).toMatchObject({
+      url: expect.stringContaining('/api/asset?path='),
+      projectRelPath: 'docs/report.docx',
+      ext: 'docx',
+    });
   });
 
   test('clicking "Open with built-in text editor" flips into the text branch', () => {

@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { ASSET_EXTENSIONS, type BasenameIndex } from '@inkeep/open-knowledge-core';
+import { type BasenameIndex, LINKABLE_ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
 import type { ContentFilter } from './content-filter.ts';
 import { isSupportedAssetFile } from './doc-extensions.ts';
 
@@ -83,7 +83,7 @@ export function seedBasenameIndex(opts: SeedOptions): void {
         if (realStat.isDirectory()) walk(canonical);
         else if (
           realStat.isFile() &&
-          isSupportedAssetFile(full, ASSET_EXTENSIONS) &&
+          isSupportedAssetFile(full, LINKABLE_ASSET_EXTENSIONS) &&
           !opts.contentFilter?.isExcluded(rel)
         ) {
           opts.basenameIndex.add(rel);
@@ -99,7 +99,7 @@ export function seedBasenameIndex(opts: SeedOptions): void {
       }
       if (
         stat.isFile() &&
-        isSupportedAssetFile(full, ASSET_EXTENSIONS) &&
+        isSupportedAssetFile(full, LINKABLE_ASSET_EXTENSIONS) &&
         !opts.contentFilter?.isExcluded(rel)
       ) {
         opts.basenameIndex.add(rel);

@@ -43,6 +43,18 @@ describe('seedBasenameIndex — initial walk (no filter)', () => {
     expect(idx.resolveEmbed('arbitrary.xyz', 'docs/meeting.md')).toBeNull();
   });
 
+  test('admits .base and .canvas files into the basename index', () => {
+    write('vault/note.md');
+    write('vault/Characters.base', 'fields:\n  - name\n');
+    write('vault/Board.canvas', '{"nodes":[],"edges":[]}\n');
+
+    const idx = createBasenameIndex();
+    seedBasenameIndex({ contentDir, basenameIndex: idx });
+
+    expect(idx.resolveEmbed('Characters.base', 'vault/note.md')).toBe('vault/Characters.base');
+    expect(idx.resolveEmbed('Board.canvas', 'vault/note.md')).toBe('vault/Board.canvas');
+  });
+
   test('empty contentDir produces empty index without throwing', () => {
     const idx = createBasenameIndex();
     seedBasenameIndex({ contentDir, basenameIndex: idx });

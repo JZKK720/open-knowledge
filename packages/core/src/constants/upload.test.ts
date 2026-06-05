@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  ASSET_EXTENSIONS,
   AUDIO_EXTENSIONS,
   FILE_ATTACHMENT_EXTENSIONS,
   IMAGE_EXTENSIONS,
+  INLINE_RENDERABLE_EXTENSIONS,
+  LINKABLE_ASSET_EXTENSIONS,
   mediaKindForSidebarAssetExtension,
+  TEXT_VIEWER_FALLBACK_EXTENSIONS,
   VIDEO_EXTENSIONS,
   WIKI_EMBED_EXTENSIONS,
 } from './upload.ts';
@@ -100,6 +104,46 @@ describe('mediaKindForSidebarAssetExtension', () => {
     ['lock', 'text'],
   ] as const)('classifies %s → %s (text-data formats)', (ext, expected) => {
     expect(mediaKindForSidebarAssetExtension(ext)).toBe(expected);
+  });
+
+  test.each([
+    ['base', 'text'],
+    ['canvas', 'text'],
+  ] as const)('classifies %s → %s (text-viewer fallback set)', (ext, expected) => {
+    expect(mediaKindForSidebarAssetExtension(ext)).toBe(expected);
+  });
+
+  test('base and canvas are absent from ASSET_EXTENSIONS and INLINE_RENDERABLE_EXTENSIONS', () => {
+    expect(ASSET_EXTENSIONS.has('base')).toBe(false);
+    expect(ASSET_EXTENSIONS.has('canvas')).toBe(false);
+    expect(INLINE_RENDERABLE_EXTENSIONS.has('base')).toBe(false);
+    expect(INLINE_RENDERABLE_EXTENSIONS.has('canvas')).toBe(false);
+  });
+
+  test('TEXT_VIEWER_FALLBACK_EXTENSIONS contains exactly base and canvas', () => {
+    expect(TEXT_VIEWER_FALLBACK_EXTENSIONS.has('base')).toBe(true);
+    expect(TEXT_VIEWER_FALLBACK_EXTENSIONS.has('canvas')).toBe(true);
+    expect(TEXT_VIEWER_FALLBACK_EXTENSIONS.size).toBe(2);
+  });
+
+  describe('LINKABLE_ASSET_EXTENSIONS', () => {
+    test('is a strict superset of ASSET_EXTENSIONS', () => {
+      for (const ext of ASSET_EXTENSIONS) {
+        expect(LINKABLE_ASSET_EXTENSIONS.has(ext)).toBe(true);
+      }
+      expect(LINKABLE_ASSET_EXTENSIONS.size).toBeGreaterThan(ASSET_EXTENSIONS.size);
+    });
+
+    test('contains base and canvas (text-viewer-fallback members)', () => {
+      expect(LINKABLE_ASSET_EXTENSIONS.has('base')).toBe(true);
+      expect(LINKABLE_ASSET_EXTENSIONS.has('canvas')).toBe(true);
+    });
+
+    test('size equals ASSET_EXTENSIONS + TEXT_VIEWER_FALLBACK_EXTENSIONS', () => {
+      expect(LINKABLE_ASSET_EXTENSIONS.size).toBe(
+        ASSET_EXTENSIONS.size + TEXT_VIEWER_FALLBACK_EXTENSIONS.size,
+      );
+    });
   });
 
   test('lock files dispatch to TextViewer regardless of stem prefix', () => {

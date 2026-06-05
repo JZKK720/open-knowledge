@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { DocumentListEntry } from '@inkeep/open-knowledge-core';
+import { ASSET_EXTENSIONS, type DocumentListEntry } from '@inkeep/open-knowledge-core';
 import {
   __getShowAllWalkStatsForTesting,
   __resetShowAllWalkStatsForTesting,
@@ -123,5 +123,29 @@ describe('streamShowAllEntries — abort + laziness', () => {
     expect(first.value).toBeDefined();
     const ret = await gen.return({ truncated: false });
     expect(ret.done).toBe(true);
+  });
+});
+
+describe('streamShowAllEntries — .base/.canvas mediaKind', () => {
+  test('.base and .canvas entries report mediaKind text in showAll output', async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ok-showall-mediakind-')));
+    writeFileSync(join(dir, 'note.md'), '# Note\n');
+    writeFileSync(join(dir, 'Characters.base'), 'fields:\n  - name\n');
+    writeFileSync(join(dir, 'Board.canvas'), '{"nodes":[],"edges":[]}\n');
+
+    const { entries } = await drain(streamShowAllEntries(streamOptsFor(dir, 50_000)));
+
+    const baseEntry = entries.find((e) => e.kind === 'asset' && e.docName === 'Characters.base');
+    const canvasEntry = entries.find((e) => e.kind === 'asset' && e.docName === 'Board.canvas');
+
+    expect(baseEntry).toBeDefined();
+    expect(baseEntry?.kind === 'asset' && baseEntry.mediaKind).toBe('text');
+    expect(canvasEntry).toBeDefined();
+    expect(canvasEntry?.kind === 'asset' && canvasEntry.mediaKind).toBe('text');
+  });
+
+  test('.base and .canvas are absent from ASSET_EXTENSIONS (serve allowlist unchanged)', () => {
+    expect(ASSET_EXTENSIONS.has('base')).toBe(false);
+    expect(ASSET_EXTENSIONS.has('canvas')).toBe(false);
   });
 });

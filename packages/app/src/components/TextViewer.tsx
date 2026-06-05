@@ -26,6 +26,7 @@ const lightTheme = basicLightInit({
 function pickLanguageExtension(extension: string): Language | null {
   switch (extension.toLowerCase()) {
     case 'json':
+    case 'canvas':
       return json().language;
     case 'toml':
       return StreamLanguage.define(toml);

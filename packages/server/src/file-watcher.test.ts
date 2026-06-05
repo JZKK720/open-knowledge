@@ -925,6 +925,42 @@ describe('file-watcher ContentFilter refcount hooks', () => {
     expect(filter.isExcluded('fresh/pic.png')).toBe(false);
   });
 
+  test('LINKABLE_ASSET_EXTENSIONS: .base file alongside .md dispatches asset-create event', async () => {
+    const filter = createContentFilter({
+      projectDir: tmpDir,
+      contentDir,
+    });
+
+    const newDir = resolve(contentDir, 'canvas-test');
+    mkdirSync(newDir);
+    const mdPath = resolve(newDir, 'note.md');
+    const assetPath = resolve(newDir, 'board.base');
+    writeFileSync(mdPath, '# Note\n');
+    writeFileSync(assetPath, '{}');
+
+    const collected: DiskEvent[] = [];
+    await handleRawEvents(
+      [
+        { type: 'create', path: mdPath },
+        { type: 'create', path: assetPath },
+      ],
+      contentDir,
+      filter,
+      new Map(),
+      new Map(),
+      async (e) => {
+        collected.push(e);
+      },
+    );
+
+    const kinds = collected.map((e) => e.kind).sort();
+    expect(kinds).toEqual(['asset-create', 'create']);
+    const asset = collected.find((e) => e.kind === 'asset-create');
+    if (asset?.kind === 'asset-create') {
+      expect(asset.relativePath).toBe('canvas-test/board.base');
+    }
+  });
+
   test('folder create/delete events update the folder index', async () => {
     const folderIndex = new Map();
     const collected: DiskEvent[] = [];
