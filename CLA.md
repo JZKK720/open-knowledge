@@ -1,4 +1,4 @@
-> Based on the Apache Individual Contributor License Agreement (ICLA) V2.2, with Inkeep, Inc. as the grantee. It is a copyright and patent **license**, not an assignment, so you keep full ownership of your contributions. The license-grant and representation clauses (sections 1 to 8) are the verbatim Apache text; the Foundation's nonprofit-specific covenant and the paper contact-form fields are omitted.
+> Adapted from the Apache Individual Contributor License Agreement (ICLA) V2.2, with Inkeep, Inc. as the grantee. It is a copyright and patent **license**, not an assignment, so you keep full ownership of your contributions.
 
 # Inkeep Individual Contributor License Agreement
 
@@ -29,3 +29,5 @@ You accept and agree to the following terms and conditions for Your present and 
 ---
 
 **How to sign.** Open a pull request on the public repository. The CLA-assistant bot will comment with a link to sign this Agreement — a one-time, roughly 30-second authenticated click recorded against your GitHub identity that covers all of your future contributions. Inkeep employees and project bots are allowlisted and are not prompted.
+
+If your employer requires a Corporate Contributor License Agreement, comment on your pull request and an Inkeep maintainer will coordinate next steps.

@@ -20,13 +20,14 @@ holds three bits of information:
 
 **While Open Knowledge is pre-1.0, NEVER declare a `major` bump in a changeset.** OK uses a modified semver where the bump types map differently:
 
-| What you want to communicate                            | OK pre-1.0 bump type |
-| ------------------------------------------------------- | -------------------- |
-| Breaking change for consumers (rename, removal, schema) | `minor`              |
-| New feature, additive API surface                       | `minor`              |
-| Bug fix, internal change, no user-visible API impact    | `patch`              |
+| What you want to communicate                                  | OK pre-1.0 bump type |
+| ------------------------------------------------------------- | -------------------- |
+| Breaking API, schema, or CLI change                           | `minor`              |
+| Large new surface                                             | `minor`              |
+| Bug fix, UI improvement, or small user-visible addition        | `patch`              |
+| Internal change with no user-visible runtime impact           | `patch`              |
 
-**Why:** under standard semver, going from `0.X.Y` to `1.0.0` is a once-in-a-product-lifetime decision. Until OK explicitly takes a major (decided by the team, not by an individual changeset), every change is either `minor` (new behavior or breaking change) or `patch` (bug fix / refinement). This lets us ship breaking changes without prematurely advertising a 1.0 stability promise.
+**Why:** under standard semver, going from `0.X.Y` to `1.0.0` is a once-in-a-product-lifetime decision. Until OK explicitly takes a major (decided by the team, not by an individual changeset), breaking changes and large surfaces use `minor`, while fixes and smaller user-visible additions use `patch`. This lets us ship breaking changes without prematurely advertising a 1.0 stability promise.
 
 **Mechanic:** the OK fixed-group (`@inkeep/open-knowledge`, `-core`, `-server`, `-app`, `-desktop`) bumps in lock-step on the highest declared bump type across all queued changesets. A single `major` declaration on any one package pulls the entire group to `1.0.0` — once. Don't be that changeset.
 
