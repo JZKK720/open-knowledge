@@ -7,9 +7,9 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import type { MDXComponents } from 'mdx/types';
 import { AgentIcons } from '@/components/agent-icons';
+import { CtaButton } from '@/components/cta-button';
 import { DownloadButton } from '@/components/download-button';
 import { Mermaid } from '@/components/mermaid';
-import { OpenWithAiButton } from '@/components/open-with-ai-button';
 import { LayerStack, QuickstartCTA, WhereToStart } from '@/components/overview-blocks';
 
 export function getMDXComponents(): MDXComponents {
@@ -20,11 +20,11 @@ export function getMDXComponents(): MDXComponents {
     AgentIcons,
     Card,
     Cards,
+    CtaButton,
     DownloadButton,
     Image: ImageZoom,
     LayerStack,
     Mermaid,
-    OpenWithAiButton,
     QuickstartCTA,
     Step,
     Steps,
