@@ -2071,10 +2071,6 @@ msgstr "Failed to load documents"
 msgid "Failed to load file"
 msgstr "Failed to load file"
 
-#: src/components/TextViewer.tsx
-msgid "Failed to load file (HTTP {status})"
-msgstr "Failed to load file (HTTP {status})"
-
 #: src/components/FolderPropertiesCard.tsx
 msgid "Failed to load folder properties: {message}"
 msgstr "Failed to load folder properties: {message}"
@@ -4884,6 +4880,10 @@ msgstr "Something went wrong loading the settings panel."
 msgid "Something went wrong opening \"{docName}\"."
 msgstr "Something went wrong opening \"{docName}\"."
 
+#: src/components/TextViewer.tsx
+msgid "Something went wrong opening this file (HTTP {status})."
+msgstr "Something went wrong opening this file (HTTP {status})."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Source editing"
 msgstr "Source editing"
@@ -5244,6 +5244,18 @@ msgstr "This branch is checked out in:"
 #: src/components/GraphPanel.tsx
 msgid "This document is already active in the editor. Use Open to collapse the graph."
 msgstr "This document is already active in the editor. Use Open to collapse the graph."
+
+#: src/components/TextViewer.tsx
+msgid "This file can't be opened in the text editor."
+msgstr "This file can't be opened in the text editor."
+
+#: src/components/TextViewer.tsx
+msgid "This file could not be found."
+msgstr "This file could not be found."
+
+#: src/components/TextViewer.tsx
+msgid "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
+msgstr "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
 
 #: src/components/CreateProjectDialog.tsx
 msgid "This folder already has files. Add a name to create a new subfolder inside it."

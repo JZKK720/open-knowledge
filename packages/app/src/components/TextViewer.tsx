@@ -57,7 +57,18 @@ function useAssetText(src: string): FetchState {
       .then(async (resp) => {
         if (!resp.ok) {
           const status = resp.status;
-          throw new Error(t`Failed to load file (HTTP ${status})`);
+          if (status === 413) {
+            throw new Error(
+              t`This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app.`,
+            );
+          }
+          if (status === 404) {
+            throw new Error(t`This file could not be found.`);
+          }
+          if (status === 400) {
+            throw new Error(t`This file can't be opened in the text editor.`);
+          }
+          throw new Error(t`Something went wrong opening this file (HTTP ${status}).`);
         }
         return resp.text();
       })

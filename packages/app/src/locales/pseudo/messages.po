@@ -2066,10 +2066,6 @@ msgstr ""
 msgid "Failed to load file"
 msgstr ""
 
-#: src/components/TextViewer.tsx
-msgid "Failed to load file (HTTP {status})"
-msgstr ""
-
 #: src/components/FolderPropertiesCard.tsx
 msgid "Failed to load folder properties: {message}"
 msgstr ""
@@ -4879,6 +4875,10 @@ msgstr ""
 msgid "Something went wrong opening \"{docName}\"."
 msgstr ""
 
+#: src/components/TextViewer.tsx
+msgid "Something went wrong opening this file (HTTP {status})."
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Source editing"
 msgstr ""
@@ -5238,6 +5238,18 @@ msgstr ""
 
 #: src/components/GraphPanel.tsx
 msgid "This document is already active in the editor. Use Open to collapse the graph."
+msgstr ""
+
+#: src/components/TextViewer.tsx
+msgid "This file can't be opened in the text editor."
+msgstr ""
+
+#: src/components/TextViewer.tsx
+msgid "This file could not be found."
+msgstr ""
+
+#: src/components/TextViewer.tsx
+msgid "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
 msgstr ""
 
 #: src/components/CreateProjectDialog.tsx

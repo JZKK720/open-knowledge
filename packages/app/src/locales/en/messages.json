@@ -310,6 +310,7 @@
     ],
     "92rbk2": ["Mirror loading <0>", ["mirrorRef"], "</0>"],
     "96G6Re": ["New folder"],
+    "96w9hU": ["Something went wrong opening this file (HTTP ", ["status"], ")."],
     "99eR72": ["Visual editor table selection"],
     "9Bd18D": ["Failed to load hub pages"],
     "9NC_MT": ["Couldn't open ", ["CLAUDE_WEB_FALLBACK_LABEL"], " in your browser."],
@@ -408,6 +409,9 @@
     "CTJLpz": ["\"", ["trimmed"], "\" already exists here"],
     "CU3AiE": ["Switching branches"],
     "CXj9C-": ["New property name"],
+    "C_WGy8": [
+      "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
+    ],
     "C_cPoW": ["Your GitHub session expired — sign in again to verify push access."],
     "ChAtFg": ["You don't have permission to push to this repo"],
     "CvsD6Y": ["via ", ["viaTags"]],
@@ -677,6 +681,7 @@
     "MrwYIK": ["Toggle a source comment through CodeMirror."],
     "MsuXaI": ["Hide panel (", ["panelShortcut"], ")"],
     "N1YYa7": ["Loading image"],
+    "N1mdmS": ["This file can't be opened in the text editor."],
     "N2FcBE": ["Synced"],
     "N2S1rs": ["Empty"],
     "N2eHWq": ["Code Block"],
@@ -758,7 +763,6 @@
     "PXXeW8": ["Restore this auto-save?"],
     "PZt1uN": ["Search files, commands, projects, and AI handoff actions."],
     "PZt2Ds": ["Clone ended unexpectedly."],
-    "PauP7d": ["Failed to load file (HTTP ", ["status"], ")"],
     "PdA9NZ": [["ahead"], " ahead"],
     "Pgu10b": ["Saved as <0>", ["slug"], ".md</0>"],
     "PgzIpb": ["Move to the previous visual-editor find result."],
@@ -1540,6 +1544,7 @@
     "rwrPbS": ["Component boundary navigation"],
     "s-MGs7": ["Resources"],
     "s-XOaI": ["File name"],
+    "s0IDhW": ["This file could not be found."],
     "s1c0ja": ["Bullet List"],
     "s3caR3": ["Deleting"],
     "sE7R19": [
