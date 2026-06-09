@@ -23,15 +23,37 @@ export async function resolveStatusSource(
   return { tier: entry.gitProtocol === 'ssh' ? 'C' : 'B', token: entry.token };
 }
 
+export type StatusOutcome =
+  | { authenticated: false }
+  | { authenticated: false; error: string }
+  | {
+      authenticated: true;
+      tier: 'A' | 'B' | 'C';
+      login: string;
+      name: string | null;
+      email: string | null;
+    };
+
+export function buildStatusPayload(
+  host: string,
+  backend: TokenStore['backend'],
+  outcome: StatusOutcome,
+): Record<string, unknown> {
+  return { type: 'status', host, backend, ...outcome };
+}
+
 async function runStatus(opts: StatusOptions, tokenStore: TokenStore): Promise<void> {
   const { host, json } = opts;
   validateGitHubHost(host);
 
+  const backend = tokenStore.backend;
   const source = await resolveStatusSource(host, tokenStore);
 
   if (source.tier === 'none') {
     if (json) {
-      process.stdout.write(`${JSON.stringify({ type: 'status', host, authenticated: false })}\n`);
+      process.stdout.write(
+        `${JSON.stringify(buildStatusPayload(host, backend, { authenticated: false }))}\n`,
+      );
     } else {
       process.stderr.write(`Not logged in to ${host}\n`);
     }
@@ -45,15 +67,15 @@ async function runStatus(opts: StatusOptions, tokenStore: TokenStore): Promise<v
     const { data } = await octokit.users.getAuthenticated();
     if (json) {
       process.stdout.write(
-        `${JSON.stringify({
-          type: 'status',
-          host,
-          authenticated: true,
-          tier: source.tier,
-          login: data.login,
-          name: data.name,
-          email: data.email,
-        })}\n`,
+        `${JSON.stringify(
+          buildStatusPayload(host, backend, {
+            authenticated: true,
+            tier: source.tier,
+            login: data.login,
+            name: data.name,
+            email: data.email,
+          }),
+        )}\n`,
       );
     } else {
       process.stderr.write(`✓ Logged in as ${data.login} on ${host}\n`);
@@ -61,8 +83,9 @@ async function runStatus(opts: StatusOptions, tokenStore: TokenStore): Promise<v
   } catch {
     if (json) {
       process.stdout.write(
-        JSON.stringify({ type: 'status', host, authenticated: false, error: 'token invalid' }) +
-          '\n',
+        `${JSON.stringify(
+          buildStatusPayload(host, backend, { authenticated: false, error: 'token invalid' }),
+        )}\n`,
       );
     } else {
       process.stderr.write(`✗ Token invalid for ${host}\n`);

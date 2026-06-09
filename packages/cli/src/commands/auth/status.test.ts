@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GhDetectResult } from '../../auth/gh-detect.ts';
 import { FileBackend } from '../../auth/token-store.ts';
-import { resolveStatusSource } from './status.ts';
+import { buildStatusPayload, resolveStatusSource } from './status.ts';
 
 function makeStore(tmpDir: string) {
   return new FileBackend(join(tmpDir, 'auth.yml'));
@@ -86,5 +86,49 @@ describe('resolveStatusSource', () => {
       return { available: false };
     });
     expect(seen).toEqual(['ghe.example.com']);
+  });
+});
+
+describe('buildStatusPayload', () => {
+  test('surfaces the active backend when unauthenticated (no token) — the headless-Linux probe shape', () => {
+    expect(buildStatusPayload('github.com', 'file', { authenticated: false })).toEqual({
+      type: 'status',
+      host: 'github.com',
+      backend: 'file',
+      authenticated: false,
+    });
+  });
+
+  test('surfaces the active backend when authenticated', () => {
+    expect(
+      buildStatusPayload('github.com', 'keyring', {
+        authenticated: true,
+        tier: 'B',
+        login: 'alice',
+        name: 'Alice',
+        email: 'alice@example.com',
+      }),
+    ).toEqual({
+      type: 'status',
+      host: 'github.com',
+      backend: 'keyring',
+      authenticated: true,
+      tier: 'B',
+      login: 'alice',
+      name: 'Alice',
+      email: 'alice@example.com',
+    });
+  });
+
+  test('surfaces the active backend alongside an invalid-token error', () => {
+    expect(
+      buildStatusPayload('github.com', 'file', { authenticated: false, error: 'token invalid' }),
+    ).toEqual({
+      type: 'status',
+      host: 'github.com',
+      backend: 'file',
+      authenticated: false,
+      error: 'token invalid',
+    });
   });
 });
