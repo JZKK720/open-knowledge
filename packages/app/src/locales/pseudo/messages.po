@@ -50,6 +50,10 @@ msgstr ""
 msgid "(a worktree of {0})"
 msgstr ""
 
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "(inline)"
+msgstr ""
+
 #: src/components/CommandPalette.tsx
 msgid "(missing)"
 msgstr ""
@@ -83,6 +87,11 @@ msgstr ""
 #. placeholder {0}: tag.count
 #: src/components/CommandPalette.tsx
 msgid "{0, plural, one {# doc} other {# docs}}"
+msgstr ""
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "{0, plural, one {# request blocked by the preview's security policy} other {# requests blocked by the preview's security policy}}"
 msgstr ""
 
 #. placeholder {0}: item.count
@@ -1750,6 +1759,7 @@ msgid "Dismiss"
 msgstr ""
 
 #: src/components/UpdateNotices.tsx
+#: src/editor/components/PreviewBlockedNotice.tsx
 msgid "Dismiss notice"
 msgstr ""
 
@@ -3106,6 +3116,15 @@ msgstr ""
 
 #: src/components/ui/breadcrumb.tsx
 msgid "More"
+msgstr ""
+
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More requests were blocked."
+msgstr ""
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More than {0} requests were blocked by the preview's security policy"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
@@ -5322,6 +5341,10 @@ msgstr ""
 
 #: src/editor/slash-command/items.tsx
 msgid "The formula <0>c = √(a² + b²)</0> renders inline."
+msgstr ""
+
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
 msgstr ""
 
 #: src/components/PropertyPanel.tsx

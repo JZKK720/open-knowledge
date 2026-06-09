@@ -50,6 +50,10 @@ msgstr "\"frontmatter\" is a reserved property name"
 msgid "(a worktree of {0})"
 msgstr "(a worktree of {0})"
 
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "(inline)"
+msgstr "(inline)"
+
 #: src/components/CommandPalette.tsx
 msgid "(missing)"
 msgstr "(missing)"
@@ -84,6 +88,11 @@ msgstr "(user-level only)"
 #: src/components/CommandPalette.tsx
 msgid "{0, plural, one {# doc} other {# docs}}"
 msgstr "{0, plural, one {# doc} other {# docs}}"
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "{0, plural, one {# request blocked by the preview's security policy} other {# requests blocked by the preview's security policy}}"
+msgstr "{0, plural, one {# request blocked by the preview's security policy} other {# requests blocked by the preview's security policy}}"
 
 #. placeholder {0}: item.count
 #: src/editor/tag-suggestion/TagSuggestionMenu.tsx
@@ -1755,6 +1764,7 @@ msgid "Dismiss"
 msgstr "Dismiss"
 
 #: src/components/UpdateNotices.tsx
+#: src/editor/components/PreviewBlockedNotice.tsx
 msgid "Dismiss notice"
 msgstr "Dismiss notice"
 
@@ -3112,6 +3122,15 @@ msgstr "Modify the link target, anchor, and display label."
 #: src/components/ui/breadcrumb.tsx
 msgid "More"
 msgstr "More"
+
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More requests were blocked."
+msgstr "More requests were blocked."
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More than {0} requests were blocked by the preview's security policy"
+msgstr "More than {0} requests were blocked by the preview's security policy"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Move between table cells"
@@ -5328,6 +5347,10 @@ msgstr "The folders and templates are in place; there's nothing left to scaffold
 #: src/editor/slash-command/items.tsx
 msgid "The formula <0>c = √(a² + b²)</0> renders inline."
 msgstr "The formula <0>c = √(a² + b²)</0> renders inline."
+
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
+msgstr "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
 
 #: src/components/PropertyPanel.tsx
 msgid "The properties block at the top of this doc has a formatting error. Switch to source mode to fix it."

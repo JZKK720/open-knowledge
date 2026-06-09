@@ -797,6 +797,16 @@
     "QcpeeE": ["Navigate to ", ["docName"]],
     "QqBQu1": ["Label <0>(visible link text)</0>"],
     "QyioBP": ["Move up"],
+    "R0cyYB": [
+      [
+        "0",
+        "plural",
+        {
+          "one": ["#", " request blocked by the preview's security policy"],
+          "other": ["#", " requests blocked by the preview's security policy"]
+        }
+      ]
+    ],
     "R0jJzV": ["Paste URL, owner/repo, or search your repos"],
     "R3y75Z": ["Edit source"],
     "R4RGjs": [
@@ -1068,6 +1078,7 @@
     "_TDESN": ["Network error - ", ["kind"], " \"", ["createdPath"], "\" still exists on disk"],
     "_TF8ep": ["Failed to render PDF"],
     "_VRtd7": ["Couldn't send the selection — please try again."],
+    "_W-elG": ["(inline)"],
     "_gkGSK": ["deleted template"],
     "_qD6mn": ["Pick the folder where you've cloned it."],
     "_rP3HI": [["minutes"], "m ago"],
@@ -1170,6 +1181,7 @@
     "dURmlQ": ["\"frontmatter\" is a reserved property name"],
     "dbhUX1": ["Hide this file"],
     "dbtjJh": ["(opens in new tab)"],
+    "djc1l9": ["More than ", ["0"], " requests were blocked by the preview's security policy"],
     "dprWmL": ["Anchor in this page"],
     "dr1vFs": ["Replace all matches"],
     "dw_dUJ": ["Failed to duplicate path"],
@@ -1483,6 +1495,7 @@
     ],
     "oBXkm2": ["Delete code block"],
     "oJl7eO": ["Unknown component: ", ["componentName"], " — source editable below"],
+    "oKBnk5": ["More requests were blocked."],
     "oS1YpJ": ["Open the Project Navigator."],
     "oXKEsy": ["Delete an adjacent wiki-link or tag chip."],
     "ogAuyr": ["Back to document view"],
@@ -1755,6 +1768,9 @@
     "y46m5r": ["The desktop app isn't responding. Refresh and try again."],
     "y5FUYi": ["Suggestion menu open"],
     "yCX4jp": [" Your selection could not be restored."],
+    "yEJ-sl": [
+      "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
+    ],
     "yHikCO": ["Open CodeMirror's go-to-line prompt."],
     "yKu_3Y": ["Restore"],
     "yLq4w4": ["Separator"],

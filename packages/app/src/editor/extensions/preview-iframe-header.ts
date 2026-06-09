@@ -20,6 +20,38 @@ export function parsePreviewHeightMessage(data: unknown): number | null {
   return typeof h === 'number' && Number.isFinite(h) && h > 0 ? Math.ceil(h) : null;
 }
 
+const PREVIEW_CSP_VIOLATION_MESSAGE_KEY = 'okPreviewCspViolation';
+
+/** One CSP-blocked request: the violated directive and the (browser-reported,
+ *  possibly origin-truncated or `inline`/`eval`) URI it blocked. */
+export interface PreviewBlockedRequest {
+  directive: string;
+  uri: string;
+}
+
+export const PREVIEW_CSP_VIOLATION_SAMPLE_CAP = 20;
+
+export function parsePreviewCspViolationMessage(
+  data: unknown,
+): { blocked: PreviewBlockedRequest[]; truncated: boolean } | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const payload = (data as Record<string, unknown>)[PREVIEW_CSP_VIOLATION_MESSAGE_KEY];
+  if (typeof payload !== 'object' || payload === null) return null;
+  const rawBlocked = (payload as Record<string, unknown>).blocked;
+  if (!Array.isArray(rawBlocked)) return null;
+  const blocked: PreviewBlockedRequest[] = [];
+  for (const item of rawBlocked) {
+    if (typeof item !== 'object' || item === null) continue;
+    const directive = (item as Record<string, unknown>).directive;
+    const uri = (item as Record<string, unknown>).uri;
+    if (typeof directive === 'string' && typeof uri === 'string') {
+      blocked.push({ directive, uri });
+    }
+  }
+  if (blocked.length === 0) return null;
+  return { blocked, truncated: (payload as Record<string, unknown>).truncated === true };
+}
+
 const PREVIEW_SCROLLBAR_STYLE = `<style>
   html, body { scrollbar-width: thin; scrollbar-color: rgba(115,115,115,0.4) transparent; }
   html::-webkit-scrollbar, body::-webkit-scrollbar,
@@ -69,6 +101,17 @@ function previewBootstrapScript(theme: PreviewTheme): string {
     `}` +
     `if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}` +
     `else{init();}` +
+    `var cspSeen=new Set();var cspList=[];var cspTrunc=false;var cspTimer;` +
+    `function cspFlush(){parent.postMessage({${PREVIEW_CSP_VIOLATION_MESSAGE_KEY}:{blocked:cspList.slice(),truncated:cspTrunc}},'*');}` +
+    `addEventListener('securitypolicyviolation',function(e){` +
+    `if(cspTrunc)return;` +
+    `var dir=(e&&(e.effectiveDirective||e.violatedDirective))||'';` +
+    `var uri=(e&&e.blockedURI)||'';` +
+    `var k=dir+' '+uri;` +
+    `if(cspSeen.has(k))return;cspSeen.add(k);` +
+    `if(cspList.length<${PREVIEW_CSP_VIOLATION_SAMPLE_CAP}){cspList.push({directive:dir,uri:uri});}else{cspTrunc=true;}` +
+    `if(cspTimer){clearTimeout(cspTimer);}cspTimer=setTimeout(cspFlush,250);` +
+    `});` +
     `})();</script>`
   );
 }
