@@ -65,6 +65,7 @@ export function SettingsDialogShell({ open, onOpenChange }: SettingsDialogShellP
       enabled: hasProject,
       items: [
         { id: 'sync', label: t`Sync` },
+        { id: 'search', label: t`Search` },
         { id: 'project-templates', label: t`Templates` },
         { id: 'okignore', label: t`Ignore patterns` },
         { id: 'sharing', label: t`Config sharing` },

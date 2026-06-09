@@ -66,8 +66,10 @@ import {
 } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
 import { AccountSection } from './AccountSection';
+import { EmbeddingsKeySection } from './EmbeddingsKeySection';
 import { OkignoreSection } from './OkignoreSection';
 import { ProjectTemplatesSection } from './ProjectTemplatesSection';
+import { SearchSection } from './SearchSection';
 import {
   getEnumOptions,
   getFieldDefault,
@@ -136,10 +138,18 @@ export function SettingsDialogBody({
     return <HotkeysSection />;
   }
   if (activeId === 'account') {
-    return <AccountSection />;
+    return (
+      <div className="space-y-8">
+        <AccountSection />
+        <EmbeddingsKeySection />
+      </div>
+    );
   }
   if (activeId === 'sync') {
     return <SyncSection />;
+  }
+  if (activeId === 'search') {
+    return <SearchSection />;
   }
   if (activeId === 'project-templates') {
     return <ProjectTemplatesSection />;

@@ -9,6 +9,7 @@ import {
   ConfigSchema,
   ensureProjectGit,
   initContent,
+  makeLazyEmbeddingsKeyStore,
 } from '@inkeep/open-knowledge-server';
 import { type KeyringSmokeResult, runKeyringSmoke } from './keyring-smoke.ts';
 
@@ -186,6 +187,7 @@ export function setupUtility(deps: SetupUtilityDeps): UtilityHandle {
       }
 
       const tokenStore = makeLazyProbeTokenStore();
+      const embeddingsKeyStore = makeLazyEmbeddingsKeyStore();
 
       booted = await server.bootServer({
         ...msg.opts,
@@ -198,6 +200,7 @@ export function setupUtility(deps: SetupUtilityDeps): UtilityHandle {
         autoInitFn: undefined,
         detectGh,
         tokenStore,
+        embeddingsKeyStore,
         serveContentAssets: true,
         ...(msg.opts.reactShellDistDir ? { reactShellDistDir: msg.opts.reactShellDistDir } : {}),
       });

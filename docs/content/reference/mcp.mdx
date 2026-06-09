@@ -12,7 +12,7 @@ The surface is **17 tools**. Three of the four write verbs — `write`, `edit`, 
 | Tool | Purpose |
 | --- | --- |
 | `exec` | Read-only shell (`cat`, `ls`, `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut`); reads return frontmatter, backlinks, and recent history. Fs-direct; works without the server. |
-| `search` | Ranked workspace search (title boost + body BM25 + recency; same engine the cmd-K palette uses) |
+| `search` | Ranked workspace search (title boost + body BM25 + recency; same engine the cmd-K palette uses). When [semantic search](/docs/reference/configuration#semantic-search) is enabled, an embeddings signal is additionally fused into `full_text` ranking (opt-in, content egress) — pass `semantic: false` to force pure-lexical. |
 | `links` | Wiki-link graph. `kind` selects: `backlinks`, `forward`, `dead`, `orphans`, `hubs`, or `suggest`. Accepts an array (e.g. `["dead", "orphans", "hubs"]`) to fetch several views in one call; each view nests under its own key in the response |
 | `history` | Version timeline for a doc. Each entry carries a `version` (commit SHA) you pass to `restore_version` |
 | `config` | Read the effective merged config (`config({ key: "appearance.theme" })` for a sub-tree; omit `key` for the whole config) |

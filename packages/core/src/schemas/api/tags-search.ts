@@ -161,6 +161,7 @@ export const SearchRequestSchema = z
     scopes: z.array(z.enum(['page', 'folder', 'content'])).optional(),
     scope: z.string().optional(),
     limit: z.number().int().nonnegative().optional(),
+    semantic: z.boolean().optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
@@ -177,12 +178,38 @@ export const SearchResultEntrySchema = z
   .loose() satisfies StandardSchemaV1;
 export type SearchResultEntry = z.infer<typeof SearchResultEntrySchema>;
 
+export const SearchSemanticStatusSchema = z
+  .object({
+    capable: z.boolean(),
+    applied: z.boolean(),
+    coverage: z.object({
+      embedded: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    }),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type SearchSemanticStatus = z.infer<typeof SearchSemanticStatusSchema>;
+
+export const SemanticIndexStatusSchema = z
+  .object({
+    enabled: z.boolean(),
+    keyPresent: z.boolean(),
+    keySource: z.enum(['file', 'env']).nullable(),
+    ready: z.boolean(),
+    capable: z.boolean(),
+    embedded: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type SemanticIndexStatus = z.infer<typeof SemanticIndexStatusSchema>;
+
 export const SearchSuccessSchema = z
   .object({
     query: z.string(),
     intent: z.enum(['autocomplete', 'full_text', 'omnibar']),
     results: z.array(SearchResultEntrySchema),
     elapsedMs: z.number().nonnegative(),
+    semantic: SearchSemanticStatusSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type SearchSuccess = z.infer<typeof SearchSuccessSchema>;

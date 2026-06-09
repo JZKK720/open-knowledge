@@ -21,6 +21,7 @@ import {
   prepareSingleFileOpen,
 } from '@inkeep/open-knowledge-server';
 import { Command, InvalidArgumentError } from 'commander';
+import { makeLazyEmbeddingsKeyStore } from '../auth/embeddings-key-store.ts';
 import { detectGh } from '../auth/gh-detect.ts';
 import { makeLazyProbeTokenStore } from '../auth/token-store.ts';
 import { OK_DIR, PACKAGE_VERSION } from '../constants.ts';
@@ -408,6 +409,7 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
   const attachUiSibling = opts.reactShellDistDir === undefined;
 
   const tokenStore = makeLazyProbeTokenStore();
+  const embeddingsKeyStore = makeLazyEmbeddingsKeyStore();
 
   const booted: BootedServer = await bootServer({
     config,
@@ -419,6 +421,7 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
     quiet: false,
     detectGh,
     tokenStore,
+    embeddingsKeyStore,
     ...(ephemeral
       ? {
           ephemeral: true as const,

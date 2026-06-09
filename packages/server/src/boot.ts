@@ -119,6 +119,7 @@ export interface BootServerOptions
     | 'lockKind'
     | 'detectGh'
     | 'tokenStore'
+    | 'embeddingsKeyStore'
     | 'singleDocRelPath'
     | 'ephemeral'
   > {
@@ -273,6 +274,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     skipStateManifestCheck: opts.skipStateManifestCheck,
     detectGh: opts.detectGh,
     tokenStore: opts.tokenStore,
+    embeddingsKeyStore: opts.embeddingsKeyStore,
     singleDocRelPath: opts.singleDocRelPath,
     ephemeral: opts.ephemeral,
   });

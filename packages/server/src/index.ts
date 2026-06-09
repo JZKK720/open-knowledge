@@ -100,6 +100,20 @@ export {
   detectClaudeDesktopPresence,
 } from './detect-claude-desktop.ts';
 export {
+  clearEmbeddingsKeyFromAllBackends,
+  createEmbeddingsSecretStore,
+  DEFAULT_EMBEDDINGS_DIMENSIONS,
+  describeStoredEmbeddingsKey,
+  EMBEDDINGS_API_KEY_ENV,
+  type EmbeddingsKeyReader,
+  type EmbeddingsKeyStore,
+  type EmbeddingsSecretStore,
+  FileEmbeddingsBackend,
+  makeLazyEmbeddingsKeyStore,
+  type ResolvedSemanticConfig,
+  readProjectLocalSemanticConfig,
+} from './embeddings/index.ts';
+export {
   applyExternalChange,
   createExternalChangeHandler,
   FILE_WATCHER_ORIGIN,

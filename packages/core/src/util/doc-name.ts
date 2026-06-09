@@ -38,3 +38,7 @@ export function validateDocName(name: string): { ok: true } | { ok: false; reaso
 export function isValidDocName(name: string): boolean {
   return validateDocName(name).ok;
 }
+
+export function isHiddenDocName(name: string): boolean {
+  return name.split('/').some((segment) => segment.startsWith('.'));
+}

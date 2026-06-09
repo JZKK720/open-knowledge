@@ -15,6 +15,9 @@ export const DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST: readonly string[] = Object.fr
 export const DEFAULT_SPANS_MAX_BYTES = 52_428_800;
 export const DEFAULT_LOGS_MAX_BYTES = 26_214_400;
 
+export const DEFAULT_EMBEDDINGS_BASE_URL = 'https://api.openai.com/v1';
+export const DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-small';
+
 export const ConfigSchema = z.looseObject({
   content: z
     .looseObject({
@@ -179,6 +182,66 @@ export const ConfigSchema = z.looseObject({
         spans: { maxBytes: DEFAULT_SPANS_MAX_BYTES },
         logs: { maxBytes: DEFAULT_LOGS_MAX_BYTES },
         attributeDenylist: [...DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST],
+      },
+    }),
+  search: z
+    .looseObject({
+      semantic: z
+        .looseObject({
+          enabled: z
+            .boolean()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Add semantic (embeddings) ranking to the MCP search tool, fused with the lexical engine so conceptually-related pages surface even with no shared keywords. When ON and an API key is set (`ok embeddings set-key`), the search query and matching document content are sent to the configured embeddings provider — content egress. Default OFF. Per-machine (project-local) — not shared with collaborators.',
+            })
+            .default(false),
+          baseUrl: z
+            .string()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Base URL of the OpenAI-compatible embeddings API (default https://api.openai.com/v1). Override for Azure / self-hosted / other providers. The API key is NOT stored here — set it with `ok embeddings set-key` (OS keyring).',
+            })
+            .default(DEFAULT_EMBEDDINGS_BASE_URL),
+          model: z
+            .string()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Embeddings model id (default text-embedding-3-small). Must be served by the provider at baseUrl. Changing it re-embeds the corpus (the cache is keyed by provider + model + dimensions).',
+            })
+            .default(DEFAULT_EMBEDDINGS_MODEL),
+          dimensions: z
+            .number()
+            .int()
+            .positive()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                "Optional output vector dimensions. Omit to use the model's native size (1536 for text-embedding-3-small). Set a smaller value (text-embedding-3 supports e.g. 512 / 1024) to shrink the on-disk cache, trading a little retrieval quality. Changing it re-embeds the corpus.",
+            })
+            .optional(),
+        })
+        .default({
+          enabled: false,
+          baseUrl: DEFAULT_EMBEDDINGS_BASE_URL,
+          model: DEFAULT_EMBEDDINGS_MODEL,
+        }),
+    })
+    .default({
+      semantic: {
+        enabled: false,
+        baseUrl: DEFAULT_EMBEDDINGS_BASE_URL,
+        model: DEFAULT_EMBEDDINGS_MODEL,
       },
     }),
 });

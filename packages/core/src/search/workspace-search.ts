@@ -22,13 +22,22 @@ export interface WorkspaceSearchResult {
     lexical: number;
     fullText: number;
     recency: number;
+    vector?: number;
   };
+}
+
+export interface WorkspaceSemanticInput {
+  scores: ReadonlyMap<string, number>;
+  rrfK?: number;
+  candidateLimit?: number;
+  similarityFloor?: number;
 }
 
 export interface WorkspaceSearchOptions {
   intent?: WorkspaceSearchIntent;
   scopes?: readonly WorkspaceSearchScope[];
   limit?: number;
+  semantic?: WorkspaceSemanticInput;
 }
 
 export interface WorkspaceSearchCorpus {
@@ -37,6 +46,10 @@ export interface WorkspaceSearchCorpus {
 
 export const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
 export const MAX_WORKSPACE_SEARCH_LIMIT = 100;
+
+export const DEFAULT_RRF_K = 60;
+export const DEFAULT_VECTOR_CANDIDATE_LIMIT = 64;
+export const DEFAULT_VECTOR_SIMILARITY_FLOOR = 0.35;
 
 const WORKSPACE_SEARCH_SCHEMA = {
   id: 'string',
@@ -253,20 +266,140 @@ export function searchWorkspaceCorpus(
     candidates.set(hit.document.id, hit.document);
   }
 
-  return [...candidates.values()]
-    .map((document) => {
-      const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
-      const fullText = fullTextScores.get(document.id) ?? 0;
-      const recencyScore = recency.get(document.id) ?? 0;
-      return {
-        document,
-        score: lexical + fullText * 20 + recencyScore,
-        signals: { lexical, fullText, recency: recencyScore },
-      };
-    })
+  if (!options.semantic) {
+    return [...candidates.values()]
+      .map((document) => {
+        const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
+        const fullText = fullTextScores.get(document.id) ?? 0;
+        const recencyScore = recency.get(document.id) ?? 0;
+        return {
+          document,
+          score: lexical + fullText * 20 + recencyScore,
+          signals: { lexical, fullText, recency: recencyScore },
+        };
+      })
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        return a.document.path.localeCompare(b.document.path);
+      })
+      .slice(0, limit);
+  }
+
+  return rankWithVector({
+    scopedDocuments,
+    candidates,
+    fullTextScores,
+    recency,
+    normalizedQuery,
+    semantic: options.semantic,
+    limit,
+  });
+}
+
+interface SemanticRow {
+  document: WorkspaceSearchDocument;
+  score: number;
+  signals: WorkspaceSearchResult['signals'];
+  lexical: number;
+  fullText: number;
+  recency: number;
+  cosine: number | undefined;
+}
+
+function denseRank(orderedIds: readonly string[]): Map<string, number> {
+  const ranks = new Map<string, number>();
+  orderedIds.forEach((id, i) => {
+    ranks.set(id, i + 1);
+  });
+  return ranks;
+}
+
+function rankWithVector(args: {
+  scopedDocuments: readonly WorkspaceSearchDocument[];
+  candidates: Map<string, WorkspaceSearchDocument>;
+  fullTextScores: ReadonlyMap<string, number>;
+  recency: ReadonlyMap<string, number>;
+  normalizedQuery: string;
+  semantic: WorkspaceSemanticInput;
+  limit: number;
+}): WorkspaceSearchResult[] {
+  const { scopedDocuments, candidates, fullTextScores, recency, normalizedQuery, semantic, limit } =
+    args;
+  const rrfK = semantic.rrfK ?? DEFAULT_RRF_K;
+  const candidateLimit = semantic.candidateLimit ?? DEFAULT_VECTOR_CANDIDATE_LIMIT;
+  const floor = semantic.similarityFloor ?? DEFAULT_VECTOR_SIMILARITY_FLOOR;
+  const vectorScores = semantic.scores;
+
+  const scopedById = new Map(scopedDocuments.map((d) => [d.id, d] as const));
+  const topVector = [...vectorScores.entries()]
+    .filter(([id, cos]) => cos >= floor && scopedById.has(id))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, candidateLimit);
+  for (const [id] of topVector) {
+    if (!candidates.has(id)) {
+      const doc = scopedById.get(id);
+      if (doc) candidates.set(id, doc);
+    }
+  }
+
+  const rows: SemanticRow[] = [...candidates.values()].map((document) => {
+    const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
+    const fullText = fullTextScores.get(document.id) ?? 0;
+    const recencyScore = recency.get(document.id) ?? 0;
+    const cosine = vectorScores.get(document.id);
+    const qualifies = cosine !== undefined && cosine >= floor;
+    return {
+      document,
+      score: lexical + fullText * 20 + recencyScore,
+      signals: qualifies
+        ? { lexical, fullText, recency: recencyScore, vector: cosine }
+        : { lexical, fullText, recency: recencyScore },
+      lexical,
+      fullText,
+      recency: recencyScore,
+      cosine,
+    };
+  });
+
+  const bm25Rank = denseRank(
+    rows
+      .filter((r) => r.fullText > 0)
+      .sort((a, b) => b.fullText - a.fullText || a.document.path.localeCompare(b.document.path))
+      .map((r) => r.document.id),
+  );
+  const vecRank = denseRank(
+    rows
+      .filter(
+        (r): r is SemanticRow & { cosine: number } => r.cosine !== undefined && r.cosine >= floor,
+      )
+      .sort((a, b) => b.cosine - a.cosine || a.document.path.localeCompare(b.document.path))
+      .map((r) => r.document.id),
+  );
+
+  const rrfScore = (id: string): number => {
+    let s = 0;
+    const br = bm25Rank.get(id);
+    if (br !== undefined) s += 1 / (rrfK + br);
+    const vr = vecRank.get(id);
+    if (vr !== undefined) s += 1 / (rrfK + vr);
+    return s;
+  };
+
+  return rows
     .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score;
+      const aLexical = a.lexical > 0 ? 1 : 0;
+      const bLexical = b.lexical > 0 ? 1 : 0;
+      if (aLexical !== bLexical) return bLexical - aLexical; // lexical tier first
+      if (aLexical === 1) {
+        if (a.score !== b.score) return b.score - a.score; // within lexical tier: legacy order
+        return a.document.path.localeCompare(b.document.path);
+      }
+      const ar = rrfScore(a.document.id);
+      const br = rrfScore(b.document.id);
+      if (ar !== br) return br - ar; // body tier: RRF(BM25, vector)
+      if (a.recency !== b.recency) return b.recency - a.recency;
       return a.document.path.localeCompare(b.document.path);
     })
+    .map(({ document, score, signals }) => ({ document, score, signals }))
     .slice(0, limit);
 }

@@ -99,7 +99,7 @@ describe('search MCP tool — registration', () => {
     expect(DESCRIPTION.slice(0, 200)).toContain('grep');
   });
 
-  test('inputSchema exposes query, intent, scopes, limit, cwd', () => {
+  test('inputSchema exposes query, intent, scopes, limit, semantic, cwd', () => {
     const { server, registered } = makeFakeServer();
     register(server, {
       resolveCwd: async () => '/tmp/proj',
@@ -113,6 +113,7 @@ describe('search MCP tool — registration', () => {
       'limit',
       'query',
       'scopes',
+      'semantic',
     ]);
   });
 });
@@ -175,6 +176,7 @@ describe('search MCP tool — happy path', () => {
       intent: 'full_text',
       limit: 5,
       scopes: ['page', 'content'],
+      semantic: true,
     });
 
     const structured = result.structuredContent as {
@@ -227,6 +229,72 @@ describe('search MCP tool — happy path', () => {
     const body = JSON.parse(String(captured.body)) as Record<string, unknown>;
     expect(body.intent).toBe('full_text');
     expect(body.limit).toBe(20);
+  });
+
+  test('semantic:false is forwarded as the per-call lexical override', async () => {
+    const captured: { body?: string } = {};
+    globalThis.fetch = mock(async (_url: string, init?: RequestInit) => {
+      captured.body = String(init?.body);
+      return new Response(JSON.stringify({ ok: true, results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+
+    const { server, registered } = makeFakeServer();
+    register(server, {
+      resolveCwd: async () => '/tmp/proj',
+      config: DEFAULT_CONFIG,
+      serverUrl: 'http://localhost:1234',
+    });
+    const tool = expectOneRegisteredTool(registered);
+    await tool.handler({ query: 'q', semantic: false, cwd: '/tmp/proj' });
+    const body = JSON.parse(String(captured.body)) as Record<string, unknown>;
+    expect(body.semantic).toBe(false);
+  });
+
+  test('passes through signals.vector + the non-content semantic coverage block', async () => {
+    mockFetchOk({
+      ok: true,
+      query: 'auth retries',
+      intent: 'full_text',
+      results: [
+        {
+          kind: 'page',
+          path: 'guides/credential-rotation',
+          title: 'Credential Rotation',
+          score: 12.3,
+          signals: { lexical: 0, fullText: 0, recency: 0, vector: 0.82 },
+        },
+      ],
+      semantic: { capable: true, applied: true, coverage: { embedded: 12, total: 40 } },
+      elapsedMs: 5,
+    });
+    const { server, registered } = makeFakeServer();
+    register(server, {
+      resolveCwd: async () => '/tmp/proj',
+      config: DEFAULT_CONFIG,
+      serverUrl: 'http://localhost:1234',
+    });
+    const tool = expectOneRegisteredTool(registered);
+    const result = await tool.handler({ query: 'auth retries', cwd: '/tmp/proj' });
+    const structured = result.structuredContent as {
+      results: Array<{ signals: { vector?: number } }>;
+      semantic?: {
+        capable: boolean;
+        applied: boolean;
+        coverage: { embedded: number; total: number };
+      };
+    };
+    expect(structured.results[0]?.signals.vector).toBeCloseTo(0.82, 5);
+    expect(structured.semantic).toEqual({
+      capable: true,
+      applied: true,
+      coverage: { embedded: 12, total: 40 },
+    });
+    const text = result.content?.find((c) => c.type === 'text')?.text ?? '';
+    expect(text).toContain('Semantic:');
+    expect(text).toContain('12/40');
   });
 
   test('zero results returns "No matches" text + structured.resultCount = 0', async () => {

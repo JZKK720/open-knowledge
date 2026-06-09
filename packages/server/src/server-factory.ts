@@ -47,6 +47,17 @@ import { createConflictLifecycleSeedExtension } from './conflict-lifecycle-seed.
 import { type ContentFilter, createContentFilter } from './content-filter.ts';
 import { getDocExtension, stripDocExtension } from './doc-extensions.ts';
 import {
+  DEFAULT_EMBEDDINGS_DIMENSIONS,
+  type Embedder,
+  type EmbeddingsKeyStore,
+  loadOpenAiEmbedder,
+  normalizeProviderId,
+  type ResolvedSemanticConfig,
+  readProjectLocalSemanticConfig,
+  SemanticSearchService,
+  secretsFilePath,
+} from './embeddings/index.ts';
+import {
   applyDiskContentToDoc,
   applyExternalChange,
   FILE_WATCHER_ORIGIN,
@@ -151,6 +162,8 @@ export interface ServerOptions {
   detectGh?: DetectGhFn;
   tokenStore?: ProbeTokenStore | null;
   checkPushPermissionFn?: (opts: CheckPushPermissionOptions) => Promise<PushPermission>;
+  embeddingsKeyStore?: EmbeddingsKeyStore | null;
+  embedderLoader?: () => Promise<Embedder | null>;
   singleDocRelPath?: string;
   ephemeral?: boolean;
 }
@@ -233,6 +246,17 @@ export function createServer(options: ServerOptions): ServerInstance {
     return project.value.autoSync?.enabled === true;
   }
 
+  function readSemanticSearchConfig(): ResolvedSemanticConfig {
+    return readProjectLocalSemanticConfig(projectDir, {
+      configHomedirOverride,
+      onWarn: (message) => log.warn({ message }, '[config] could not read project-local config'),
+    });
+  }
+
+  function semanticProviderFingerprint(cfg: ResolvedSemanticConfig): string {
+    return `${normalizeProviderId(cfg.baseUrl)}|${cfg.model}|${cfg.dimensions ?? DEFAULT_EMBEDDINGS_DIMENSIONS}`;
+  }
+
   initTelemetry();
 
   const serverInstanceId = randomUUID();
@@ -292,6 +316,23 @@ export function createServer(options: ServerOptions): ServerInstance {
   let agentFocusBroadcaster: AgentFocusBroadcaster | null = null;
   let agentPresenceBroadcaster: AgentPresenceBroadcaster | null = null;
   let invalidateReferencedAssetsCache: (() => void) | null = null;
+
+  const initialSemanticConfig = readSemanticSearchConfig();
+  const semanticSearch = new SemanticSearchService({
+    loadEmbedder:
+      options.embedderLoader ??
+      (() => {
+        const cfg = readSemanticSearchConfig();
+        return loadOpenAiEmbedder({
+          keyStore: options.embeddingsKeyStore ?? null,
+          config: { baseUrl: cfg.baseUrl, model: cfg.model, dimensions: cfg.dimensions },
+        });
+      }),
+    cacheDir: join(getLocalDir(projectDir), 'embeddings'),
+    enabled: initialSemanticConfig.enabled,
+    providerFingerprint: semanticProviderFingerprint(initialSemanticConfig),
+  });
+
   let loadedPrincipal: Principal | null = null;
   const forceUnloadSet = new Set<Document>();
   let shutdownAllowsUnload = false;
@@ -625,6 +666,8 @@ export function createServer(options: ServerOptions): ServerInstance {
       ready,
       recentlyRemovedDocs,
       serializeDoc,
+      semanticSearch,
+      embeddingsSecretsFile: secretsFilePath(configHomedirOverride),
       ephemeral,
       onReferencedAssetsCacheInvalidator: (invalidate) => {
         invalidateReferencedAssetsCache = invalidate;
@@ -1636,6 +1679,11 @@ export function createServer(options: ServerOptions): ServerInstance {
               log.warn({ err, enabled }, '[sync] failed to apply autoSync.enabled from config');
             });
           }
+          const semCfg = readSemanticSearchConfig();
+          semanticSearch.applyConfig({
+            enabled: semCfg.enabled,
+            providerFingerprint: semanticProviderFingerprint(semCfg),
+          });
         });
         configFileWatcherCleanups.push({ docName: configDocName, cleanup });
         log.info({ docName: configDocName, path: absPath }, '[config-file-watcher] started');

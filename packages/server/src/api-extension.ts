@@ -87,6 +87,7 @@ import {
   type InlineAssetMediaKind,
   InstallSkillRequestSchema,
   InstallSkillSuccessSchema,
+  isHiddenDocName,
   LINKABLE_ASSET_EXTENSIONS,
   type LifecycleStatus,
   LinkGraphSuccessSchema,
@@ -100,6 +101,8 @@ import {
   LocalOpAuthStatusSuccessSchema,
   type LocalOpCloneRequest,
   LocalOpCloneRequestSchema,
+  LocalOpEmbeddingsMutationSuccessSchema,
+  LocalOpEmbeddingsSetKeyRequestSchema,
   LocalOpOkInitRequestSchema,
   LocalOpOkInitResponseSchema,
   LocalOpOpenRequestSchema,
@@ -128,11 +131,14 @@ import {
   SaveVersionRequestSchema,
   SaveVersionSuccessSchema,
   SearchRequestSchema,
+  type SearchSemanticStatus,
+  type SearchSuccess,
   SearchSuccessSchema,
   SeedApplyRequestSchema,
   SeedApplySuccessSchema,
   SeedListPacksSuccessSchema,
   SeedPlanSuccessSchema,
+  SemanticIndexStatusSchema,
   ServerInfoSuccessSchema,
   ShareConstructUrlRequestSchema,
   ShareConstructUrlResponseSchema,
@@ -172,7 +178,9 @@ import {
   type WorkspaceSearchCorpus,
   type WorkspaceSearchDocument,
   type WorkspaceSearchIntent,
+  type WorkspaceSearchResult,
   type WorkspaceSearchScope,
+  type WorkspaceSemanticInput,
   WorkspaceSuccessSchema,
 } from '@inkeep/open-knowledge-core';
 import {
@@ -222,6 +230,17 @@ import {
 } from './content-divergence-gate.ts';
 import { recordContributor } from './contributor-tracker.ts';
 import { deriveDetection, embedProbeRing, recordEmbedProbe } from './embed-probe.ts';
+import {
+  recordSemanticQuery,
+  type SemanticQueryOutcome,
+} from './embeddings/embeddings-telemetry.ts';
+import {
+  clearEmbeddingsKeyFromAllBackends,
+  EMBEDDINGS_API_KEY_ENV,
+  FileEmbeddingsBackend,
+  SEMANTIC_MIN_QUERY_LENGTH,
+  type SemanticSearchService,
+} from './embeddings/index.ts';
 import {
   FrontmatterMalformedError,
   respondFrontmatterMalformed,
@@ -1554,6 +1573,8 @@ export interface ApiExtensionOptions {
   ready?: Promise<void>;
   recentlyRemovedDocs?: RecentlyRemovedDocs;
   serializeDoc?: (docName: string) => string | null;
+  semanticSearch?: SemanticSearchService;
+  embeddingsSecretsFile?: string;
 }
 
 interface WorkspaceSearchCacheEntry {
@@ -1634,6 +1655,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     ready,
     recentlyRemovedDocs,
     serializeDoc,
+    semanticSearch,
+    embeddingsSecretsFile,
     ephemeral = false,
   } = options;
 
@@ -10257,10 +10280,142 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     return scopes.length > 0 ? scopes : undefined;
   }
 
+  function parseSemanticParam(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return undefined;
+  }
+
+  interface SemanticResolution {
+    input?: WorkspaceSemanticInput;
+    status?: SearchSemanticStatus;
+    queryEmbedMs: number | null;
+    pageTotal: number;
+    capable: boolean;
+  }
+
+  async function resolveSemantic(
+    query: string,
+    intent: WorkspaceSearchIntent,
+    semanticParam: boolean | undefined,
+    corpus: WorkspaceSearchCorpus,
+  ): Promise<SemanticResolution> {
+    const pageTotal = corpus.documents.reduce((n, d) => n + (d.kind === 'page' ? 1 : 0), 0);
+    if (!semanticSearch?.isEnabled() || semanticParam !== true) {
+      return { queryEmbedMs: null, pageTotal, capable: false };
+    }
+
+    void semanticSearch.embedCorpus(corpus.documents);
+
+    let input: WorkspaceSemanticInput | undefined;
+    let queryEmbedMs: number | null = null;
+    if (intent === 'full_text' && query.trim().length >= SEMANTIC_MIN_QUERY_LENGTH) {
+      const startedAt = performance.now();
+      const scores = await semanticSearch.queryScores(query, corpus.documents);
+      queryEmbedMs = performance.now() - startedAt;
+      if (scores && scores.size > 0) input = { scores };
+    }
+
+    const status = semanticSearch.getStatus();
+    return {
+      input,
+      status: {
+        capable: status.capable,
+        applied: false, // finalized post-ranking (did any result carry a vector)
+        coverage: { embedded: status.embeddedCount, total: pageTotal },
+      },
+      queryEmbedMs,
+      pageTotal,
+      capable: status.capable,
+    };
+  }
+
+  function toSearchResultEntry(
+    result: ReturnType<typeof searchWorkspaceCorpus>[number],
+    query: string,
+  ): {
+    kind: WorkspaceSearchScope;
+    path: string;
+    title: string;
+    score: number;
+    signals: WorkspaceSearchResult['signals'];
+    snippet?: string;
+  } {
+    return {
+      kind: result.document.kind,
+      path: result.document.path,
+      title: result.document.title,
+      score: result.score,
+      signals: result.signals,
+      snippet:
+        result.document.kind === 'page'
+          ? buildSearchSnippet(result.document.content, query)
+          : undefined,
+    };
+  }
+
+  async function buildSearchResponse(params: {
+    query: string;
+    intent: WorkspaceSearchIntent;
+    scopes: WorkspaceSearchScope[] | undefined;
+    limit: number | undefined;
+    semanticParam: boolean | undefined;
+  }): Promise<SearchSuccess> {
+    const startedAt = performance.now();
+    const corpus = await getWorkspaceSearchCorpus();
+    const semantic = await resolveSemantic(
+      params.query,
+      params.intent,
+      params.semanticParam,
+      corpus,
+    );
+    const results = searchWorkspaceCorpus(corpus, params.query, {
+      intent: params.intent,
+      scopes: params.scopes,
+      limit: params.limit,
+      semantic: semantic.input,
+    });
+    const entries = results.map((r) => toSearchResultEntry(r, params.query));
+
+    let semanticStatus: SearchSemanticStatus | undefined;
+    if (semantic.status) {
+      const vectorContributors = entries.reduce(
+        (n, e) => n + (e.signals.vector !== undefined ? 1 : 0),
+        0,
+      );
+      const applied = vectorContributors > 0;
+      semanticStatus = { ...semantic.status, applied };
+      const outcome: SemanticQueryOutcome = !semantic.capable
+        ? 'incapable'
+        : applied
+          ? 'applied'
+          : semantic.status.coverage.embedded === 0
+            ? 'warming'
+            : 'no_match';
+      recordSemanticQuery({
+        outcome,
+        capable: semantic.capable,
+        embedded: semantic.status.coverage.embedded,
+        total: semantic.pageTotal,
+        queryEmbedMs: semantic.queryEmbedMs,
+        vectorContributors,
+      });
+    }
+
+    return {
+      query: params.query,
+      intent: params.intent,
+      results: entries,
+      elapsedMs: Math.max(0, performance.now() - startedAt),
+      ...(semanticStatus ? { semantic: semanticStatus } : {}),
+    };
+  }
+
   async function buildWorkspaceSearchDocumentsFromIndex(): Promise<WorkspaceSearchDocument[]> {
     const pages: WorkspaceSearchDocument[] = [];
     for (const [docName, entry] of getFileIndex()) {
-      if (isSystemDoc(docName) || isConfigDoc(docName)) continue;
+      if (isSystemDoc(docName) || isConfigDoc(docName) || isHiddenDocName(docName)) continue;
       let content = '';
       let title = docName;
       try {
@@ -10284,7 +10439,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
   function workspaceSearchFingerprint(): string {
     return [...getFileIndex()]
-      .filter(([docName]) => !isSystemDoc(docName) && !isConfigDoc(docName))
+      .filter(
+        ([docName]) => !isSystemDoc(docName) && !isConfigDoc(docName) && !isHiddenDocName(docName),
+      )
       .sort(([a], [b]) => a.localeCompare(b))
       .map(
         ([docName, entry]) =>
@@ -10358,6 +10515,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const scopes = parseSearchScopes(
         url.searchParams.get('scope') ?? url.searchParams.get('scopes'),
       );
+      const semanticParam = parseSemanticParam(url.searchParams.get('semantic'));
       const limitNum = limit === null ? undefined : Number(limit);
 
       if (query.length > 200) {
@@ -10371,35 +10529,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         return;
       }
       try {
-        const startedAt = performance.now();
-        const corpus = await getWorkspaceSearchCorpus();
-        const results = searchWorkspaceCorpus(corpus, query, {
+        const body = await buildSearchResponse({
+          query,
           intent,
           scopes,
           limit: limitNum,
+          semanticParam,
         });
-        successResponse(
-          res,
-          200,
-          SearchSuccessSchema,
-          {
-            query,
-            intent,
-            results: results.map((result) => ({
-              kind: result.document.kind,
-              path: result.document.path,
-              title: result.document.title,
-              score: result.score,
-              signals: result.signals,
-              snippet:
-                result.document.kind === 'page'
-                  ? buildSearchSnippet(result.document.content, query)
-                  : undefined,
-            })),
-            elapsedMs: Math.max(0, performance.now() - startedAt),
-          },
-          { handler: 'search-get' },
-        );
+        successResponse(res, 200, SearchSuccessSchema, body, { handler: 'search-get' });
       } catch (e) {
         errorResponse(
           res,
@@ -10420,6 +10557,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const intent = parseSearchIntent(body.intent);
       const scopes = parseSearchScopes(body.scopes ?? body.scope);
       const limit = typeof body.limit === 'number' ? body.limit : undefined;
+      const semanticParam = parseSemanticParam(body.semantic);
 
       if (query.length > 200) {
         errorResponse(
@@ -10432,35 +10570,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         return;
       }
       try {
-        const startedAt = performance.now();
-        const corpus = await getWorkspaceSearchCorpus();
-        const results = searchWorkspaceCorpus(corpus, query, {
+        const responseBody = await buildSearchResponse({
+          query,
           intent,
           scopes,
           limit,
+          semanticParam,
         });
-        successResponse(
-          res,
-          200,
-          SearchSuccessSchema,
-          {
-            query,
-            intent,
-            results: results.map((result) => ({
-              kind: result.document.kind,
-              path: result.document.path,
-              title: result.document.title,
-              score: result.score,
-              signals: result.signals,
-              snippet:
-                result.document.kind === 'page'
-                  ? buildSearchSnippet(result.document.content, query)
-                  : undefined,
-            })),
-            elapsedMs: Math.max(0, performance.now() - startedAt),
-          },
-          { handler: 'search-post' },
-        );
+        successResponse(res, 200, SearchSuccessSchema, responseBody, { handler: 'search-post' });
       } catch (e) {
         errorResponse(
           res,
@@ -11099,6 +11216,139 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     });
   }
 
+  const HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY = 'local-op-embeddings-set-key';
+  const HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY = 'local-op-embeddings-clear-key';
+  const LOCAL_OP_EMBEDDINGS_GUARD = '/api/local-op/embeddings';
+
+  const handleLocalOpEmbeddingsSetKey = withValidation(
+    LocalOpEmbeddingsSetKeyRequestSchema,
+    async (_req, res, body) => {
+      if (!localOpGuard.tryAcquire(LOCAL_OP_EMBEDDINGS_GUARD)) {
+        errorResponse(
+          res,
+          429,
+          'urn:ok:error:concurrent-operation',
+          'An embeddings key operation is already in progress.',
+          { handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY, extraHeaders: { 'Retry-After': '5' } },
+        );
+        return;
+      }
+      try {
+        await new FileEmbeddingsBackend(embeddingsSecretsFile).set(body.key);
+        successResponse(
+          res,
+          200,
+          LocalOpEmbeddingsMutationSuccessSchema,
+          { keyPresent: true },
+          {
+            handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+            extraHeaders: { 'Cache-Control': 'no-store' },
+          },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Failed to store the key.', {
+          handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+          cause: e,
+        });
+      } finally {
+        localOpGuard.release(LOCAL_OP_EMBEDDINGS_GUARD);
+      }
+    },
+    {
+      handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+      method: 'POST',
+      preBodyGate: (req, res) =>
+        checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY }),
+    },
+  );
+
+  const handleLocalOpEmbeddingsClearKey = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      if (!localOpGuard.tryAcquire(LOCAL_OP_EMBEDDINGS_GUARD)) {
+        errorResponse(
+          res,
+          429,
+          'urn:ok:error:concurrent-operation',
+          'An embeddings key operation is already in progress.',
+          { handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY, extraHeaders: { 'Retry-After': '5' } },
+        );
+        return;
+      }
+      try {
+        await clearEmbeddingsKeyFromAllBackends(embeddingsSecretsFile);
+        successResponse(
+          res,
+          200,
+          LocalOpEmbeddingsMutationSuccessSchema,
+          { keyPresent: false },
+          {
+            handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+            extraHeaders: { 'Cache-Control': 'no-store' },
+          },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Failed to clear the key.', {
+          handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+          cause: e,
+        });
+      } finally {
+        localOpGuard.release(LOCAL_OP_EMBEDDINGS_GUARD);
+      }
+    },
+    {
+      handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+      method: 'POST',
+      preBodyGate: (req, res) =>
+        checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY }),
+    },
+  );
+
+  const handleSemanticStatus = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      try {
+        let enabled = false;
+        let ready = false;
+        let capable = false;
+        let embedded = 0;
+        if (semanticSearch) {
+          const status = semanticSearch.getStatus();
+          enabled = status.enabled;
+          ready = status.ready;
+          capable = status.capable;
+          embedded = status.embeddedCount;
+        }
+        const storedKey = await new FileEmbeddingsBackend(embeddingsSecretsFile).get();
+        const keySource: 'file' | 'env' | null = storedKey
+          ? 'file'
+          : process.env[EMBEDDINGS_API_KEY_ENV]
+            ? 'env'
+            : null;
+        const keyPresent = keySource !== null;
+        let total = 0;
+        for (const [docName] of getFileIndex()) {
+          if (!isSystemDoc(docName) && !isConfigDoc(docName) && !isHiddenDocName(docName)) {
+            total += 1;
+          }
+        }
+        successResponse(
+          res,
+          200,
+          SemanticIndexStatusSchema,
+          { enabled, keyPresent, keySource, ready, capable, embedded, total },
+          { handler: 'semantic-status', extraHeaders: { 'Cache-Control': 'no-store' } },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
+          handler: 'semantic-status',
+          cause: e,
+        });
+      }
+    },
+    { handler: 'semantic-status', method: 'GET', skipBodyParse: true },
+  );
+
   const routes: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
     '/api/config': handleApiConfig,
     '/api/asset': handleAsset,
@@ -11118,6 +11368,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/template': handleTemplate,
     '/api/templates': handleTemplatesList,
     '/api/search': handleSearch,
+    '/api/semantic-status': handleSemanticStatus,
     '/api/suggest-links': handleSuggestLinks,
     '/api/page-headings': handlePageHeadings,
     '/api/create-page': handleCreatePage,
@@ -11168,6 +11419,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/local-op/auth/pat': handleLocalOpAuthPat,
     '/api/local-op/auth/identity': handleLocalOpAuthIdentity,
     '/api/local-op/auth/set-identity': handleLocalOpAuthSetIdentity,
+    '/api/local-op/embeddings/set-key': handleLocalOpEmbeddingsSetKey,
+    '/api/local-op/embeddings/clear-key': handleLocalOpEmbeddingsClearKey,
     '/api/installed-agents': handleInstalledAgentsRoute,
     '/api/spawn-cursor': handleSpawnCursorRoute,
     '/api/handoff': handleHandoffDispatchRoute,

@@ -400,6 +400,10 @@ msgstr "📝 or assets/icon.png"
 msgid "A folder named <0>{sanitized}</0> already has files at this location. Pick a different name."
 msgstr "A folder named <0>{sanitized}</0> already has files at this location. Pick a different name."
 
+#: src/components/settings/SearchSection.tsx
+msgid "A key is set, but the embeddings provider rejected it or was unreachable — search fell back to keyword matching. Check the key in <0>Settings → Account</0> and your provider settings."
+msgstr "A key is set, but the embeddings provider rejected it or was unreachable — search fell back to keyword matching. Check the key in <0>Settings → Account</0> and your provider settings."
+
 #: src/editor/slash-command/items.tsx
 msgid "A line with a footnote<0><1>[1]</1></0> and a definition shown below."
 msgstr "A line with a footnote<0><1>[1]</1></0> and a definition shown below."
@@ -480,6 +484,10 @@ msgstr "Activity"
 msgid "Add"
 msgstr "Add"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Add a key"
+msgstr "Add a key"
+
 #: src/components/FolderPropertiesCard.tsx
 msgid "Add a property"
 msgstr "Add a property"
@@ -495,6 +503,10 @@ msgstr "Add another pattern"
 #: src/lib/keyboard-shortcuts.ts
 msgid "Add cursors or select matching occurrences through CodeMirror."
 msgstr "Add cursors or select matching occurrences through CodeMirror."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
+msgstr "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
 
 #: src/components/McpConsentDialogBody.tsx
 msgid "Add Open Knowledge to your AI tools"
@@ -600,6 +612,10 @@ msgstr "and more"
 msgid "Anyone can see"
 msgstr "Anyone can see"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "API key set"
+msgstr "API key set"
+
 #: src/components/CreatedItemsList.tsx
 msgid "Append-only timeline"
 msgstr "Append-only timeline"
@@ -607,6 +623,10 @@ msgstr "Append-only timeline"
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Apply link"
 msgstr "Apply link"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Applying your change"
+msgstr "Applying your change"
 
 #: src/components/FileTree.tsx
 msgid "Are you sure you want to delete {folderName}/ and all files inside? This action cannot be undone."
@@ -835,6 +855,7 @@ msgstr "Can't nest projects. An Open Knowledge project already exists at <0>{roo
 #: src/components/NewTemplateDialog.tsx
 #: src/components/PublishToGitHubDialog.tsx
 #: src/components/SeedDialog.tsx
+#: src/components/settings/SearchSection.tsx
 #: src/components/ShareBranchSwitchDialog.tsx
 #: src/components/ShareReceiveDialog.tsx
 #: src/components/TemplateEditDialog.tsx
@@ -893,6 +914,10 @@ msgstr "Choose whether to commit <0>.ok/</0>, <1>.mcp.json</1> (and per-editor v
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Claude Desktop"
 msgstr "Claude Desktop"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Clear"
+msgstr "Clear"
 
 #: src/components/PageHeaderWidgets.tsx
 msgid "Clear {keyName}"
@@ -1400,6 +1425,10 @@ msgstr "Could not write project files. Try a different location."
 msgid "Couldn't auto-copy"
 msgstr "Couldn't auto-copy"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Couldn't clear the key — please try again."
+msgstr "Couldn't clear the key — please try again."
+
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Couldn't construct the share URL. Try Done and re-share."
 msgstr "Couldn't construct the share URL. Try Done and re-share."
@@ -1483,6 +1512,10 @@ msgstr "Couldn't resolve the conflict for {filePath}."
 #: src/components/TemplateForm.tsx
 msgid "Couldn't save template: {error}"
 msgstr "Couldn't save template: {error}"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Couldn't save the key — please try again."
+msgstr "Couldn't save the key — please try again."
 
 #: src/components/DiffViewBoundary.tsx
 msgid "Couldn't save the resolution for {filePath}."
@@ -1699,6 +1732,10 @@ msgstr "Diff unavailable"
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Disable git auto-sync"
 msgstr "Disable git auto-sync"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Disable semantic search"
+msgstr "Disable semantic search"
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Disable sync"
@@ -1921,6 +1958,14 @@ msgstr "Embed an external page in an inline iframe (docs, demos, Figma, CodeSand
 msgid "Embed an image with optional alt text."
 msgstr "Embed an image with optional alt text."
 
+#: src/components/settings/SearchSection.tsx
+msgid "Embeddings are computed only when a search runs and are cached locally under <0>.ok/local</0>."
+msgstr "Embeddings are computed only when a search runs and are cached locally under <0>.ok/local</0>."
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Embeddings provider key"
+msgstr "Embeddings provider key"
+
 #: src/components/PropertyWidgets.tsx
 msgid "Empty"
 msgstr "Empty"
@@ -1941,6 +1986,10 @@ msgstr "Enable git auto-sync"
 #: src/components/AutoSyncEnableWarning.tsx
 msgid "Enable git auto-sync?"
 msgstr "Enable git auto-sync?"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Enable semantic search"
+msgstr "Enable semantic search"
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Enable sync"
@@ -2039,6 +2088,10 @@ msgstr "Failed to create page"
 msgid "Failed to delete path"
 msgstr "Failed to delete path"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Failed to disable semantic search — {detail}"
+msgstr "Failed to disable semantic search — {detail}"
+
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Failed to disable sync — {detail}"
 msgstr "Failed to disable sync — {detail}"
@@ -2046,6 +2099,10 @@ msgstr "Failed to disable sync — {detail}"
 #: src/components/FileTree.tsx
 msgid "Failed to duplicate path"
 msgstr "Failed to duplicate path"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Failed to enable semantic search — {detail}"
+msgstr "Failed to enable semantic search — {detail}"
 
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Failed to enable sync — {detail}"
@@ -2596,6 +2653,10 @@ msgstr "Indent or outdent the current list item."
 #: src/editor/slash-command/items.tsx
 msgid "Indented blockquote for citations."
 msgstr "Indented blockquote for citations."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Indexed {embedded} of {total} pages."
+msgstr "Indexed {embedded} of {total} pages."
 
 #: src/components/FrontmatterRow.tsx
 msgid "inherited"
@@ -3486,6 +3547,10 @@ msgstr "Numbered list of items."
 msgid "of {totalPages}"
 msgstr "of {totalPages}"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Off — search ranks by keyword only. No content leaves this computer."
+msgstr "Off — search ranks by keyword only. No content leaves this computer."
+
 #: src/components/SyncStatusBadge.tsx
 msgid "Offline"
 msgstr "Offline"
@@ -3512,6 +3577,10 @@ msgstr "OK Desktop"
 #: src/components/ConnectingBanner.tsx
 msgid "ok ui responded but server.lock has no port yet"
 msgstr "ok ui responded but server.lock has no port yet"
+
+#: src/components/settings/SearchSection.tsx
+msgid "On — your search queries and the text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
+msgstr "On — your search queries and the text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "One pattern per line — appended to <0>.okignore</0>."
@@ -3917,6 +3986,10 @@ msgstr "Page thumbnails"
 msgid "page-name"
 msgstr "page-name"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Pages are embedded the first time a search needs them."
+msgstr "Pages are embedded the first time a search needs them."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Paragraph"
 msgstr "Paragraph"
@@ -3944,6 +4017,10 @@ msgstr "Paste URL, owner/repo, or search your repos"
 #: src/editor/clipboard/source-clipboard.ts
 msgid "Paste was incomplete — {chunksCompleted} of {totalChunks} chunks landed.{restoreSuffix}"
 msgstr "Paste was incomplete — {chunksCompleted} of {totalChunks} chunks landed.{restoreSuffix}"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Paste your API key"
+msgstr "Paste your API key"
 
 #: src/components/NewItemDialog.tsx
 msgid "Path cannot contain \"..\""
@@ -4339,6 +4416,10 @@ msgstr "Replace current match"
 msgid "Replace current match from field"
 msgstr "Replace current match from field"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Replace key"
+msgstr "Replace key"
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Replace the active match from the replace field."
 msgstr "Replace the active match from the replace field."
@@ -4495,6 +4576,7 @@ msgid "Sandboxed HTML embed — write HTML, see the rendered preview live."
 msgstr "Sandboxed HTML embed — write HTML, see the rendered preview live."
 
 #: src/components/AuthModal.tsx
+#: src/components/settings/EmbeddingsKeySection.tsx
 #: src/components/TemplateEditDialog.tsx
 #: src/editor/components/CodePreviewEditModal.tsx
 #: src/editor/extensions/InternalLinkPropPanel.tsx
@@ -4535,6 +4617,7 @@ msgstr "Saved as <0>{slug}.md</0>"
 msgid "Saves the file to <0>~/Downloads/openknowledge.skill</0> and opens the Claude Desktop App. Requires Node.js or Bun on your PATH."
 msgstr "Saves the file to <0>~/Downloads/openknowledge.skill</0> and opens the Claude Desktop App. Requires Node.js or Bun on your PATH."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
 #: src/components/TemplateEditDialog.tsx
 #: src/components/TimelinePanel.tsx
 msgid "Saving"
@@ -4550,6 +4633,7 @@ msgstr "Scope: "
 
 #: src/components/CommandPalette.tsx
 #: src/components/empty-state/KeyboardHintsFooter.tsx
+#: src/components/settings/SettingsDialogShell.tsx
 #: src/components/SidebarSearchBar.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "Search"
@@ -4586,6 +4670,10 @@ msgstr "Search recent projects"
 #: src/components/ProjectSwitcher.tsx
 msgid "Search recent projects..."
 msgstr "Search recent projects..."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Search settings not yet loaded — try again in a moment"
+msgstr "Search settings not yet loaded — try again in a moment"
 
 #: src/components/NewItemDialog.tsx
 msgid "Search templates"
@@ -4659,6 +4747,22 @@ msgstr "Selection must be inside the project"
 #: src/components/EditorFooter.tsx
 msgid "Selection statistics"
 msgstr "Selection statistics"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic ranking activates the first time an agent runs a search."
+msgstr "Semantic ranking activates the first time an agent runs a search."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search"
+msgstr "Semantic search"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
+msgstr "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search is on, but no API key is set — search falls back to keyword matching. Add one in <0>Settings → Account</0> (it's stored once for your whole machine)."
+msgstr "Semantic search is on, but no API key is set — search falls back to keyword matching. Add one in <0>Settings → Account</0> (it's stored once for your whole machine)."
 
 #: src/editor/slash-command/items.tsx
 msgid "Separator"
@@ -4977,6 +5081,10 @@ msgstr "Still loading"
 msgid "Stored at <0>.ok/templates/</0> in this project. Available in every folder (folder-scoped templates can override by filename)."
 msgstr "Stored at <0>.ok/templates/</0> in this project. Available in every folder (folder-scoped templates can override by filename)."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Stored on this machine."
+msgstr "Stored on this machine."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Strikethrough"
 msgstr "Strikethrough"
@@ -5185,6 +5293,10 @@ msgstr "That folder isn't an Open Knowledge project yet. Initialize it and open?
 msgid "The {targetNoun} could not be opened — try navigating to it manually."
 msgstr "The {targetNoun} could not be opened — try navigating to it manually."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
+msgstr "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
 msgstr "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
@@ -5313,6 +5425,14 @@ msgstr "This project lives only on this computer. Connect it to GitHub to back i
 msgid "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
 msgstr "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
 
+#: src/components/settings/SearchSection.tsx
+msgid "This sends content off your machine"
+msgstr "This sends content off your machine"
+
+#: src/components/settings/SearchSection.tsx
+msgid "This setting is per-machine and isn't shared with collaborators. It needs an API key set with <0>ok embeddings set-key</0>."
+msgstr "This setting is per-machine and isn't shared with collaborators. It needs an API key set with <0>ok embeddings set-key</0>."
+
 #: src/components/TemplateDeleteDialog.tsx
 msgid "This template lives in a parent folder — deleting it affects every folder beneath it that doesn't define its own version."
 msgstr "This template lives in a parent folder — deleting it affects every folder beneath it that doesn't define its own version."
@@ -5415,6 +5535,14 @@ msgstr "Tree View Options"
 #: src/components/settings/AccountSection.tsx
 msgid "Try again"
 msgstr "Try again"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Turn on"
+msgstr "Turn on"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Turn on semantic search?"
+msgstr "Turn on semantic search?"
 
 #: src/editor/components/Pdf.tsx
 msgid "Two-page (even)"
@@ -5584,6 +5712,10 @@ msgstr "Use letters, digits, <0>-</0> or <1>_</1> only."
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "User"
 msgstr "User"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside Open Knowledge)."
+msgstr "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside Open Knowledge)."
 
 #: src/components/FolderPropertiesCard.tsx
 msgid "Value is required"
@@ -5802,6 +5934,10 @@ msgstr "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
 #: src/components/CloneDialog.tsx
 msgid "Your repositories"
 msgstr "Your repositories"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Your search queries and the full text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
+msgstr "Your search queries and the full text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Your share link is ready below."

@@ -61,6 +61,22 @@ export const LocalOpAuthPatRequestSchema = z
   .loose() satisfies StandardSchemaV1;
 export type LocalOpAuthPatRequest = z.infer<typeof LocalOpAuthPatRequestSchema>;
 
+export const LocalOpEmbeddingsSetKeyRequestSchema = z
+  .object({
+    key: z.string().min(1),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type LocalOpEmbeddingsSetKeyRequest = z.infer<typeof LocalOpEmbeddingsSetKeyRequestSchema>;
+
+export const LocalOpEmbeddingsMutationSuccessSchema = z
+  .object({
+    keyPresent: z.boolean(),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type LocalOpEmbeddingsMutationSuccess = z.infer<
+  typeof LocalOpEmbeddingsMutationSuccessSchema
+>;
+
 export const LocalOpAuthSetIdentityRequestSchema = z
   .object({
     name: z.string().refine((s) => s.trim().length > 0, { message: 'name must be non-empty' }),

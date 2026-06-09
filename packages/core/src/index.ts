@@ -119,6 +119,8 @@ export {
   type Config,
   type ConfigPatch,
   ConfigSchema,
+  DEFAULT_EMBEDDINGS_BASE_URL,
+  DEFAULT_EMBEDDINGS_MODEL,
   DEFAULT_LOGS_MAX_BYTES,
   DEFAULT_SPANS_MAX_BYTES,
   DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST,
@@ -594,6 +596,10 @@ export {
   LocalOpAuthStatusSuccessSchema,
   type LocalOpCloneRequest,
   LocalOpCloneRequestSchema,
+  type LocalOpEmbeddingsMutationSuccess,
+  LocalOpEmbeddingsMutationSuccessSchema,
+  type LocalOpEmbeddingsSetKeyRequest,
+  LocalOpEmbeddingsSetKeyRequestSchema,
   type LocalOpOkInitFailureReason,
   LocalOpOkInitFailureReasonSchema,
   type LocalOpOkInitRequest,
@@ -660,6 +666,8 @@ export {
   SearchRequestSchema,
   type SearchResultEntry,
   SearchResultEntrySchema,
+  type SearchSemanticStatus,
+  SearchSemanticStatusSchema,
   type SearchSuccess,
   SearchSuccessSchema,
   type SeedApplyRequest,
@@ -676,6 +684,8 @@ export {
   SeedPackInfoSchema,
   type SeedPlanSuccess,
   SeedPlanSuccessSchema,
+  type SemanticIndexStatus,
+  SemanticIndexStatusSchema,
   type ServerInfoSuccess,
   ServerInfoSuccessSchema,
   type ShareConstructUrlErrorCode,
@@ -815,6 +825,9 @@ export {
 export {
   createWorkspaceSearchCorpus,
   createWorkspaceSearchDocument,
+  DEFAULT_RRF_K,
+  DEFAULT_VECTOR_CANDIDATE_LIMIT,
+  DEFAULT_VECTOR_SIMILARITY_FLOOR,
   DEFAULT_WORKSPACE_SEARCH_LIMIT,
   MAX_WORKSPACE_SEARCH_LIMIT,
   searchWorkspaceCorpus,
@@ -826,6 +839,7 @@ export {
   type WorkspaceSearchOptions,
   type WorkspaceSearchResult,
   type WorkspaceSearchScope,
+  type WorkspaceSemanticInput,
   workspaceSearchBasename,
   workspaceSearchPathSegments,
 } from './search/workspace-search.ts';
@@ -880,7 +894,7 @@ export type {
   ShadowContributor,
   TimelineEntry,
 } from './types/timeline.ts';
-export { isValidDocName, validateDocName } from './util/doc-name.ts';
+export { isHiddenDocName, isValidDocName, validateDocName } from './util/doc-name.ts';
 export { applyByPrefixSuffix } from './utils/apply-by-prefix-suffix.ts';
 export { toDesktopAssetHref } from './utils/asset-href.ts';
 export { ChunkedInsertError, chunkedYTextInsert } from './utils/chunked-insert.ts';

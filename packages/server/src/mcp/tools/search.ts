@@ -19,13 +19,16 @@ import {
 export const DESCRIPTION = [
   '[Requires: Hocuspocus server] Ranked page retrieval for a query (title boost + body BM25 + recency — the cmd-K engine). For literal search across every line, use `exec` (`grep`) instead.',
   '',
-  'Returns scored page (and folder, with `omnibar` intent) hits, each with a body snippet. `exec`-grep covers every occurrence and needs no server.',
+  'When semantic search is enabled for the workspace (an opt-in setting with an API key), an embeddings signal is additionally fused into `full_text` ranking, surfacing conceptually-related pages that share no keywords. This tool opts in by default; the `semantic` block in the response reports coverage. Note: with semantic enabled, the query and matching page content are sent to the configured embeddings provider (content egress). Set `semantic: false` to force pure-lexical ranking for a call.',
+  '',
+  'Returns scored page (and folder, with `omnibar` intent) hits, each with a body snippet and a `signals` breakdown (lexical / fullText / recency / vector). `exec`-grep covers every occurrence and needs no server.',
   '',
   '**Parameters:**',
   '- `query` — Free-form; tokenized across title, name, path segments, and (with `full_text`) body.',
   '- `intent` (optional) — `omnibar` searches title/path/folders only (fast); `full_text` includes body. Default `full_text`.',
   '- `scopes` (optional) — Result scope: `page` | `folder` | `content`. Defaults derive from `intent`.',
   '- `limit` (optional) — Max rows; default 20, max 100.',
+  '- `semantic` (optional) — Set `false` to force pure-lexical ranking even when semantic search is enabled. Omit to use semantic when available.',
   '',
   'If the server is down, the tool returns a recovery hint — use `exec("grep ...")` as the server-free fallback.',
 ].join('\n');
@@ -54,6 +57,12 @@ const InputSchema = {
       "Override the default scope set. Members: 'page', 'folder', 'content'. Defaults derive from intent.",
     ),
   limit: z.number().int().min(1).max(100).optional().describe('Max rows; default 20, max 100.'),
+  semantic: z
+    .boolean()
+    .optional()
+    .describe(
+      'Set false to force pure-lexical ranking for this call even when semantic search is enabled. Omit to use semantic when available.',
+    ),
   cwd: z.string().optional().describe(ROUTED_CWD_DESCRIPTION),
 } as const;
 
@@ -67,10 +76,17 @@ const SearchResultRowSchema = z.object({
     lexical: z.number(),
     fullText: z.number(),
     recency: z.number(),
+    vector: z.number().optional(),
   }),
   snippet: z.string().optional(),
   previewUrl: z.string().nullable(),
   previewUrlSource: z.enum(PREVIEW_URL_SOURCES).optional(),
+});
+
+const SearchSemanticStatusSchema = z.object({
+  capable: z.boolean(),
+  applied: z.boolean(),
+  coverage: z.object({ embedded: z.number().int(), total: z.number().int() }),
 });
 
 const OutputSchema = outputSchemaWithText({
@@ -80,6 +96,7 @@ const OutputSchema = outputSchemaWithText({
   resultCount: z.number().int(),
   results: z.array(SearchResultRowSchema),
   elapsedMs: z.number().nullable(),
+  semantic: SearchSemanticStatusSchema.optional(),
 });
 
 type SearchKind = 'page' | 'folder';
@@ -89,8 +106,14 @@ interface SearchApiRow {
   path?: string;
   title?: string | null;
   score?: number;
-  signals?: { lexical?: number; fullText?: number; recency?: number };
+  signals?: { lexical?: number; fullText?: number; recency?: number; vector?: number };
   snippet?: string;
+}
+
+interface SearchApiSemanticStatus {
+  capable?: boolean;
+  applied?: boolean;
+  coverage?: { embedded?: number; total?: number };
 }
 
 interface SearchApiResponse {
@@ -100,6 +123,7 @@ interface SearchApiResponse {
   intent?: string;
   results?: SearchApiRow[];
   elapsedMs?: number;
+  semantic?: SearchApiSemanticStatus;
   [key: string]: unknown;
 }
 
@@ -109,10 +133,16 @@ interface SearchResultRow {
   docName: string;
   title: string | null;
   score: number;
-  signals: { lexical: number; fullText: number; recency: number };
+  signals: { lexical: number; fullText: number; recency: number; vector?: number };
   snippet?: string;
   previewUrl: string | null;
   previewUrlSource?: PreviewUrlSource;
+}
+
+interface SearchSemanticStatus {
+  capable: boolean;
+  applied: boolean;
+  coverage: { embedded: number; total: number };
 }
 
 interface SearchStructuredResult {
@@ -122,6 +152,7 @@ interface SearchStructuredResult {
   resultCount: number;
   results: SearchResultRow[];
   elapsedMs: number | null;
+  semantic?: SearchSemanticStatus;
 }
 
 function isSearchKind(value: unknown): value is SearchKind {
@@ -132,12 +163,43 @@ function normalizeSignals(signals: SearchApiRow['signals']): {
   lexical: number;
   fullText: number;
   recency: number;
+  vector?: number;
 } {
   return {
     lexical: typeof signals?.lexical === 'number' ? signals.lexical : 0,
     fullText: typeof signals?.fullText === 'number' ? signals.fullText : 0,
     recency: typeof signals?.recency === 'number' ? signals.recency : 0,
+    ...(typeof signals?.vector === 'number' ? { vector: signals.vector } : {}),
   };
+}
+
+function normalizeSemanticStatus(
+  semantic: SearchApiSemanticStatus | undefined,
+): SearchSemanticStatus | undefined {
+  if (!semantic || typeof semantic.capable !== 'boolean') return undefined;
+  return {
+    capable: semantic.capable,
+    applied: semantic.applied === true,
+    coverage: {
+      embedded: typeof semantic.coverage?.embedded === 'number' ? semantic.coverage.embedded : 0,
+      total: typeof semantic.coverage?.total === 'number' ? semantic.coverage.total : 0,
+    },
+  };
+}
+
+function formatSemanticNote(semantic: SearchSemanticStatus | undefined): string {
+  if (!semantic) return '';
+  if (!semantic.capable) {
+    return '> Semantic: enabled but not ready (no API key, or warming up) — lexical ranking only.';
+  }
+  const { embedded, total } = semantic.coverage;
+  if (semantic.applied) {
+    return `> Semantic: on — vector signal contributed (${embedded}/${total} pages embedded).`;
+  }
+  if (embedded < total) {
+    return `> Semantic: on — indexing ${embedded}/${total} pages; vectors are still filling in, re-run for fuller coverage.`;
+  }
+  return '> Semantic: on — no page cleared the similarity threshold for this query.';
 }
 
 function formatResultsBlock(results: SearchResultRow[]): string {
@@ -171,6 +233,7 @@ export function register(server: ServerInstance, deps: SearchDeps): void {
       intent?: (typeof INTENT_VALUES)[number];
       scopes?: Array<(typeof SCOPE_VALUES)[number]>;
       limit?: number;
+      semantic?: boolean;
       cwd?: string;
     }) => {
       try {
@@ -191,7 +254,12 @@ export function register(server: ServerInstance, deps: SearchDeps): void {
 
         const intent = args.intent ?? 'full_text';
         const limit = args.limit ?? 20;
-        const body: Record<string, unknown> = { query: args.query, intent, limit };
+        const body: Record<string, unknown> = {
+          query: args.query,
+          intent,
+          limit,
+          semantic: args.semantic ?? true,
+        };
         if (args.scopes) body.scopes = args.scopes;
 
         const result = (await httpPost(url, '/api/search', body)) as SearchApiResponse;
@@ -220,6 +288,7 @@ export function register(server: ServerInstance, deps: SearchDeps): void {
           ];
         });
 
+        const semantic = normalizeSemanticStatus(result.semantic);
         const structured: SearchStructuredResult = {
           cwd,
           query: args.query,
@@ -227,13 +296,16 @@ export function register(server: ServerInstance, deps: SearchDeps): void {
           resultCount: rows.length,
           results: rows,
           elapsedMs: typeof result.elapsedMs === 'number' ? result.elapsedMs : null,
+          ...(semantic ? { semantic } : {}),
         };
 
         const header = `## Search results for "${args.query}" (${rows.length} hit${rows.length === 1 ? '' : 's'}, intent: ${intent})`;
-        const text =
+        const semanticNote = formatSemanticNote(semantic);
+        const resultsText =
           rows.length === 0
             ? `No matches for "${args.query}".`
             : `${header}\n\n${formatResultsBlock(rows)}`;
+        const text = semanticNote ? `${resultsText}\n${semanticNote}` : resultsText;
 
         return textPlusStructured(text, structured);
       } catch (err) {

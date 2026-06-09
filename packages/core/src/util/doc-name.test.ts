@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { isValidDocName, validateDocName } from './doc-name.ts';
+import { isHiddenDocName, isValidDocName, validateDocName } from './doc-name.ts';
+
+describe('isHiddenDocName', () => {
+  for (const name of ['.cursor/skills/x', '.claude/foo', 'a/.hidden/b', '.okignore', 'a/.b'])
+    test(`hidden: ${JSON.stringify(name)}`, () => expect(isHiddenDocName(name)).toBe(true));
+  for (const name of ['Characters/Spike Spiegel', 'Music', 'a/b/c', 'note.with.dots'])
+    test(`visible: ${JSON.stringify(name)}`, () => expect(isHiddenDocName(name)).toBe(false));
+});
 
 describe('validateDocName', () => {
   test('accepts ordinary extension-less docNames', () => {
