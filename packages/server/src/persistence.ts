@@ -23,6 +23,7 @@ import {
 import type { JSONContent } from '@tiptap/core';
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
+import { LINEAGE_EPOCH_KEY } from './auth-token-schema.ts';
 import type { BacklinkIndex } from './backlink-index.ts';
 import { getMsSinceLastUserTx, isDocQuiescent } from './bridge-quiescence.ts';
 import { assertBridgeInvariant } from './bridge-watchdog.ts';
@@ -1215,6 +1216,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
                 documentName,
                 options?.resolveSize,
               );
+              document.getMap('lifecycle').set(LINEAGE_EPOCH_KEY, crypto.randomUUID());
             }, FILE_WATCHER_ORIGIN);
             log.info(
               { filePath, children: xmlFragment.length },

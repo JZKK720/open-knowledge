@@ -1,5 +1,5 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { MarkdownManager } from '@inkeep/open-knowledge-core';
+import { LINEAGE_EPOCH_KEY, MarkdownManager } from '@inkeep/open-knowledge-core';
 import type {
   HocuspocusAuthRejectionReason,
   HocuspocusAuthToken,
@@ -58,6 +58,7 @@ interface PoolEntryBase {
   bridgeSetupFailed: boolean;
   lastServerSyncedSV: Uint8Array | null;
   lastDiskAckedSV: Uint8Array | null;
+  lineageEpochRecordAtOpen: string | null;
 }
 
 interface ActivePoolEntry extends PoolEntryBase {
@@ -140,6 +141,8 @@ class ClientPersistenceClearTimeoutError extends Error {
 
 const LAST_OBSERVED_BRANCH_KEY = 'ok-last-observed-branch';
 
+const DOC_LINEAGE_EPOCHS_KEY = 'ok-doc-lineage-epochs';
+
 const FORCE_SYNC_INTERVAL_MS = 5_000;
 
 const MAX_BUFFER_BYTES = readNumericOverride('MAX_BUFFER_BYTES', 1 * 1024 * 1024);
@@ -166,6 +169,7 @@ export function buildAuthToken(
   tabIdentity: { principalId: string; tabSessionId: string } | null,
   expectedServerInstanceId: string | null,
   expectedBranch: string | null = null,
+  expectedDocLineageEpoch: string | null = null,
 ): string {
   const claim: HocuspocusAuthToken = { ...browserClientVersionTokenFields() };
   if (tabIdentity !== null) {
@@ -177,6 +181,9 @@ export function buildAuthToken(
   }
   if (expectedBranch !== null && expectedBranch.length > 0) {
     claim.expectedBranch = expectedBranch;
+  }
+  if (expectedDocLineageEpoch !== null && expectedDocLineageEpoch.length > 0) {
+    claim.expectedDocLineageEpoch = expectedDocLineageEpoch;
   }
   return JSON.stringify(claim);
 }
@@ -292,7 +299,7 @@ export class ProviderPool {
     doc: Y.Doc,
   ): ClientPersistenceProvider {
     return this.persistenceFactory({
-      branch: this.getOrInitObservedBranch() ?? UNKNOWN_BRANCH_SENTINEL,
+      branch: this.normalizedObservedBranch(),
       serverInstanceId,
       docName,
       doc,
@@ -301,9 +308,32 @@ export class ProviderPool {
 
   private attachDeferredPersistence(serverInstanceId: string): void {
     let anyAttached = false;
-    for (const entry of this._entries.values()) {
+    for (const entry of Array.from(this._entries.values())) {
       if (entry.kind !== 'active') continue;
       if (entry.persistence !== null) continue;
+      if (this._entries.get(entry.docName) !== entry) continue;
+      if (entry.hasSynced && entry.lineageEpochRecordAtOpen !== null) {
+        const liveEpoch = entry.provider.document.getMap('lifecycle').get(LINEAGE_EPOCH_KEY);
+        if (
+          typeof liveEpoch === 'string' &&
+          liveEpoch.length > 0 &&
+          liveEpoch !== entry.lineageEpochRecordAtOpen
+        ) {
+          const docName = entry.docName;
+          this.emitStructuredClientRecoveryEvent({
+            event: 'ok-doc-lineage-mismatch',
+            ...this.recoveryTelemetryBase(docName),
+            via: 'deferred-attach',
+            staleEpoch: entry.lineageEpochRecordAtOpen,
+            liveEpoch,
+          });
+          const wasActive = this.activeDocName === docName;
+          void this.runCloseAndClearPersistence(docName);
+          const reopened = this.open(docName);
+          if (reopened !== null && wasActive) this.setActive(docName);
+          continue;
+        }
+      }
       try {
         entry.persistence = this.buildPersistence(
           serverInstanceId,
@@ -369,6 +399,79 @@ export class ProviderPool {
     } catch {}
   }
 
+  private readonly docLineageEpochs = new Map<string, string>();
+  private docLineageEpochsEnvelopeConsumed = false;
+
+  private normalizedObservedBranch(): string {
+    return this.getOrInitObservedBranch() ?? UNKNOWN_BRANCH_SENTINEL;
+  }
+
+  private consumeLineageEpochEnvelopeIfValid(): void {
+    if (this.docLineageEpochsEnvelopeConsumed) return;
+    const instanceId = this.cachedServerInstanceId;
+    if (instanceId === null || instanceId.length === 0) return;
+    this.docLineageEpochsEnvelopeConsumed = true;
+    try {
+      const raw = this.storage?.getItem(DOC_LINEAGE_EPOCHS_KEY) ?? null;
+      if (raw === null) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) return;
+      const envelope = parsed as { branch?: unknown; serverInstanceId?: unknown; epochs?: unknown };
+      if (envelope.branch !== this.normalizedObservedBranch()) return;
+      if (envelope.serverInstanceId !== instanceId) return;
+      if (typeof envelope.epochs !== 'object' || envelope.epochs === null) return;
+      for (const [docName, epoch] of Object.entries(envelope.epochs as Record<string, unknown>)) {
+        if (typeof epoch === 'string' && epoch.length > 0 && !this.docLineageEpochs.has(docName)) {
+          this.docLineageEpochs.set(docName, epoch);
+        }
+      }
+    } catch (err: unknown) {
+      if (!(err instanceof DOMException)) {
+        console.warn(
+          JSON.stringify({
+            event: 'ok-lineage-epoch-envelope-read-error',
+            errorName: err instanceof Error ? err.name : typeof err,
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
+    }
+  }
+
+  private getRecordedLineageEpoch(docName: string): string | null {
+    const inMemory = this.docLineageEpochs.get(docName);
+    if (inMemory !== undefined) return inMemory;
+    this.consumeLineageEpochEnvelopeIfValid();
+    return this.docLineageEpochs.get(docName) ?? null;
+  }
+
+  private persistLineageEpochEnvelope(): void {
+    const instanceId = this.cachedServerInstanceId;
+    if (instanceId === null || instanceId.length === 0) return;
+    try {
+      this.storage?.setItem(
+        DOC_LINEAGE_EPOCHS_KEY,
+        JSON.stringify({
+          branch: this.normalizedObservedBranch(),
+          serverInstanceId: instanceId,
+          epochs: Object.fromEntries(this.docLineageEpochs),
+        }),
+      );
+    } catch {}
+  }
+
+  private recordLineageEpoch(docName: string, epoch: string): void {
+    if (this.docLineageEpochs.get(docName) === epoch) return;
+    this.docLineageEpochs.set(docName, epoch);
+    this.persistLineageEpochEnvelope();
+  }
+
+  private deleteLineageEpochRecord(docName: string): void {
+    if (this.docLineageEpochs.delete(docName)) {
+      this.persistLineageEpochEnvelope();
+    }
+  }
+
   private withClearDataTimeout(docName: string, promise: Promise<void>): Promise<void> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -391,7 +494,7 @@ export class ProviderPool {
     docName: string,
     staleClaimOverride?: string | undefined,
   ): { docName: string; branch: string; serverInstanceId?: string } {
-    const branch = this.getOrInitObservedBranch() ?? UNKNOWN_BRANCH_SENTINEL;
+    const branch = this.normalizedObservedBranch();
     const base: { docName: string; branch: string; serverInstanceId?: string } = {
       docName,
       branch,
@@ -597,10 +700,14 @@ export class ProviderPool {
     }
 
     const expectedServerInstanceId = this.cachedServerInstanceId;
+    const lineageEpochRecordAtOpen = this.getRecordedLineageEpoch(docName);
     const token = buildAuthToken(
       this.tabIdentity,
       expectedServerInstanceId,
       this.getOrInitObservedBranch(),
+      expectedServerInstanceId !== null && expectedServerInstanceId.length > 0
+        ? lineageEpochRecordAtOpen
+        : null,
     );
     const provider = new HocuspocusProvider({
       url: appendTraceContextToCollabUrl(this.wsUrl),
@@ -662,6 +769,7 @@ export class ProviderPool {
       pendingRecycleTimer: null,
       bridgeSetupFailed: false,
       serverDrivenCloseReauthInFlight: false,
+      lineageEpochRecordAtOpen,
     };
     mark('ok/pool/open', { docName, hit: false, poolEventId });
     mark.count('ok/pool/open', { hit: false });
@@ -678,6 +786,10 @@ export class ProviderPool {
       entry.syncState = 'synced';
       entry.hasSynced = true;
       entry.lastServerSyncedSV = captureStateVector(provider.document);
+      const syncedLineageEpoch = provider.document.getMap('lifecycle').get(LINEAGE_EPOCH_KEY);
+      if (typeof syncedLineageEpoch === 'string' && syncedLineageEpoch.length > 0) {
+        this.recordLineageEpoch(docName, syncedLineageEpoch);
+      }
       if (entry.pendingRecycleTimer) {
         clearTimeout(entry.pendingRecycleTimer);
         entry.pendingRecycleTimer = null;
@@ -727,6 +839,7 @@ export class ProviderPool {
         'branch-mismatch',
         'rename-redirect',
         'doc-deleted',
+        'doc-lineage-mismatch',
       ] as const satisfies readonly HocuspocusAuthRejectionReason[];
       type _AssertCovers = HocuspocusAuthRejectionReason extends (typeof KNOWN)[number]
         ? true
@@ -770,15 +883,32 @@ export class ProviderPool {
         }
         const fromDocName = docName;
         const toDocName = payload;
+        this.deleteLineageEpochRecord(fromDocName);
         const existing = this.entries.get(fromDocName);
         const hadOpenProvider = existing !== undefined && existing.kind === 'active';
         this.onRenameRedirect?.({ fromDocName, toDocName, hadOpenProvider });
         return;
       }
       if (typed === 'doc-deleted') {
+        this.deleteLineageEpochRecord(docName);
         const existing = this.entries.get(docName);
         const hadOpenProvider = existing !== undefined && existing.kind === 'active';
         this.onDocDeleted?.({ docName, hadOpenProvider });
+        return;
+      }
+      if (typed === 'doc-lineage-mismatch') {
+        if (entry.kind !== 'active' || this.entries.get(docName) !== entry) return;
+        this.deleteLineageEpochRecord(docName);
+        this.emitStructuredClientRecoveryEvent({
+          event: 'ok-doc-lineage-mismatch',
+          ...this.recoveryTelemetryBase(docName),
+          via: 'auth-rejection',
+          staleEpoch: entry.lineageEpochRecordAtOpen ?? '',
+        });
+        const wasActive = this.activeDocName === docName;
+        void this.runCloseAndClearPersistence(docName);
+        const reopened = this.open(docName);
+        if (reopened !== null && wasActive) this.setActive(docName);
         return;
       }
       const _never: never = typed;
@@ -1139,9 +1269,9 @@ export class ProviderPool {
       }
     }
 
-    const branch = this.getOrInitObservedBranch();
+    const branch = this.normalizedObservedBranch();
     const serverInstanceId = this.cachedServerInstanceId;
-    if (branch === null || serverInstanceId === null) return;
+    if (serverInstanceId === null) return;
 
     const dbName = `ok-ydoc:${branch}:${serverInstanceId}:${docName}`;
     try {
@@ -1229,6 +1359,8 @@ export class ProviderPool {
     this.bufferedUpdates.clear();
     this.pendingClears.clear();
     this.clearFailures.clear();
+    this.docLineageEpochs.clear();
+    this.docLineageEpochsEnvelopeConsumed = false;
     this.onBranchMismatch = null;
     this.branchMismatchInFlight = null;
     this.onRenameRedirect = null;

@@ -698,6 +698,21 @@ describe('buildAuthToken (MECHANISM-ONLY — CRDT restart recovery + client vers
       parseHocuspocusAuthToken(buildAuthToken(tabId, 'sid-x', ''))?.expectedBranch,
     ).toBeUndefined();
   });
+
+  test('includes expectedDocLineageEpoch when supplied', () => {
+    const parsed = parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, 'epoch-1'));
+    if (!parsed) throw new Error('expected valid token');
+    expect(parsed.expectedDocLineageEpoch).toBe('epoch-1');
+  });
+
+  test('omits expectedDocLineageEpoch when null or empty', () => {
+    expect(
+      parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, null))?.expectedDocLineageEpoch,
+    ).toBeUndefined();
+    expect(
+      parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, ''))?.expectedDocLineageEpoch,
+    ).toBeUndefined();
+  });
 });
 
 describe('ProviderPool server-instance-ID claim (US-001)', () => {
@@ -974,6 +989,257 @@ describe('ProviderPool server-instance-ID claim (US-001)', () => {
     if (!tok1 || !tok2) throw new Error('expected valid tokens');
     expect(tok1.expectedServerInstanceId).toBeUndefined();
     expect(tok2.expectedServerInstanceId).toBe('server-instance-xyz');
+  });
+});
+
+describe('ProviderPool doc-lineage epoch records', () => {
+  const ENVELOPE_KEY = 'ok-doc-lineage-epochs';
+
+  function makeStubStorage(): {
+    stub: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+    store: Map<string, string>;
+  } {
+    const store = new Map<string, string>();
+    const stub = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+    return { stub, store };
+  }
+
+  function makePersistenceStub(): ClientPersistenceProvider {
+    return {
+      whenSynced: Promise.resolve(undefined as never),
+      synced: true,
+      destroy: async () => {},
+      clearData: async () => {},
+    } as unknown as ClientPersistenceProvider;
+  }
+
+  function makeEnvelope(
+    serverInstanceId: string,
+    epochs: Record<string, string>,
+    branch = '_unknown_',
+  ): string {
+    return JSON.stringify({ branch, serverInstanceId, epochs });
+  }
+
+  function tokenOf(entry: { provider: { configuration: { token: unknown } } }) {
+    const parsed = parseHocuspocusAuthToken(entry.provider.configuration.token as string);
+    if (!parsed) throw new Error('expected valid token');
+    return parsed;
+  }
+
+  test('open() claims the epoch recorded in a valid storage envelope', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBe('epoch-1');
+  });
+
+  test('claim is omitted while the server instance id is unknown', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('envelope from a different server instance is ignored', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope('dead-instance', { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('envelope from a different branch scope is ignored', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }, 'feature'));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('synced lifecycle epoch is recorded and round-trips into a fresh pool', () => {
+    const { stub, store } = makeStubStorage();
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const docName = uniqueDocName('pp-lineage-record');
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+    entry.provider.emit('synced', { state: true });
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope written to storage');
+    const envelope = JSON.parse(raw) as {
+      branch: string;
+      serverInstanceId: string;
+      epochs: Record<string, string>;
+    };
+    expect(envelope.serverInstanceId).toBe(TEST_SERVER_INSTANCE_ID);
+    expect(envelope.epochs[docName]).toBe('epoch-live');
+
+    const pool2 = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    try {
+      pool2.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const entry2 = pool2.open(docName);
+      if (!entry2) throw new Error('expected entry2');
+      expect(tokenOf(entry2).expectedDocLineageEpoch).toBe('epoch-live');
+    } finally {
+      pool2.dispose();
+    }
+  });
+
+  test('doc-lineage-mismatch rejection drops the record and reopens claim-less', async () => {
+    const { stub, store } = makeStubStorage();
+    const docName = uniqueDocName('pp-lineage-reject');
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { [docName]: 'epoch-dead' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    pool.setActive(docName);
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBe('epoch-dead');
+
+    const warnSpy = mock(() => {});
+    const origWarn = console.warn;
+    console.warn = warnSpy;
+    entry.provider.emit('authenticationFailed', { reason: 'doc-lineage-mismatch' });
+    console.warn = origWarn;
+
+    const reopened = pool.peek(docName);
+    if (!reopened) throw new Error('expected reopened entry');
+    expect(reopened).not.toBe(entry);
+    expect(pool.getActiveDocName()).toBe(docName);
+    expect(tokenOf(reopened).expectedDocLineageEpoch).toBeUndefined();
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope still present');
+    const envelope = JSON.parse(raw) as { epochs: Record<string, string> };
+    expect(envelope.epochs[docName]).toBeUndefined();
+
+    const emitted = warnSpy.mock.calls
+      .map((call) => call[0] as string)
+      .filter((line) => typeof line === 'string' && line.includes('ok-doc-lineage-mismatch'));
+    expect(emitted.length).toBe(1);
+    const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+    expect(event.via).toBe('auth-rejection');
+    expect(event.staleEpoch).toBe('epoch-dead');
+
+    await wait(10);
+  });
+
+  test('deferred-attach guard replaces a stale-lineage entry instead of hydrating it', async () => {
+    const { stub } = makeStubStorage();
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    const docName = uniqueDocName('pp-lineage-deferred');
+
+    const first = pool.open(docName);
+    if (!first) throw new Error('expected first entry');
+    first.provider.document.getMap('lifecycle').set('epoch', 'epoch-dead');
+    first.provider.emit('synced', { state: true });
+    pool.close(docName);
+
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    expect(entry.persistence).toBeNull();
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+    entry.provider.emit('synced', { state: true });
+
+    const warnSpy = mock(() => {});
+    const origWarn = console.warn;
+    console.warn = warnSpy;
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    console.warn = origWarn;
+
+    const reopened = pool.peek(docName);
+    if (!reopened) throw new Error('expected reopened entry');
+    expect(reopened).not.toBe(entry);
+    expect(tokenOf(reopened).expectedDocLineageEpoch).toBe('epoch-live');
+    expect(reopened.lineageEpochRecordAtOpen).toBe('epoch-live');
+
+    const emitted = warnSpy.mock.calls
+      .map((call) => call[0] as string)
+      .filter((line) => typeof line === 'string' && line.includes('ok-doc-lineage-mismatch'));
+    expect(emitted.length).toBe(1);
+    const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+    expect(event.via).toBe('deferred-attach');
+    expect(event.staleEpoch).toBe('epoch-dead');
+    expect(event.liveEpoch).toBe('epoch-live');
+
+    await wait(10);
+  });
+
+  test('rename-redirect and doc-deleted rejections prune the lineage record', () => {
+    const { stub, store } = makeStubStorage();
+    const renamedDoc = uniqueDocName('pp-lineage-renamed');
+    const deletedDoc = uniqueDocName('pp-lineage-deleted');
+    store.set(
+      ENVELOPE_KEY,
+      makeEnvelope(TEST_SERVER_INSTANCE_ID, {
+        [renamedDoc]: 'epoch-a',
+        [deletedDoc]: 'epoch-b',
+      }),
+    );
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const renamedEntry = pool.open(renamedDoc);
+    const deletedEntry = pool.open(deletedDoc);
+    if (!renamedEntry || !deletedEntry) throw new Error('expected entries');
+
+    renamedEntry.provider.emit('authenticationFailed', {
+      reason: `rename-redirect:${renamedDoc}-new`,
+    });
+    deletedEntry.provider.emit('authenticationFailed', { reason: 'doc-deleted' });
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope still present');
+    const envelope = JSON.parse(raw) as { epochs: Record<string, string> };
+    expect(envelope.epochs[renamedDoc]).toBeUndefined();
+    expect(envelope.epochs[deletedDoc]).toBeUndefined();
   });
 });
 

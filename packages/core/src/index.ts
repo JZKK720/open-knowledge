@@ -161,6 +161,7 @@ export {
   CREATE_NEW_PROJECT_FAILURE_REASONS,
   type CreateNewProjectFailureReason,
 } from './constants/create-new-project-reason.ts';
+export { LINEAGE_EPOCH_KEY } from './constants/doc-lifecycle.ts';
 export {
   DOCUMENT_OPEN_BYTE_LIMIT,
   isDocumentOverOpenByteLimit,

@@ -252,6 +252,28 @@ export interface ReconciliationMetrics {
    *  non-zero indicates a cache populator is producing inconsistent
    *  rename pairs and the defense is silently degrading. */
   removalRedirectChainCycles: number;
+  /** Count of WebSocket connections rejected by `docLineageGuard` with the
+   *  `'doc-lineage-mismatch'` reason — a client claimed a lineage epoch that
+   *  doesn't match the live doc (or claimed against an unloaded doc, stale
+   *  by construction). Each rejection is one prevented union-merge of a dead
+   *  materialization, at the cost of a client close → clearIDB → reopen
+   *  round-trip. Steady-state near-zero with bursts after external
+   *  delete/recreate or rename; a high steady rate means the epoch minting
+   *  or the client's record bookkeeping has drifted and every connection is
+   *  paying the recovery round-trip. Lifetime total: the operator signal is
+   *  the growth rate computed at the metrics consumer (burst = expected;
+   *  sustained = drifted bookkeeping), not the absolute value. */
+  authDocLineageMismatchCount: number;
+  /** Count of `docLineageGuard` invocations that fell through to admit via
+   *  the defensive try/catch — same fail-open philosophy and observability
+   *  rationale as `authRemovalGuardErrors`: each fall-through silently
+   *  disables the stale-lineage fence for that connection, so non-zero
+   *  growth (correlated with `doc-lineage-guard-error` warns) means the
+   *  corruption class the fence exists to prevent can reach docs unnoticed.
+   *  Lifetime total with no built-in threshold: alert on sustained growth
+   *  rate at the metrics consumer — a one-time blip is a transient, a
+   *  climbing rate means the fence is silently disabled under live traffic. */
+  authDocLineageGuardErrors: number;
 }
 
 const counters: ReconciliationMetrics = {
@@ -302,6 +324,8 @@ const counters: ReconciliationMetrics = {
   recentlyRemovedDocsSize: 0,
   authRemovalGuardErrors: 0,
   removalRedirectChainCycles: 0,
+  authDocLineageMismatchCount: 0,
+  authDocLineageGuardErrors: 0,
 };
 
 export function incrementReconcile(): void {
@@ -459,6 +483,14 @@ export function incrementRemovalRedirectChainCycle(): void {
   counters.removalRedirectChainCycles++;
 }
 
+export function incrementAuthDocLineageMismatch(): void {
+  counters.authDocLineageMismatchCount++;
+}
+
+export function incrementAuthDocLineageGuardError(): void {
+  counters.authDocLineageGuardErrors++;
+}
+
 export function incrementCollabSocketFilteredError(code: 'EPIPE' | 'ECONNRESET'): void {
   if (code === 'EPIPE') counters.collabSocketEpipeCount++;
   else counters.collabSocketEconnresetCount++;
@@ -548,4 +580,6 @@ export function resetMetrics(): void {
   counters.recentlyRemovedDocsSize = 0;
   counters.authRemovalGuardErrors = 0;
   counters.removalRedirectChainCycles = 0;
+  counters.authDocLineageMismatchCount = 0;
+  counters.authDocLineageGuardErrors = 0;
 }

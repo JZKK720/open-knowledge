@@ -9,10 +9,11 @@ import {
 } from './auth-token-schema.ts';
 
 describe('HOCUSPOCUS_AUTH_REJECTION_REASONS', () => {
-  it('contains the four wire reasons used by server-side throws', () => {
+  it('contains the five wire reasons used by server-side throws', () => {
     expect([...HOCUSPOCUS_AUTH_REJECTION_REASONS].sort()).toEqual([
       'branch-mismatch',
       'doc-deleted',
+      'doc-lineage-mismatch',
       'rename-redirect',
       'server-instance-mismatch',
     ]);

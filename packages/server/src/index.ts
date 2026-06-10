@@ -41,6 +41,7 @@ export {
   type HocuspocusAuthToken,
   HocuspocusAuthTokenSchema,
   isHocuspocusAuthRejectionReason,
+  LINEAGE_EPOCH_KEY,
   parseAuthRejectionWire,
   parseHocuspocusAuthToken,
 } from './auth-token-schema.ts';

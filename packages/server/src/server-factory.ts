@@ -46,6 +46,7 @@ import { isDocInConflict } from './conflict-errors.ts';
 import { createConflictLifecycleSeedExtension } from './conflict-lifecycle-seed.ts';
 import { type ContentFilter, createContentFilter } from './content-filter.ts';
 import { getDocExtension, stripDocExtension } from './doc-extensions.ts';
+import { runDocLineageGuard } from './doc-lineage-guard.ts';
 import {
   DEFAULT_EMBEDDINGS_DIMENSIONS,
   type Embedder,
@@ -614,6 +615,17 @@ export function createServer(options: ServerOptions): ServerInstance {
       },
     };
     hocuspocus.configuration.extensions.push(removalRedirectGuard);
+
+    const docLineageGuard: Extension & { __kind: 'doc-lineage-guard' } = {
+      __kind: 'doc-lineage-guard',
+      async onAuthenticate(payload) {
+        const parsed = parseHocuspocusAuthToken(payload.token);
+        runDocLineageGuard(payload.documentName, parsed?.expectedDocLineageEpoch, {
+          getLoadedDoc: (name) => hocuspocus.documents.get(name),
+        });
+      },
+    };
+    hocuspocus.configuration.extensions.push(docLineageGuard);
 
     const systemDocBroadcastGuard: Extension & { __kind: 'system-doc-broadcast-guard' } = {
       __kind: 'system-doc-broadcast-guard',
