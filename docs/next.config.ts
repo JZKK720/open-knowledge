@@ -7,19 +7,13 @@ const nextConfig: NextConfig = {
     // Fail the build on any compiler diagnostic
     panicThreshold: 'all_errors',
   },
-  // Redirects for deleted docs pages — the prior `Install` and `CLI` pages
-  // were folded into Quickstart and Configuration respectively when the docs
-  // pivoted to a desktop-app-first story.
+  // Redirects for deleted docs pages — the prior `Install` page was folded
+  // into Quickstart when the docs pivoted to a desktop-app-first story.
   async redirects() {
     return [
       {
         source: '/docs/get-started/install',
         destination: '/docs/get-started/quickstart',
-        permanent: true,
-      },
-      {
-        source: '/docs/reference/cli',
-        destination: '/docs/reference/configuration',
         permanent: true,
       },
       {
