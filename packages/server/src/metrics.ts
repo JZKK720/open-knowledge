@@ -159,6 +159,28 @@ export interface ReconciliationMetrics {
    *  Path-B rate via `actual_rate = observerAPathBFires +
    *  observerAPathBFiresSuppressed`. */
   observerAPathBFiresSuppressed: number;
+  /** Y.Text-is-truth contract (precedent #38) — count of Observer A
+   *  settlement checks that detected a drain settling split-brain (Y.Text
+   *  vs serialize(fragment) divergence beyond `normalizeBridge` tolerance)
+   *  and enqueued a same-drain Observer B re-derive, that escaped the
+   *  per-(site, doc) rate-limiter and emitted a structured
+   *  `bridge-split-brain-rederive` event. No organic input produces this
+   *  divergence at HEAD — producers were narrowed to dependency/plugin
+   *  drift — so this firing in production is itself the drift alert: a
+   *  new divergent fallback producer has appeared. Also the operator
+   *  signal for a doc stuck re-deriving its fragment on every edit (the
+   *  divergence is structural and persists by design; the re-derive cost
+   *  recurs per drain). Counter increments only on emit; the companion
+   *  suppressed counter preserves `actual_rate = fires + suppressed`. */
+  bridgeSplitBrainRederives: number;
+  /** Companion to `bridgeSplitBrainRederives` — count of split-brain
+   *  re-derive detections the rate-limiter suppressed within the
+   *  per-(site, doc) debounce window. On an irreducibly-divergent doc the
+   *  check fires on every Observer A drain (every WYSIWYG keystroke), so
+   *  the unsuppressed `console.warn` would drown the very drift signal
+   *  operators need. Incremented only on suppress, mirroring
+   *  `observerAPathBFiresSuppressed`. */
+  bridgeSplitBrainRederivesSuppressed: number;
   /** Y.Text-is-truth contract — count of best-effort
    *  fragment-reconciliation attempts (`reconcileFragmentNow`) that
    *  threw inside persistence's pre-write sanity-check recovery path. The
@@ -314,6 +336,8 @@ const counters: ReconciliationMetrics = {
   bridgeToleranceApplied: {},
   observerAPathBFires: 0,
   observerAPathBFiresSuppressed: 0,
+  bridgeSplitBrainRederives: 0,
+  bridgeSplitBrainRederivesSuppressed: 0,
   persistenceReconciliationFailures: 0,
   externalChangeHandlerErrors: 0,
   persistenceSanityCheckSerializeFailures: 0,
@@ -443,6 +467,14 @@ export function incrementObserverAPathBFiresSuppressed(): void {
   counters.observerAPathBFiresSuppressed++;
 }
 
+export function incrementBridgeSplitBrainRederives(): void {
+  counters.bridgeSplitBrainRederives++;
+}
+
+export function incrementBridgeSplitBrainRederivesSuppressed(): void {
+  counters.bridgeSplitBrainRederivesSuppressed++;
+}
+
 export function incrementPersistenceReconciliationFailures(): void {
   counters.persistenceReconciliationFailures++;
 }
@@ -570,6 +602,8 @@ export function resetMetrics(): void {
   counters.bridgeToleranceApplied = {};
   counters.observerAPathBFires = 0;
   counters.observerAPathBFiresSuppressed = 0;
+  counters.bridgeSplitBrainRederives = 0;
+  counters.bridgeSplitBrainRederivesSuppressed = 0;
   counters.persistenceReconciliationFailures = 0;
   counters.externalChangeHandlerErrors = 0;
   counters.persistenceSanityCheckSerializeFailures = 0;

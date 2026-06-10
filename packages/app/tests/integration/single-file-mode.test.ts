@@ -154,8 +154,8 @@ describe('single-file mode — write-back (FR3)', () => {
 });
 
 describe('single-file mode — no rewrite on open (FR4 / G8)', () => {
-  const RAW = '1. a\n1. b\n';
-  const CANONICAL = '1. a\n2. b\n';
+  const RAW = '> q\nq2\n';
+  const CANONICAL = '> q\n> q2\n';
 
   test('a reconciliation to the file’s own canonical form is suppressed; a genuine edit persists', async () => {
     const contentDir = ephemeralContentDir({ 'notes.md': RAW });

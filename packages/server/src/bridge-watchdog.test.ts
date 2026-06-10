@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { BridgeInvariantViolationError } from '@inkeep/open-knowledge-core';
 import {
+  __getSplitBrainRateTupleCountForTests,
   __getViolationRateTupleCountForTests,
   __resetBridgeWatchdogForTests,
   assertBridgeInvariant,
+  emitBridgeSplitBrainRederive,
   emitObserverAPathBFired,
   shouldEmitBridgeInvariantViolation,
+  shouldEmitBridgeSplitBrainRederive,
   shouldEmitBridgeToleranceApplied,
   shouldEmitObserverAPathBFired,
   shouldThrowOnBridgeInvariantViolation,
@@ -387,6 +390,56 @@ describe('shouldEmitObserverAPathBFired — per-doc rate-limiter', () => {
   });
 });
 
+describe('shouldEmitBridgeSplitBrainRederive — per-(site, doc) rate-limiter', () => {
+  test('first call for a (site, doc) tuple returns true', () => {
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+  });
+
+  test('repeat call inside window returns false', () => {
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1500)).toBe(false);
+  });
+
+  test('call after debounce expires returns true', () => {
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 70_000)).toBe(true);
+  });
+
+  test('sites have independent windows for the same doc', () => {
+    expect(shouldEmitBridgeSplitBrainRederive('identity-gate', 'doc-1', 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('identity-gate', 'doc-1', 1500)).toBe(false);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1500)).toBe(false);
+  });
+
+  test('different docs have independent windows', () => {
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-2', 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1500)).toBe(false);
+  });
+
+  test('docName=undefined uses __nodoc__ sentinel (distinct from any named doc)', () => {
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', undefined, 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', undefined, 1500)).toBe(false);
+  });
+
+  test('emitBridgeSplitBrainRederive increments suppressed counter when rate-limited', () => {
+    expect(emitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+    expect(getMetrics().bridgeSplitBrainRederivesSuppressed).toBe(0);
+    expect(emitBridgeSplitBrainRederive('post-merge', 'doc-1', 1500)).toBe(false);
+    expect(getMetrics().bridgeSplitBrainRederivesSuppressed).toBe(1);
+    expect(emitBridgeSplitBrainRederive('post-merge', 'doc-1', 2000)).toBe(false);
+    expect(getMetrics().bridgeSplitBrainRederivesSuppressed).toBe(2);
+  });
+
+  test('emitBridgeSplitBrainRederive returns true after window resets', () => {
+    expect(emitBridgeSplitBrainRederive('post-merge', 'doc-1', 1000)).toBe(true);
+    expect(emitBridgeSplitBrainRederive('post-merge', 'doc-1', 70_000)).toBe(true);
+    expect(getMetrics().bridgeSplitBrainRederivesSuppressed).toBe(0);
+  });
+});
+
 describe('bridge-invariant-violation payload redaction (OK_TELEMETRY_VERBOSE opt-in)', () => {
   let originalNodeEnv: string | undefined;
   let originalVerbose: string | undefined;
@@ -673,6 +726,62 @@ describe('shouldEmitBridgeInvariantViolation — lazy prune of past-window entri
 
     shouldEmitBridgeInvariantViolation('observer-b', 'doc-new', 2_000);
     expect(__getViolationRateTupleCountForTests()).toBe(1025);
+  });
+});
+
+describe('shouldEmitBridgeSplitBrainRederive — lazy prune of past-window entries', () => {
+  test('grows linearly below the prune threshold', () => {
+    for (let i = 0; i < 1023; i++) {
+      shouldEmitBridgeSplitBrainRederive('post-merge', `doc-${i}`, 0);
+    }
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1023);
+  });
+
+  test('past-window entries reclaim when threshold is exceeded', () => {
+    for (let i = 0; i < 1024; i++) {
+      shouldEmitBridgeSplitBrainRederive('post-merge', `doc-${i}`, 0);
+    }
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1024);
+
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-new', 70_000);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1);
+  });
+
+  test('in-window entries are preserved during prune (mixed window state)', () => {
+    for (let i = 0; i < 1023; i++) {
+      shouldEmitBridgeSplitBrainRederive('post-merge', `doc-old-${i}`, 0);
+    }
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-fresh', 30_000);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1024);
+
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-new', 70_000);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(2);
+    expect(shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-fresh', 71_000)).toBe(false);
+  });
+
+  test('threshold boundary: exactly 1023 entries does not trigger prune', () => {
+    for (let i = 0; i < 1023; i++) {
+      shouldEmitBridgeSplitBrainRederive('post-merge', `doc-${i}`, 0);
+    }
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1024th', 70_000);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1024);
+  });
+
+  test('all-in-window: prune walks but reclaims nothing (documents conditional bound)', () => {
+    for (let i = 0; i < 1024; i++) {
+      shouldEmitBridgeSplitBrainRederive('post-merge', `doc-${i}`, 1_000);
+    }
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1024);
+
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-new', 2_000);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(1025);
+  });
+
+  test('all three sites for the same doc occupy distinct keys (each counted)', () => {
+    shouldEmitBridgeSplitBrainRederive('post-merge', 'doc-1', 0);
+    shouldEmitBridgeSplitBrainRederive('identity-gate', 'doc-1', 0);
+    shouldEmitBridgeSplitBrainRederive('error-recovery', 'doc-1', 0);
+    expect(__getSplitBrainRateTupleCountForTests()).toBe(3);
   });
 });
 

@@ -14,11 +14,17 @@ import type { Schema } from '@tiptap/pm/model';
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import type * as Y from 'yjs';
 import { attachQuiescenceTracker } from './bridge-quiescence.ts';
-import { assertBridgeInvariant, emitObserverAPathBFired } from './bridge-watchdog.ts';
+import {
+  assertBridgeInvariant,
+  type BridgeSplitBrainSite,
+  emitBridgeSplitBrainRederive,
+  emitObserverAPathBFired,
+} from './bridge-watchdog.ts';
 import { recordFrontmatterEditSurface } from './frontmatter-telemetry.ts';
 import {
   incrementBridgeMergeCheckpointCreated,
   incrementBridgeMergeContentLoss,
+  incrementBridgeSplitBrainRederives,
   incrementObserverAPathBFires,
   incrementServerObserverError,
   incrementServerObserverFire,
@@ -70,6 +76,10 @@ export interface SetupServerObserversOpts {
   resolveEmbed?: (basename: string, sourcePath: string) => string | null;
   resolveSize?: (basename: string, sourcePath: string) => number | null;
   onDispatch?: ObserverDispatchHook;
+}
+
+function settlesSplitBrain(settledText: string, md: string): boolean {
+  return settledText !== md && normalizeBridge(settledText) !== normalizeBridge(md);
 }
 
 export function setupServerObservers(opts: SetupServerObserversOpts): () => void {
@@ -126,6 +136,23 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
     });
   };
 
+  const recordSplitBrainRederive = (site: BridgeSplitBrainSite): void => {
+    try {
+      if (emitBridgeSplitBrainRederive(site, opts.docName)) {
+        incrementBridgeSplitBrainRederives();
+        console.warn(
+          JSON.stringify({
+            event: 'bridge-split-brain-rederive',
+            'doc.name': opts.docName ?? null,
+            site,
+          }),
+        );
+      }
+    } catch (telErr) {
+      console.warn('[Server Observer A] Split-brain telemetry failed:', telErr);
+    }
+  };
+
   let lastSyncedXmlMd = '';
   let xmlDirty = false;
   let textDirty = false;
@@ -153,7 +180,13 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
       const frontmatter = readCurrentFm();
       const md = prependFrontmatter(frontmatter, body);
 
-      if (lastSyncedXmlMd === md) return;
+      if (lastSyncedXmlMd === md) {
+        if (settlesSplitBrain(ytext.toString(), md)) {
+          textDirty = true;
+          recordSplitBrainRederive('identity-gate');
+        }
+        return;
+      }
 
       const currentText = ytext.toString();
 
@@ -198,14 +231,38 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
       }
 
       incrementServerObserverFire('a');
-      lastSyncedXmlMd = ytext.toString();
+      const settledText = ytext.toString();
+      if (settlesSplitBrain(settledText, md)) {
+        lastSyncedXmlMd = md;
+        textDirty = true;
+        recordSplitBrainRederive('post-merge');
+      } else {
+        lastSyncedXmlMd = settledText;
+      }
     } catch (err) {
       incrementServerObserverError('a');
       console.error('[Server Observer A] Failed to sync tree→text:', err);
       try {
-        lastSyncedXmlMd = ytext.toString();
+        const recoveryJson = yXmlFragmentToProseMirrorRootNode(xmlFragment, schema).toJSON();
+        const recoveryBody = mdManager.serialize(recoveryJson);
+        const recoveryMd = prependFrontmatter(readCurrentFm(), recoveryBody);
+        if (settlesSplitBrain(ytext.toString(), recoveryMd)) {
+          lastSyncedXmlMd = recoveryMd;
+          textDirty = true;
+          recordSplitBrainRederive('error-recovery');
+        } else {
+          lastSyncedXmlMd = ytext.toString();
+        }
       } catch (innerErr) {
-        console.warn('[Server Observer A] Baseline recovery also failed:', innerErr);
+        console.warn(
+          '[Server Observer A] Baseline recovery also failed',
+          JSON.stringify({
+            'doc.name': opts.docName ?? null,
+            originalError: err instanceof Error ? err.message : String(err),
+            recoveryError: innerErr instanceof Error ? innerErr.message : String(innerErr),
+          }),
+        );
+        lastSyncedXmlMd = '';
       }
     }
   };
@@ -382,12 +439,12 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
         }
 
         const ranA = xmlDirty;
-        const ranB = textDirty;
         if (xmlDirty) {
           xmlDirty = false;
           opts.onDispatch?.('a');
           runObserverASync();
         }
+        const ranB = textDirty;
         if (textDirty) {
           textDirty = false;
           opts.onDispatch?.('b');

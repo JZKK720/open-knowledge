@@ -441,6 +441,61 @@ describe('list-indent canonical collapse', () => {
   });
 });
 
+describe('ordered-list-marker-number canonical collapse', () => {
+  test('lazy `1./1.` equivalent to renumbered `1./2.`', () => {
+    expect(normalizeBridge('# Todo\n\n1. first\n1. second\n')).toBe(
+      normalizeBridge('# Todo\n\n1. first\n2. second\n'),
+    );
+  });
+
+  test('three-item lazy `1./1./1.` equivalent to renumbered `1./2./3.`', () => {
+    expect(normalizeBridge('1. a\n1. b\n1. c\n')).toBe(normalizeBridge('1. a\n2. b\n3. c\n'));
+  });
+
+  test('start offset preserved: `5./5.` equivalent to `5./6.`', () => {
+    expect(normalizeBridge('5. a\n5. b\n')).toBe(normalizeBridge('5. a\n6. b\n'));
+  });
+
+  test('paren-delimiter `1)` markers renumber-tolerate too', () => {
+    expect(normalizeBridge('1) a\n1) b\n')).toBe(normalizeBridge('1) a\n2) b\n'));
+  });
+
+  test('nested ordered list renumber collapses (mirrors list-indent nesting coverage)', () => {
+    const lazy = '1. a\n   1. x\n   1. y\n1. b\n';
+    const renum = '1. a\n   1. x\n   2. y\n2. b\n';
+    expect(normalizeBridge(lazy)).toBe(normalizeBridge(renum));
+  });
+
+  test('deep-indented ordered item renumber collapses', () => {
+    expect(normalizeBridge('      1. nested')).toBe(normalizeBridge('      9. nested'));
+  });
+
+  test('NEGATIVE: content after the marker differing is NOT collapsed', () => {
+    expect(normalizeBridge('1. first\n')).not.toBe(normalizeBridge('1. second\n'));
+    expect(normalizeBridge('1. apple\n2. banana\n')).not.toBe(
+      normalizeBridge('1. apple\n2. cherry\n'),
+    );
+  });
+
+  test('NEGATIVE: marker-type `.` vs `)` is NOT collapsed', () => {
+    expect(normalizeBridge('1. a\n')).not.toBe(normalizeBridge('1) a\n'));
+  });
+
+  test('NEGATIVE: ordered marker vs bullet marker is NOT collapsed', () => {
+    expect(normalizeBridge('1. a\n')).not.toBe(normalizeBridge('- a\n'));
+  });
+
+  test('NEGATIVE: adding or removing a line is NOT collapsed', () => {
+    expect(normalizeBridge('1. a\n1. b\n')).not.toBe(normalizeBridge('1. a\n'));
+    expect(normalizeBridge('1. a\n')).not.toBe(normalizeBridge('1. a\n1. b\n'));
+  });
+
+  test('NEGATIVE: a digit run that is not an ordered-list marker is preserved', () => {
+    expect(normalizeBridge('Version 2 shipped\n')).toBe('Version 2 shipped');
+    expect(normalizeBridge('Version 2 shipped\n')).not.toBe(normalizeBridge('Version 3 shipped\n'));
+  });
+});
+
 describe('detectAppliedToleranceClasses (FR-41)', () => {
   test('exposes the class enum for bounded-cardinality emit consumers', () => {
     expect(BRIDGE_TOLERANCE_CLASSES).toEqual([
@@ -453,10 +508,27 @@ describe('detectAppliedToleranceClasses (FR-41)', () => {
       'block-separator-collapse',
       'table-align-row-spacing',
       'list-indent-canonical',
+      'ordered-list-marker-number',
       'trailing-whitespace',
       'blank-line-collapse',
       'trailing-newline',
     ]);
+  });
+
+  test('detects ordered-list-marker-number when marker digits differ across inputs', () => {
+    expect(detectAppliedToleranceClasses('1. a\n1. b', '1. a\n2. b')).toContain(
+      'ordered-list-marker-number',
+    );
+    expect(detectAppliedToleranceClasses('   1. x\n   1. y', '   1. x\n   2. y')).toContain(
+      'ordered-list-marker-number',
+    );
+  });
+
+  test('does not detect ordered-list-marker-number when no ordered marker is present', () => {
+    expect(detectAppliedToleranceClasses('- a\n- b', '- a\n- b')).not.toContain(
+      'ordered-list-marker-number',
+    );
+    expect(detectAppliedToleranceClasses('foo', 'foo')).not.toContain('ordered-list-marker-number');
   });
 
   test('detects emphasis-around-code when either input contains the tight wrap', () => {

@@ -4,6 +4,13 @@ const TABLE_ALIGN_ROW_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/;
 
 const LIST_ITEM_INDENT_RE = /^[ \t]+([-+*]|\d+[.)]|[a-zA-Z][.)])\s/;
 
+const ORDERED_LIST_MARKER_RE = /^\d+([.)])(?=\s)/;
+
+/** Canonical sentinel the ordered-list marker number collapses to. Any digit
+ *  run works as long as it is stable across both sides; `1` keeps the
+ *  normalized form readable. */
+const ORDERED_LIST_MARKER_CANONICAL = '1';
+
 const EMPHASIS_AROUND_CODE_RE = /\*\*\s*(`[^`]+`)\s*\*\*/g;
 
 export function normalizeBridge(s: string): string {
@@ -22,10 +29,10 @@ export function normalizeBridge(s: string): string {
       if (TABLE_ALIGN_ROW_RE.test(trimmed)) {
         return trimmed.replace(/\s+/g, '');
       }
-      if (LIST_ITEM_INDENT_RE.test(trimmed)) {
-        return trimmed.replace(/^[ \t]+/, '');
-      }
-      return trimmed;
+      const deindented = LIST_ITEM_INDENT_RE.test(trimmed)
+        ? trimmed.replace(/^[ \t]+/, '')
+        : trimmed;
+      return deindented.replace(ORDERED_LIST_MARKER_RE, `${ORDERED_LIST_MARKER_CANONICAL}$1`);
     })
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -42,6 +49,7 @@ export const BRIDGE_TOLERANCE_CLASSES = [
   'block-separator-collapse',
   'table-align-row-spacing',
   'list-indent-canonical',
+  'ordered-list-marker-number',
   'trailing-whitespace',
   'blank-line-collapse',
   'trailing-newline',
@@ -107,6 +115,22 @@ export function detectAppliedToleranceClasses(left: string, right: string): Brid
   const listIndentMultiline = /^[ \t]+([-+*]|\d+[.)]|[a-zA-Z][.)])\s/m;
   if (listIndentMultiline.test(leftLf) || listIndentMultiline.test(rightLf)) {
     classes.push('list-indent-canonical');
+  }
+
+  const canonMarkerLine = (line: string): string =>
+    line
+      .replace(/^[ \t]+/, '')
+      .replace(ORDERED_LIST_MARKER_RE, `${ORDERED_LIST_MARKER_CANONICAL}$1`);
+  const leftLines = leftLf.split('\n');
+  const rightLines = rightLf.split('\n');
+  const markerLineCount = Math.min(leftLines.length, rightLines.length);
+  for (let i = 0; i < markerLineCount; i++) {
+    const l = leftLines[i] ?? '';
+    const r = rightLines[i] ?? '';
+    if (l !== r && canonMarkerLine(l) === canonMarkerLine(r) && /^[ \t]*\d+[.)]\s/.test(l)) {
+      classes.push('ordered-list-marker-number');
+      break;
+    }
   }
 
   if (/[ \t]\n/.test(leftLf) || /[ \t]\n/.test(rightLf)) {
