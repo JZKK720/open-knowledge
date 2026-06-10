@@ -256,3 +256,108 @@ describe('handleCredentialGet diagnostic logging', () => {
     expect(result()).toBe('username=alice\npassword=gho_abc\n');
   });
 });
+
+describe('handleCredentialGet gh-token relay', () => {
+  let tmpDir: string;
+  let savedToken: string | undefined;
+  let savedHost: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'ok-git-cred-relay-'));
+    savedToken = process.env.OK_GH_TOKEN;
+    savedHost = process.env.OK_GH_TOKEN_HOST;
+    delete process.env.OK_GH_TOKEN;
+    delete process.env.OK_GH_TOKEN_HOST;
+  });
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    if (savedToken === undefined) delete process.env.OK_GH_TOKEN;
+    else process.env.OK_GH_TOKEN = savedToken;
+    if (savedHost === undefined) delete process.env.OK_GH_TOKEN_HOST;
+    else process.env.OK_GH_TOKEN_HOST = savedHost;
+  });
+
+  test('relayed token for a matching host wins over the stored entry', async () => {
+    const store = makeStore(tmpDir);
+    await store.set('github.com', 'alice', 'gho_stored');
+    process.env.OK_GH_TOKEN = 'gho_relayed';
+    process.env.OK_GH_TOKEN_HOST = 'github.com';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable, result } = makeOutput();
+
+    const code = await handleCredentialGet(input, writable, store);
+
+    expect(code).toBe(0);
+    expect(result()).toBe('username=x-access-token\npassword=gho_relayed\n');
+  });
+
+  test('relayed token serves even when the store is empty (the reported bug)', async () => {
+    const store = makeStore(tmpDir);
+    process.env.OK_GH_TOKEN = 'gho_relayed';
+    process.env.OK_GH_TOKEN_HOST = 'github.com';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable, result } = makeOutput();
+
+    const code = await handleCredentialGet(input, writable, store);
+
+    expect(code).toBe(0);
+    expect(result()).toBe('username=x-access-token\npassword=gho_relayed\n');
+  });
+
+  test('host mismatch falls through to the stored entry', async () => {
+    const store = makeStore(tmpDir);
+    await store.set('github.com', 'alice', 'gho_stored');
+    process.env.OK_GH_TOKEN = 'gho_relayed';
+    process.env.OK_GH_TOKEN_HOST = 'ghe.internal.example';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable, result } = makeOutput();
+
+    const code = await handleCredentialGet(input, writable, store);
+
+    expect(code).toBe(0);
+    expect(result()).toBe('username=alice\npassword=gho_stored\n');
+  });
+
+  test('token present but host var unset falls through to the store', async () => {
+    const store = makeStore(tmpDir);
+    await store.set('github.com', 'alice', 'gho_stored');
+    process.env.OK_GH_TOKEN = 'gho_relayed';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable, result } = makeOutput();
+
+    const code = await handleCredentialGet(input, writable, store);
+
+    expect(code).toBe(0);
+    expect(result()).toBe('username=alice\npassword=gho_stored\n');
+  });
+
+  test('CR and LF in the relayed token are stripped before write', async () => {
+    const store = makeStore(tmpDir);
+    process.env.OK_GH_TOKEN = 'gho_relayed\r\nurl=http://evil';
+    process.env.OK_GH_TOKEN_HOST = 'github.com';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable, result } = makeOutput();
+
+    const code = await handleCredentialGet(input, writable, store);
+
+    expect(code).toBe(0);
+    expect(result()).toBe('username=x-access-token\npassword=gho_relayedurl=http://evil\n');
+  });
+
+  test('logs gh-env-token at debug and never the token', async () => {
+    const store = makeStore(tmpDir);
+    process.env.OK_GH_TOKEN = 'gho_relayed_secret';
+    process.env.OK_GH_TOKEN_HOST = 'github.com';
+    const input = makeStream('protocol=https\nhost=github.com\n\n');
+    const { writable } = makeOutput();
+    const { logger, calls } = makeFakeLogger();
+
+    const code = await handleCredentialGet(input, writable, store, { log: logger });
+
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.level).toBe('debug');
+    expect(calls[0]?.fields).toMatchObject({ host: 'github.com', outcome: 'gh-env-token' });
+    expect(JSON.stringify(calls)).not.toContain('gho_relayed_secret');
+  });
+});

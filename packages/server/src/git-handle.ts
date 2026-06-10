@@ -3,9 +3,15 @@ import simpleGit, { type SimpleGit, type SimpleGitOptions } from 'simple-git';
 
 export { withParentLock } from './git-mutex.ts';
 
+export interface RelayGhToken {
+  token: string;
+  host: string;
+}
+
 interface GitHandleOptions {
   credentialArgs?: string[];
   gitIndexFile?: string;
+  ghToken?: RelayGhToken;
 }
 
 export interface GitHandle {
@@ -20,7 +26,7 @@ type CredentialHelperUnsafeGitOptions = SimpleGitOptions & {
   };
 };
 
-export function buildGitEnv(): Record<string, string> {
+export function buildGitEnv(ghToken?: RelayGhToken): Record<string, string> {
   const env: Record<string, string> = { LANG: 'C', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0' };
   if (process.env.PATH !== undefined) {
     env.PATH = process.env.PATH;
@@ -28,13 +34,17 @@ export function buildGitEnv(): Record<string, string> {
   if (process.env.ELECTRON_RUN_AS_NODE !== undefined) {
     env.ELECTRON_RUN_AS_NODE = process.env.ELECTRON_RUN_AS_NODE;
   }
+  if (ghToken) {
+    env.OK_GH_TOKEN = ghToken.token;
+    env.OK_GH_TOKEN_HOST = ghToken.host;
+  }
   return env;
 }
 
 export function createGitInstance(projectDir: string, options: GitHandleOptions = {}): GitHandle {
-  const { credentialArgs = [], gitIndexFile } = options;
+  const { credentialArgs = [], gitIndexFile, ghToken } = options;
 
-  const env: Record<string, string | undefined> = buildGitEnv();
+  const env: Record<string, string | undefined> = buildGitEnv(ghToken);
   if (gitIndexFile) {
     env.GIT_INDEX_FILE = resolve(projectDir, gitIndexFile);
   }

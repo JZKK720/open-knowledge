@@ -6,11 +6,32 @@ import { join, resolve } from 'node:path';
 import { OK_DIR } from '../constants.ts';
 import {
   buildCloneArgs,
+  buildCloneEnv,
   cloneWithBranchFallback,
   ensureOkExcludedFromGit,
   isBranchNotFoundError,
   shouldSkipAuthForPublicRepo,
 } from './clone.ts';
+
+describe('buildCloneEnv', () => {
+  test('inherits PATH and HOME from the source env', () => {
+    const env = buildCloneEnv({ PATH: '/opt/homebrew/bin:/usr/bin', HOME: '/Users/me' });
+    expect(env.PATH).toBe('/opt/homebrew/bin:/usr/bin');
+    expect(env.HOME).toBe('/Users/me');
+  });
+
+  test('pins GIT_TERMINAL_PROMPT=0 and LANG/LC_ALL=C, overriding inherited locale', () => {
+    const env = buildCloneEnv({ PATH: '/usr/bin', LANG: 'fr_FR.UTF-8', LC_ALL: 'fr_FR.UTF-8' });
+    expect(env.GIT_TERMINAL_PROMPT).toBe('0');
+    expect(env.LANG).toBe('C');
+    expect(env.LC_ALL).toBe('C');
+  });
+
+  test('drops undefined entries (no `undefined` strings reach the child env)', () => {
+    const env = buildCloneEnv({ PATH: '/usr/bin', SOME_UNSET: undefined });
+    expect('SOME_UNSET' in env).toBe(false);
+  });
+});
 
 describe('shouldSkipAuthForPublicRepo', () => {
   test('https + github.com + isPublic=true → true (anonymous clone path)', () => {

@@ -47,6 +47,16 @@ describe('buildGitEnv', () => {
       expect('ELECTRON_RUN_AS_NODE' in buildGitEnv()).toBe(false);
     });
   });
+
+  test('emits OK_GH_TOKEN/OK_GH_TOKEN_HOST only when a relay token is supplied', () => {
+    const without = buildGitEnv();
+    expect('OK_GH_TOKEN' in without).toBe(false);
+    expect('OK_GH_TOKEN_HOST' in without).toBe(false);
+
+    const withToken = buildGitEnv({ token: 'gho_relayed', host: 'github.com' });
+    expect(withToken.OK_GH_TOKEN).toBe('gho_relayed');
+    expect(withToken.OK_GH_TOKEN_HOST).toBe('github.com');
+  });
 });
 
 describe('createGitInstance (credential.helper config)', () => {
