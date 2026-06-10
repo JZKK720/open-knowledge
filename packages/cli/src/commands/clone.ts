@@ -35,6 +35,17 @@ function emit(json: boolean, obj: Record<string, unknown>): void {
   if (json) process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
+export function buildCloneEnv(sourceEnv: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(sourceEnv)) {
+    if (value !== undefined) env[key] = value;
+  }
+  env.GIT_TERMINAL_PROMPT = '0';
+  env.LANG = 'C';
+  env.LC_ALL = 'C';
+  return env;
+}
+
 export function buildCloneArgs(branch: string | null | undefined): string[] {
   if (typeof branch !== 'string' || branch.length === 0) return ['--progress'];
   return ['--progress', '-b', branch];
@@ -108,9 +119,7 @@ async function runClone(
     ? { tier: 'none' as const, credentialArgs: [] as string[] }
     : await resolveAuth(parsed.hostname, tokenStore, {});
 
-  const env: Record<string, string> = {
-    GIT_TERMINAL_PROMPT: '0',
-  };
+  const env = buildCloneEnv();
 
   const gitConfig = resolved.credentialArgs.length >= 2 ? [resolved.credentialArgs[1]] : [];
 

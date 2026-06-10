@@ -21,12 +21,25 @@ export async function handleCredentialGet(
   const attrs = parseCredentialInput(text);
   const host = attrs.host ?? '';
 
+  const safeLine = (s: string) => s.replace(/[\r\n]/g, '');
+
   if (!host) {
     ctx?.log?.warn(
       { outcome: 'no-host', backend: tokenStore.backend },
       '[auth] git-credential get',
     );
     return 1;
+  }
+
+  const relayToken = process.env.OK_GH_TOKEN;
+  const relayTokenHost = process.env.OK_GH_TOKEN_HOST;
+  if (relayToken && relayTokenHost === host) {
+    ctx?.log?.debug(
+      { host, outcome: 'gh-env-token', backend: tokenStore.backend },
+      '[auth] git-credential get',
+    );
+    output.write(`username=x-access-token\npassword=${safeLine(relayToken)}\n`);
+    return 0;
   }
 
   const entry = await tokenStore.get(host);
@@ -45,7 +58,6 @@ export async function handleCredentialGet(
 
   if (entry == null) return 1;
 
-  const safeLine = (s: string) => s.replace(/[\r\n]/g, '');
   output.write(`username=${safeLine(entry.login)}\npassword=${safeLine(entry.token)}\n`);
   return 0;
 }

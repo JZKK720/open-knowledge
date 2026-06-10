@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOCAL_DIR } from '@inkeep/open-knowledge-core';
 import simpleGit from 'simple-git';
+import { classifyGitError } from './error-classification.ts';
+import type { DetectGhFn } from './github-permissions.ts';
 import type { SyncState } from './sync-engine.ts';
 import { SyncEngine } from './sync-engine.ts';
 
@@ -1359,6 +1361,8 @@ interface InternalState {
   pullError?: string;
   pushErrorCode?: string;
   pullErrorCode?: string;
+  gitHandle: () => unknown;
+  handleError: (classified: ReturnType<typeof classifyGitError>, op: 'push' | 'pull') => void;
 }
 
 describe('SyncEngine auth-error recovery', () => {
@@ -1431,5 +1435,90 @@ describe('SyncEngine auth-error recovery', () => {
     const before = engine.getStatus().state;
     await engine.notifyCredentialsChanged();
     expect(engine.getStatus().state).toBe(before);
+  });
+});
+
+function recordDetectGh(result: ReturnType<DetectGhFn>): {
+  fn: DetectGhFn;
+  calls: () => number;
+  lastHost: () => string | undefined;
+} {
+  let calls = 0;
+  let lastHost: string | undefined;
+  return {
+    fn: (host?: string) => {
+      calls++;
+      lastHost = host;
+      return result;
+    },
+    calls: () => calls,
+    lastHost: () => lastHost,
+  };
+}
+
+describe('SyncEngine gh-token credential relay', () => {
+  test('threads the resolved gh token through git handles during a real push cycle', async () => {
+    const git = simpleGit(projectDir);
+    await git.init(['--initial-branch=main']);
+    await git.raw('config', 'user.name', 'Test');
+    await git.raw('config', 'user.email', 'test@test.com');
+    writeFileSync(join(projectDir, 'README.md'), '# Test\n');
+    await git.add('.');
+    await git.commit('Initial');
+
+    const bareDir = join(tmpDir, 'bare.git');
+    mkdirSync(bareDir, { recursive: true });
+    await simpleGit(bareDir).init(true);
+    await git.addRemote('origin', bareDir);
+    await git.push(['--set-upstream', 'origin', 'main']);
+
+    writeFileSync(join(projectDir, 'README.md'), '# Test\n\nchange\n');
+    await git.add('.');
+    await git.commit('local commit');
+
+    const detect = recordDetectGh({ available: true, token: 'gho_relayed' });
+    const engine = new SyncEngine({
+      projectDir,
+      contentDir,
+      contentFilter: stubContentFilter,
+      syncEnabled: true,
+      detectGh: detect.fn,
+    });
+    try {
+      await engine.start();
+      await engine.trigger('push');
+
+      expect(detect.calls()).toBeGreaterThan(0);
+      expect(detect.lastHost()).toBe('github.com');
+    } finally {
+      await engine.destroy();
+    }
+  });
+
+  test('caches the gh token across handles, then re-resolves after an auth error', () => {
+    const detect = recordDetectGh({ available: true, token: 'gho_relayed' });
+    const engine = new SyncEngine({
+      projectDir,
+      contentDir,
+      contentFilter: stubContentFilter,
+      syncEnabled: true,
+      detectGh: detect.fn,
+    });
+    const internal = engine as unknown as InternalState;
+
+    internal.gitHandle();
+    internal.gitHandle();
+    expect(detect.calls()).toBe(1);
+
+    internal.handleError(
+      classifyGitError(
+        new Error(
+          'fatal: could not read Username for https://github.com: terminal prompts disabled',
+        ),
+      ),
+      'push',
+    );
+    internal.gitHandle();
+    expect(detect.calls()).toBe(2);
   });
 });
