@@ -174,6 +174,7 @@
     "54Y6Fg": ["Could not load templates. Try again later."],
     "56WWtu": ["Couldn't load starter packs: ", ["error"]],
     "56xUL1": ["Property name"],
+    "57fiu8": ["(read-only — edit in source mode for now)"],
     "5ALjdr": ["Move through visual-editor find results from the find field."],
     "5Ajb15": ["The formula <0>c = √(a² + b²)</0> renders inline."],
     "5ClEAu": ["Inline hashtag for cross-doc grouping."],
@@ -247,6 +248,7 @@
     "6gRgw8": ["Retry"],
     "6hfDJr": ["Server error: ", ["status"]],
     "6ibbCg": ["Create your first file"],
+    "6ki7F2": [["0", "plural", { "one": ["#", " item"], "other": ["#", " items"] }]],
     "6m_7We": ["Open this settings dialog."],
     "6q0rnH": ["writing"],
     "6u9LvN": [["days", "plural", { "one": ["#", " day ago"], "other": ["#", " days ago"] }]],
@@ -427,6 +429,7 @@
     "C_cPoW": ["Your GitHub session expired — sign in again to verify push access."],
     "ChAtFg": ["You don't have permission to push to this repo"],
     "Ck9XRt": ["Couldn't save the key — please try again."],
+    "CmeH9S": ["Add property to ", ["keyName"]],
     "CvsD6Y": ["via ", ["viaTags"]],
     "D4H2N6": ["Remove ", ["tag"]],
     "D8OV7J": ["Only collaborators"],
@@ -594,6 +597,7 @@
     "J2MgzQ": ["Undo all edits on ", ["docName"]],
     "J2Mv98": ["Name (e.g. ", ["login"], ")"],
     "J2eKUI": ["File"],
+    "J3HzPL": ["Collapse ", ["keyName"]],
     "J6N5MX": ["Couldn't construct the share URL. Try Done and re-share."],
     "JCxGEX": [
       "No disconnected pages. Pages appear here only when they have no incoming and no outgoing graph edges."
@@ -713,6 +717,7 @@
     "NKkZXl": ["Initialize and open"],
     "NOHyEE": ["Retry push"],
     "NORKZU": ["Pattern warnings: ", ["summary"]],
+    "NQ8llq": ["Add item"],
     "NRSLBe": [["diffMin"], "m ago"],
     "NSnIUP": ["Two-page (even)"],
     "NUr4kz": ["A reusable starting point for new documents in this folder."],
@@ -752,11 +757,13 @@
       ]
     ],
     "OLBz-_": ["Mermaid diagram failed to render."],
+    "OLIKgw": ["Drag item ", ["0"], " to reorder"],
     "ONPvOb": ["Loading agent activity"],
     "ONgEZF": ["Loading headings for ", ["pageTarget"]],
     "OTF92M": ["Label <0>(optional display text)</0>"],
     "OX2Neh": ["Inline code"],
     "OYnx7O": ["Path cannot start with \"/\""],
+    "OdmsFg": ["Failed to delete item"],
     "OiHJdA": [
       "Move through slash, wiki-link, tag, and path suggestions; accept or dismiss the active suggestion."
     ],
@@ -797,6 +804,7 @@
     "Q8A-U_": ["Connected to"],
     "QDZbvN": [["diffDays"], "d ago"],
     "QI4KgP": [["fileLabel"], " · ", ["folderLabel"]],
+    "QOINDn": ["empty"],
     "QQghPu": ["Install in Claude Desktop"],
     "QR5SP1": ["created template"],
     "QWks14": ["A short line shown under the name in the template list."],
@@ -846,6 +854,7 @@
     "SCzAbA": [["phase"], " — ", ["pct"], "%"],
     "SEYWYq": ["Undo all edits on this file?"],
     "SFN6dN": ["Heading 3"],
+    "STTOnz": [["keyName"], " type: complex value (nested; read-only)"],
     "SUOoXn": ["Failed to open project."],
     "SYfHmN": ["Unpin tab"],
     "Sc1bKE": [
@@ -929,6 +938,7 @@
     "VuxVSP": ["Start source completion"],
     "VvS_k_": ["Config sharing is now local-only."],
     "W-ntoW": ["heading-slug"],
+    "W0i24j": ["Object"],
     "W1qRuM": ["This document is already active in the editor. Use Open to collapse the graph."],
     "W5A0Ly": ["An unexpected error occurred."],
     "W8uemY": ["Pick a starter pack to scaffold folders, templates, and AI-readable rules."],
@@ -1150,6 +1160,7 @@
       ["rawName"],
       "</0> can't be used as a project identifier — it has no characters left after sanitization. Click Browse to pick a folder whose name contains at least one alphanumeric character."
     ],
+    "cEoyWz": ["Add item to ", ["keyName"]],
     "cF9DyA": ["Reconnecting after server restart"],
     "cIptmH": ["In the Claude Desktop App"],
     "cKjLuT": ["(project + user)"],
@@ -1198,6 +1209,7 @@
     "eBIT9h": ["Paste failed.", ["restoreSuffix"]],
     "eFJkVt": ["Clone failed: ", ["cloneError"]],
     "eG8Jsg": ["Toggle source tab focus mode"],
+    "eKThTQ": ["Failed to reorder"],
     "eNQGRb": ["Inline LaTeX math rendered with KaTeX."],
     "ePK91l": ["Edit"],
     "eSu2Xn": [
@@ -1249,6 +1261,7 @@
     ],
     "gUlRQj": ["Orphans"],
     "gYz2ep": ["Expires in ", ["timeLabel"]],
+    "gbHcbI": ["Failed to delete property"],
     "gcV0dI": ["The folders and templates are in place; there's nothing left to scaffold."],
     "gg3Rpy": ["Restore this version?"],
     "ggm6JX": [
@@ -1443,6 +1456,7 @@
     ],
     "mNY1G6": ["Undo all edits"],
     "mSJ3Rn": ["Computing scaffold plan"],
+    "mU3j1b": ["Remove item ", ["0"]],
     "mWVJRX": ["Collapsible section with a clickable summary."],
     "mYGY3B": ["Date"],
     "mYLRjR": ["You picked ~/Desktop. Open Knowledge will index everything on your desktop."],
@@ -1616,6 +1630,7 @@
     "s-MGs7": ["Resources"],
     "s-XOaI": ["File name"],
     "s0IDhW": ["This file could not be found."],
+    "s0J_k9": [["0", "plural", { "one": ["#", " key"], "other": ["#", " keys"] }]],
     "s1c0ja": ["Bullet List"],
     "s3caR3": ["Deleting"],
     "sE7R19": [
@@ -1792,8 +1807,10 @@
     "yLq4w4": ["Separator"],
     "yMgL_E": ["Find field navigation"],
     "yQE2r9": ["Loading"],
+    "yUxR-Q": ["Expand ", ["keyName"]],
     "yWWThY": ["Asset reference"],
     "yYR6za": ["Display text"],
+    "y_5CE8": ["Item ", ["0"]],
     "yf5r22": [
       ["keyName"],
       " type: ",
@@ -1853,6 +1870,7 @@
     "zkz0Fg": ["Set up syncing"],
     "zlErBl": ["Page headings error response did not match RFC 9457"],
     "zo3Dl7": ["Toggle thumbnails"],
+    "ztKII6": ["Failed to add item"],
     "zwBp5t": ["Private"]
   }
 }

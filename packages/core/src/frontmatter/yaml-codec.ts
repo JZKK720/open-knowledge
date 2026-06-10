@@ -1,9 +1,11 @@
 import {
   Document,
+  isMap,
   isSeq,
   type Pair,
   parseDocument,
   type ToStringOptions,
+  type YAMLMap,
   type YAMLSeq,
 } from 'yaml';
 import { type FrontmatterMap, FrontmatterMapSchema, FrontmatterValueSchema } from './schema.ts';
@@ -14,11 +16,9 @@ export const STRINGIFY_OPTIONS: ToStringOptions = {
   lineWidth: 0,
 };
 
-export type ParsedFrontmatter = {
-  doc: Document;
-  map: FrontmatterMap | null;
-  parseError?: string;
-};
+export type ParsedFrontmatter =
+  | { doc: Document; map: FrontmatterMap; parseError?: never }
+  | { doc: Document; map: null; parseError: string };
 
 export function parseFrontmatterYaml(yaml: string): ParsedFrontmatter {
   if (yaml.trim() === '') {
@@ -76,17 +76,29 @@ export function applyPatchToDocument(doc: Document, patch: Record<string, unknow
     if (!result.success) {
       throw new Error(`Invalid frontmatter value for "${key}": ${result.error.message}`);
     }
-    if (Array.isArray(result.data)) {
-      const existing = doc.get(key, true);
-      const existingFlow = isSeq(existing) ? (existing as YAMLSeq).flow : undefined;
-      const newNode = doc.createNode(result.data) as YAMLSeq;
-      if (existingFlow !== undefined) newNode.flow = existingFlow;
-      doc.set(key, newNode);
-      continue;
-    }
-    doc.set(key, result.data);
+    doc.set(key, buildValueNode(doc, doc.get(key, true), result.data));
   }
   return doc.toString(STRINGIFY_OPTIONS);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function buildValueNode(doc: Document, existing: unknown, data: unknown): unknown {
+  if (Array.isArray(data)) {
+    const node = doc.createNode(data) as YAMLSeq;
+    const flow = isSeq(existing) ? (existing as YAMLSeq).flow : undefined;
+    if (flow !== undefined) node.flow = flow;
+    return node;
+  }
+  if (isPlainObject(data)) {
+    const node = doc.createNode(data) as YAMLMap;
+    const flow = isMap(existing) ? (existing as YAMLMap).flow : undefined;
+    if (flow !== undefined) node.flow = flow;
+    return node;
+  }
+  return data;
 }
 
 export function withFences(yamlBody: string): string {

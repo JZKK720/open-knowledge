@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { renderInventoryFooter, stripFrontmatter } from '@inkeep/open-knowledge-core';
+import {
+  type FrontmatterPatch,
+  renderInventoryFooter,
+  stripFrontmatter,
+} from '@inkeep/open-knowledge-core';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import { resolveContentDir, resolveLockDir } from '../../config/paths.ts';
@@ -35,8 +39,6 @@ import {
   resolveTemplatePath,
   TEMPLATE_PATH_DESCRIBE,
 } from './verb-schemas.ts';
-
-type FrontmatterPatch = Record<string, string | number | boolean | string[] | null>;
 
 const BASE_DESCRIPTION = [
   'Edit one thing in place. Pass EXACTLY ONE of `document`, `folder`, or `template`. Within each: a body edit (`find` + `replace`) OR a `frontmatter` merge-patch — not both in one call.',

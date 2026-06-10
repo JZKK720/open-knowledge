@@ -9,10 +9,16 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import { AlertTriangle, GripVertical, Trash2, X } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useRef } from 'react';
+import { ArrayOfObjectsWidget } from '@/components/ArrayOfObjectsWidget';
+import { ObjectWidget } from '@/components/ObjectWidget';
 import { PageCoverWidget, PageIconWidget } from '@/components/PageHeaderWidgets';
 import {
   BooleanWidget,
+  ComplexValueWidget,
   DateWidget,
+  isArrayOfObjectsValue,
+  isComplexValue,
+  isPlainObjectValue,
   ListWidget,
   NumberWidget,
   TextWidget,
@@ -29,6 +35,8 @@ export interface AddDraft {
   value: FrontmatterValue;
   error: string | null;
 }
+
+const ADD_ROW_PATH: ReadonlyArray<string | number> = ['__add__'] as const;
 
 export interface RenameDraft {
   key: string;
@@ -55,6 +63,7 @@ interface FrontmatterRowProps {
   isDuplicate?: boolean;
   badge?: ReactNode;
   isPlaceholder?: boolean;
+  path?: ReadonlyArray<string | number>;
   onCommit: (next: FrontmatterValue) => void;
   onChangeType: (next: FrontmatterType) => void;
   onRemove?: () => void;
@@ -71,11 +80,14 @@ export function FrontmatterRow({
   isDuplicate = false,
   badge,
   isPlaceholder = false,
+  path,
   onCommit,
   onChangeType,
   onRemove,
 }: FrontmatterRowProps) {
   const { t } = useLingui();
+  const isComplex = isComplexValue(value);
+  const rowPath: ReadonlyArray<string | number> = path ?? [keyName];
   return (
     <SortableShell
       sortableId={sortableId}
@@ -84,6 +96,7 @@ export function FrontmatterRow({
       error={error}
       isDuplicate={isDuplicate}
       isPlaceholder={isPlaceholder}
+      isComplex={isComplex}
     >
       {(dragHandle) => (
         <>
@@ -105,7 +118,11 @@ export function FrontmatterRow({
                 <PlaceholderIdentity keyName={keyName} type={declared} />
               ) : (
                 <>
-                  <TypeIconButton keyName={keyName} type={declared} onChangeType={onChangeType} />
+                  {isComplex ? (
+                    <ComplexValueTypeIcon keyName={keyName} type={declared} />
+                  ) : (
+                    <TypeIconButton keyName={keyName} type={declared} onChangeType={onChangeType} />
+                  )}
                   <div className="w-32 shrink-0 @max-[26rem]/prow:w-auto">
                     {rename?.state ? (
                       <RenameInput
@@ -143,6 +160,7 @@ export function FrontmatterRow({
                 keyName={keyName}
                 value={value}
                 widgetType={declared}
+                path={rowPath}
                 onCommit={onCommit}
               />
             </div>
@@ -185,6 +203,7 @@ function SortableShell({
   error,
   isDuplicate,
   isPlaceholder,
+  isComplex,
   children,
 }: {
   sortableId: string | undefined;
@@ -193,6 +212,7 @@ function SortableShell({
   error?: string | null;
   isDuplicate: boolean;
   isPlaceholder: boolean;
+  isComplex: boolean;
   children: (dragHandle: ReactNode) => ReactNode;
 }) {
   if (sortableId) {
@@ -203,6 +223,7 @@ function SortableShell({
         declared={declared}
         error={error}
         isDuplicate={isDuplicate}
+        isComplex={isComplex}
       >
         {children}
       </SortableRowBody>
@@ -217,6 +238,7 @@ function SortableShell({
       data-widget-type={declared}
       data-error={error ?? undefined}
       data-duplicate={isDuplicate || undefined}
+      data-complex-value={isComplex || undefined}
     >
       {children(dragHandleSlot)}
     </div>
@@ -229,6 +251,7 @@ function SortableRowBody({
   declared,
   error,
   isDuplicate,
+  isComplex,
   children,
 }: {
   sortableId: string;
@@ -236,6 +259,7 @@ function SortableRowBody({
   declared: FrontmatterType;
   error?: string | null;
   isDuplicate: boolean;
+  isComplex: boolean;
   children: (dragHandle: ReactNode) => ReactNode;
 }) {
   const { t } = useLingui();
@@ -273,10 +297,28 @@ function SortableRowBody({
       data-widget-type={declared}
       data-error={error ?? undefined}
       data-duplicate={isDuplicate || undefined}
+      data-complex-value={isComplex || undefined}
       data-dragging={isDragging || undefined}
     >
       {children(dragHandle)}
     </div>
+  );
+}
+
+function ComplexValueTypeIcon({ keyName, type }: { keyName: string; type: FrontmatterType }) {
+  const { t } = useLingui();
+  const Icon = TYPE_ICON[type];
+  return (
+    <span
+      role="img"
+      data-testid="type-icon-static"
+      data-key={keyName}
+      data-type={type}
+      aria-label={t`${keyName} type: complex value (nested; read-only)`}
+      className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
+    >
+      <Icon className="size-3.5" aria-hidden="true" />
+    </span>
   );
 }
 
@@ -449,6 +491,7 @@ export function AddPropertyRow({
             keyName="__add__"
             value={draft.value}
             widgetType={draft.type}
+            path={ADD_ROW_PATH}
             onCommit={onChangeValue}
           />
         </div>
@@ -493,10 +536,11 @@ interface WidgetProps {
   keyName: string;
   value: FrontmatterValue;
   widgetType: FrontmatterType;
+  path: ReadonlyArray<string | number>;
   onCommit: (next: FrontmatterValue) => void;
 }
 
-function Widget({ keyName, value, widgetType, onCommit }: WidgetProps) {
+function Widget({ keyName, value, widgetType, path, onCommit }: WidgetProps) {
   if (keyName === 'icon') {
     const str = typeof value === 'string' ? value : '';
     return <PageIconWidget keyName={keyName} value={str} onCommit={onCommit} />;
@@ -505,8 +549,21 @@ function Widget({ keyName, value, widgetType, onCommit }: WidgetProps) {
     const str = typeof value === 'string' ? value : '';
     return <PageCoverWidget keyName={keyName} value={str} onCommit={onCommit} />;
   }
+  if (isPlainObjectValue(value)) {
+    return <ObjectWidget keyName={keyName} value={value} path={path} depth={path.length - 1} />;
+  }
+  if (isArrayOfObjectsValue(value)) {
+    return (
+      <ArrayOfObjectsWidget keyName={keyName} value={value} path={path} depth={path.length - 1} />
+    );
+  }
+  if (isComplexValue(value)) {
+    return <ComplexValueWidget keyName={keyName} value={value} />;
+  }
   if (widgetType === 'list') {
-    const arr = Array.isArray(value) ? value : [];
+    const arr = Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === 'string')
+      : [];
     return <ListWidget keyName={keyName} value={arr} onCommit={onCommit} />;
   }
   if (widgetType === 'boolean') {

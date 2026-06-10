@@ -74,6 +74,16 @@ describe('extractFrontmatterTags', () => {
   test('returns empty when tags is null', () => {
     expect(extractFrontmatterTags('tags: null\n')).toEqual([]);
   });
+
+  test('drops object array elements rather than stringifying them', () => {
+    const yaml = 'tags:\n  - valid\n  - {nested: "object"}\n  - alsoValid\n';
+    expect(extractFrontmatterTags(yaml)).toEqual(['valid', 'alsoValid']);
+  });
+
+  test('drops nested-array elements rather than stringifying them', () => {
+    const yaml = 'tags:\n  - valid\n  - [inner, list]\n  - alsoValid\n';
+    expect(extractFrontmatterTags(yaml)).toEqual(['valid', 'alsoValid']);
+  });
 });
 
 describe('isValidFrontmatterTagValue', () => {

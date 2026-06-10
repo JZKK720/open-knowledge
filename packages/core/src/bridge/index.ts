@@ -5,6 +5,8 @@ export {
   type FrontmatterBinding,
   type FrontmatterBindingPatchResult,
   type FrontmatterBindingPatchSuccess,
+  type FrontmatterBindingPathResult,
+  type FrontmatterBindingPathSuccess,
   type FrontmatterBindingRenameResult,
   type FrontmatterBindingRenameSuccess,
   type FrontmatterBindingReorderResult,
@@ -24,6 +26,11 @@ export {
 export { type DiffChange, diffLinesFast } from './diff-lines.ts';
 export {
   applyPatchToFm,
+  applyPathDeleteToFm,
+  applyPathRenameToFm,
+  applyPathReorderSeqToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
   applyRenameToFm,
   applyReorderToFm,
   detectFmRegion,

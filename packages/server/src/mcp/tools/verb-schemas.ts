@@ -6,9 +6,11 @@ const FrontmatterPatchValue = z.union([FrontmatterValueSchema, z.null()]);
 export const FrontmatterArg = z
   .record(z.string(), FrontmatterPatchValue)
   .describe(
-    'Metadata as a flat key→value map (string | number | boolean | string[]). ' +
-      'Merge-patch: include a key to set it, set a key to null to delete it; keys you omit are unchanged. ' +
-      'Example: { title: "Q3 Planning", tags: ["planning"], status: "draft" }.',
+    'Metadata as a key→value map. Values may be a scalar (string | number | boolean), a scalar array, ' +
+      'a nested object, or an array of objects. Merge-patch: include a top-level key to set it, set a ' +
+      'top-level key to null to delete it; keys you omit are unchanged. A nested object REPLACES the ' +
+      'existing subtree at that key (send the full subtree you want). ' +
+      'Example: { title: "Q3 Planning", tags: ["planning"], metadata: { version: "1.0", author: "Inkeep" } }.',
   );
 
 const POSITIONS = ['append', 'prepend', 'replace'] as const;

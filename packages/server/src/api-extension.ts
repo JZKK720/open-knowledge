@@ -1787,7 +1787,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           const category = typeof map.category === 'string' ? map.category : undefined;
           let tags: string[] | undefined;
           if (Array.isArray(map.tags)) {
-            tags = map.tags.length > 0 ? map.tags : undefined;
+            const stringTags = map.tags.filter(
+              (entry): entry is string => typeof entry === 'string',
+            );
+            tags = stringTags.length > 0 ? stringTags : undefined;
           } else if (typeof map.tags === 'string' && map.tags) {
             tags = [map.tags];
           }
@@ -3520,6 +3523,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               break;
             case 'parse_failed':
               fieldErrors = { __region__: `frontmatter region unparseable: ${editError.reason}` };
+              break;
+            case 'invalid_path':
+              fieldErrors = {
+                [editError.path.map(String).join('.') || '__path__']: editError.reason,
+              };
               break;
             default: {
               const _exhaustive: never = editError;

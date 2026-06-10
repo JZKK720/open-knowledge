@@ -21,6 +21,7 @@ import {
   type FrontmatterType,
   type FrontmatterValue,
   fieldErrorsFromError,
+  frontmatterValuesEqual,
   inferType,
   readFmKeys,
   readFmRegionWithError,
@@ -28,6 +29,7 @@ import {
 import { Trans, useLingui } from '@lingui/react/macro';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { FrontmatterBindingProvider } from '@/components/FrontmatterBindingContext';
 import {
   type AddDraft,
   AddPropertyRow,
@@ -196,7 +198,7 @@ export function PropertyPanel({ provider }: PropertyPanelProps) {
     if (current === undefined) return;
     setOverrides((prev) => ({ ...prev, [key]: nextType }));
     const coerced = coerceValue(current, nextType);
-    if (!Object.hasOwn(map, key) || !sameValue(current, coerced)) {
+    if (!Object.hasOwn(map, key) || !frontmatterValuesEqual(current, coerced)) {
       commitProperty(key, coerced);
     }
   }
@@ -323,85 +325,86 @@ export function PropertyPanel({ provider }: PropertyPanelProps) {
   if (renderKeys.length === 0 && !adding && !parseError) return null;
 
   return (
-    <div
-      className="property-panel editor-content-aligned pt-4 pb-4 text-sm"
-      data-testid="property-panel"
-    >
-      <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            className="mb-1.5 flex h-auto w-fit bg-transparent! items-center gap-1 px-1 py-0.5 text-base font-medium text-foreground hover:bg-transparent hover:text-foreground"
-          >
-            <ChevronRight
-              data-expanded={!collapsed}
-              className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ease-out data-[expanded=true]:rotate-90"
-            />
-            <span>
-              <Trans>Properties</Trans>
-            </span>
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-in]">
-          {parseError ? (
-            <div
-              role="alert"
-              data-testid="property-panel-yaml-error"
-              className="mb-1 flex items-start gap-1.5 rounded border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[11px] text-destructive"
+    <FrontmatterBindingProvider binding={binding}>
+      <div
+        className="property-panel editor-content-aligned pt-4 pb-4 text-sm"
+        data-testid="property-panel"
+      >
+        <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mb-1.5 flex h-auto w-fit bg-transparent! items-center gap-1 px-1 py-0.5 text-base font-medium text-foreground hover:bg-transparent hover:text-foreground"
             >
-              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
-              <div>
-                <Trans>
-                  The properties block at the top of this doc has a formatting error. Switch to
-                  source mode to fix it.
-                </Trans>
-                <span className="block text-[10px] opacity-80">{parseError}</span>
+              <ChevronRight
+                data-expanded={!collapsed}
+                className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ease-out data-[expanded=true]:rotate-90"
+              />
+              <span>
+                <Trans>Properties</Trans>
+              </span>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-in]">
+            {parseError ? (
+              <div
+                role="alert"
+                data-testid="property-panel-yaml-error"
+                className="mb-1 flex items-start gap-1.5 rounded border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[11px] text-destructive"
+              >
+                <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                <div>
+                  <Trans>
+                    The properties block at the top of this doc has a formatting error. Switch to
+                    source mode to fix it.
+                  </Trans>
+                  <span className="block text-[10px] opacity-80">{parseError}</span>
+                </div>
               </div>
-            </div>
-          ) : null}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={renderKeys.map((k, i) => rowId(k, i))}
-              strategy={verticalListSortingStrategy}
+            ) : null}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              {renderKeys.map((key, idx) => {
-                const value = map[key];
-                if (value === undefined) return null;
-                const declared = overrides[key] ?? inferType(value);
-                const renameState = renaming?.key === key ? renaming : null;
-                const isDuplicate = (dupCount.get(key) ?? 0) > 1;
-                return (
-                  <FrontmatterRow
-                    // biome-ignore lint/suspicious/noArrayIndexKey: position-aware key for dup-name rows.
-                    key={`${key}-${idx}`}
-                    sortableId={rowId(key, idx)}
-                    keyName={key}
-                    value={value}
-                    declared={declared}
-                    error={errors[key] ?? null}
-                    resetCounter={resetCounters[key] ?? 0}
-                    isDuplicate={isDuplicate}
-                    rename={{
-                      state: renameState,
-                      onBegin: () => beginRename(key),
-                      onChangeDraft: changeRenameDraft,
-                      onCommit: commitRename,
-                      onCancel: cancelRename,
-                    }}
-                    onCommit={(v) => commitProperty(key, v)}
-                    onChangeType={(t) => setType(key, t)}
-                    onRemove={() => removeProperty(key)}
-                  />
-                );
-              })}
-            </SortableContext>
-          </DndContext>
-          {/*
+              <SortableContext
+                items={renderKeys.map((k, i) => rowId(k, i))}
+                strategy={verticalListSortingStrategy}
+              >
+                {renderKeys.map((key, idx) => {
+                  const value = map[key];
+                  if (value === undefined) return null;
+                  const declared = overrides[key] ?? inferType(value);
+                  const renameState = renaming?.key === key ? renaming : null;
+                  const isDuplicate = (dupCount.get(key) ?? 0) > 1;
+                  return (
+                    <FrontmatterRow
+                      // biome-ignore lint/suspicious/noArrayIndexKey: position-aware key for dup-name rows.
+                      key={`${key}-${idx}`}
+                      sortableId={rowId(key, idx)}
+                      keyName={key}
+                      value={value}
+                      declared={declared}
+                      error={errors[key] ?? null}
+                      resetCounter={resetCounters[key] ?? 0}
+                      isDuplicate={isDuplicate}
+                      rename={{
+                        state: renameState,
+                        onBegin: () => beginRename(key),
+                        onChangeDraft: changeRenameDraft,
+                        onCommit: commitRename,
+                        onCancel: cancelRename,
+                      }}
+                      onCommit={(v) => commitProperty(key, v)}
+                      onChangeType={(t) => setType(key, t)}
+                      onRemove={() => removeProperty(key)}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+            {/*
             Tags discoverability affordance — render an empty, pinned-at-
             end `tags` row when the key is absent from the file YAML
             (`map`). The first commit from this virtual row writes the YAML
@@ -411,50 +414,51 @@ export function PropertyPanel({ provider }: PropertyPanelProps) {
             the virtual row is purely for "this doc has no tags field yet,
             but you can add one here."
           */}
-          {!Object.hasOwn(map, 'tags') ? (
-            <FrontmatterRow
-              key="virtual-tags"
-              keyName="tags"
-              value={[]}
-              declared="list"
-              error={errors.tags ?? null}
-              resetCounter={resetCounters.tags ?? 0}
-              isPlaceholder
-              onCommit={(v) => commitProperty('tags', v)}
-              onChangeType={() => {}}
-            />
-          ) : null}
-          {adding ? (
-            <AddPropertyRow
-              draft={adding}
-              onChangeName={changeAddName}
-              onChangeType={changeAddType}
-              onChangeValue={changeAddValue}
-              onCommit={commitAdd}
-              onCancel={cancelAdd}
-            />
-          ) : (
-            <div className="mt-1 flex items-center gap-1">
-              <span aria-hidden className="h-7 w-4 shrink-0" />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                data-testid="add-property-trigger"
-                onClick={beginAdd}
-                aria-label={t`Add property`}
-                className="flex items-center gap-1.5 rounded px-2 py-1 font-medium text-sm hover:bg-muted/50 hover:text-foreground"
-              >
-                <Plus className="size-3.5" />
-                <span>
-                  <Trans>Add</Trans>
-                </span>
-              </Button>
-            </div>
-          )}
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+            {!Object.hasOwn(map, 'tags') ? (
+              <FrontmatterRow
+                key="virtual-tags"
+                keyName="tags"
+                value={[]}
+                declared="list"
+                error={errors.tags ?? null}
+                resetCounter={resetCounters.tags ?? 0}
+                isPlaceholder
+                onCommit={(v) => commitProperty('tags', v)}
+                onChangeType={() => {}}
+              />
+            ) : null}
+            {adding ? (
+              <AddPropertyRow
+                draft={adding}
+                onChangeName={changeAddName}
+                onChangeType={changeAddType}
+                onChangeValue={changeAddValue}
+                onCommit={commitAdd}
+                onCancel={cancelAdd}
+              />
+            ) : (
+              <div className="mt-1 flex items-center gap-1">
+                <span aria-hidden className="h-7 w-4 shrink-0" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="add-property-trigger"
+                  onClick={beginAdd}
+                  aria-label={t`Add property`}
+                  className="flex items-center gap-1.5 rounded px-2 py-1 font-medium text-sm hover:bg-muted/50 hover:text-foreground"
+                >
+                  <Plus className="size-3.5" />
+                  <span>
+                    <Trans>Add</Trans>
+                  </span>
+                </Button>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    </FrontmatterBindingProvider>
   );
 }
 
@@ -462,12 +466,4 @@ interface PatchResult {
   ok: boolean;
   error?: string;
   fieldErrors?: Record<string, string>;
-}
-
-function sameValue(a: FrontmatterValue, b: FrontmatterValue): boolean {
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, i) => item === b[i]);
-  }
-  return a === b;
 }

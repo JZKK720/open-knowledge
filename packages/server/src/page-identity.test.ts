@@ -226,4 +226,9 @@ describe('extractPageIcon', () => {
     const content = `---\nicon: ${exactlyAtCap}\n---\n`;
     expect(extractPageIcon(content)).toBe(exactlyAtCap);
   });
+
+  test('returns undefined when icon holds a nested map (graceful degradation)', () => {
+    const content = '---\nicon:\n  url: https://example.com/img.png\n  alt: example\n---\n';
+    expect(extractPageIcon(content)).toBeUndefined();
+  });
 });

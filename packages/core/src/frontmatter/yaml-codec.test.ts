@@ -60,9 +60,43 @@ describe('parseFrontmatterYaml', () => {
     expect(parseFrontmatterYaml('"just a string"').map).toBeNull();
   });
 
-  test('returns null map when a value violates the shape schema (nested object)', () => {
-    const { map } = parseFrontmatterYaml('nested:\n  inner: bad\n');
+  test('parses nested objects into a populated map with no parseError', () => {
+    const yaml = 'name: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n';
+    const { map, parseError } = parseFrontmatterYaml(yaml);
+    expect(parseError).toBeUndefined();
+    expect(map).toEqual({
+      name: 'skill',
+      metadata: { version: '1.0.0', author: 'Inkeep' },
+    });
+  });
+
+  test('parses arbitrarily deep nesting + arrays of objects with no parseError', () => {
+    const yaml =
+      'name: skill\n' +
+      'items:\n' +
+      '  - title: a\n' +
+      '    nested:\n' +
+      '      deep: ok\n' +
+      '  - title: b\n';
+    const { map, parseError } = parseFrontmatterYaml(yaml);
+    expect(parseError).toBeUndefined();
+    expect(map).toEqual({
+      name: 'skill',
+      items: [{ title: 'a', nested: { deep: 'ok' } }, { title: 'b' }],
+    });
+  });
+
+  test('object array elements are NOT String-coerced (scalar-only coercion)', () => {
+    const yaml = 'items:\n  - {a: 1}\n  - tag\n  - 2026\n';
+    const { map, parseError } = parseFrontmatterYaml(yaml);
+    expect(parseError).toBeUndefined();
+    expect(map?.items).toEqual([{ a: 1 }, 'tag', '2026']);
+  });
+
+  test('returns null map on genuinely malformed YAML (yaml@2 parse error)', () => {
+    const { map, parseError } = parseFrontmatterYaml('title: foo: bar');
     expect(map).toBeNull();
+    expect(parseError).toBeDefined();
   });
 
   test('coerces non-string scalars in array values to strings', () => {
@@ -215,6 +249,103 @@ describe('applyPatchToDocument', () => {
     const { doc } = parseFrontmatterYaml('tags:\n  - a\n  - b\n');
     const out = applyPatchToDocument(doc, { tags: ['a', 'b', 'c'] });
     expect(out).toMatch(/tags:\s*\n\s*-\s/);
+  });
+
+  test('nested object patch replaces the subtree, preserving sibling top-level keys', () => {
+    const { doc } = parseFrontmatterYaml(
+      'name: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\ndescription: hello\n',
+    );
+    const out = applyPatchToDocument(doc, {
+      metadata: { version: '2.0.0', author: 'Inkeep' },
+    });
+    const reparsed = parseFrontmatterYaml(out).map;
+    expect(reparsed).toEqual({
+      name: 'skill',
+      metadata: { version: '2.0.0', author: 'Inkeep' },
+      description: 'hello',
+    });
+  });
+
+  test('null deletes a nested-object subtree key', () => {
+    const { doc } = parseFrontmatterYaml(
+      'name: skill\nmetadata:\n  version: 1.0.0\ndescription: hello\n',
+    );
+    const out = applyPatchToDocument(doc, { metadata: null });
+    expect(out).not.toContain('metadata');
+    expect(out).toContain('name: skill');
+    expect(out).toContain('description: hello');
+  });
+
+  test('non-object value replaces an existing object subtree', () => {
+    const { doc } = parseFrontmatterYaml(
+      'name: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n',
+    );
+    const out = applyPatchToDocument(doc, { metadata: 'inline-value' });
+    expect(parseFrontmatterYaml(out).map).toEqual({
+      name: 'skill',
+      metadata: 'inline-value',
+    });
+  });
+
+  test('nested object value replaces an existing scalar key', () => {
+    const { doc } = parseFrontmatterYaml('name: skill\n');
+    const out = applyPatchToDocument(doc, {
+      name: { kind: 'skill', detail: 'x' },
+    });
+    expect(parseFrontmatterYaml(out).map).toEqual({
+      name: { kind: 'skill', detail: 'x' },
+    });
+  });
+
+  test('arbitrarily-deep nested set builds the full subtree', () => {
+    const { doc } = parseFrontmatterYaml('name: skill\n');
+    const out = applyPatchToDocument(doc, {
+      outer: { inner: { leaf: 'ok' } },
+    });
+    expect(parseFrontmatterYaml(out).map).toEqual({
+      name: 'skill',
+      outer: { inner: { leaf: 'ok' } },
+    });
+  });
+
+  test('preserves comments on untouched sibling keys across a nested-subtree edit', () => {
+    const yaml =
+      '# leading comment\nname: skill\n# metadata block\nmetadata:\n  version: 1.0.0\n# trailing comment on description\ndescription: hello\n';
+    const { doc } = parseFrontmatterYaml(yaml);
+    const out = applyPatchToDocument(doc, {
+      metadata: { version: '2.0.0' },
+    });
+    expect(out).toContain('# leading comment');
+    expect(out).toContain('# trailing comment on description');
+    expect(out).toContain('name: skill');
+    expect(out).toContain('description: hello');
+  });
+
+  test('preserves flow-style nested map when replacing the subtree', () => {
+    const { doc } = parseFrontmatterYaml('metadata: {version: 1.0, author: Inkeep}\n');
+    const out = applyPatchToDocument(doc, {
+      metadata: { version: '2.0', author: 'Inkeep' },
+    });
+    expect(out).toContain('metadata: {');
+  });
+
+  test('preserves block-style nested map when replacing the subtree', () => {
+    const { doc } = parseFrontmatterYaml('metadata:\n  version: 1.0\n  author: Inkeep\n');
+    const out = applyPatchToDocument(doc, {
+      metadata: { version: '2.0', author: 'Inkeep' },
+    });
+    expect(out).toMatch(/metadata:\s*\n\s+version:/);
+  });
+
+  test('round-trip is idempotent: applying the same nested patch twice is byte-stable', () => {
+    const baseYaml = 'name: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n';
+    const first = applyPatchToDocument(parseFrontmatterYaml(baseYaml).doc, {
+      metadata: { version: '2.0.0', author: 'Inkeep' },
+    });
+    const second = applyPatchToDocument(parseFrontmatterYaml(first).doc, {
+      metadata: { version: '2.0.0', author: 'Inkeep' },
+    });
+    expect(second).toBe(first);
   });
 });
 

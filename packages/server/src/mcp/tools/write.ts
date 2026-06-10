@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import {
+  type FrontmatterPatch,
   normalizeBridge,
   renderInventoryFooter,
   stripFrontmatter,
@@ -50,8 +51,6 @@ import {
   TEMPLATE_CONTENT_DESCRIBE,
   TEMPLATE_PATH_DESCRIBE,
 } from './verb-schemas.ts';
-
-type FrontmatterPatch = Record<string, string | number | boolean | string[] | null>;
 
 const BASE_DESCRIPTION = [
   'Create or replace one thing. Pass EXACTLY ONE of `document`, `folder`, `template`, or `asset` (or `documents` for a batch of docs).',

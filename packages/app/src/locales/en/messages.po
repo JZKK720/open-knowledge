@@ -41,6 +41,7 @@ msgstr "\"{docName}\" took too long. Check your connection."
 msgid "\"{trimmed}\" already exists here"
 msgstr "\"{trimmed}\" already exists here"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "\"frontmatter\" is a reserved property name"
 msgstr "\"frontmatter\" is a reserved property name"
@@ -71,6 +72,10 @@ msgstr "(opens in new tab)"
 msgid "(project + user)"
 msgstr "(project + user)"
 
+#: src/components/PropertyWidgets.tsx
+msgid "(read-only — edit in source mode for now)"
+msgstr "(read-only — edit in source mode for now)"
+
 #: src/components/NewItemDialog.tsx
 msgid "(root)"
 msgstr "(root)"
@@ -88,6 +93,16 @@ msgstr "(user-level only)"
 #: src/components/CommandPalette.tsx
 msgid "{0, plural, one {# doc} other {# docs}}"
 msgstr "{0, plural, one {# doc} other {# docs}}"
+
+#. placeholder {0}: value.length
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "{0, plural, one {# item} other {# items}}"
+msgstr "{0, plural, one {# item} other {# items}}"
+
+#. placeholder {0}: entries.length
+#: src/components/ObjectWidget.tsx
+msgid "{0, plural, one {# key} other {# keys}}"
+msgstr "{0, plural, one {# key} other {# keys}}"
 
 #. placeholder {0}: blocked.length
 #: src/editor/components/PreviewBlockedNotice.tsx
@@ -260,6 +275,10 @@ msgstr "{keyName} type: {typeLabel} (inherited from folder properties; not edita
 #: src/components/PropertyWidgets.tsx
 msgid "{keyName} type: {typeLabel}. Click to change."
 msgstr "{keyName} type: {typeLabel}. Click to change."
+
+#: src/components/FrontmatterRow.tsx
+msgid "{keyName} type: complex value (nested; read-only)"
+msgstr "{keyName} type: complex value (nested; read-only)"
 
 #: src/components/PageHeaderWidgets.tsx
 #: src/components/PropertyWidgets.tsx
@@ -489,6 +508,7 @@ msgstr "Activity"
 #. Primary button that writes MCP config for the selected AI tools
 #: src/components/FrontmatterRow.tsx
 #: src/components/McpConsentDialogBody.tsx
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Add"
 msgstr "Add"
@@ -513,6 +533,14 @@ msgstr "Add another pattern"
 msgid "Add cursors or select matching occurrences through CodeMirror."
 msgstr "Add cursors or select matching occurrences through CodeMirror."
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Add item"
+msgstr "Add item"
+
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Add item to {keyName}"
+msgstr "Add item to {keyName}"
+
 #: src/components/settings/SearchSection.tsx
 msgid "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
 msgstr "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
@@ -532,6 +560,10 @@ msgstr "Add properties"
 #: src/components/PropertyPanel.tsx
 msgid "Add property"
 msgstr "Add property"
+
+#: src/components/ObjectWidget.tsx
+msgid "Add property to {keyName}"
+msgstr "Add property to {keyName}"
 
 #: src/editor/components/Tabs.tsx
 msgid "Add tab"
@@ -1093,6 +1125,11 @@ msgstr "Collapse"
 #: src/components/ActivityPanelFileRow.tsx
 msgid "Collapse {docName}"
 msgstr "Collapse {docName}"
+
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Collapse {keyName}"
+msgstr "Collapse {keyName}"
 
 #: src/components/FileSidebar.tsx
 msgid "Collapse all"
@@ -1851,6 +1888,11 @@ msgstr "Drag {keyName} to reorder"
 msgid "Drag {patternText} to reorder"
 msgstr "Drag {patternText} to reorder"
 
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Drag item {0} to reorder"
+msgstr "Drag item {0} to reorder"
+
 #: src/components/FileTree.tsx
 msgid "Duplicate"
 msgstr "Duplicate"
@@ -1984,6 +2026,11 @@ msgstr "Embeddings are computed only when a search runs and are cached locally u
 msgid "Embeddings provider key"
 msgstr "Embeddings provider key"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "empty"
+msgstr "empty"
+
 #: src/components/PropertyWidgets.tsx
 msgid "Empty"
 msgstr "Empty"
@@ -2037,6 +2084,11 @@ msgstr "Exit merge"
 msgid "Expand {docName}"
 msgstr "Expand {docName}"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Expand {keyName}"
+msgstr "Expand {keyName}"
+
 #: src/components/FileSidebar.tsx
 msgid "Expand all"
 msgstr "Expand all"
@@ -2074,6 +2126,11 @@ msgstr "External link"
 msgid "External wiki link"
 msgstr "External wiki link"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Failed to add item"
+msgstr "Failed to add item"
+
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to add property"
 msgstr "Failed to add property"
@@ -2102,9 +2159,17 @@ msgstr "Failed to create folder"
 msgid "Failed to create page"
 msgstr "Failed to create page"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Failed to delete item"
+msgstr "Failed to delete item"
+
 #: src/components/FileTree.tsx
 msgid "Failed to delete path"
 msgstr "Failed to delete path"
+
+#: src/components/ObjectWidget.tsx
+msgid "Failed to delete property"
+msgstr "Failed to delete property"
 
 #: src/components/settings/SearchSection.tsx
 msgid "Failed to disable semantic search — {detail}"
@@ -2244,6 +2309,7 @@ msgstr "Failed to rename"
 msgid "Failed to rename path"
 msgstr "Failed to rename path"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to rename property"
 msgstr "Failed to rename property"
@@ -2252,6 +2318,12 @@ msgstr "Failed to rename property"
 msgid "Failed to render PDF"
 msgstr "Failed to render PDF"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Failed to reorder"
+msgstr "Failed to reorder"
+
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to update property"
 msgstr "Failed to update property"
@@ -2816,6 +2888,11 @@ msgstr "Invalid patch payload"
 msgid "Italic"
 msgstr "Italic"
 
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Item {0}"
+msgstr "Item {0}"
+
 #: src/components/CreatedItemsList.tsx
 msgid "Items to be created"
 msgstr "Items to be created"
@@ -3232,6 +3309,7 @@ msgid "Name cannot be empty"
 msgstr "Name cannot be empty"
 
 #: src/components/FolderPropertiesCard.tsx
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Name is required"
 msgstr "Name is required"
@@ -3585,6 +3663,10 @@ msgstr "Number"
 #: src/editor/slash-command/items.tsx
 msgid "Numbered list of items."
 msgstr "Numbered list of items."
+
+#: src/components/PropertyWidgets.tsx
+msgid "Object"
+msgstr "Object"
 
 #: src/editor/components/Pdf.tsx
 msgid "of {totalPages}"
@@ -4226,6 +4308,7 @@ msgstr "Project-level pages with no outgoing graph edges."
 msgid "Properties"
 msgstr "Properties"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Property \"{trimmed}\" already exists"
 msgstr "Property \"{trimmed}\" already exists"
@@ -4397,6 +4480,11 @@ msgstr "Remove failed: {error}"
 #: src/components/NavigatorApp.tsx
 msgid "Remove from recent projects"
 msgstr "Remove from recent projects"
+
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Remove item {0}"
+msgstr "Remove item {0}"
 
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Remove link"

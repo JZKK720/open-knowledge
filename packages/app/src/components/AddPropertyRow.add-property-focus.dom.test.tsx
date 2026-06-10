@@ -12,9 +12,12 @@ const TYPE_PICKER_LABEL: Record<FrontmatterType, string> = {
   boolean: 'Checkbox',
   date: 'Date',
   list: 'List',
+  object: 'Object',
 };
 
-const ALL_TYPE_PICKS = Object.entries(TYPE_PICKER_LABEL) as Array<[FrontmatterType, string]>;
+const ALL_TYPE_PICKS = (
+  Object.entries(TYPE_PICKER_LABEL) as Array<[FrontmatterType, string]>
+).filter(([type]) => type !== 'object');
 
 function PropertyPanelHarness({
   initialType = 'text' as FrontmatterType,

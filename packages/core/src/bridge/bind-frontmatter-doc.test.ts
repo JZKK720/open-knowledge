@@ -95,13 +95,30 @@ describe('bindFrontmatterDoc — patch()', () => {
     const binding = bindFrontmatterDoc(provider);
     binding.patch({ title: 'Hello' });
 
-    const result = binding.patch({ count: { nested: true } as unknown as number });
+    const result = binding.patch({ count: Symbol('nope') as unknown as number });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('SCHEMA_INVALID');
     }
     expect(readFmMap(provider.document.getText('source').toString())).toEqual({ title: 'Hello' });
+  });
+
+  test('nested object value is accepted and round-trips through Y.Text', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patch({
+      name: 'skill',
+      metadata: { version: '1.0.0', author: 'Inkeep' },
+    });
+
+    expect(result.ok).toBe(true);
+    const map = readFmMap(provider.document.getText('source').toString());
+    expect(map).toEqual({
+      name: 'skill',
+      metadata: { version: '1.0.0', author: 'Inkeep' },
+    });
   });
 
   test('reserved key "frontmatter" is rejected', () => {
@@ -238,6 +255,396 @@ describe('bindFrontmatterDoc — reorder()', () => {
   });
 });
 
+describe('bindFrontmatterDoc — patchPath() / deletePath() (Q-T9 local addressing)', () => {
+  test('patchPath sets a nested leaf, preserving sibling top-level keys', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      name: 'skill',
+      description: 'd',
+      metadata: { version: '1.0', author: 'Inkeep' },
+    });
+
+    const result = binding.patchPath(['metadata', 'version'], '2.0');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.path).toEqual(['metadata', 'version']);
+    }
+    expect(binding.current().map).toEqual({
+      name: 'skill',
+      description: 'd',
+      metadata: { version: '2.0', author: 'Inkeep' },
+    });
+  });
+
+  test('patchPath preserves sibling nested keys at the same depth (single-leaf set)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      metadata: { version: '1.0', author: 'A', license: 'MIT' },
+    });
+
+    const result = binding.patchPath(['metadata', 'version'], '2.0');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      metadata: { version: '2.0', author: 'A', license: 'MIT' },
+    });
+  });
+
+  test('patchPath creates missing intermediate maps', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ name: 'skill' });
+
+    const result = binding.patchPath(['metadata', 'version'], '1.0');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      name: 'skill',
+      metadata: { version: '1.0' },
+    });
+  });
+
+  test('patchPath at depth >=3 creates parent chain', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['a', 'b', 'c', 'd'], 'leaf');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      a: { b: { c: { d: 'leaf' } } },
+    });
+  });
+
+  test('patchPath single-element path reduces to a top-level set (append on new key)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ title: 'Hello' });
+
+    const result = binding.patchPath(['cluster'], 'X');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ title: 'Hello', cluster: 'X' });
+    expect(binding.current().keys).toEqual(['title', 'cluster']);
+  });
+
+  test('patchPath single-element path updates in place (no reorder on update)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ title: 'Hello', cluster: 'X' });
+
+    binding.patchPath(['title'], 'World');
+
+    expect(binding.current().keys).toEqual(['title', 'cluster']);
+    expect(binding.current().map.title).toBe('World');
+  });
+
+  test('patchPath sets an array leaf value', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ name: 'doc' });
+
+    const result = binding.patchPath(['tags'], ['alpha', 'beta']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ name: 'doc', tags: ['alpha', 'beta'] });
+  });
+
+  test('patchPath sets nested object leaf value (whole-subtree replace at leaf)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0', author: 'A' } });
+
+    const result = binding.patchPath(['metadata'], { version: '2.0' });
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ metadata: { version: '2.0' } });
+  });
+
+  test('patchPath into an existing seq item by index', () => {
+    const provider = makeProvider('---\nauthors:\n  - name: A\n  - name: B\n---\n');
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['authors', 0, 'role'], 'lead');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      authors: [{ name: 'A', role: 'lead' }, { name: 'B' }],
+    });
+  });
+
+  test('patchPath through a scalar intermediate returns parse_failed (WRITE_ERROR)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ a: 'string-value' });
+
+    const result = binding.patchPath(['a', 'b'], 'x');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('WRITE_ERROR');
+    }
+    expect(binding.current().map).toEqual({ a: 'string-value' });
+  });
+
+  test('patchPath empty path is rejected with SCHEMA_INVALID / invalid_path', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath([], 'x');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEMA_INVALID');
+      if (result.error.code === 'SCHEMA_INVALID') {
+        expect(result.error.issues[0]?.issueCode).toBe('invalid_path');
+      }
+    }
+  });
+
+  test('patchPath rejects reserved top-level key "frontmatter"', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['frontmatter', 'nested'], 'x');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEMA_INVALID');
+      if (result.error.code === 'SCHEMA_INVALID') {
+        expect(result.error.issues[0]?.issueCode).toBe('reserved_key');
+      }
+    }
+  });
+
+  test('patchPath admits nested "frontmatter" key (only top-level slot is reserved)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['metadata', 'frontmatter'], 'allowed');
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ metadata: { frontmatter: 'allowed' } });
+  });
+
+  test('patchPath invalid leaf value (Symbol) returns SCHEMA_INVALID without mutating Y.Text', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0' } });
+
+    const result = binding.patchPath(['metadata', 'count'], Symbol('nope') as unknown as number);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEMA_INVALID');
+    }
+    expect(binding.current().map).toEqual({ metadata: { version: '1.0' } });
+  });
+
+  test('patchPath stamps writes with FORM_WRITE_ORIGIN', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    let observedOrigin: unknown = null;
+    provider.document.getText('source').observe((_event, transaction) => {
+      observedOrigin = transaction.origin;
+    });
+
+    binding.patchPath(['metadata', 'version'], '1.0');
+
+    expect(observedOrigin).toBe(FORM_WRITE_ORIGIN);
+  });
+
+  test('patchPath preserves flow style on nested map subtree replace', () => {
+    const provider = makeProvider('---\nmetadata: {version: 1.0, author: A}\n---\n');
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['metadata'], { version: '2.0', author: 'B' });
+
+    expect(result.ok).toBe(true);
+    const fenced = readYTextFm(provider);
+    expect(fenced).toContain('{ version: "2.0"');
+    expect(fenced).toContain('author: B }');
+  });
+
+  test('patchPath preserves sibling comments inside the nested map (single-leaf set)', () => {
+    const provider = makeProvider(
+      '---\nname: hello\nmetadata:\n  # version comment\n  version: 1.0\n  author: A\n---\n',
+    );
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.patchPath(['metadata', 'author'], 'B');
+
+    expect(result.ok).toBe(true);
+    const fenced = readYTextFm(provider);
+    expect(fenced).toContain('# version comment');
+    expect(fenced).toContain('version: 1.0');
+    expect(fenced).toContain('author: B');
+  });
+
+  test('patchPath disposed binding returns WRITE_ERROR', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.dispose();
+
+    const result = binding.patchPath(['metadata', 'version'], '1.0');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('WRITE_ERROR');
+    }
+  });
+
+  test('deletePath removes a single nested leaf, leaves sibling siblings + parent map', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      name: 'skill',
+      metadata: { version: '1.0', author: 'A', license: 'MIT' },
+    });
+
+    const result = binding.deletePath(['metadata', 'author']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      name: 'skill',
+      metadata: { version: '1.0', license: 'MIT' },
+    });
+  });
+
+  test('deletePath does NOT prune emptied parent maps (documented rule)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0' } });
+
+    const result = binding.deletePath(['metadata', 'version']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ metadata: {} });
+  });
+
+  test('deletePath single-element path removes a top-level key', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ title: 'Hello', cluster: 'X' });
+
+    const result = binding.deletePath(['cluster']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ title: 'Hello' });
+    expect(binding.current().keys).toEqual(['title']);
+  });
+
+  test('deletePath on absent leaf is an idempotent no-op (Result.ok)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0' } });
+
+    const result = binding.deletePath(['metadata', 'absent']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ metadata: { version: '1.0' } });
+  });
+
+  test('deletePath through a scalar intermediate is an idempotent no-op (getIn returns undefined)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ a: 'string-value' });
+
+    const result = binding.deletePath(['a', 'b']);
+
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ a: 'string-value' });
+  });
+
+  test('deletePath empty path is rejected with SCHEMA_INVALID', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.deletePath([]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEMA_INVALID');
+    }
+  });
+
+  test('deletePath rejects reserved top-level key "frontmatter"', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    const result = binding.deletePath(['frontmatter']);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('SCHEMA_INVALID');
+      if (result.error.code === 'SCHEMA_INVALID') {
+        expect(result.error.issues[0]?.issueCode).toBe('reserved_key');
+      }
+    }
+  });
+
+  test('deletePath stamps writes with FORM_WRITE_ORIGIN', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0' } });
+
+    let observedOrigin: unknown = null;
+    provider.document.getText('source').observe((_event, transaction) => {
+      observedOrigin = transaction.origin;
+    });
+
+    binding.deletePath(['metadata', 'version']);
+
+    expect(observedOrigin).toBe(FORM_WRITE_ORIGIN);
+  });
+
+  test('deletePath disposed binding returns WRITE_ERROR', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.dispose();
+
+    const result = binding.deletePath(['metadata', 'version']);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('WRITE_ERROR');
+    }
+  });
+
+  test('patchPath then deletePath round-trip leaves an empty parent map (not pruned)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+
+    binding.patchPath(['metadata', 'version'], '1.0');
+    expect(binding.current().map).toEqual({ metadata: { version: '1.0' } });
+
+    binding.deletePath(['metadata', 'version']);
+    expect(binding.current().map).toEqual({ metadata: {} });
+
+    binding.deletePath(['metadata']);
+    expect(binding.current().map).toEqual({});
+  });
+
+  test('patchPath updates do NOT touch siblings or trailing comments (depth-2 leaf set)', () => {
+    const provider = makeProvider(
+      '---\nname: hello\nmetadata:\n  version: 1.0\n  author: A\n# trailing\n---\nbody\n',
+    );
+    const binding = bindFrontmatterDoc(provider);
+
+    binding.patchPath(['metadata', 'version'], '2.0');
+
+    const fenced = readYTextFm(provider);
+    expect(fenced).toContain('# trailing');
+    expect(fenced).toContain('author: A');
+    expect(fenced).toContain('version: "2.0"');
+    expect(fenced).toContain('name: hello');
+  });
+});
+
 describe('bindFrontmatterDoc — current()', () => {
   test('returns empty snapshot when there is no FM region', () => {
     const provider = makeProvider();
@@ -299,6 +706,23 @@ describe('bindFrontmatterDoc — subscribe()', () => {
 
   test('content-equality bailout: body-only edits do not fire (D20)', () => {
     const provider = makeProvider('---\ntitle: Hello\n---\nbody\n');
+    const binding = bindFrontmatterDoc(provider);
+    let calls = 0;
+    binding.subscribe(() => {
+      calls += 1;
+    });
+    const callsBefore = calls;
+
+    const ytext = provider.document.getText('source');
+    ytext.insert(ytext.length, '\nmore body\n');
+
+    expect(calls).toBe(callsBefore);
+  });
+
+  test('content-equality bailout: body-only edits do not fire with NESTED frontmatter', () => {
+    const provider = makeProvider(
+      '---\nname: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n---\nbody\n',
+    );
     const binding = bindFrontmatterDoc(provider);
     let calls = 0;
     binding.subscribe(() => {
@@ -545,6 +969,360 @@ describe('bindFrontmatterDoc — no-FM body-edit perf bailout', () => {
     expect(spy.reads()).toBe(0);
     expect(calls).toBe(0);
     spy.restore();
+    binding.dispose();
+  });
+});
+
+describe('bindFrontmatterDoc — renamePath()', () => {
+  function seedNested(): {
+    provider: ReturnType<typeof makeProvider>;
+    binding: ReturnType<typeof bindFrontmatterDoc>;
+  } {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      name: 'skill',
+      metadata: { version: '1.0.0', author: 'Inkeep', license: 'MIT' },
+    });
+    return { provider, binding };
+  }
+
+  test('renames a nested key preserving sibling nested keys + top-level keys', () => {
+    const { provider, binding } = seedNested();
+    const result = binding.renamePath(['metadata', 'version'], 'semver');
+    expect(result.ok).toBe(true);
+    const fenced = readYTextFm(provider);
+    expect(fenced).toContain('semver: 1.0.0');
+    expect(fenced).toContain('author: Inkeep');
+    expect(fenced).toContain('license: MIT');
+    expect(fenced).toContain('name: skill');
+    expect(fenced).not.toContain('version: 1.0.0');
+    binding.dispose();
+  });
+
+  test('single-element path renames a top-level key (matches rename())', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ name: 'skill', description: 'hello' });
+
+    const result = binding.renamePath(['name'], 'title');
+    expect(result.ok).toBe(true);
+    expect(readFmMap(provider.document.getText('source').toString())).toEqual({
+      title: 'skill',
+      description: 'hello',
+    });
+    binding.dispose();
+  });
+
+  test('preserves nested source position so siblings keep their order', () => {
+    const { provider, binding } = seedNested();
+    binding.renamePath(['metadata', 'author'], 'maintainer');
+    const fenced = readYTextFm(provider);
+    const versionIdx = fenced.indexOf('version:');
+    const maintainerIdx = fenced.indexOf('maintainer:');
+    const licenseIdx = fenced.indexOf('license:');
+    expect(versionIdx).toBeLessThan(maintainerIdx);
+    expect(maintainerIdx).toBeLessThan(licenseIdx);
+    binding.dispose();
+  });
+
+  test('unknown nested key returns SCHEMA_INVALID with unknown_key', () => {
+    const { binding } = seedNested();
+    const result = binding.renamePath(['metadata', 'missing'], 'x');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    if (result.error.code === 'SCHEMA_INVALID') {
+      expect(result.error.issues[0]?.issueCode).toBe('unknown_key');
+    }
+    binding.dispose();
+  });
+
+  test('nested target collision returns SCHEMA_INVALID with duplicate_target', () => {
+    const { binding } = seedNested();
+    const result = binding.renamePath(['metadata', 'version'], 'author');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    if (result.error.code === 'SCHEMA_INVALID') {
+      expect(result.error.issues[0]?.issueCode).toBe('duplicate_target');
+    }
+    binding.dispose();
+  });
+
+  test('allowDuplicate admits a nested colliding rename', () => {
+    const { binding } = seedNested();
+    const result = binding.renamePath(['metadata', 'version'], 'author', {
+      allowDuplicate: true,
+    });
+    expect(result.ok).toBe(true);
+    binding.dispose();
+  });
+
+  test('rejects numeric last segment (sequence index) as invalid_path', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ items: ['a', 'b'] });
+
+    const result = binding.renamePath(['items', 0], 'x');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    if (result.error.code === 'SCHEMA_INVALID') {
+      expect(result.error.issues[0]?.issueCode).toBe('invalid_path');
+    }
+    binding.dispose();
+  });
+
+  test('empty path rejected with invalid_path', () => {
+    const { binding } = seedNested();
+    const result = binding.renamePath([], 'x');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    binding.dispose();
+  });
+
+  test('top-level rename to reserved frontmatter key rejected', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ name: 'skill' });
+
+    const result = binding.renamePath(['name'], 'frontmatter');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    if (result.error.code === 'SCHEMA_INVALID') {
+      expect(result.error.issues[0]?.issueCode).toBe('reserved_key');
+    }
+    binding.dispose();
+  });
+
+  test('writes are stamped with FORM_WRITE_ORIGIN', () => {
+    const { provider, binding } = seedNested();
+
+    let observedOrigin: unknown = null;
+    provider.document.getText('source').observe((_event, transaction) => {
+      observedOrigin = transaction.origin;
+    });
+
+    binding.renamePath(['metadata', 'version'], 'semver');
+    expect(observedOrigin).toBe(FORM_WRITE_ORIGIN);
+    binding.dispose();
+  });
+
+  test('disposed binding rejects further renamePath calls', () => {
+    const { binding } = seedNested();
+    binding.dispose();
+
+    const result = binding.renamePath(['metadata', 'version'], 'semver');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('WRITE_ERROR');
+  });
+});
+
+describe('bindFrontmatterDoc — reorderPath()', () => {
+  function seedNested(): {
+    provider: ReturnType<typeof makeProvider>;
+    binding: ReturnType<typeof bindFrontmatterDoc>;
+  } {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      name: 'skill',
+      metadata: { version: '1.0.0', author: 'Inkeep', license: 'MIT' },
+    });
+    return { provider, binding };
+  }
+
+  test('reorders nested children preserving sibling top-level keys', () => {
+    const { provider, binding } = seedNested();
+    const result = binding.reorderPath(['metadata'], ['license', 'author', 'version']);
+    expect(result.ok).toBe(true);
+    const fenced = readYTextFm(provider);
+    const licenseIdx = fenced.indexOf('license:');
+    const authorIdx = fenced.indexOf('author:');
+    const versionIdx = fenced.indexOf('version:');
+    expect(licenseIdx).toBeLessThan(authorIdx);
+    expect(authorIdx).toBeLessThan(versionIdx);
+    expect(fenced).toContain('name: skill');
+    binding.dispose();
+  });
+
+  test('empty path reorders top-level keys (matches reorder())', () => {
+    const { provider, binding } = seedNested();
+    const result = binding.reorderPath([], ['metadata', 'name']);
+    expect(result.ok).toBe(true);
+    const fenced = readYTextFm(provider);
+    const metaIdx = fenced.indexOf('metadata:');
+    const nameIdx = fenced.indexOf('name:');
+    expect(metaIdx).toBeLessThan(nameIdx);
+    binding.dispose();
+  });
+
+  test('rejects non-permutation with WRITE_ERROR (reorder_mismatch)', () => {
+    const { binding } = seedNested();
+    const result = binding.reorderPath(['metadata'], ['version', 'missing']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('WRITE_ERROR');
+    binding.dispose();
+  });
+
+  test('rejects when target is not a map (e.g. scalar leaf)', () => {
+    const { binding } = seedNested();
+    const result = binding.reorderPath(['name'], ['x']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    binding.dispose();
+  });
+
+  test('writes are stamped with FORM_WRITE_ORIGIN', () => {
+    const { provider, binding } = seedNested();
+
+    let observedOrigin: unknown = null;
+    provider.document.getText('source').observe((_event, transaction) => {
+      observedOrigin = transaction.origin;
+    });
+
+    binding.reorderPath(['metadata'], ['author', 'version', 'license']);
+    expect(observedOrigin).toBe(FORM_WRITE_ORIGIN);
+    binding.dispose();
+  });
+
+  test('disposed binding rejects further reorderPath calls', () => {
+    const { binding } = seedNested();
+    binding.dispose();
+
+    const result = binding.reorderPath(['metadata'], ['version', 'author', 'license']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('WRITE_ERROR');
+  });
+});
+
+describe('bindFrontmatterDoc — reorderSeqPath()', () => {
+  function seedAuthors(): {
+    provider: ReturnType<typeof makeProvider>;
+    binding: ReturnType<typeof bindFrontmatterDoc>;
+  } {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({
+      title: 'doc',
+      authors: [
+        { name: 'A', role: 'lead' },
+        { name: 'B', role: 'review' },
+        { name: 'C', role: 'author' },
+      ],
+    });
+    return { provider, binding };
+  }
+
+  test('permutes sequence items at path; sibling top-level keys survive', () => {
+    const { binding } = seedAuthors();
+    const result = binding.reorderSeqPath(['authors'], [2, 0, 1]);
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      title: 'doc',
+      authors: [
+        { name: 'C', role: 'author' },
+        { name: 'A', role: 'lead' },
+        { name: 'B', role: 'review' },
+      ],
+    });
+    binding.dispose();
+  });
+
+  test('rejects non-permutation as WRITE_ERROR (reorder_mismatch)', () => {
+    const { binding } = seedAuthors();
+    const result = binding.reorderSeqPath(['authors'], [0, 1]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('WRITE_ERROR');
+    binding.dispose();
+  });
+
+  test('rejects when target is not a sequence (map at path)', () => {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ metadata: { version: '1.0', author: 'X' } });
+    const result = binding.reorderSeqPath(['metadata'], [0, 1]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SCHEMA_INVALID');
+    binding.dispose();
+  });
+
+  test('writes are stamped with FORM_WRITE_ORIGIN', () => {
+    const { provider, binding } = seedAuthors();
+    let observedOrigin: unknown = null;
+    provider.document.getText('source').observe((_event, transaction) => {
+      observedOrigin = transaction.origin;
+    });
+    binding.reorderSeqPath(['authors'], [2, 1, 0]);
+    expect(observedOrigin).toBe(FORM_WRITE_ORIGIN);
+    binding.dispose();
+  });
+
+  test('identity permutation is a no-op without Y.Text mutation', () => {
+    const { provider, binding } = seedAuthors();
+    const before = provider.document.getText('source').toString();
+    const result = binding.reorderSeqPath(['authors'], [0, 1, 2]);
+    expect(result.ok).toBe(true);
+    const after = provider.document.getText('source').toString();
+    expect(after).toBe(before);
+    binding.dispose();
+  });
+
+  test('disposed binding rejects further reorderSeqPath calls', () => {
+    const { binding } = seedAuthors();
+    binding.dispose();
+    const result = binding.reorderSeqPath(['authors'], [2, 0, 1]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('WRITE_ERROR');
+  });
+});
+
+describe('bindFrontmatterDoc — array-of-objects item CRUD via patchPath/deletePath', () => {
+  function seedAuthors(): {
+    provider: ReturnType<typeof makeProvider>;
+    binding: ReturnType<typeof bindFrontmatterDoc>;
+  } {
+    const provider = makeProvider();
+    const binding = bindFrontmatterDoc(provider);
+    binding.patch({ authors: [{ name: 'A' }, { name: 'B' }] });
+    return { provider, binding };
+  }
+
+  test('add item appends a new empty object at end via patchPath at index = length', () => {
+    const { binding } = seedAuthors();
+    const result = binding.patchPath(['authors', 2], {});
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      authors: [{ name: 'A' }, { name: 'B' }, {}],
+    });
+    binding.dispose();
+  });
+
+  test('delete item splices the sequence (length decreases)', () => {
+    const { binding } = seedAuthors();
+    const result = binding.deletePath(['authors', 0]);
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({ authors: [{ name: 'B' }] });
+    binding.dispose();
+  });
+
+  test('edit a field within an item leaves siblings intact', () => {
+    const { binding } = seedAuthors();
+    const result = binding.patchPath(['authors', 1, 'role'], 'editor');
+    expect(result.ok).toBe(true);
+    expect(binding.current().map).toEqual({
+      authors: [{ name: 'A' }, { name: 'B', role: 'editor' }],
+    });
     binding.dispose();
   });
 });

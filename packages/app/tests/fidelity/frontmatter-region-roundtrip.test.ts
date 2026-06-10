@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   applyPatchToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
   applyRenameToFm,
   applyReorderToFm,
   parseFencedFmRegion,
 } from '@inkeep/open-knowledge-core';
 import * as fc from 'fast-check';
+import { Document as YamlDocument } from 'yaml';
 
 const MAX_KEY_BYTES = 32;
 const MAX_VALUE_BYTES = 64;
@@ -155,5 +158,190 @@ describe('frontmatter-region — round-trip invariants', () => {
     if (!result.ok) return;
     expect(result.nextFenced).toContain('# pinned comment');
     expect(result.nextFenced).toContain('status: published');
+  });
+});
+
+const scalarArbitrary = fc.oneof(stringValue, numberValue, booleanValue);
+const scalarListArbitrary = fc.array(stringValue, { minLength: 1, maxLength: 3 });
+
+function nestedMapArbitraryAtDepth(depth: number): fc.Arbitrary<Record<string, unknown>> {
+  return fc.uniqueArray(safeKey, { minLength: 1, maxLength: 3 }).chain((keys) =>
+    fc.tuple(...keys.map(() => nestedValueArbitraryAtDepth(depth))).map((values) => {
+      const map: Record<string, unknown> = {};
+      keys.forEach((k, i) => {
+        map[k] = values[i];
+      });
+      return map;
+    }),
+  );
+}
+
+function nestedValueArbitraryAtDepth(depth: number): fc.Arbitrary<unknown> {
+  if (depth <= 0) return fc.oneof(scalarArbitrary, scalarListArbitrary);
+  return fc.oneof(
+    { arbitrary: scalarArbitrary, weight: 4 },
+    { arbitrary: scalarListArbitrary, weight: 2 },
+    { arbitrary: nestedMapArbitraryAtDepth(depth - 1), weight: 2 },
+    {
+      arbitrary: fc.array(nestedMapArbitraryAtDepth(depth - 1), { minLength: 1, maxLength: 2 }),
+      weight: 1,
+    },
+  );
+}
+
+const nestedFmMapArbitrary = fc.uniqueArray(safeKey, { minLength: 1, maxLength: 4 }).chain((keys) =>
+  fc.tuple(...keys.map(() => nestedValueArbitraryAtDepth(2))).map((values) => {
+    const map: Record<string, unknown> = {};
+    keys.forEach((k, i) => {
+      map[k] = values[i];
+    });
+    return { keys, map };
+  }),
+);
+
+function buildNestedFenced(map: Record<string, unknown>): string {
+  const doc = new YamlDocument(map);
+  const body = doc.toString({ defaultKeyType: 'PLAIN', lineWidth: 0 });
+  return `---\n${body}---\n`;
+}
+
+describe('frontmatter-region — nested round-trip invariants (PRD-6947)', () => {
+  test('I-rt-7: parse → serialize → parse is fixed-point at depth (nested maps + arrays of objects)', () => {
+    fc.assert(
+      fc.property(nestedFmMapArbitrary, ({ map }) => {
+        const fenced = buildNestedFenced(map);
+        const { doc, map: parsed1 } = parseFencedFmRegion(fenced);
+        if (parsed1 === null) return;
+        const reSer = doc.toString({ defaultKeyType: 'PLAIN', lineWidth: 0 });
+        const { map: parsed2 } = parseFencedFmRegion(`---\n${reSer}---\n`);
+        expect(parsed2).toEqual(parsed1);
+      }),
+      { numRuns: 40 },
+    );
+  });
+
+  test('I-rt-8: applyPatchToFm with {} is parse-stable at depth', () => {
+    fc.assert(
+      fc.property(nestedFmMapArbitrary, ({ map }) => {
+        const fenced = buildNestedFenced(map);
+        const { map: parsedOrig } = parseFencedFmRegion(fenced);
+        if (parsedOrig === null) return;
+        const result = applyPatchToFm(fenced, {});
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const { map: parsedNext } = parseFencedFmRegion(result.nextFenced);
+        expect(parsedNext).toEqual(parsedOrig);
+      }),
+      { numRuns: 40 },
+    );
+  });
+
+  test('I-rt-9: whole-subtree replacement is byte-stable on second application (idempotence at depth)', () => {
+    fc.assert(
+      fc.property(
+        nestedFmMapArbitrary.filter(({ keys }) => keys.length >= 1),
+        nestedValueArbitraryAtDepth(2),
+        ({ keys, map }, newValue) => {
+          const target = keys[0];
+          if (!target) return;
+          const fenced = buildNestedFenced(map);
+          const first = applyPatchToFm(fenced, { [target]: newValue as never });
+          if (!first.ok) return;
+          const second = applyPatchToFm(first.nextFenced, { [target]: newValue as never });
+          expect(second.ok).toBe(true);
+          if (!second.ok) return;
+          expect(second.nextFenced).toBe(first.nextFenced);
+        },
+      ),
+      { numRuns: 30 },
+    );
+  });
+
+  test('I-rt-10: whole-subtree replacement preserves untouched sibling top-level keys', () => {
+    fc.assert(
+      fc.property(
+        nestedFmMapArbitrary.filter(({ keys }) => keys.length >= 2),
+        nestedValueArbitraryAtDepth(2),
+        ({ keys, map }, newValue) => {
+          const target = keys[0];
+          if (!target) return;
+          const fenced = buildNestedFenced(map);
+          const result = applyPatchToFm(fenced, { [target]: newValue as never });
+          if (!result.ok) return;
+          const { map: parsedNext } = parseFencedFmRegion(result.nextFenced);
+          if (parsedNext === null) return;
+          for (const sibling of keys.slice(1)) {
+            expect(parsedNext[sibling]).toEqual(map[sibling] as never);
+          }
+        },
+      ),
+      { numRuns: 30 },
+    );
+  });
+
+  test('I-rt-11: applyPathSetToFm at a nested leaf preserves siblings at every level (Q-T9 local API)', () => {
+    fc.assert(
+      fc.property(
+        fc
+          .tuple(
+            fc.uniqueArray(safeKey, { minLength: 2, maxLength: 3 }),
+            fc.uniqueArray(safeKey, { minLength: 2, maxLength: 3 }),
+            scalarArbitrary,
+            scalarArbitrary,
+          )
+          .map(([topKeys, nestedKeys, siblingValue, leafValue]) => ({
+            topKeys,
+            nestedKeys,
+            siblingValue,
+            leafValue,
+          })),
+        ({ topKeys, nestedKeys, siblingValue, leafValue }) => {
+          const [parentKey, siblingTop] = topKeys;
+          const [targetNested, siblingNested] = nestedKeys;
+          if (!parentKey || !siblingTop || !targetNested || !siblingNested) return;
+          const nested: Record<string, unknown> = {};
+          for (const k of nestedKeys) nested[k] = siblingValue;
+          const map: Record<string, unknown> = { [parentKey]: nested, [siblingTop]: siblingValue };
+          const fenced = buildNestedFenced(map);
+          const result = applyPathSetToFm(fenced, [parentKey, targetNested], leafValue);
+          if (!result.ok) return;
+          const { map: parsedNext } = parseFencedFmRegion(result.nextFenced);
+          if (parsedNext === null) return;
+          expect(parsedNext[siblingTop]).toEqual(siblingValue);
+          const reparsedNested = parsedNext[parentKey] as Record<string, unknown>;
+          expect(reparsedNested[siblingNested]).toEqual(siblingValue);
+          expect(reparsedNested[targetNested]).toEqual(leafValue);
+        },
+      ),
+      { numRuns: 30 },
+    );
+  });
+
+  test('I-rt-12: applyPathReorderToFm with identity permutation at depth is parse-stable', () => {
+    fc.assert(
+      fc.property(
+        fc.tuple(
+          fc.uniqueArray(safeKey, { minLength: 1, maxLength: 2 }),
+          fc.uniqueArray(safeKey, { minLength: 2, maxLength: 4 }),
+          scalarArbitrary,
+        ),
+        ([topKeys, nestedKeys, value]) => {
+          const parentKey = topKeys[0];
+          if (!parentKey || nestedKeys.length < 2) return;
+          const nested: Record<string, unknown> = {};
+          for (const k of nestedKeys) nested[k] = value;
+          const map: Record<string, unknown> = { [parentKey]: nested };
+          const fenced = buildNestedFenced(map);
+          const result = applyPathReorderToFm(fenced, [parentKey], nestedKeys);
+          expect(result.ok).toBe(true);
+          if (!result.ok) return;
+          const { map: parsedNext } = parseFencedFmRegion(result.nextFenced);
+          if (parsedNext === null) return;
+          const reparsedNested = parsedNext[parentKey] as Record<string, unknown>;
+          expect(Object.keys(reparsedNested)).toEqual(nestedKeys);
+        },
+      ),
+      { numRuns: 30 },
+    );
   });
 });

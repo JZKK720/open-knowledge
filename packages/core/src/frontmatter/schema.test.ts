@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { isFrontmatterValueEmpty } from './schema.ts';
+import {
+  FRONTMATTER_TYPES,
+  frontmatterValuesEqual,
+  inferType,
+  isFrontmatterValueEmpty,
+} from './schema.ts';
 
 describe('isFrontmatterValueEmpty', () => {
   test('treats null, empty string, and empty array as empty', () => {
@@ -22,5 +27,98 @@ describe('isFrontmatterValueEmpty', () => {
   test('treats other primitives as non-empty', () => {
     expect(isFrontmatterValueEmpty(42)).toBe(false);
     expect(isFrontmatterValueEmpty(true)).toBe(false);
+  });
+});
+
+describe('FRONTMATTER_TYPES', () => {
+  test('includes object for nested mapping support', () => {
+    expect(FRONTMATTER_TYPES).toContain('object');
+  });
+});
+
+describe('inferType', () => {
+  test('returns object for a plain mapping', () => {
+    expect(inferType({})).toBe('object');
+    expect(inferType({ version: '1.0' })).toBe('object');
+    expect(inferType({ a: { b: 'c' } })).toBe('object');
+  });
+
+  test('returns list for arrays regardless of element shape', () => {
+    expect(inferType([])).toBe('list');
+    expect(inferType(['a', 'b'])).toBe('list');
+    expect(inferType([{ k: 'v' }])).toBe('list');
+    expect(inferType([{ a: 1 }, { b: 2 }])).toBe('list');
+  });
+
+  test('preserves scalar inference (boolean, number, date, text)', () => {
+    expect(inferType(true)).toBe('boolean');
+    expect(inferType(42)).toBe('number');
+    expect(inferType('2026-06-09')).toBe('date');
+    expect(inferType('hello')).toBe('text');
+  });
+});
+
+describe('frontmatterValuesEqual', () => {
+  test('scalars compare by value', () => {
+    expect(frontmatterValuesEqual('a', 'a')).toBe(true);
+    expect(frontmatterValuesEqual(1, 1)).toBe(true);
+    expect(frontmatterValuesEqual(true, true)).toBe(true);
+    expect(frontmatterValuesEqual('a', 'b')).toBe(false);
+    expect(frontmatterValuesEqual(1, 2)).toBe(false);
+  });
+
+  test('structurally-equal nested objects are equal across references', () => {
+    expect(
+      frontmatterValuesEqual(
+        { version: '1.0.0', author: 'Inkeep' },
+        { version: '1.0.0', author: 'Inkeep' },
+      ),
+    ).toBe(true);
+    expect(frontmatterValuesEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+  });
+
+  test('differing nested leaf is unequal', () => {
+    expect(frontmatterValuesEqual({ version: '1.0.0' }, { version: '2.0.0' })).toBe(false);
+  });
+
+  test('extra key in either side is unequal', () => {
+    expect(frontmatterValuesEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+    expect(frontmatterValuesEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);
+  });
+
+  test('arrays recurse into element structure (not reference)', () => {
+    expect(frontmatterValuesEqual(['a', 'b'], ['a', 'b'])).toBe(true);
+    expect(frontmatterValuesEqual([{ k: 1 }], [{ k: 1 }])).toBe(true);
+    expect(frontmatterValuesEqual([{ k: 1 }], [{ k: 2 }])).toBe(false);
+    expect(frontmatterValuesEqual(['a'], ['a', 'b'])).toBe(false);
+  });
+
+  test('deeply nested structures compare structurally', () => {
+    expect(
+      frontmatterValuesEqual(
+        { meta: { tags: ['x'], nested: { n: 1 } } },
+        { meta: { tags: ['x'], nested: { n: 1 } } },
+      ),
+    ).toBe(true);
+    expect(
+      frontmatterValuesEqual({ meta: { nested: { n: 1 } } }, { meta: { nested: { n: 2 } } }),
+    ).toBe(false);
+  });
+
+  test('cross-type mismatches are unequal', () => {
+    expect(frontmatterValuesEqual({}, [])).toBe(false);
+    expect(frontmatterValuesEqual('1', 1)).toBe(false);
+    expect(frontmatterValuesEqual({ a: 1 }, 'a')).toBe(false);
+  });
+
+  test('null is handled by the guard path (only equal to itself)', () => {
+    expect(frontmatterValuesEqual(null, null)).toBe(true);
+    expect(frontmatterValuesEqual(null, {})).toBe(false);
+    expect(frontmatterValuesEqual({}, null)).toBe(false);
+    expect(frontmatterValuesEqual(null, 'a')).toBe(false);
+  });
+
+  test('same key count but different key set is unequal (Object.hasOwn guard)', () => {
+    expect(frontmatterValuesEqual({ a: 1, b: 2 }, { a: 1, c: 2 })).toBe(false);
   });
 });

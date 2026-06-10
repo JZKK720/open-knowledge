@@ -280,6 +280,172 @@ describe('PropertyPanel malformed YAML banner (FR9)', () => {
   });
 });
 
+describe('PropertyPanel nested-value rendering', () => {
+  test('skill-shaped nested frontmatter renders every top-level row + no banner', () => {
+    const provider = makeProvider('nested-skill-doc');
+    seedYTextFm(
+      provider,
+      '---\nname: my-skill\ndescription: A skill\nmetadata:\n  version: "1.0"\n  author: Inkeep\n  repository: github.com/inkeep/x\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).not.toContain('data-testid="property-panel-yaml-error"');
+    expect(html).toContain('data-key="name"');
+    expect(html).toContain('data-key="description"');
+    expect(html).toContain('data-key="metadata"');
+  });
+
+  test('nested object value renders ObjectWidget (not the text widget)', () => {
+    const provider = makeProvider('nested-object-doc');
+    seedYTextFm(
+      provider,
+      '---\nname: my-skill\nmetadata:\n  version: "1.0"\n  author: Inkeep\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).toContain('data-testid="object-widget"');
+    expect(html).toMatch(/data-key="metadata"[^>]*data-complex-value="true"/);
+    expect(html).toMatch(/data-testid="object-widget"[^>]*data-key="metadata"/);
+    expect(html).not.toMatch(
+      /data-testid="text-widget"[^>]*data-key="metadata"|data-key="metadata"[^>]*data-testid="text-widget"/,
+    );
+    expect(html).not.toMatch(/data-testid="complex-value-widget"[^>]*data-key="metadata"/);
+    expect(html).toContain('version');
+    expect(html).toContain('author');
+  });
+
+  test('sibling scalar keys around a nested value still render their interactive widgets', () => {
+    const provider = makeProvider('nested-skill-siblings-doc');
+    seedYTextFm(
+      provider,
+      '---\nname: my-skill\ndescription: A skill\nmetadata:\n  version: "1.0"\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).toContain('data-testid="text-widget"');
+    expect(html).toContain('data-key="name"');
+    expect(html).toContain('data-key="description"');
+    expect(html).toContain('aria-label="name type: Text. Click to change."');
+    expect(html).toContain('aria-label="description type: Text. Click to change."');
+  });
+
+  test('nested row carries a static (non-dropdown) type icon — no coercion footgun', () => {
+    const provider = makeProvider('nested-static-icon-doc');
+    seedYTextFm(provider, '---\nmetadata:\n  version: "1.0"\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toMatch(
+      /data-testid="type-icon-static"[^>]*data-key="metadata"[^>]*data-type="object"/,
+    );
+    expect(html).not.toMatch(/data-testid="type-icon-button"[^>]*data-key="metadata"/);
+  });
+
+  test('array-of-objects value renders as indexed ArrayOfObjectsWidget (not the read-only complex preview)', () => {
+    const provider = makeProvider('array-of-objects-doc');
+    seedYTextFm(
+      provider,
+      '---\nplugins:\n  - name: a\n    version: 1\n  - name: b\n    version: 2\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).not.toContain('data-testid="property-panel-yaml-error"');
+    expect(html).toMatch(
+      /data-testid="array-of-objects-widget"[^>]*data-key="plugins"|data-key="plugins"[^>]*data-testid="array-of-objects-widget"/,
+    );
+    expect(html).toContain('2 items');
+    expect(html).not.toMatch(/data-testid="complex-value-widget"[^>]*data-key="plugins"/);
+  });
+
+  test('nested row keeps the delete affordance — user can still remove the key', () => {
+    const provider = makeProvider('nested-delete-doc');
+    seedYTextFm(provider, '---\nname: x\nmetadata:\n  version: "1.0"\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toContain('aria-label="Remove metadata"');
+  });
+});
+
+describe('PropertyPanel ObjectWidget recursive rendering', () => {
+  test('object value renders an expandable Collapsible with an accessible trigger', () => {
+    const provider = makeProvider('object-widget-trigger-doc');
+    seedYTextFm(provider, '---\nmetadata:\n  version: "1.0"\n  author: Inkeep\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toMatch(/data-testid="object-widget-trigger"[^>]*data-key="metadata"/);
+    expect(html).toMatch(
+      /data-testid="object-widget-trigger"[^>]*data-key="metadata"[^>]*aria-expanded="true"|data-key="metadata"[^>]*data-testid="object-widget-trigger"[^>]*aria-expanded="true"/,
+    );
+    expect(html).toMatch(/aria-label="Collapse metadata"|aria-label="Expand metadata"/);
+  });
+
+  test('expanded object widget renders child rows for every nested key', () => {
+    const provider = makeProvider('object-widget-children-doc');
+    seedYTextFm(
+      provider,
+      '---\nmetadata:\n  version: "1.0"\n  author: Inkeep\n  repository: github.com/x\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).toMatch(/data-testid="property-row"[^>]*data-key="version"/);
+    expect(html).toMatch(/data-testid="property-row"[^>]*data-key="author"/);
+    expect(html).toMatch(/data-testid="property-row"[^>]*data-key="repository"/);
+    expect(html).toMatch(/data-testid="object-widget-children"[^>]*data-key="metadata"/);
+  });
+
+  test('scalar leaves at depth 1 render via the existing scalar widgets per inferType', () => {
+    const provider = makeProvider('object-widget-scalar-leaves-doc');
+    seedYTextFm(provider, '---\nmetadata:\n  version: "1.0"\n  count: 42\n  active: true\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toMatch(/data-testid="text-widget"[^>]*data-key="version"/);
+    expect(html).toMatch(/data-testid="number-widget"[^>]*data-key="count"/);
+    expect(html).toMatch(/data-testid="boolean-widget"[^>]*data-key="active"/);
+  });
+
+  test('nested object at depth 2 renders its own ObjectWidget recursively', () => {
+    const provider = makeProvider('object-widget-recursive-doc');
+    seedYTextFm(
+      provider,
+      '---\nmetadata:\n  version: "1.0"\n  details:\n    license: MIT\n    notes: hello\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).toMatch(/data-testid="object-widget"[^>]*data-key="metadata"[^>]*data-depth="0"/);
+    expect(html).toMatch(/data-testid="object-widget"[^>]*data-key="details"[^>]*data-depth="1"/);
+    expect(html).toMatch(/data-testid="property-row"[^>]*data-key="details"/);
+  });
+
+  test('depth>=1 ObjectWidgets default to collapsed (avoid drowning the panel)', () => {
+    const provider = makeProvider('object-widget-depth-default-doc');
+    seedYTextFm(
+      provider,
+      '---\nmetadata:\n  details:\n    license: MIT\n    repo: github.com/x\n---\n',
+    );
+    const html = renderPanel(provider);
+    expect(html).toMatch(
+      /data-testid="object-widget-trigger"[^>]*data-key="metadata"[^>]*aria-expanded="true"|data-key="metadata"[^>]*data-testid="object-widget-trigger"[^>]*aria-expanded="true"/,
+    );
+    expect(html).toMatch(
+      /data-testid="object-widget-trigger"[^>]*data-key="details"[^>]*aria-expanded="false"|data-key="details"[^>]*data-testid="object-widget-trigger"[^>]*aria-expanded="false"/,
+    );
+  });
+
+  test('nested scalar rows carry interactive type-icon-button (live picker) per leaf', () => {
+    const provider = makeProvider('nested-icon-types-doc');
+    seedYTextFm(provider, '---\nmetadata:\n  version: "1.0"\n  count: 42\n  active: true\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toMatch(
+      /data-testid="type-icon-button"[^>]*data-key="version"[^>]*data-type="text"/,
+    );
+    expect(html).toMatch(
+      /data-testid="type-icon-button"[^>]*data-key="count"[^>]*data-type="number"/,
+    );
+    expect(html).toMatch(
+      /data-testid="type-icon-button"[^>]*data-key="active"[^>]*data-type="boolean"/,
+    );
+  });
+
+  test('empty object {} renders an ObjectWidget with no child rows', () => {
+    const provider = makeProvider('empty-object-doc');
+    seedYTextFm(provider, '---\nmetadata: {}\n---\n');
+    const html = renderPanel(provider);
+    expect(html).toMatch(/data-testid="object-widget"[^>]*data-key="metadata"/);
+    expect(html).toMatch(
+      /data-testid="object-widget-children"[^>]*data-key="metadata"[^>]*><\/div>/,
+    );
+  });
+});
+
 describe('PropertyPanel error rendering', () => {
   test('rows render with no error subline by default', () => {
     const provider = makeProvider('no-error-doc');
