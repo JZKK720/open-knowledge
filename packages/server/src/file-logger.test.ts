@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
-import { MAX_FILE_SIZE } from './file-logger.ts';
+import { flushFileLogger, MAX_FILE_SIZE } from './file-logger.ts';
 
 const TEST_DIR = join(tmpdir(), `ok-file-logger-test-${process.pid}`);
 
@@ -99,5 +99,86 @@ describe('file logger', () => {
 
     expect(unrefCalls).toBe(1);
     expect(scheduledMs).toBe(5000);
+  });
+
+  test('flushFileLogger persists a record logged immediately before exit', async () => {
+    mkdirSync(TEST_DIR, { recursive: true });
+    const filePath = join(TEST_DIR, 'flush.log');
+    const prev = process.env.OK_LOG_LEVEL;
+    process.env.OK_LOG_LEVEL = 'info';
+    try {
+      const { createFileLogger } = require('./file-logger.ts');
+      const logger = createFileLogger({ name: 'flush', filePath });
+      logger.warn({ outcome: 'absent', host: 'github.com' }, '[auth] git-credential get');
+      await flushFileLogger(logger);
+      const content = readFileSync(filePath, 'utf8');
+      expect(content).toContain('git-credential get');
+      expect(content).toContain('"outcome":"absent"');
+    } finally {
+      if (prev === undefined) delete process.env.OK_LOG_LEVEL;
+      else process.env.OK_LOG_LEVEL = prev;
+    }
+  });
+
+  test('flushFileLogger(undefined) resolves without throwing', async () => {
+    await expect(flushFileLogger(undefined)).resolves.toBeUndefined();
+  });
+
+  function makeFakeLogger(stream: unknown): PinoLoggerInstance {
+    return { [pino.symbols.streamSym]: stream } as unknown as PinoLoggerInstance;
+  }
+
+  test("flushFileLogger waits for 'ready' when the fd is not open yet, then flushes", async () => {
+    let flushed = false;
+    let readyCb: (() => void) | undefined;
+    const stream = {
+      fd: -1,
+      flushSync: () => {
+        flushed = true;
+      },
+      once: (event: string, cb: () => void) => {
+        if (event === 'ready') readyCb = cb;
+      },
+    };
+
+    const p = flushFileLogger(makeFakeLogger(stream), 5000);
+    expect(flushed).toBe(false);
+    expect(typeof readyCb).toBe('function');
+
+    readyCb?.();
+    await p;
+    expect(flushed).toBe(true);
+  });
+
+  test('flushFileLogger resolves within the bound when the stream never becomes ready', async () => {
+    let flushed = false;
+    const stream = {
+      fd: -1,
+      flushSync: () => {
+        flushed = true;
+      },
+      once: (_event: string, _cb: () => void) => {},
+    };
+
+    const start = Date.now();
+    await flushFileLogger(makeFakeLogger(stream), 30);
+    const elapsed = Date.now() - start;
+    expect(flushed).toBe(false);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  test('flushFileLogger flushes immediately when the fd is already open', async () => {
+    let flushed = false;
+    const stream = {
+      fd: 7,
+      flushSync: () => {
+        flushed = true;
+      },
+      once: () => {
+        throw new Error('should not wait for ready when fd is already open');
+      },
+    };
+    await flushFileLogger(makeFakeLogger(stream), 5000);
+    expect(flushed).toBe(true);
   });
 });

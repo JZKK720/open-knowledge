@@ -143,7 +143,7 @@ program.addCommand(bugReportCommand());
 
 program.addCommand(configCommand());
 
-program.addCommand(authCommand());
+program.addCommand(authCommand(getCliLogger));
 
 program.addCommand(embeddingsCommand());
 

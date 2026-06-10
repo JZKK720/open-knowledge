@@ -119,7 +119,7 @@ export {
   createExternalChangeHandler,
   FILE_WATCHER_ORIGIN,
 } from './external-change.ts';
-export { createFileLogger, getLogFilePath, getLogsDir } from './file-logger.ts';
+export { createFileLogger, flushFileLogger, getLogFilePath, getLogsDir } from './file-logger.ts';
 export {
   type AsyncSubscription,
   assertNeverDiskEvent,
