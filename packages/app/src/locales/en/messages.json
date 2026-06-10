@@ -1662,6 +1662,7 @@
     "u3wRF-": ["Published"],
     "u6Hp4N": ["Markdown"],
     "u7H-Wn": ["Show panel (", ["panelShortcutLabel"], ")"],
+    "uCaIdy": ["GitHub sign-in is missing or expired. Reconnect to resume syncing."],
     "uF9ruK": ["Saving"],
     "uH_S-u": [["loadErrorTitle"], ": ", ["message"]],
     "uKRYiW": ["Sync status unavailable — server error."],

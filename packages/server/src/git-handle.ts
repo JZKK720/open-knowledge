@@ -21,7 +21,7 @@ type CredentialHelperUnsafeGitOptions = SimpleGitOptions & {
 };
 
 export function buildGitEnv(): Record<string, string> {
-  const env: Record<string, string> = { LANG: 'C', LC_ALL: 'C' };
+  const env: Record<string, string> = { LANG: 'C', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0' };
   if (process.env.PATH !== undefined) {
     env.PATH = process.env.PATH;
   }

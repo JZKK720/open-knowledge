@@ -109,6 +109,47 @@ describe('classifyGitError', () => {
       expect(r.subclass).toBe('scope-mismatch');
       expect(r.retryable).toBe(false);
     });
+
+    test('no credential — "could not read Username … Device not configured" (no GIT_TERMINAL_PROMPT)', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal: could not read Username',
+          "fatal: could not read Username for 'https://github.com': Device not configured",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+      expect(r.retryable).toBe(false);
+      expect(r.userFacingCode).toBe('auth-no-credential');
+    });
+
+    test('no credential — "terminal prompts disabled" (with GIT_TERMINAL_PROMPT=0)', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal: could not read Username',
+          "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+      expect(r.retryable).toBe(false);
+      expect(r.userFacingCode).toBe('auth-no-credential');
+    });
+
+    test('no credential — could not read Password', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal',
+          "could not read Password for 'https://github.com': terminal prompts disabled",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+    });
+
+    test('deriveUserFacingCode maps auth/no-credential', () => {
+      expect(deriveUserFacingCode('auth', 'no-credential')).toBe('auth-no-credential');
+    });
   });
 
   describe('Class 3 — Semantic (non-retryable)', () => {
@@ -400,11 +441,13 @@ describe('classifyGitError', () => {
         'auth-403',
         'auth-401',
         'auth-scope-mismatch',
+        'auth-no-credential',
         'semantic-protected-branch',
       ]);
       const samples = [
         mkErr('Could not resolve host: github.com'),
         mkErr('HTTP 403: forbidden'),
+        mkErr("fatal: could not read Username for 'https://github.com': terminal prompts disabled"),
         mkErr('CONFLICT'),
         mkErr('lfs storage quota exceeded'),
         mkErr('Unknown error'),

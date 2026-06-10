@@ -2437,6 +2437,10 @@ msgstr ""
 msgid "GitHub authentication failed. Try signing in again."
 msgstr ""
 
+#: src/components/SyncStatusBadge.tsx
+msgid "GitHub sign-in is missing or expired. Reconnect to resume syncing."
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Global"
 msgstr ""

@@ -1,7 +1,13 @@
 import type { SyncErrorCode } from '@inkeep/open-knowledge-core';
 
 type NetworkSubclass = 'dns' | 'timeout' | '5xx' | '429' | 'connection-refused' | 'unknown-network';
-type AuthSubclass = '401' | '403' | 'expired-token' | 'scope-mismatch' | 'unknown-auth';
+type AuthSubclass =
+  | '401'
+  | '403'
+  | 'expired-token'
+  | 'scope-mismatch'
+  | 'no-credential'
+  | 'unknown-auth';
 type SemanticSubclass =
   | 'non-fast-forward'
   | 'protected-branch'
@@ -66,6 +72,7 @@ export function deriveUserFacingCode(
   if (cls === 'auth' && subclass === '403') return 'auth-403';
   if (cls === 'auth' && subclass === '401') return 'auth-401';
   if (cls === 'auth' && subclass === 'scope-mismatch') return 'auth-scope-mismatch';
+  if (cls === 'auth' && subclass === 'no-credential') return 'auth-no-credential';
   if (cls === 'semantic' && subclass === 'protected-branch') return 'semantic-protected-branch';
   return null;
 }
@@ -91,6 +98,11 @@ const AUTH_PATTERNS: RegExp[] = [
   /permission denied.*\(publickey\)/i,
   /host key verification failed/i,
   /fatal:.*repository.*not found/i, // often auth-related on private repos
+];
+
+const NO_CREDENTIAL_PATTERNS: RegExp[] = [
+  /could not read (username|password)/i,
+  /terminal prompts disabled/i,
 ];
 
 const SCOPE_MISMATCH_PATTERNS: RegExp[] = [
@@ -245,6 +257,15 @@ function classifyGitErrorBase(error: Error | unknown): ClassifiedErrorBase {
     };
   }
 
+  if (matchesAny(combined, NO_CREDENTIAL_PATTERNS)) {
+    return {
+      class: 'auth',
+      subclass: 'no-credential',
+      retryable: false,
+      message: 'No GitHub credential available — reconnect to resume syncing',
+      rawStderr: raw,
+    };
+  }
   if (matchesAny(combined, SCOPE_MISMATCH_PATTERNS)) {
     return {
       class: 'auth',

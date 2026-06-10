@@ -45,6 +45,7 @@ export const SYNC_ERROR_CODES = [
   'auth-403',
   'auth-401',
   'auth-scope-mismatch',
+  'auth-no-credential',
   'semantic-protected-branch',
 ] as const;
 

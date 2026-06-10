@@ -442,6 +442,29 @@ export class SyncEngine {
     void this.probePushPermissionInternal('refresh');
   }
 
+  async notifyCredentialsChanged(): Promise<void> {
+    if (!this.syncEnabled) return;
+    if (this.state !== 'auth-error' && this.pausedReason !== 'auth-error') return;
+
+    this.pausedReason = undefined;
+    this.clearPushError();
+    this.clearPullError();
+    this.consecutiveFailures = 0;
+
+    this.hasRemote = await this.probeRemote();
+    if (!this.hasRemote) {
+      this.transitionTo('dormant');
+      this.saveStateNow();
+      return;
+    }
+
+    this.transitionTo('idle');
+    this.schedulePull(0);
+    this.schedulePush();
+    this.saveStateNow();
+    void this.probePushPermissionInternal('refresh');
+  }
+
   async trigger(op: 'sync' | 'push' | 'pull' = 'sync'): Promise<void> {
     this.consecutiveFailures = 0;
     if (
@@ -768,7 +791,8 @@ export class SyncEngine {
 
   private async runPullCycle(): Promise<void> {
     if (this.pullInFlight) return;
-    if (this.state === 'dormant' || this.state === 'disabled') return;
+    if (this.state === 'dormant' || this.state === 'disabled' || this.state === 'auth-error')
+      return;
     if (this.state === 'conflict') {
       this.schedulePull(); // retry after interval but don't fetch while conflicted
       return;
@@ -1578,7 +1602,9 @@ export class SyncEngine {
   private saveStateNow(): void {
     try {
       const persistedReason =
-        this.pausedReason === 'no-push-permission' ? undefined : this.pausedReason;
+        this.pausedReason === 'no-push-permission' || this.pausedReason === 'auth-error'
+          ? undefined
+          : this.pausedReason;
       const data: PersistedSyncState = {
         version: 1,
         lastSyncUtc: this.lastSyncUtc,
@@ -1606,7 +1632,9 @@ export class SyncEngine {
       this.lastPushedSha = data.lastPushedSha ?? null;
       this.consecutiveFailures = data.consecutiveFailures ?? 0;
       this.pausedReason =
-        data.pausedReason === 'no-push-permission' ? undefined : data.pausedReason;
+        data.pausedReason === 'no-push-permission' || data.pausedReason === 'auth-error'
+          ? undefined
+          : data.pausedReason;
 
       const inflightFiles = data.inflightConflicts ?? [];
       if (inflightFiles.length > 0) {

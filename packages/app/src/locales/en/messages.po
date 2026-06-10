@@ -2442,6 +2442,10 @@ msgstr "Git identity isn't set — commits use a default author. Set yours so te
 msgid "GitHub authentication failed. Try signing in again."
 msgstr "GitHub authentication failed. Try signing in again."
 
+#: src/components/SyncStatusBadge.tsx
+msgid "GitHub sign-in is missing or expired. Reconnect to resume syncing."
+msgstr "GitHub sign-in is missing or expired. Reconnect to resume syncing."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Global"
 msgstr "Global"

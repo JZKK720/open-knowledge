@@ -559,6 +559,16 @@ export function __resetRenameTelemetryForTesting(): void {
   _renameAttributionCounter = null;
 }
 
+export function resumeSyncOnAuthEvent(
+  event: AuthEvent,
+  getSyncEngine?: () => SyncEngine | null,
+): void {
+  if (event.type !== 'complete') return;
+  void getSyncEngine?.()
+    ?.notifyCredentialsChanged()
+    .catch(() => {});
+}
+
 export const ROLLBACK_ORIGIN = {
   source: 'local' as const,
   skipStoreHooks: false,
@@ -8283,6 +8293,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
           return;
         }
+        resumeSyncOnAuthEvent(event, getSyncEngine);
         if (!res.writableEnded && !res.destroyed) {
           try {
             res.write(`${JSON.stringify(event)}\n`);

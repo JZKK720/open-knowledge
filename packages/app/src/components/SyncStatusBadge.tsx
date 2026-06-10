@@ -169,6 +169,8 @@ export function formatPushFailureCode(code: SyncErrorCode): string {
       return t`GitHub authentication failed. Try signing in again.`;
     case 'auth-scope-mismatch':
       return t`Your GitHub token is missing required scopes. Try signing in again.`;
+    case 'auth-no-credential':
+      return t`GitHub sign-in is missing or expired. Reconnect to resume syncing.`;
     case 'semantic-protected-branch':
       return t`The default branch is protected — pushes need a pull request.`;
     default:
@@ -184,6 +186,8 @@ export function formatPullFailureCode(code: SyncErrorCode): string {
       return t`GitHub authentication failed. Try signing in again.`;
     case 'auth-scope-mismatch':
       return t`Your GitHub token is missing required scopes. Try signing in again.`;
+    case 'auth-no-credential':
+      return t`GitHub sign-in is missing or expired. Reconnect to resume syncing.`;
     default:
       return t`Fetch failed — check the server logs for details.`;
   }
@@ -197,6 +201,8 @@ export function formatSyncFailureCode(code: SyncErrorCode): string {
       return t`GitHub authentication failed. Try signing in again.`;
     case 'auth-scope-mismatch':
       return t`Your GitHub token is missing required scopes. Try signing in again.`;
+    case 'auth-no-credential':
+      return t`GitHub sign-in is missing or expired. Reconnect to resume syncing.`;
     case 'semantic-protected-branch':
       return t`The default branch is protected — pushes need a pull request.`;
     default:

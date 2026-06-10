@@ -120,6 +120,15 @@ describe('formatSyncFailureCode — neutral collapsed copy', () => {
     expect(formatSyncFailureCode('auth-403')).not.toBe(formatPushFailureCode('auth-403'));
     expect(formatSyncFailureCode('auth-403')).toBe(formatPullFailureCode('auth-403'));
   });
+
+  test('auth-no-credential copy directs the user to reconnect (all three formatters)', async () => {
+    const { formatSyncFailureCode, formatPushFailureCode, formatPullFailureCode } = await import(
+      './SyncStatusBadge'
+    );
+    for (const fmt of [formatSyncFailureCode, formatPushFailureCode, formatPullFailureCode]) {
+      expect(fmt('auth-no-credential')).toMatch(/reconnect/i);
+    }
+  });
 });
 
 describe('computeSyncErrorLines — collapse + label truth table', () => {

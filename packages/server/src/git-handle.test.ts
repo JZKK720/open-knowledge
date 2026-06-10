@@ -26,6 +26,10 @@ describe('buildGitEnv', () => {
     expect(env.LC_ALL).toBe('C');
   });
 
+  test('disables terminal prompts (no-TTY server-spawned git)', () => {
+    expect(buildGitEnv().GIT_TERMINAL_PROMPT).toBe('0');
+  });
+
   test('preserves PATH so a bare-command credential helper resolves', () => {
     withEnv('PATH', '/custom/bin:/usr/bin', () => {
       expect(buildGitEnv().PATH).toBe('/custom/bin:/usr/bin');
