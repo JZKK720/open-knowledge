@@ -129,26 +129,4 @@ describe('McpConsentDialog module shape', () => {
     expect(spy.mock.calls.length).toBe(1);
     expect(spy.mock.calls[0]).toEqual(['hello']);
   });
-
-  test('Pass 1 Major #8: dialog renders "Will replace existing" label for willReplace=true rows', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const source = readFileSync(join(import.meta.dir, 'McpConsentDialogBody.tsx'), 'utf8');
-    expect(source).toContain('Will replace existing Open Knowledge entry');
-    expect(source).toContain('editor.willReplace');
-  });
-
-  test('Pass 1 Major #1: onAdd / onSkip must reset `busy` on !result.ok so retry is possible', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const source = readFileSync(join(import.meta.dir, 'McpConsentDialogBody.tsx'), 'utf8');
-    const onAddBlock = source.match(/async function onAdd\(\)\s*\{[\s\S]*?\n\s\s\}/);
-    const onSkipBlock = source.match(/async function onSkip\(\)\s*\{[\s\S]*?\n\s\s\}/);
-    expect(onAddBlock).not.toBeNull();
-    expect(onSkipBlock).not.toBeNull();
-    expect(onAddBlock?.[0]).toContain('if (!result.ok)');
-    expect(onAddBlock?.[0]).toContain('setBusy(false)');
-    expect(onSkipBlock?.[0]).toContain('if (!result.ok)');
-    expect(onSkipBlock?.[0]).toContain('setBusy(false)');
-  });
 });

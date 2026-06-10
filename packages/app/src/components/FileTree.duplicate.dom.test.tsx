@@ -7,7 +7,9 @@ import type { ResolvedNavigationTarget } from './navigation-targets';
 
 type MenuItemProps = {
   children?: ReactNode;
+  checked?: boolean;
   disabled?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
   onSelect?: () => void;
   [key: string]: unknown;
 };
@@ -16,15 +18,35 @@ function PassThrough({ children }: { children?: ReactNode }) {
   return <>{children}</>;
 }
 
-function MenuItem({ children, disabled, onSelect, variant: _variant, ...props }: MenuItemProps) {
+function MenuItem({
+  children,
+  checked,
+  disabled,
+  onCheckedChange,
+  onSelect,
+  variant: _variant,
+  ...props
+}: MenuItemProps) {
+  const handleClick = () => {
+    onCheckedChange?.(!checked);
+    onSelect?.();
+  };
+  if (checked !== undefined) {
+    return (
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={handleClick}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  }
   return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      onClick={() => onSelect?.()}
-      {...props}
-    >
+    <button type="button" role="menuitem" disabled={disabled} onClick={handleClick} {...props}>
       {children}
     </button>
   );
@@ -184,6 +206,14 @@ let duplicateStatus = 200;
 let duplicateGate: Promise<void> | null = null;
 let duplicateFetchError: Error | null = null;
 let fetchCalls: FetchCall[] = [];
+let okignoreBindingMock: {
+  current: () => string;
+  patch: ReturnType<typeof mock>;
+} | null = null;
+let projectLocalBindingMock: { patch: ReturnType<typeof mock> } | null = null;
+let mergedConfigMock: {
+  appearance?: { sidebar?: { showHiddenFiles?: boolean; showAllFiles?: boolean } };
+} | null = null;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -194,6 +224,20 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function duplicateCalls() {
   return fetchCalls.filter((call) => call.url === '/api/duplicate-path');
+}
+
+function expectMenuOrder(labels: readonly RegExp[]) {
+  const items = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'),
+  );
+  let cursor = -1;
+  for (const label of labels) {
+    const next = items.findIndex(
+      (item, index) => index > cursor && label.test(item.textContent ?? ''),
+    );
+    expect(next, `expected menu item ${label} after index ${cursor}`).toBeGreaterThan(cursor);
+    cursor = next;
+  }
 }
 
 function makeFetchMock() {
@@ -256,9 +300,9 @@ mock.module('./ui/sidebar', () => ({
 
 mock.module('@/lib/config-provider', () => ({
   useConfigContext: () => ({
-    okignoreBinding: null,
-    projectLocalBinding: null,
-    merged: null,
+    okignoreBinding: okignoreBindingMock,
+    projectLocalBinding: projectLocalBindingMock,
+    merged: mergedConfigMock,
   }),
 }));
 
@@ -273,7 +317,16 @@ mock.module('./handoff/useHandoffDispatch', () => ({
 }));
 
 mock.module('./handoff/OpenInAgentContextSubmenu', () => ({
-  OpenInAgentContextSubmenu: () => null,
+  OpenInAgentContextSubmenu: ({ webFallbackVisible }: { webFallbackVisible?: boolean }) => (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid="file-tree-menu-open-in-agent"
+      data-web-fallback-visible={String(webFallbackVisible)}
+    >
+      Open with AI
+    </button>
+  ),
 }));
 
 mock.module('./sidebar-hover-prewarm', () => ({
@@ -386,6 +439,9 @@ describe('FileTree duplicate action runtime behavior', () => {
     duplicateGate = null;
     duplicateFetchError = null;
     fetchCalls = [];
+    okignoreBindingMock = null;
+    projectLocalBindingMock = null;
+    mergedConfigMock = null;
     globalThis.fetch = makeFetchMock() as unknown as typeof fetch;
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
@@ -431,6 +487,49 @@ describe('FileTree duplicate action runtime behavior', () => {
     expect(closeMenuMock).toHaveBeenCalled();
   });
 
+  test('file context-menu Hide appends an anchored okignore pattern and shows reversible copy', async () => {
+    okignoreBindingMock = {
+      current: () => '',
+      patch: mock(() => ({ ok: true })),
+    };
+    const user = userEvent.setup();
+    renderFileTree();
+
+    const hide = (await screen.findByTestId('file-tree-menu-hide')) as HTMLButtonElement;
+    expect(hide.disabled).toBe(false);
+    expect(hide.textContent).toContain('Hide this file');
+
+    await user.click(hide);
+
+    expect(closeMenuMock).toHaveBeenCalled();
+    expect(okignoreBindingMock.patch).toHaveBeenCalledWith('/notes/source.mdx\n');
+    expect(toastSuccessMock).toHaveBeenCalledWith('Hidden “source”', {
+      description: 'Manage hidden files in Settings → Ignore patterns.',
+      duration: 5000,
+    });
+  });
+
+  test('Hide is disabled without the shared okignore binding and dedupes existing patterns', async () => {
+    renderFileTree();
+    expect(((await screen.findByTestId('file-tree-menu-hide')) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    cleanup();
+
+    okignoreBindingMock = {
+      current: () => '/notes/source.mdx\n',
+      patch: mock(() => ({ ok: true })),
+    };
+    const user = userEvent.setup();
+    renderFileTree();
+
+    await user.click(await screen.findByTestId('file-tree-menu-hide'));
+
+    expect(closeMenuMock).toHaveBeenCalled();
+    expect(okignoreBindingMock.patch).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalledWith('Hidden “source”', expect.anything());
+  });
+
   test('folder context-menu Duplicate posts the selected folder target and navigates to the copy', async () => {
     menuItem = { kind: 'directory', path: 'notes/' };
     duplicateResponse = {
@@ -463,6 +562,75 @@ describe('FileTree duplicate action runtime behavior', () => {
       description: 'notes copy',
     });
     expect(closeMenuMock).toHaveBeenCalled();
+  });
+
+  test('folder context menu exposes runtime order, subtree actions, visibility toggles, and folder hide', async () => {
+    menuItem = { kind: 'directory', path: 'notes/' };
+    okignoreBindingMock = {
+      current: () => '',
+      patch: mock(() => ({ ok: true })),
+    };
+    projectLocalBindingMock = { patch: mock(() => ({ ok: true })) };
+    mergedConfigMock = {
+      appearance: { sidebar: { showHiddenFiles: true, showAllFiles: false } },
+    };
+    const user = userEvent.setup();
+    renderFileTree();
+
+    await screen.findByRole('menuitem', { name: /duplicate/i });
+    expectMenuOrder([
+      /New File/,
+      /New from template/,
+      /New Folder/,
+      /Open with AI/,
+      /Copy Path/,
+      /Show Hidden Files/,
+      /Show all files/,
+      /Expand All/,
+      /Duplicate/,
+      /Rename/,
+      /Hide folder/,
+      /Delete/,
+    ]);
+
+    const showHidden = screen.getByTestId('file-tree-menu-show-hidden-files');
+    const showAll = screen.getByTestId('file-tree-menu-show-all-files');
+    expect(showHidden.getAttribute('aria-checked')).toBe('true');
+    expect(showAll.getAttribute('aria-checked')).toBe('false');
+
+    await user.click(showAll);
+    expect(projectLocalBindingMock.patch).toHaveBeenCalledWith({
+      appearance: { sidebar: { showAllFiles: true } },
+    });
+    await user.click(showHidden);
+    expect(projectLocalBindingMock.patch).toHaveBeenCalledWith({
+      appearance: { sidebar: { showHiddenFiles: false } },
+    });
+
+    await user.click(screen.getByRole('menuitem', { name: /expand all/i }));
+    expect(model.getItem('notes/')?.isExpanded()).toBe(true);
+
+    await user.click(screen.getByTestId('file-tree-menu-hide'));
+    expect(okignoreBindingMock.patch).toHaveBeenCalledWith('/notes/\n');
+    expect(toastSuccessMock).toHaveBeenCalledWith('Hidden folder “notes”', {
+      description: 'Manage hidden files in Settings → Ignore patterns.',
+      duration: 5000,
+    });
+  });
+
+  test('asset context menu keeps path actions and suppresses document-only actions', async () => {
+    menuItem = { kind: 'file', path: 'images/logo.png' };
+    renderFileTree();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('file-tree-menu-hide')).toBeNull();
+    });
+    expect(screen.queryByTestId('file-tree-menu-open-in-agent')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /duplicate/i })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /rename/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /^delete/i })).toBeTruthy();
+    expect(screen.queryByTestId('file-tree-menu-show-hidden-files')).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /copy path/i })).toBeTruthy();
   });
 
   test('duplicate response is schema-validated before UI reconciliation', async () => {

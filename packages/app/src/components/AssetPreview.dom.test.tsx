@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  expectVisualClassTokens,
+  expectVisualClassTokensAbsent,
+} from '@/test-utils/visual-contract';
 
 mock.module('@/editor/components/Pdf', () => ({
   Pdf: (props: { src?: string; title?: string; fillContainer?: boolean }) => (
@@ -38,7 +42,7 @@ describe('AssetPreview — image loading-state placeholder (PRD-6638)', () => {
 
     const slot = screen.queryByTestId('image-slot') as HTMLElement | null;
     expect(slot).not.toBeNull();
-    expect(slot?.className).toContain('aspect-[16/9]');
+    expectVisualClassTokens(slot?.className, ['aspect-[16/9]']);
   });
 
   test('removes the placeholder and releases the aspect-ratio constraint after the inner <img>.load event fires', () => {
@@ -54,7 +58,7 @@ describe('AssetPreview — image loading-state placeholder (PRD-6638)', () => {
 
     const slotAfterLoad = screen.queryByTestId('image-slot') as HTMLElement | null;
     expect(slotAfterLoad).not.toBeNull();
-    expect(slotAfterLoad?.className).not.toContain('aspect-[16/9]');
+    expectVisualClassTokensAbsent(slotAfterLoad?.className, ['aspect-[16/9]']);
   });
 
   test('renders an <audio> player for mediaKind="audio"', () => {
@@ -102,6 +106,6 @@ describe('AssetPreview — image loading-state placeholder (PRD-6638)', () => {
 
     expect(screen.queryByTestId('image-loading-skeleton')).not.toBeNull();
     const slot = screen.queryByTestId('image-slot') as HTMLElement | null;
-    expect(slot?.className).toContain('aspect-[16/9]');
+    expectVisualClassTokens(slot?.className, ['aspect-[16/9]']);
   });
 });

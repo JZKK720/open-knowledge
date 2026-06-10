@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { getParseHealth, resetParseHealth } from '@inkeep/open-knowledge-core';
 import { onPillRenderError } from './SidebarSearchBar';
-import SRC from './SidebarSearchBar?raw';
 
 describe('SidebarSearchBar module', () => {
   test('exports the SidebarSearchBar component', async () => {
@@ -65,53 +64,5 @@ describe('onPillRenderError — Pattern C runtime observability emission', () =>
 
     const payload = JSON.parse(String(warnSpy.mock.calls[0][0]));
     expect(payload.stack).toBe('\n  at SidebarSearchBar\n  at FileSidebar');
-  });
-});
-
-describe('SidebarSearchBar source-level guards', () => {
-  test('imports Button from \'@/components/ui/button\' and uses variant="outline"', () => {
-    expect(SRC).toMatch(/import\s*\{\s*Button\s*\}\s*from\s*['"]@\/components\/ui\/button['"]/);
-    expect(SRC).toMatch(/variant=['"]outline['"]/);
-  });
-
-  test('composition pins every visual class in the locked contract', () => {
-    expect(SRC).toContain('rounded-lg');
-    expect(SRC).toContain('h-9');
-    expect(SRC).toContain('w-full');
-    expect(SRC).toContain('justify-start');
-    expect(SRC).toContain('gap-2');
-    expect(SRC).toContain('px-3');
-    expect(SRC).toContain('font-normal');
-    expect(SRC).toContain('text-muted-foreground');
-  });
-
-  test("imports the Search icon from 'lucide-react' and renders it as decorative (aria-hidden)", () => {
-    expect(SRC).toMatch(/import\s*\{\s*Search\s*\}\s*from\s*['"]lucide-react['"]/);
-    expect(SRC).toMatch(/<Search\s+aria-hidden=['"]true['"]\s*\/>/);
-  });
-
-  test('renders the visible Search label with flex-1 text-left text-sm spans', () => {
-    expect(SRC).toMatch(
-      /<span\s+className=['"]flex-1\s+text-left\s+text-sm['"]>\s*<Trans>Search<\/Trans>\s*<\/span>/,
-    );
-  });
-
-  test('button carries the stable telemetry selector value', () => {
-    expect(SRC).toMatch(/data-telemetry-event=['"]ok\.sidebar\.search_pill\.click['"]/);
-  });
-
-  test('does NOT add aria-label to the button (visible label is the accessible name)', () => {
-    expect(SRC).not.toMatch(/aria-label=['"]/);
-  });
-
-  test('does NOT import useCallback / useMemo / memo / forwardRef from react', () => {
-    expect(SRC).not.toMatch(/import\s*\{[^}]*\buseCallback\b[^}]*\}\s*from\s*['"]react['"]/);
-    expect(SRC).not.toMatch(/import\s*\{[^}]*\buseMemo\b[^}]*\}\s*from\s*['"]react['"]/);
-    expect(SRC).not.toMatch(/import\s*\{[^}]*\bmemo\b[^}]*\}\s*from\s*['"]react['"]/);
-    expect(SRC).not.toMatch(/import\s*\{[^}]*\bforwardRef\b[^}]*\}\s*from\s*['"]react['"]/);
-  });
-
-  test('does NOT import @testing-library/react (repo convention)', () => {
-    expect(SRC).not.toMatch(/@testing-library\/react/);
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
+import { expectVisualClassTokens } from '@/test-utils/visual-contract';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
 
 describe('EditorBreadcrumb (Tier-3 mount)', () => {
@@ -22,6 +23,7 @@ describe('EditorBreadcrumb (Tier-3 mount)', () => {
 
     const nav = screen.getByRole('navigation', { name: /breadcrumb/i });
     expect(nav).toBeTruthy();
+    expectVisualClassTokens(nav.className, ['min-w-0']);
 
     const itemEls = nav.querySelectorAll('li[data-slot="breadcrumb-item"]');
     expect(itemEls.length).toBe(3);
@@ -34,6 +36,11 @@ describe('EditorBreadcrumb (Tier-3 mount)', () => {
 
     const list = nav.querySelector('ol[data-slot="breadcrumb-list"]');
     expect(list?.firstElementChild?.getAttribute('data-slot')).toBe('breadcrumb-item');
+    expectVisualClassTokens(list?.className, [
+      'text-muted-foreground/70',
+      'text-xs',
+      'overflow-hidden',
+    ]);
   });
 
   test('renders the basename folder for a one-deep docName', () => {
@@ -55,6 +62,27 @@ describe('EditorBreadcrumb (Tier-3 mount)', () => {
     const titleHosts = itemEls.map((li) => li.querySelector('[data-slot="breadcrumb-page"]'));
     expect(titleHosts[0]?.getAttribute('title')).toBe('a-very-long-folder-name');
     expect(titleHosts[1]?.getAttribute('title')).toBe('another-folder');
+  });
+
+  test('deep paths collapse middle segments into an accessible ellipsis', () => {
+    render(<EditorBreadcrumb docName="one/two/three/four/five/six/notes" />);
+
+    const nav = screen.getByRole('navigation', { name: /breadcrumb/i });
+    const itemEls = Array.from(
+      nav.querySelectorAll<HTMLLIElement>('li[data-slot="breadcrumb-item"]'),
+    );
+    expect(itemEls.map((li) => li.textContent)).toEqual([
+      'one',
+      'two / three / four',
+      'five',
+      'six',
+    ]);
+
+    const ellipsis = itemEls[1];
+    expect(ellipsis?.querySelector('[aria-hidden="true"]')?.getAttribute('title')).toBe(
+      'two / three / four',
+    );
+    expect(ellipsis?.querySelector('.sr-only')?.textContent).toBe('two / three / four');
   });
 
   test('reactivity: changing docName re-renders with new segments', () => {

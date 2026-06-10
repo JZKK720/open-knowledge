@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { InstallState, TargetData } from '@inkeep/open-knowledge-core';
 import { KNOWN_TARGETS } from '@/lib/handoff/targets';
-import SRC from './OpenInAgentMenuItem?raw';
 
 function targetById(id: TargetData['id']): TargetData {
   const found = KNOWN_TARGETS.find((t) => t.id === id);
@@ -274,19 +273,6 @@ describe('successToastForWebFallback — distinct from dispatch toast copy', () 
     const { successToastForWebFallback } = await import('./OpenInAgentMenuItem');
     const message = successToastForWebFallback('Claude Cowork');
     expect(message).not.toBe('Opened in Claude Cowork.');
-  });
-});
-
-describe('OpenInAgentMenuItem source-level guards', () => {
-  test('enabled branch dispatches via onSelect (no install-skill side door)', () => {
-    expect(SRC).toMatch(/onSelect=\{onSelect\}/);
-    expect(SRC).toMatch(/Open with AI \$\{targetDisplayName\}/);
-  });
-
-  test('not-installed branch (DropdownMenuSub with install + web fallback) is preserved', () => {
-    expect(SRC).toContain('DropdownMenuSubTrigger');
-    expect(SRC).toContain('open-in-agent-install-');
-    expect(SRC).toContain('open-in-agent-web-fallback-');
   });
 });
 

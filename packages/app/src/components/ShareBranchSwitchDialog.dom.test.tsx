@@ -269,6 +269,43 @@ describe('ShareBranchSwitchDialog — Switch path (runCheckout + CC1 gate)', () 
     cleanup();
   });
 
+  test('dirty conflicts disable Switch and describe the blocking file list', async () => {
+    const store = createShareReceiveStore();
+    const { bridge } = makeBridge({
+      fetchBranchInfo: mock(
+        async (): Promise<BranchInfoResponse> => ({
+          ok: true,
+          currentBranch: 'main',
+          currentHeadSha: 'aaaaaaa',
+          detached: false,
+          shareTargetExists: true,
+          dirtyConflicts: {
+            conflicts: true,
+            files: ['docs/notes.md', 'package.json'],
+          },
+        }),
+      ),
+    });
+    const payload = projectBranchSwitchPayload();
+    const fakeBridgeForStore = {
+      onShareReceived: (cb: (p: OkShareReceivedPayload) => void) => {
+        cb(payload);
+        return () => {};
+      },
+    } as unknown as OkDesktopBridge;
+    store.install({ bridge: fakeBridgeForStore });
+    render(<ShareBranchSwitchDialog bridge={bridge} store={store} />);
+
+    const switchBtn = await screen.findByTestId('share-branch-switch-switch');
+    const describedBy = switchBtn.getAttribute('aria-describedby');
+    expect((switchBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(switchBtn.getAttribute('aria-disabled')).toBe('true');
+    expect(describedBy).toBe('share-receive-branch-conflict-files');
+    const conflictList = document.getElementById(describedBy ?? '');
+    expect(conflictList?.textContent).toContain('docs/notes.md');
+    expect(conflictList?.textContent).toContain('package.json');
+  });
+
   test('Switch click runs checkout, awaits CC1, then warm-focus-dispatches with pendingDeepLinkDoc + pendingBranch', async () => {
     const store = createShareReceiveStore();
     const { bridge, calls } = makeBridge();
@@ -310,6 +347,76 @@ describe('ShareBranchSwitchDialog — Switch path (runCheckout + CC1 gate)', () 
     expect(openArg).toBeDefined();
     expect(openArg.pendingDeepLinkTarget).toEqual({ kind: 'doc', path: 'docs/notes.md' });
     expect(openArg.pendingBranch).toBe(payload.share.branch);
+  });
+
+  test('Switch does not navigate or warm-focus until CC1 resolves', async () => {
+    const store = createShareReceiveStore();
+    let resolveCc1: (result: { ok: true }) => void = () => {};
+    const cc1Promise = new Promise<{ ok: true }>((resolve) => {
+      resolveCc1 = resolve;
+    });
+    const { bridge, calls } = makeBridge({
+      awaitBranchSwitched: mock(() => cc1Promise),
+    });
+    const payload = projectBranchSwitchPayload();
+    const fakeBridgeForStore = {
+      onShareReceived: (cb: (p: OkShareReceivedPayload) => void) => {
+        cb(payload);
+        return () => {};
+      },
+    } as unknown as OkDesktopBridge;
+    store.install({ bridge: fakeBridgeForStore });
+    window.location.hash = '#before-switch';
+    render(<ShareBranchSwitchDialog bridge={bridge} store={store} />);
+
+    const switchBtn = await screen.findByTestId('share-branch-switch-switch');
+    await act(async () => {
+      fireEvent.click(switchBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(calls.awaitBranchSwitched).toHaveBeenCalledTimes(1);
+    });
+    expect(calls.open).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#before-switch');
+
+    resolveCc1({ ok: true });
+
+    await waitFor(() => {
+      expect(calls.open).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test('Switch on a branchless share dismisses without waiting on CC1', async () => {
+    const store = createShareReceiveStore();
+    const { bridge, calls } = makeBridge();
+    const payload = projectBranchSwitchPayload();
+    payload.share.branch = '';
+    const fakeBridgeForStore = {
+      onShareReceived: (cb: (p: OkShareReceivedPayload) => void) => {
+        cb(payload);
+        return () => {};
+      },
+    } as unknown as OkDesktopBridge;
+    store.install({ bridge: fakeBridgeForStore });
+    render(<ShareBranchSwitchDialog bridge={bridge} store={store} />);
+
+    const switchBtn = await screen.findByTestId('share-branch-switch-switch');
+    await act(async () => {
+      fireEvent.click(switchBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(store.getSnapshot()).toBeNull();
+    });
+    expect(calls.runCheckout).toHaveBeenCalledWith({
+      projectPath: payload.projectPath,
+      branch: '',
+    });
+    expect(calls.awaitBranchSwitched).not.toHaveBeenCalled();
+    expect(calls.open).not.toHaveBeenCalled();
   });
 
   test('Switch warm-focus open() reject surfaces a toast — no silent swallow', async () => {

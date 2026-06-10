@@ -1,6 +1,4 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 interface MockBridge {
   config: {
@@ -221,13 +219,12 @@ describe('NavigatorApp error-state helpers', () => {
   test('runWithErrorStatePure surfaces rejections via setError with Error.message', async () => {
     const { runWithErrorStatePure } = await import('./NavigatorApp');
     const setErrorCalls: Array<string | null> = [];
-    const setError = (msg: string | null) => {
-      setErrorCalls.push(msg);
-    };
     await runWithErrorStatePure(
       () => Promise.reject(new Error('boot failed')),
       'Failed to open project.',
-      setError,
+      (msg) => {
+        setErrorCalls.push(msg);
+      },
     );
     expect(setErrorCalls).toEqual([null, 'boot failed']);
   });
@@ -235,13 +232,12 @@ describe('NavigatorApp error-state helpers', () => {
   test('runWithErrorStatePure falls back when rejection has no usable message', async () => {
     const { runWithErrorStatePure } = await import('./NavigatorApp');
     const setErrorCalls: Array<string | null> = [];
-    const setError = (msg: string | null) => {
-      setErrorCalls.push(msg);
-    };
     await runWithErrorStatePure(
       () => Promise.reject('network dropped'),
       'Failed to open project.',
-      setError,
+      (msg) => {
+        setErrorCalls.push(msg);
+      },
     );
     expect(setErrorCalls).toEqual([null, 'Failed to open project.']);
   });
@@ -256,118 +252,5 @@ describe('NavigatorApp error-state helpers', () => {
     );
     afterAwait = true;
     expect(afterAwait).toBe(true);
-  });
-});
-
-const NAVIGATOR_SRC = readFileSync(join(__dirname, 'NavigatorApp.tsx'), 'utf8');
-
-describe('NavigatorApp launcher-header channel surface', () => {
-  test('imports BetaBadge from the sibling component (cross-window subscription centralized via the hook)', () => {
-    expect(NAVIGATOR_SRC).toMatch(/from\s+['"]\.\/BetaBadge['"]/);
-    expect(NAVIGATOR_SRC).toMatch(/<BetaBadge\b/);
-  });
-
-  test('Channel badge is gone: no useUpdateChannel hook + no Beta/Stable string literal in the header', () => {
-    expect(NAVIGATOR_SRC).not.toMatch(
-      /channel\s*===\s*['"]beta['"]\s*\?\s*['"]Beta['"]\s*:\s*['"]Stable['"]/,
-    );
-    expect(NAVIGATOR_SRC).not.toMatch(/useUpdateChannel/);
-  });
-
-  test('BetaBadge sits in the title row (chrome-level signal, not About-row info)', () => {
-    const titleMatch = NAVIGATOR_SRC.match(/<h1[^>]*>Open Knowledge<\/h1>\s*<BetaBadge/);
-    expect(titleMatch).not.toBeNull();
-  });
-});
-
-describe('NavigatorApp — Electron theme bridge wiring', () => {
-  test('imports useTheme from next-themes for the user-intent value', () => {
-    expect(NAVIGATOR_SRC).toMatch(
-      /import\s*\{[^}]*\buseTheme\b[^}]*\}\s*from\s*['"]next-themes['"]/,
-    );
-    expect(NAVIGATOR_SRC).toMatch(/useTheme\(\)/);
-  });
-
-  test('delegates the theme bridge wiring to the shared useThemeBridge hook', () => {
-    expect(NAVIGATOR_SRC).toMatch(
-      /import\s*\{\s*useThemeBridge\s*\}\s*from\s*['"]@\/hooks\/use-theme-bridge['"]/,
-    );
-    expect(NAVIGATOR_SRC).toMatch(/useThemeBridge\(\s*bridge\s*,\s*themeValue/);
-  });
-
-  test('falls back to "system" for symmetry with ConfigProvider', () => {
-    expect(NAVIGATOR_SRC).toMatch(/themeValue\s*\?\?\s*['"]system['"]/);
-  });
-});
-
-describe('NavigatorApp launcher window drag region', () => {
-  test('detects Electron host via the canonical window.okDesktop != null idiom', () => {
-    expect(NAVIGATOR_SRC).toMatch(
-      /typeof\s+window\s*!==\s*['"]undefined['"]\s*&&\s*window\.okDesktop\s*!=\s*null/,
-    );
-    expect(NAVIGATOR_SRC).toContain('const isElectronHost');
-  });
-
-  test('chrome row spans full window width and is draggable in Electron mode', () => {
-    expect(NAVIGATOR_SRC).toMatch(
-      /data-testid=['"]nav-chrome-row['"][\s\S]*?isElectronHost\s*\?\s*['"]\[-webkit-app-region:drag\]['"]|isElectronHost\s*\?\s*['"]\[-webkit-app-region:drag\]['"][\s\S]*?data-testid=['"]nav-chrome-row['"]/,
-    );
-  });
-
-  test('chrome row carries data-electron-drag so the globals.css `:has()` rule can target it', () => {
-    expect(NAVIGATOR_SRC).toMatch(
-      /data-electron-drag=\{\s*isElectronHost\s*\?\s*['"]['"]\s*:\s*undefined\s*\}/,
-    );
-  });
-
-  test('header element itself does NOT carry drag (chrome row owns it)', () => {
-    expect(NAVIGATOR_SRC).not.toMatch(
-      /<header\b[^>]*\[-webkit-app-region:drag\]|<header\b[\s\S]{0,200}?isElectronHost\s*\?\s*['"]\[-webkit-app-region:drag\]/,
-    );
-  });
-
-  test('outer container is NOT draggable (drag is scoped to the chrome row)', () => {
-    expect(NAVIGATOR_SRC).not.toMatch(
-      /h-screen\s+w-screen[^"`']*\[-webkit-app-region:drag\]|className=\{`flex h-screen[\s\S]*?\[-webkit-app-region:drag\]/,
-    );
-  });
-
-  test('NavigatorCard does NOT carry a no-drag opt-out (no drag ancestor)', () => {
-    const cardFnMatch = NAVIGATOR_SRC.match(/function\s+NavigatorCard\b[\s\S]*?^}/m);
-    expect(cardFnMatch).not.toBeNull();
-    expect(cardFnMatch?.[0] ?? '').not.toMatch(/\[-webkit-app-region:no-drag\]/);
-  });
-
-  test('RecentRow does NOT carry a no-drag opt-out (no drag ancestor)', () => {
-    const rowFnMatch = NAVIGATOR_SRC.match(/function\s+RecentRow\b[\s\S]*?^}/m);
-    expect(rowFnMatch).not.toBeNull();
-    expect(rowFnMatch?.[0] ?? '').not.toMatch(/\[-webkit-app-region:no-drag\]/);
-  });
-});
-
-describe('NavigatorApp entry-point propagation', () => {
-  test('Open folder on disk → openProject(..., "pick-existing")', () => {
-    expect(NAVIGATOR_SRC).toMatch(/onOpenFolder\s*=[\s\S]*?openProject\([^)]*,\s*'pick-existing'/);
-  });
-
-  test('Create new project card opens CreateProjectDialog (no direct openProject dispatch)', () => {
-    expect(NAVIGATOR_SRC).toMatch(/const\s+onCreate\s*=\s*\(\)\s*=>\s*setCreateDialogOpen\(true\)/);
-    expect(NAVIGATOR_SRC).toMatch(/<CreateProjectDialog\b[\s\S]*?bridge=\{bridge\}/);
-    expect(NAVIGATOR_SRC).toMatch(
-      /data-testid=['"]nav-create-new['"]|dataTestId=['"]nav-create-new['"]/,
-    );
-  });
-
-  test('Open Recent row → openProject(..., "recents")', () => {
-    expect(NAVIGATOR_SRC).toMatch(/onOpenRecent\s*=[\s\S]*?openProject\([^)]*,\s*'recents'/);
-  });
-
-  test('Clone-complete → openProject(..., "pick-existing")', () => {
-    expect(NAVIGATOR_SRC).toMatch(/onCloneComplete[\s\S]*?openProject\([^)]*,\s*'pick-existing'/);
-  });
-
-  test('local openProject helper threads an EntryPoint argument into bridge.project.open', () => {
-    expect(NAVIGATOR_SRC).toMatch(/entryPoint:\s*OkProjectEntryPoint/);
-    expect(NAVIGATOR_SRC).toMatch(/bridge\.project\.open\(\{[^}]*entryPoint(\s*,|\s*\})/);
   });
 });

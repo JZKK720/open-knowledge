@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { ConfigBinding, OkignoreBinding } from '@inkeep/open-knowledge-core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 type WindowGlobals = {
   MutationObserver?: typeof MutationObserver;
@@ -40,29 +41,40 @@ interface BodyProps {
   okignoreSynced: boolean;
 }
 const probeProps: BodyProps[] = [];
+type BodyMode = 'probe' | 'suspend' | 'throw';
 
 function resetProbe() {
   probeProps.length = 0;
 }
 
+const pendingBodyChunk = new Promise<never>(() => {});
+
 let mockUserBinding: ConfigBinding | null = null;
 let mockUserSynced = false;
 let mockOkignoreBinding: OkignoreBinding | null = null;
 let mockOkignoreSynced = false;
+let mockCollabUrl: string | null = 'ws://test.invalid';
+let mockDesktopPresent = false;
+let mockBodyMode: BodyMode = 'probe';
+let mockShowInstallSkill = true;
+
+mock.module('@inkeep/open-knowledge-core', () => ({
+  get SHOW_INSTALL_SKILL() {
+    return mockShowInstallSkill;
+  },
+}));
 
 mock.module('@/components/settings/SettingsDialogBodyLazy', () => ({
   SettingsDialogBodyLazy: (props: BodyProps) => {
+    if (mockBodyMode === 'suspend') throw pendingBodyChunk;
+    if (mockBodyMode === 'throw') throw new Error('settings chunk failed');
     probeProps.push(props);
     return <div data-testid="settings-body-probe" />;
   },
 }));
 
-mock.module('@/components/settings/SettingsDialogErrorBoundary', () => ({
-  SettingsDialogErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 mock.module('@/editor/DocumentContext', () => ({
-  useDocumentContext: () => ({ collabUrl: 'ws://test.invalid' }),
+  useDocumentContext: () => ({ collabUrl: mockCollabUrl }),
   DocumentProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -84,7 +96,7 @@ mock.module('@/lib/config-provider', () => ({
 
 mock.module('@/lib/handoff/use-claude-desktop-integration', () => ({
   useClaudeDesktopIntegration: () => ({
-    desktopPresent: false,
+    desktopPresent: mockDesktopPresent,
     skillInstalled: false,
     refresh: () => {},
   }),
@@ -110,6 +122,10 @@ describe('SettingsDialogShell userBinding gating (Tier-3 mount)', () => {
     mockUserSynced = false;
     mockOkignoreBinding = null;
     mockOkignoreSynced = false;
+    mockCollabUrl = 'ws://test.invalid';
+    mockDesktopPresent = false;
+    mockBodyMode = 'probe';
+    mockShowInstallSkill = true;
     consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -150,76 +166,85 @@ describe('SettingsDialogShell userBinding gating (Tier-3 mount)', () => {
     const latest = probeProps[probeProps.length - 1];
     expect(latest?.userBinding).toBeNull();
   });
-});
 
-describe('SettingsDialogShell version footer', () => {
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  type WindowWithOkDesktop = typeof window & { okDesktop?: unknown };
+  test('renders the dialog frame, navigation landmark, and default Preferences section immediately', () => {
+    render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
 
-  beforeEach(() => {
-    mockUserBinding = null;
-    mockUserSynced = true;
-    mockOkignoreBinding = null;
-    mockOkignoreSynced = false;
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    expect(screen.getByTestId('settings-dialog')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeTruthy();
+    expect(screen.getByText('User')).toBeTruthy();
+    expect(screen.getByText('This project')).toBeTruthy();
+    expect(screen.queryByText('Integrations') === null).toBe(true);
+    expect(
+      screen.getByTestId('settings-sidebar-item-preferences').getAttribute('aria-current'),
+    ).toBe('page');
+    expect(probeProps.at(-1)?.activeId).toBe('preferences');
   });
 
-  afterEach(() => {
-    cleanup();
-    consoleErrorSpy.mockRestore();
-    delete (window as WindowWithOkDesktop).okDesktop;
-  });
-
-  test('renders the version + "Release notes" link when bridge.appVersion is set', () => {
-    const openExternal = mock(() => Promise.resolve());
-    (window as WindowWithOkDesktop).okDesktop = {
-      appVersion: '0.7.0',
-      shell: { openExternal },
-    };
+  test('disables project sections with an announced caption when no project is loaded', () => {
+    mockCollabUrl = null;
 
     render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
 
-    expect(screen.getByTestId('settings-sidebar-version').textContent).toContain('v0.7.0');
-    expect(screen.getByTestId('settings-sidebar-release-notes')).toBeTruthy();
+    const sync = screen.getByTestId('settings-sidebar-item-sync') as HTMLButtonElement;
+    expect(sync.disabled).toBe(true);
+    expect(sync.getAttribute('aria-disabled')).toBe('true');
+    expect(sync.getAttribute('aria-describedby')).toBe('settings-group-project-caption');
+    expect(screen.getByText('Open a project to edit.')).toBeTruthy();
   });
 
-  test('clicking "Release notes" opens the GitHub Releases tag URL for the running version', () => {
-    const openExternal = mock(() => Promise.resolve());
-    (window as WindowWithOkDesktop).okDesktop = {
-      appVersion: '0.7.0',
-      shell: { openExternal },
-    };
+  test('hides or shows the Integrations group from desktop availability', () => {
+    const { rerender } = render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
+    expect(screen.queryByTestId('settings-sidebar-item-claude-desktop') === null).toBe(true);
 
-    render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
+    mockDesktopPresent = true;
+    rerender(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
 
-    fireEvent.click(screen.getByTestId('settings-sidebar-release-notes'));
+    expect(screen.getByText('Integrations')).toBeTruthy();
+    expect(screen.getByTestId('settings-sidebar-item-claude-desktop')).toBeTruthy();
+  });
 
-    expect(openExternal).toHaveBeenCalledTimes(1);
-    expect(openExternal).toHaveBeenCalledWith(
-      'https://github.com/inkeep/open-knowledge/releases/tag/v0.7.0',
+  test('changes sections through the sidebar and resets to Preferences on each fresh open', async () => {
+    const { rerender } = render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
+
+    await userEvent.click(screen.getByTestId('settings-sidebar-item-sync'));
+    expect(screen.getByTestId('settings-sidebar-item-sync').getAttribute('aria-current')).toBe(
+      'page',
     );
+    expect(probeProps.at(-1)?.activeId).toBe('sync');
+
+    rerender(<SettingsDialogShell open={false} onOpenChange={() => {}} />);
+    rerender(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
+
+    expect(
+      screen.getByTestId('settings-sidebar-item-preferences').getAttribute('aria-current'),
+    ).toBe('page');
+    expect(probeProps.at(-1)?.activeId).toBe('preferences');
   });
 
-  test('percent-encodes a malformed version string defensively', () => {
-    const openExternal = mock(() => Promise.resolve());
-    (window as WindowWithOkDesktop).okDesktop = {
-      appVersion: '0.7.0/../evil',
-      shell: { openExternal },
-    };
+  test('shows a non-null accessible skeleton while the body chunk is pending', () => {
+    mockBodyMode = 'suspend';
 
     render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
 
-    fireEvent.click(screen.getByTestId('settings-sidebar-release-notes'));
-
-    expect(openExternal).toHaveBeenCalledWith(
-      'https://github.com/inkeep/open-knowledge/releases/tag/v0.7.0%2F..%2Fevil',
-    );
+    const status = screen.getByTestId('settings-content-skeleton');
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status.getAttribute('aria-busy')).toBe('true');
+    expect(status.textContent).toContain('Loading settings');
+    expect(screen.getByTestId('settings-dialog')).toBeTruthy();
+    expect(screen.queryByTestId('settings-body-probe') === null).toBe(true);
   });
 
-  test('suppresses the footer entirely in web mode (no bridge → no "vundefined")', () => {
+  test('contains body render failures inside the dialog frame', async () => {
+    mockBodyMode = 'throw';
+
     render(<SettingsDialogShell open={true} onOpenChange={() => {}} />);
 
-    expect(screen.queryByTestId('settings-sidebar-version')).toBeNull();
-    expect(screen.queryByTestId('settings-sidebar-release-notes')).toBeNull();
+    expect((await screen.findByRole('alert')).textContent).toContain('Settings failed to load');
+    expect(screen.getByTestId('settings-dialog')).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeTruthy();
   });
 });

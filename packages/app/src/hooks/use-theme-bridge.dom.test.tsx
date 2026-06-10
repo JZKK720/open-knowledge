@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { useThemeBridge } from './use-theme-bridge';
 
@@ -44,9 +44,69 @@ function makeRejectingBridge(rejectionError: Error): StubBridge {
   };
 }
 
-function HookProbe({ bridge, themeValue }: { bridge: OkDesktopBridge; themeValue: string }) {
+function HookProbe({
+  bridge,
+  themeValue,
+}: {
+  bridge: OkDesktopBridge | undefined;
+  themeValue: string | undefined;
+}) {
   useThemeBridge(bridge, themeValue);
   return <div data-testid="theme-bridge-probe" />;
+}
+
+function installControllableMatchMedia(initialMatches: boolean) {
+  const originalWindowMatchMedia = window.matchMedia;
+  const originalGlobalMatchMedia = globalThis.matchMedia;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const queries: string[] = [];
+  let matches = initialMatches;
+  const mql = {
+    get matches() {
+      return matches;
+    },
+    media: '',
+    onchange: null,
+    addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+      if (type !== 'change') return;
+      listeners.add(listener as (event: MediaQueryListEvent) => void);
+    },
+    removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+      if (type !== 'change') return;
+      listeners.delete(listener as (event: MediaQueryListEvent) => void);
+    },
+    addListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener);
+    },
+    dispatchEvent: () => false,
+  } as unknown as MediaQueryList;
+  const matchMedia = (query: string) => {
+    queries.push(query);
+    (mql as { media: string }).media = query;
+    return mql;
+  };
+
+  window.matchMedia = matchMedia;
+  globalThis.matchMedia = matchMedia;
+
+  return {
+    queries,
+    get listenerCount() {
+      return listeners.size;
+    },
+    dispatchChange(nextMatches: boolean) {
+      matches = nextMatches;
+      const event = { matches: nextMatches, media: mql.media } as MediaQueryListEvent;
+      for (const listener of listeners) listener(event);
+    },
+    restore() {
+      window.matchMedia = originalWindowMatchMedia;
+      globalThis.matchMedia = originalGlobalMatchMedia;
+    },
+  };
 }
 
 describe('useThemeBridge (Tier-3 mount)', () => {
@@ -62,6 +122,33 @@ describe('useThemeBridge (Tier-3 mount)', () => {
     cleanup();
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
+  });
+
+  test('exports the hook', async () => {
+    const mod = await import('./use-theme-bridge');
+    expect(typeof mod.useThemeBridge).toBe('function');
+  });
+
+  test('no-ops without a bridge or a valid theme value', async () => {
+    const stubBridge = makeStubBridge();
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<HookProbe bridge={undefined} themeValue="system" />);
+      await Promise.resolve();
+    });
+
+    expect(stubBridge.setThemeSourceCalls).toHaveLength(0);
+    expect(stubBridge.signalThemeAppliedCalls).toHaveLength(0);
+
+    await act(async () => {
+      view.rerender(
+        <HookProbe bridge={stubBridge as unknown as OkDesktopBridge} themeValue="solarized" />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(stubBridge.setThemeSourceCalls).toHaveLength(0);
+    expect(stubBridge.signalThemeAppliedCalls).toHaveLength(0);
   });
 
   test('forwards themeValue verbatim to setThemeSource on mount', async () => {
@@ -99,7 +186,10 @@ describe('useThemeBridge (Tier-3 mount)', () => {
     );
 
     unmount();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(stubBridge.signalThemeAppliedCalls.length).toBe(0);
 
@@ -126,7 +216,9 @@ describe('useThemeBridge (Tier-3 mount)', () => {
 
     rerender(<HookProbe bridge={stubBridge as unknown as OkDesktopBridge} themeValue="system" />);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(stubBridge.setThemeSourceCalls.length).toBe(1);
     expect(stubBridge.setThemeSourceCalls[0]).toBe('system');
@@ -186,5 +278,36 @@ describe('useThemeBridge (Tier-3 mount)', () => {
       }
     });
     expect(sawStructuredWarn).toBe(true);
+  });
+
+  test('reduced-transparency changes signal main and the listener is removed on unmount', async () => {
+    const media = installControllableMatchMedia(false);
+    try {
+      const stubBridge = makeStubBridge();
+      const { unmount } = render(
+        <HookProbe bridge={stubBridge as unknown as OkDesktopBridge} themeValue="system" />,
+      );
+
+      await waitFor(
+        () => {
+          expect(stubBridge.signalThemeAppliedCalls.length).toBe(1);
+        },
+        { timeout: ASYNC_EFFECT_TIMEOUT_MS },
+      );
+      expect(media.queries).toContain('(prefers-reduced-transparency: reduce)');
+      expect(media.listenerCount).toBe(1);
+
+      media.dispatchChange(true);
+      expect(stubBridge.signalThemeAppliedCalls.at(-1)).toEqual({
+        reducedTransparency: true,
+      });
+
+      unmount();
+      expect(media.listenerCount).toBe(0);
+      media.dispatchChange(false);
+      expect(stubBridge.signalThemeAppliedCalls).toHaveLength(2);
+    } finally {
+      media.restore();
+    }
   });
 });

@@ -5,7 +5,6 @@ import {
   type Participant,
   participantsEqual,
 } from './participant-model.ts';
-import SRC from './use-presence?raw';
 import { isSelfAwarenessEntry } from './use-presence.ts';
 
 function makeHuman(
@@ -248,27 +247,5 @@ describe('isSelfAwarenessEntry — presence self-filter discriminator', () => {
         localClientId: 100,
       }),
     ).toBe(true);
-  });
-});
-
-describe('usePresence source-level guards — self-filter wiring', () => {
-  test('self-filter runs INSIDE the human-iteration loop, BEFORE dedupeHumansByPrincipalId', () => {
-    const filterIdx = SRC.indexOf('isSelfAwarenessEntry(');
-    const dedupeIdx = SRC.indexOf('dedupeHumansByPrincipalId(');
-    expect(filterIdx).toBeGreaterThan(0);
-    expect(dedupeIdx).toBeGreaterThan(0);
-    expect(filterIdx).toBeLessThan(dedupeIdx);
-  });
-
-  test('local identity comes from `activeAwareness` — principalId via getLocalState, clientID direct', () => {
-    expect(SRC).toMatch(/activeAwareness\??\.getLocalState\(\)/);
-    expect(SRC).toMatch(/activeAwareness\??\.clientID/);
-  });
-
-  test('agent loop is unaffected — no self-filter call in the agent branch', () => {
-    const pickAgentsIdx = SRC.indexOf('pickAgentsForDoc(');
-    expect(pickAgentsIdx).toBeGreaterThan(0);
-    const filterIdx = SRC.indexOf('isSelfAwarenessEntry(');
-    expect(filterIdx).toBeLessThan(pickAgentsIdx);
   });
 });

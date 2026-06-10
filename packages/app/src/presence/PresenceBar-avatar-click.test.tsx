@@ -3,6 +3,7 @@ import type { AgentPresenceEntry } from '@inkeep/open-knowledge-core';
 import { renderToString } from 'react-dom/server';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { AgentParticipant } from './use-presence';
+import { isSelfAwarenessEntry } from './use-presence.ts';
 
 const openActivityPanelCalls: Array<[string, string | null]> = [];
 const openActivityPanel = (connectionId: string, targetDoc: string | null): void => {
@@ -27,6 +28,7 @@ mock.module('@/editor/DocumentContext', () => ({
 }));
 
 mock.module('./use-presence', () => ({
+  isSelfAwarenessEntry,
   usePresence: () => ({ current: currentAgents, crossDoc: crossDocAgents }),
 }));
 

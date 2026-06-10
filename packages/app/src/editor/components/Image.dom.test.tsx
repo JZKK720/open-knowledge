@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { expectVisualClassTokens } from '@/test-utils/visual-contract';
 
 mock.module('react-medium-image-zoom', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
@@ -53,7 +54,7 @@ describe('Image — loading-state placeholder (PRD-6638)', () => {
     const slot = screen.queryByTestId('image-slot') as HTMLElement | null;
     expect(slot).not.toBeNull();
     expect(slot?.style.width).toBeFalsy();
-    expect(slot?.className).toContain('aspect-[16/9]');
+    expectVisualClassTokens(slot?.className, ['aspect-[16/9]']);
   });
 
   test('removes the placeholder after the inner <img>.load event fires', () => {

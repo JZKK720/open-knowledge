@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { renderLinguiTemplate } from '@/test-utils/lingui-mock';
 
 type WindowGlobals = { NodeFilter?: typeof NodeFilter };
 type GlobalWithDomShims = typeof globalThis &
@@ -19,14 +20,10 @@ if (g.ResizeObserver === undefined) {
   g.ResizeObserver = NoopResizeObserver;
 }
 
-function passthroughT(strings: TemplateStringsArray | string, ...values: unknown[]): string {
-  if (typeof strings === 'string') return strings;
-  return strings.reduce((out, s, i) => out + s + (i < values.length ? String(values[i]) : ''), '');
-}
-mock.module('@lingui/core/macro', () => ({ t: passthroughT }));
+mock.module('@lingui/core/macro', () => ({ t: renderLinguiTemplate }));
 mock.module('@lingui/react/macro', () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
-  useLingui: () => ({ t: passthroughT }),
+  useLingui: () => ({ t: renderLinguiTemplate }),
 }));
 
 let singleFileValue = false;

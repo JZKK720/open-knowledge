@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import { createRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { TagPillInput } from './tag-pill-input';
 
@@ -87,6 +88,39 @@ describe('TagPillInput — input-side grammar gate', () => {
     expect(onChange.mock.calls[0]?.[0]).toEqual(['showcase']);
     expect(input.value).toBe('');
     expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  test('comma, Tab, and blur commit non-empty drafts while empty comma is swallowed', () => {
+    const onChange = mock(() => {});
+    const { container } = renderInput({ onChange });
+    const input = container.querySelector('input') as HTMLInputElement;
+
+    fireEvent.keyDown(input, { key: ',' });
+    expect(onChange).toHaveBeenCalledTimes(0);
+    expect(input.value).toBe('');
+
+    fireEvent.change(input, { target: { value: 'comma-tag' } });
+    fireEvent.keyDown(input, { key: ',' });
+    expect(onChange).toHaveBeenCalledWith(['comma-tag']);
+
+    fireEvent.change(input, { target: { value: 'tab-tag' } });
+    fireEvent.keyDown(input, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith(['tab-tag']);
+
+    fireEvent.change(input, { target: { value: 'blur-tag' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith(['blur-tag']);
+  });
+
+  test('Backspace on an empty draft removes the last pill', () => {
+    const onChange = mock(() => {});
+    const { container } = renderInput({ value: ['alpha', 'beta'], onChange });
+    const input = container.querySelector('input') as HTMLInputElement;
+
+    fireEvent.keyDown(input, { key: 'Backspace' });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]?.[0]).toEqual(['alpha']);
   });
 
   test('Enter on a digit-leading tag like a year (2026) commits', () => {
@@ -217,5 +251,40 @@ describe('TagPillInput — a11y id wiring (regression: PR #1288 review findings)
     const { container } = renderInput();
     const input = container.querySelector('input') as HTMLInputElement;
     expect(input.getAttribute('aria-describedby')).toBeNull();
+  });
+
+  test('remove buttons include the tag value in their accessible names', () => {
+    const onChange = mock(() => {});
+    const { container } = renderInput({ value: ['showcase', 'docs'], onChange });
+
+    fireEvent.click(
+      container.querySelector('button[aria-label="Remove docs"]') as HTMLButtonElement,
+    );
+
+    expect(onChange).toHaveBeenCalledWith(['showcase']);
+  });
+
+  test('forwards id, ref, aria-describedby, and aria-invalid to the focusable input and wrapper state', () => {
+    const inputRef = createRef<HTMLInputElement>();
+    const { container } = render(
+      <TooltipProvider>
+        <TagPillInput
+          value={[]}
+          onChange={() => {}}
+          id="frontmatter-tags"
+          ref={inputRef}
+          aria-describedby="frontmatter-tags-error"
+          aria-invalid="true"
+        />
+      </TooltipProvider>,
+    );
+
+    const input = container.querySelector('input') as HTMLInputElement;
+    const wrapper = container.querySelector('[data-slot="tag-pill-input"]');
+    expect(input.id).toBe('frontmatter-tags');
+    expect(inputRef.current).toBe(input);
+    expect(input.getAttribute('aria-describedby')).toBe('frontmatter-tags-error');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(wrapper?.getAttribute('aria-invalid')).toBe('true');
   });
 });
