@@ -127,6 +127,7 @@ describe('fetchWorkspaceSearchEntries', () => {
       intent: 'full_text',
       scopes: ['page', 'folder', 'content'],
       limit: 30,
+      source: 'omnibar',
     });
     expect(results).toEqual([
       {
@@ -139,5 +140,24 @@ describe('fetchWorkspaceSearchEntries', () => {
       },
       { kind: 'folder', path: 'docs', name: 'docs', title: 'docs', score: 12 },
     ]);
+  });
+
+  test('semantic submit adds semantic:true (keeps full_text + scopes + source:omnibar)', async () => {
+    let requestBody: unknown = null;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ results: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    await fetchWorkspaceSearchEntries('auth retries', { semantic: true });
+
+    expect(requestBody).toEqual({
+      query: 'auth retries',
+      intent: 'full_text',
+      scopes: ['page', 'folder', 'content'],
+      limit: 30,
+      source: 'omnibar',
+      semantic: true,
+    });
   });
 });

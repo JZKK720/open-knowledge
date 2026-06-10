@@ -1,10 +1,14 @@
-import { chmodSync, existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { tracedMkdirSync, tracedUnlinkSync, tracedWriteFileSync } from '../fs-traced.ts';
 
-const EMBEDDINGS_ACCOUNT = 'embeddings';
+/** `secrets.yml` field the embeddings API key is stored under — named
+ * `OPENAI_API_KEY` so it's self-evident to anyone who opens the file. */
+const SECRETS_KEY_FIELD = 'OPENAI_API_KEY';
+
+const LEGACY_KEY_FIELD = 'embeddings';
 
 export function secretsFilePath(homedirOverride?: string): string {
   return join(homedirOverride ?? homedir(), '.ok', 'secrets.yml');
@@ -28,8 +32,33 @@ export class FileEmbeddingsBackend implements EmbeddingsSecretStore {
     this.secretsFile = secretsFile ?? secretsFilePath();
   }
 
+  private tightenPermsIfLoose(): void {
+    let mode: number;
+    try {
+      mode = statSync(this.secretsFile).mode & 0o777;
+    } catch {
+      return;
+    }
+    if ((mode & 0o077) === 0) return; // already owner-only — nothing to repair
+    try {
+      chmodSync(this.secretsFile, 0o600);
+      process.stderr.write(
+        `[embeddings] ${this.secretsFile} was readable beyond your user account ` +
+          `(mode ${mode.toString(8)}); tightened to 600. It stores an API key.\n`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error';
+      process.stderr.write(
+        `[embeddings] ${this.secretsFile} is readable beyond your user account ` +
+          `(mode ${mode.toString(8)}) and could not be tightened (${msg}); your API key ` +
+          `remains exposed — run: chmod 600 ${this.secretsFile}\n`,
+      );
+    }
+  }
+
   private read(): Record<string, unknown> {
     if (!existsSync(this.secretsFile)) return {};
+    this.tightenPermsIfLoose();
     try {
       return (yamlParse(readFileSync(this.secretsFile, 'utf-8')) ?? {}) as Record<string, unknown>;
     } catch (e) {
@@ -49,21 +78,24 @@ export class FileEmbeddingsBackend implements EmbeddingsSecretStore {
   }
 
   get(): Promise<string | null> {
-    const value = this.read()[EMBEDDINGS_ACCOUNT];
+    const data = this.read();
+    const value = data[SECRETS_KEY_FIELD] ?? data[LEGACY_KEY_FIELD];
     return Promise.resolve(typeof value === 'string' && value !== '' ? value : null);
   }
 
   set(key: string): Promise<void> {
     const data = this.read();
-    data[EMBEDDINGS_ACCOUNT] = key;
+    delete data[LEGACY_KEY_FIELD];
+    data[SECRETS_KEY_FIELD] = key;
     this.write(data);
     return Promise.resolve();
   }
 
   clear(): Promise<void> {
     const data = this.read();
-    if (EMBEDDINGS_ACCOUNT in data) {
-      delete data[EMBEDDINGS_ACCOUNT];
+    if (SECRETS_KEY_FIELD in data || LEGACY_KEY_FIELD in data) {
+      delete data[SECRETS_KEY_FIELD];
+      delete data[LEGACY_KEY_FIELD];
       if (Object.keys(data).length === 0) {
         try {
           tracedUnlinkSync(this.secretsFile);

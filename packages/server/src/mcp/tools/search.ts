@@ -259,6 +259,7 @@ export function register(server: ServerInstance, deps: SearchDeps): void {
           intent,
           limit,
           semantic: args.semantic ?? true,
+          source: 'mcp',
         };
         if (args.scopes) body.scopes = args.scopes;
 

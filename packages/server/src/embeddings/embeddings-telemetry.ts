@@ -1,3 +1,4 @@
+import type { SearchSource } from '@inkeep/open-knowledge-core';
 import type { Counter, Histogram } from '@opentelemetry/api';
 import { getLogger } from '../logger.ts';
 import { getMeter } from '../telemetry.ts';
@@ -61,7 +62,7 @@ function queryTotalCounter(): Counter {
   if (!_queryTotal) {
     _queryTotal = getMeter().createCounter('ok.search.semantic_query_total', {
       description:
-        'Semantic-requested searches, by outcome. Bounded label: outcome ∈ {applied, no_match, warming, incapable, provider_error}.',
+        'Semantic-requested searches, by outcome and caller surface. Bounded labels: outcome ∈ {applied, no_match, warming, incapable, provider_error}, source ∈ {omnibar, mcp, http}. The omnibar/mcp split separates interactive cost from agent cost.',
     });
   }
   return _queryTotal;
@@ -91,17 +92,19 @@ export function recordEmbeddingRequestDuration(role: EmbeddingRoleLabel, ms: num
 
 export function recordSemanticQuery(event: {
   outcome: SemanticQueryOutcome;
+  source: SearchSource;
   capable: boolean;
   embedded: number;
   total: number;
   queryEmbedMs: number | null;
   vectorContributors: number;
 }): void {
-  queryTotalCounter().add(1, { outcome: event.outcome });
+  queryTotalCounter().add(1, { outcome: event.outcome, source: event.source });
   if (event.queryEmbedMs !== null) queryEmbedDurationHist().record(Math.max(0, event.queryEmbedMs));
   log.debug(
     {
       outcome: event.outcome,
+      source: event.source,
       capable: event.capable,
       embedded: event.embedded,
       total: event.total,

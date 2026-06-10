@@ -37,6 +37,7 @@ interface WorkspaceEntrySearchCorpus {
 export const EMPTY_QUERY_NAV_LIMIT = 20;
 const MATCH_QUERY_NAV_LIMIT = 50;
 const API_SEARCH_LIMIT = 30;
+export const SEMANTIC_RESULT_LIMIT = 30;
 
 let cachedEntriesFingerprint = '';
 let cachedEntrySearchCorpus: WorkspaceEntrySearchCorpus | null = null;
@@ -206,7 +207,7 @@ function toWorkspaceSearchEntry(
 
 export async function fetchWorkspaceSearchEntries(
   query: string,
-  options: { signal?: AbortSignal; limit?: number } = {},
+  options: { signal?: AbortSignal; limit?: number; semantic?: boolean } = {},
 ): Promise<WorkspaceSearchEntry[]> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) return [];
@@ -219,6 +220,8 @@ export async function fetchWorkspaceSearchEntries(
       intent: 'full_text',
       scopes: ['page', 'folder', 'content'],
       limit: options.limit ?? API_SEARCH_LIMIT,
+      source: 'omnibar',
+      ...(options.semantic ? { semantic: true } : {}),
     }),
     signal: options.signal,
   });

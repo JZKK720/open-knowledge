@@ -679,6 +679,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       recentlyRemovedDocs,
       serializeDoc,
       semanticSearch,
+      getSemanticSimilarityFloor: () => readSemanticSearchConfig().similarityFloor,
       embeddingsSecretsFile: secretsFilePath(configHomedirOverride),
       ephemeral,
       onReferencedAssetsCacheInvalidator: (invalidate) => {

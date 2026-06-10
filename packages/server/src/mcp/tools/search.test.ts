@@ -177,6 +177,7 @@ describe('search MCP tool — happy path', () => {
       limit: 5,
       scopes: ['page', 'content'],
       semantic: true,
+      source: 'mcp',
     });
 
     const structured = result.structuredContent as {

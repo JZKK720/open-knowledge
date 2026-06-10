@@ -116,7 +116,11 @@ beforeAll(async () => {
     'search:\n  semantic:\n    enabled: true\n',
     'utf-8',
   );
-  writeFileSync(join(tmpDir, '.ok', 'secrets.yml'), 'embeddings: sk-test-factory-key\n', 'utf-8');
+  writeFileSync(
+    join(tmpDir, '.ok', 'secrets.yml'),
+    'OPENAI_API_KEY: sk-test-factory-key\n',
+    'utf-8',
+  );
 
   const shadowRepo = await initShadowRepo(tmpDir);
   const embedder = createConceptEmbedder({ concepts: CONCEPTS });
@@ -178,6 +182,7 @@ describe('createServer boot — flag-ON semantic search (factory glue)', () => {
       enabled: boolean;
       keyPresent: boolean;
       keySource: string | null;
+      keyHint: string | null;
       ready: boolean;
       capable: boolean;
       embedded: number;
@@ -186,16 +191,18 @@ describe('createServer boot — flag-ON semantic search (factory glue)', () => {
     expect(status.enabled).toBe(true);
     expect(status.keyPresent).toBe(true);
     expect(status.keySource).toBe('file');
+    expect(status.keyHint).toBe('-key');
     expect(status.ready).toBe(true);
     expect(status.capable).toBe(true);
     expect(status.total).toBe(SERVED_PAGE_COUNT);
     expect(status.embedded).toBe(SERVED_PAGE_COUNT);
   });
 
-  test('the omnibar call shape stays lexical through the same booted server', async () => {
+  test('the omnibar per-keystroke call shape stays lexical through the same booted server', async () => {
     const { results, semantic } = await searchViaServer(server, {
       query: 'auth retries',
       intent: 'full_text',
+      source: 'omnibar',
     });
     for (const r of results ?? []) expect('vector' in r.signals).toBe(false);
     expect(results?.find((r) => r.path === 'guides/credential-rotation')).toBeUndefined();
@@ -269,6 +276,63 @@ describe('createServer boot — project-local scope enforcement (egress safety)'
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+describe('createServer boot — similarityFloor config reaches core ranking', () => {
+  test('a high project-local similarityFloor gates out a vector-only match the default would surface', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ok-sem-floor-'));
+    try {
+      writeFileSync(
+        join(dir, 'rotation.md'),
+        '# Credential Rotation\n\nThe credential rotation flow re-issues secrets when they expire.\n',
+        'utf-8',
+      );
+      mkdirSync(join(dir, '.ok', 'local'), { recursive: true });
+      writeFileSync(
+        join(dir, '.ok', 'local', 'config.yml'),
+        'search:\n  semantic:\n    enabled: true\n    similarityFloor: 0.999\n',
+        'utf-8',
+      );
+      writeFileSync(join(dir, '.ok', 'secrets.yml'), 'OPENAI_API_KEY: sk-test\n', 'utf-8');
+      const shadowRepo = await initShadowRepo(dir);
+      const srv = createServer({
+        contentDir: dir,
+        projectDir: dir,
+        quiet: true,
+        debounce: 60_000,
+        gitEnabled: false,
+        shadowRepo,
+        skipStateManifestCheck: true,
+        destroyTimeoutMs: 500,
+        configHomedirOverride: dir,
+        embedderLoader: () => Promise.resolve(createConceptEmbedder({ concepts: CONCEPTS })),
+      });
+      await srv.ready;
+      try {
+        const deadline = Date.now() + 20_000;
+        let result: SearchBody | undefined;
+        do {
+          result = await searchViaServer(srv, {
+            query: 'auth retries',
+            intent: 'full_text',
+            semantic: true,
+          });
+          if ((result.semantic?.coverage.embedded ?? 0) >= 1) break;
+          await new Promise((r) => setTimeout(r, 25));
+        } while (Date.now() < deadline);
+
+        expect(result?.semantic?.capable).toBe(true);
+        expect(result?.semantic?.coverage.embedded).toBe(1); // the doc embedded
+        expect(result?.results?.find((r) => r.path === 'rotation')).toBeUndefined();
+        for (const r of result?.results ?? []) expect('vector' in r.signals).toBe(false);
+        expect(result?.semantic?.applied).toBe(false);
+      } finally {
+        await srv.destroy();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
 
 describe('createServer boot — embeddings key set/clear handlers (Account control)', () => {

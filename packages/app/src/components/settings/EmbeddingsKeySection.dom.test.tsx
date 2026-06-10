@@ -25,6 +25,7 @@ function statusOf(over: Partial<SemanticIndexStatus>): SemanticIndexStatus {
     enabled: false,
     keyPresent: false,
     keySource: null,
+    keyHint: null,
     ready: false,
     capable: false,
     embedded: 0,
@@ -125,6 +126,25 @@ describe('EmbeddingsKeySection', () => {
     expect(await screen.findByTestId('settings-embeddings-key-set')).toBeDefined();
     await user.click(screen.getByTestId('settings-embeddings-key-clear'));
     expect(rec.clearCalls).toBe(1);
+  });
+
+  test('key present: shows the redacted tail (keyHint), never the full key', async () => {
+    const { transport } = makeTransport();
+    mockStatus = statusOf({ keyPresent: true, keySource: 'file', keyHint: 'a1b2' });
+    render(<EmbeddingsKeySection transport={transport} />);
+
+    const hint = await screen.findByTestId('settings-embeddings-key-hint');
+    expect(hint.textContent).toContain('a1b2');
+    expect(hint.textContent?.length).toBeLessThan(20);
+  });
+
+  test('key present without a hint: the set state still renders (no tail line)', async () => {
+    const { transport } = makeTransport();
+    mockStatus = statusOf({ keyPresent: true, keySource: 'file', keyHint: null });
+    render(<EmbeddingsKeySection transport={transport} />);
+
+    expect(await screen.findByTestId('settings-embeddings-key-set')).toBeDefined();
+    expect(screen.queryByTestId('settings-embeddings-key-hint')).toBeNull();
   });
 
   test('clear failure surfaces the error', async () => {

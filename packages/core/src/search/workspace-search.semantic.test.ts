@@ -57,7 +57,7 @@ describe('semantic ranking — candidate source + brackets-outer/RRF-body', () =
     ]);
     const withSemantic = searchWorkspaceCorpus(corpus, 'auth retries', {
       intent: 'full_text',
-      semantic: { scores },
+      semantic: { scores, similarityFloor: 0.5 },
     });
     expect(ids(withSemantic)).toEqual(['guides/credential-rotation']);
     expect(withSemantic[0].signals.vector).toBeCloseTo(0.82, 5);
@@ -66,10 +66,10 @@ describe('semantic ranking — candidate source + brackets-outer/RRF-body', () =
   test('similarityFloor keeps a low-cosine vector-only doc out of the candidate pool', () => {
     const docs = [page('recipes/sourdough', 'Sourdough', 'a recipe for sourdough bread')];
     const corpus = createWorkspaceSearchCorpus(docs);
-    const scores = new Map([['page:recipes/sourdough', 0.2]]); // below default floor 0.35
+    const scores = new Map([['page:recipes/sourdough', 0.2]]);
     const results = searchWorkspaceCorpus(corpus, 'auth retries', {
       intent: 'full_text',
-      semantic: { scores },
+      semantic: { scores, similarityFloor: 0.5 },
     });
     expect(results.length).toBe(0);
   });
@@ -101,7 +101,7 @@ describe('semantic ranking — candidate source + brackets-outer/RRF-body', () =
     const scores = new Map([['page:auth/login', 0.2]]);
     const results = searchWorkspaceCorpus(corpus, 'login', {
       intent: 'full_text',
-      semantic: { scores },
+      semantic: { scores, similarityFloor: 0.5 },
     });
     expect(results.length).toBe(1);
     expect('vector' in results[0].signals).toBe(false);
@@ -124,7 +124,7 @@ describe('semantic ranking — candidate source + brackets-outer/RRF-body', () =
     ]);
     const fused = searchWorkspaceCorpus(corpus, 'telemetry', {
       intent: 'full_text',
-      semantic: { scores },
+      semantic: { scores, similarityFloor: 0.5 },
     });
     expect(fused[0].document.path).toBe(bm25Second);
     expect(fused[1].document.path).toBe(bm25Top);
@@ -142,5 +142,26 @@ describe('semantic ranking — candidate source + brackets-outer/RRF-body', () =
     });
     expect(results.length).toBe(2);
     expect(ids(results).sort()).toEqual(['v/doc-0', 'v/doc-1']);
+  });
+
+  test('the default is rank-based: low cosines are admitted (no absolute cutoff), ordered by similarity', () => {
+    const docs = [
+      page('characters/edward', 'Edward', 'the crew hacker who breaks into networked systems'),
+      page('music/soundtrack', 'Soundtrack', 'jazz and blues from the series'),
+    ];
+    const corpus = createWorkspaceSearchCorpus(docs);
+    const noSemantic = searchWorkspaceCorpus(corpus, 'cybersecurity', { intent: 'full_text' });
+    expect(noSemantic.length).toBe(0); // zero token overlap — vector-only retrievable
+    const scores = new Map([
+      ['page:characters/edward', 0.13],
+      ['page:music/soundtrack', 0.08],
+    ]);
+    const results = searchWorkspaceCorpus(corpus, 'cybersecurity', {
+      intent: 'full_text',
+      semantic: { scores },
+    });
+    expect(ids(results)).toEqual(['characters/edward', 'music/soundtrack']);
+    expect(results[0].signals.vector).toBeCloseTo(0.13, 5);
+    expect(results[1].signals.vector).toBeCloseTo(0.08, 5);
   });
 });

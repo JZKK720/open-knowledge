@@ -838,6 +838,10 @@ msgid "Bullet List"
 msgstr ""
 
 #: src/components/CommandPalette.tsx
+msgid "By meaning"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
 msgid "By tag"
 msgstr ""
 
@@ -1495,6 +1499,10 @@ msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Couldn't reach GitHub. Try again?"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "Couldn't reach the embeddings provider — press ↵ to retry"
 msgstr ""
 
 #: src/editor/bubble-menu/EditWithAiBubbleButton.tsx
@@ -2667,6 +2675,10 @@ msgstr ""
 msgid "Indexed {embedded} of {total} pages."
 msgstr ""
 
+#: src/components/CommandPalette.tsx
+msgid "Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready. Results may be incomplete."
+msgstr ""
+
 #: src/components/FrontmatterRow.tsx
 msgid "inherited"
 msgstr ""
@@ -2824,6 +2836,10 @@ msgstr ""
 
 #: src/components/DiffViewBoundary.tsx
 msgid "Keep my version"
+msgstr ""
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Key ending in {keyHint}"
 msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
@@ -3458,6 +3474,10 @@ msgstr ""
 
 #: src/components/LinksPanel.tsx
 msgid "No pages link here yet."
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "No pages matched \"{semanticQueryText}\" by meaning."
 msgstr ""
 
 #: src/components/settings/OkignoreSection.tsx
@@ -4657,8 +4677,16 @@ msgstr ""
 msgid "Search"
 msgstr ""
 
+#: src/components/CommandPalette.tsx
+msgid "Search \"{semanticSubmitQuery}\" by meaning"
+msgstr ""
+
 #: src/components/EditorHeader.tsx
 msgid "Search ({searchShortcut})"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "Search by meaning"
 msgstr ""
 
 #: src/components/PageHeaderWidgets.tsx
@@ -4699,6 +4727,10 @@ msgstr ""
 
 #: src/components/CommandPalette.tsx
 msgid "Searching"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "Searching by meaning"
 msgstr ""
 
 #: src/editor/slash-command/items.tsx
@@ -4947,6 +4979,10 @@ msgstr ""
 
 #: src/components/FileTree.tsx
 msgid "Showing first {truncatedShownCount} items — use search to find others"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "Showing results for \"{semanticResultsLabel}\""
 msgstr ""
 
 #. placeholder {0}: items.length
@@ -5311,10 +5347,6 @@ msgstr ""
 msgid "The {targetNoun} could not be opened — try navigating to it manually."
 msgstr ""
 
-#: src/components/settings/EmbeddingsKeySection.tsx
-msgid "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
-msgstr ""
-
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
 msgstr ""
@@ -5572,6 +5604,10 @@ msgstr ""
 
 #: src/editor/components/Pdf.tsx
 msgid "Two-page (odd)"
+msgstr ""
+
+#: src/components/CommandPalette.tsx
+msgid "Type a query, then press ↵ to search your pages by meaning."
 msgstr ""
 
 #: src/editor/components/CodePreviewEditModal.tsx
@@ -5951,6 +5987,10 @@ msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
+msgstr ""
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
 msgstr ""
 
 #: src/components/CloneDialog.tsx

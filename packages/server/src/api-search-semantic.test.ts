@@ -171,7 +171,7 @@ describe('POST /api/search — semantic (opt-in)', () => {
     }
   });
 
-  test('the omnibar call shape (no semantic field) stays lexical and byte-identical', async () => {
+  test('the omnibar deliberate "by meaning" submit (semantic + source) fuses vector', async () => {
     const dir = seed();
     try {
       const fileIndex = buildFileIndex(dir);
@@ -179,7 +179,25 @@ describe('POST /api/search — semantic (opt-in)', () => {
       const { results, semantic } = await searchPost(
         dir,
         fileIndex,
-        { query: 'auth retries', intent: 'full_text' },
+        { query: 'auth retries', intent: 'full_text', semantic: true, source: 'omnibar' },
+        service,
+      );
+      expect(results?.find((r) => r.path === 'guides/credential-rotation')).toBeDefined();
+      expect(semantic?.applied).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the omnibar per-keystroke call (no semantic field) stays lexical and byte-identical', async () => {
+    const dir = seed();
+    try {
+      const fileIndex = buildFileIndex(dir);
+      const service = await makeService(fileIndex, { enabled: true });
+      const { results, semantic } = await searchPost(
+        dir,
+        fileIndex,
+        { query: 'auth retries', intent: 'full_text', source: 'omnibar' },
         service,
       );
       expect(results?.find((r) => r.path === 'guides/credential-rotation')).toBeUndefined();

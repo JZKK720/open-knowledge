@@ -49,7 +49,7 @@ export const MAX_WORKSPACE_SEARCH_LIMIT = 100;
 
 export const DEFAULT_RRF_K = 60;
 export const DEFAULT_VECTOR_CANDIDATE_LIMIT = 64;
-export const DEFAULT_VECTOR_SIMILARITY_FLOOR = 0.35;
+export const DEFAULT_VECTOR_SIMILARITY_FLOOR = 0;
 
 const WORKSPACE_SEARCH_SCHEMA = {
   id: 'string',

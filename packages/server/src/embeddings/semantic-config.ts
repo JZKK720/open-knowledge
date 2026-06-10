@@ -6,6 +6,7 @@ export interface ResolvedSemanticConfig {
   baseUrl: string;
   model: string;
   dimensions?: number;
+  similarityFloor?: number;
 }
 
 export function readProjectLocalSemanticConfig(
@@ -22,5 +23,6 @@ export function readProjectLocalSemanticConfig(
     baseUrl: semantic?.baseUrl ?? DEFAULT_EMBEDDINGS_BASE_URL,
     model: semantic?.model ?? DEFAULT_EMBEDDINGS_MODEL,
     dimensions: semantic?.dimensions ?? undefined,
+    similarityFloor: semantic?.similarityFloor ?? undefined,
   };
 }

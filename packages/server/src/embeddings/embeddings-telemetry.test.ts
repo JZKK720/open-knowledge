@@ -17,6 +17,7 @@ describe('embeddings telemetry', () => {
       recordEmbeddingRequestDuration('document', 123.4);
       recordSemanticQuery({
         outcome: 'applied',
+        source: 'mcp',
         capable: true,
         embedded: 5,
         total: 40,
@@ -25,10 +26,20 @@ describe('embeddings telemetry', () => {
       });
       recordSemanticQuery({
         outcome: 'incapable',
+        source: 'omnibar',
         capable: false,
         embedded: 0,
         total: 0,
         queryEmbedMs: null,
+        vectorContributors: 0,
+      });
+      recordSemanticQuery({
+        outcome: 'no_match',
+        source: 'http',
+        capable: true,
+        embedded: 3,
+        total: 9,
+        queryEmbedMs: 12,
         vectorContributors: 0,
       });
       __resetEmbeddingsTelemetryForTesting();

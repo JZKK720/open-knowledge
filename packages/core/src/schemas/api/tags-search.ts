@@ -162,9 +162,12 @@ export const SearchRequestSchema = z
     scope: z.string().optional(),
     limit: z.number().int().nonnegative().optional(),
     semantic: z.boolean().optional(),
+    source: z.enum(['omnibar', 'mcp', 'http']).optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
+
+export type SearchSource = NonNullable<SearchRequest['source']>;
 
 export const SearchResultEntrySchema = z
   .object({
@@ -195,6 +198,7 @@ export const SemanticIndexStatusSchema = z
     enabled: z.boolean(),
     keyPresent: z.boolean(),
     keySource: z.enum(['file', 'env']).nullable(),
+    keyHint: z.string().nullable(),
     ready: z.boolean(),
     capable: z.boolean(),
     embedded: z.number().int().nonnegative(),

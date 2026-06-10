@@ -21,26 +21,31 @@ interface UseSemanticSearchStatusResult {
   refresh: () => void;
 }
 
-export function useSemanticSearchStatus(): UseSemanticSearchStatusResult {
+export function useSemanticSearchStatus(
+  options: { enabled?: boolean } = {},
+): UseSemanticSearchStatusResult {
+  const enabled = options.enabled ?? true;
   const [status, setStatus] = useState<SemanticIndexStatus | null>(null);
 
   function refresh() {
+    if (!enabled) return;
     void fetchSemanticStatus().then((next) => {
       if (next) setStatus(next);
     });
   }
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is intentionally stable (defined in component scope)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is stable in component scope; re-run only when `enabled` flips on.
   useEffect(() => {
     refresh();
-  }, []);
+  }, [enabled]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is intentionally stable (defined in component scope)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh is stable in component scope.
   useEffect(() => {
+    if (!enabled) return;
     return subscribeToDocumentsChanged((channels) => {
       if (channels.includes('files')) refresh();
     });
-  }, []);
+  }, [enabled]);
 
   return { status, refresh };
 }

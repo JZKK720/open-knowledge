@@ -18,6 +18,7 @@ export function EmbeddingsKeySection({ transport }: { transport?: EmbeddingsKeyT
 
   const keyPresent = status?.keyPresent ?? false;
   const keySource = status?.keySource ?? null;
+  const keyHint = status?.keyHint ?? null;
 
   async function onSave() {
     const key = keyInput.trim();
@@ -56,8 +57,13 @@ export function EmbeddingsKeySection({ transport }: { transport?: EmbeddingsKeyT
         </h3>
         <p className="text-sm text-muted-foreground">
           <Trans>
-            The API key semantic search uses to embed your content. Stored once for this machine and
-            shared across all projects. Turn the feature on per project in This project → Search.
+            Your OpenAI API key, used only to create embeddings of your content for semantic search.
+            Stored once for this machine in{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+              ~/.ok/secrets.yml
+            </code>{' '}
+            (readable only by your user account) and shared across all projects. Turn the feature on
+            per project in This project → Search.
           </Trans>
         </p>
       </div>
@@ -81,9 +87,19 @@ export function EmbeddingsKeySection({ transport }: { transport?: EmbeddingsKeyT
                 data-testid="settings-embeddings-key-set"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">
+                  <div className="mb-1.5 text-sm font-medium">
                     <Trans>API key set</Trans>
                   </div>
+                  {keyHint ? (
+                    <p
+                      className="truncate font-mono text-muted-foreground text-xs"
+                      title={t`Key ending in ${keyHint}`}
+                      data-testid="settings-embeddings-key-hint"
+                    >
+                      <span aria-hidden="true">••••••••</span>
+                      {keyHint}
+                    </p>
+                  ) : null}
                   <p className="text-muted-foreground text-1sm">
                     <Trans>Stored on this machine.</Trans>
                   </p>
@@ -99,8 +115,11 @@ export function EmbeddingsKeySection({ transport }: { transport?: EmbeddingsKeyT
               </div>
             ) : null}
 
-            <div className="space-y-2">
-              <label htmlFor="settings-embeddings-key-input" className="text-sm font-medium">
+            <div>
+              <label
+                htmlFor="settings-embeddings-key-input"
+                className="mb-2 block text-sm font-medium"
+              >
                 {keyPresent ? <Trans>Replace key</Trans> : <Trans>Add a key</Trans>}
               </label>
               <div className="flex items-center gap-2">

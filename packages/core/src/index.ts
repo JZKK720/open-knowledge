@@ -653,6 +653,7 @@ export {
   SearchResultEntrySchema,
   type SearchSemanticStatus,
   SearchSemanticStatusSchema,
+  type SearchSource,
   type SearchSuccess,
   SearchSuccessSchema,
   type SeedApplyRequest,

@@ -126,6 +126,7 @@ import {
   SaveVersionSuccessSchema,
   SearchRequestSchema,
   type SearchSemanticStatus,
+  type SearchSource,
   type SearchSuccess,
   SearchSuccessSchema,
   SeedApplyRequestSchema,
@@ -1576,6 +1577,7 @@ export interface ApiExtensionOptions {
   recentlyRemovedDocs?: RecentlyRemovedDocs;
   serializeDoc?: (docName: string) => string | null;
   semanticSearch?: SemanticSearchService;
+  getSemanticSimilarityFloor?: () => number | undefined;
   embeddingsSecretsFile?: string;
 }
 
@@ -1658,6 +1660,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     recentlyRemovedDocs,
     serializeDoc,
     semanticSearch,
+    getSemanticSimilarityFloor,
     embeddingsSecretsFile,
     ephemeral = false,
   } = options;
@@ -9850,6 +9853,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     return undefined;
   }
 
+  function parseSearchSource(value: unknown): SearchSource {
+    return value === 'omnibar' || value === 'mcp' || value === 'http' ? value : 'http';
+  }
+
   interface SemanticResolution {
     input?: WorkspaceSemanticInput;
     status?: SearchSemanticStatus;
@@ -9877,7 +9884,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const startedAt = performance.now();
       const scores = await semanticSearch.queryScores(query, corpus.documents);
       queryEmbedMs = performance.now() - startedAt;
-      if (scores && scores.size > 0) input = { scores };
+      if (scores && scores.size > 0) {
+        const similarityFloor = getSemanticSimilarityFloor?.();
+        input = similarityFloor !== undefined ? { scores, similarityFloor } : { scores };
+      }
     }
 
     const status = semanticSearch.getStatus();
@@ -9924,6 +9934,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     scopes: WorkspaceSearchScope[] | undefined;
     limit: number | undefined;
     semanticParam: boolean | undefined;
+    source: SearchSource;
   }): Promise<SearchSuccess> {
     const startedAt = performance.now();
     const corpus = await getWorkspaceSearchCorpus();
@@ -9958,6 +9969,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             : 'no_match';
       recordSemanticQuery({
         outcome,
+        source: params.source,
         capable: semantic.capable,
         embedded: semantic.status.coverage.embedded,
         total: semantic.pageTotal,
@@ -10079,6 +10091,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         url.searchParams.get('scope') ?? url.searchParams.get('scopes'),
       );
       const semanticParam = parseSemanticParam(url.searchParams.get('semantic'));
+      const source = parseSearchSource(url.searchParams.get('source'));
       const limitNum = limit === null ? undefined : Number(limit);
 
       if (query.length > 200) {
@@ -10098,6 +10111,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           scopes,
           limit: limitNum,
           semanticParam,
+          source,
         });
         successResponse(res, 200, SearchSuccessSchema, body, { handler: 'search-get' });
       } catch (e) {
@@ -10121,6 +10135,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const scopes = parseSearchScopes(body.scopes ?? body.scope);
       const limit = typeof body.limit === 'number' ? body.limit : undefined;
       const semanticParam = parseSemanticParam(body.semantic);
+      const source = parseSearchSource(body.source);
 
       if (query.length > 200) {
         errorResponse(
@@ -10139,6 +10154,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           scopes,
           limit,
           semanticParam,
+          source,
         });
         successResponse(res, 200, SearchSuccessSchema, responseBody, { handler: 'search-post' });
       } catch (e) {
@@ -10883,12 +10899,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           embedded = status.embeddedCount;
         }
         const storedKey = await new FileEmbeddingsBackend(embeddingsSecretsFile).get();
-        const keySource: 'file' | 'env' | null = storedKey
-          ? 'file'
-          : process.env[EMBEDDINGS_API_KEY_ENV]
-            ? 'env'
-            : null;
+        const envKey = process.env[EMBEDDINGS_API_KEY_ENV] ?? null;
+        const keySource: 'file' | 'env' | null = storedKey ? 'file' : envKey ? 'env' : null;
         const keyPresent = keySource !== null;
+        const resolvedKey = storedKey ?? envKey;
+        const keyHint = resolvedKey && resolvedKey.length >= 8 ? resolvedKey.slice(-4) : null;
         let total = 0;
         for (const [docName] of getFileIndex()) {
           if (!isSystemDoc(docName) && !isConfigDoc(docName) && !isHiddenDocName(docName)) {
@@ -10899,7 +10914,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           res,
           200,
           SemanticIndexStatusSchema,
-          { enabled, keyPresent, keySource, ready, capable, embedded, total },
+          { enabled, keyPresent, keySource, keyHint, ready, capable, embedded, total },
           { handler: 'semantic-status', extraHeaders: { 'Cache-Control': 'no-store' } },
         );
       } catch (e) {

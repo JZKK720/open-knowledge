@@ -843,6 +843,10 @@ msgid "Bullet List"
 msgstr "Bullet List"
 
 #: src/components/CommandPalette.tsx
+msgid "By meaning"
+msgstr "By meaning"
+
+#: src/components/CommandPalette.tsx
 msgid "By tag"
 msgstr "By tag"
 
@@ -1501,6 +1505,10 @@ msgstr "Couldn't reach collab server — {errorDetail}. Try <0>ok status</0> or 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Couldn't reach GitHub. Try again?"
 msgstr "Couldn't reach GitHub. Try again?"
+
+#: src/components/CommandPalette.tsx
+msgid "Couldn't reach the embeddings provider — press ↵ to retry"
+msgstr "Couldn't reach the embeddings provider — press ↵ to retry"
 
 #: src/editor/bubble-menu/EditWithAiBubbleButton.tsx
 msgid "Couldn't read the selection — please try again."
@@ -2672,6 +2680,10 @@ msgstr "Indented blockquote for citations."
 msgid "Indexed {embedded} of {total} pages."
 msgstr "Indexed {embedded} of {total} pages."
 
+#: src/components/CommandPalette.tsx
+msgid "Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready. Results may be incomplete."
+msgstr "Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready. Results may be incomplete."
+
 #: src/components/FrontmatterRow.tsx
 msgid "inherited"
 msgstr "inherited"
@@ -2830,6 +2842,10 @@ msgstr "Keep file deleted"
 #: src/components/DiffViewBoundary.tsx
 msgid "Keep my version"
 msgstr "Keep my version"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Key ending in {keyHint}"
+msgstr "Key ending in {keyHint}"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Keyboard shortcuts available in the editor and workspace."
@@ -3464,6 +3480,10 @@ msgstr "No pages found for \"{trimmedQuery}\""
 #: src/components/LinksPanel.tsx
 msgid "No pages link here yet."
 msgstr "No pages link here yet."
+
+#: src/components/CommandPalette.tsx
+msgid "No pages matched \"{semanticQueryText}\" by meaning."
+msgstr "No pages matched \"{semanticQueryText}\" by meaning."
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "No patterns yet. Type a folder or file name below to start hiding files."
@@ -4662,9 +4682,17 @@ msgstr "Scope: "
 msgid "Search"
 msgstr "Search"
 
+#: src/components/CommandPalette.tsx
+msgid "Search \"{semanticSubmitQuery}\" by meaning"
+msgstr "Search \"{semanticSubmitQuery}\" by meaning"
+
 #: src/components/EditorHeader.tsx
 msgid "Search ({searchShortcut})"
 msgstr "Search ({searchShortcut})"
+
+#: src/components/CommandPalette.tsx
+msgid "Search by meaning"
+msgstr "Search by meaning"
 
 #: src/components/PageHeaderWidgets.tsx
 msgid "Search emoji"
@@ -4705,6 +4733,10 @@ msgstr "Search templates"
 #: src/components/CommandPalette.tsx
 msgid "Searching"
 msgstr "Searching"
+
+#: src/components/CommandPalette.tsx
+msgid "Searching by meaning"
+msgstr "Searching by meaning"
 
 #: src/editor/slash-command/items.tsx
 msgid "Second item"
@@ -4953,6 +4985,10 @@ msgstr "Show thumbnails"
 #: src/components/FileTree.tsx
 msgid "Showing first {truncatedShownCount} items — use search to find others"
 msgstr "Showing first {truncatedShownCount} items — use search to find others"
+
+#: src/components/CommandPalette.tsx
+msgid "Showing results for \"{semanticResultsLabel}\""
+msgstr "Showing results for \"{semanticResultsLabel}\""
 
 #. placeholder {0}: items.length
 #: src/editor/wiki-link-suggestion/WikiLinkSuggestionMenu.tsx
@@ -5316,10 +5352,6 @@ msgstr "That folder isn't an Open Knowledge project yet. Initialize it and open?
 msgid "The {targetNoun} could not be opened — try navigating to it manually."
 msgstr "The {targetNoun} could not be opened — try navigating to it manually."
 
-#: src/components/settings/EmbeddingsKeySection.tsx
-msgid "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
-msgstr "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
-
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
 msgstr "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
@@ -5578,6 +5610,10 @@ msgstr "Two-page (even)"
 #: src/editor/components/Pdf.tsx
 msgid "Two-page (odd)"
 msgstr "Two-page (odd)"
+
+#: src/components/CommandPalette.tsx
+msgid "Type a query, then press ↵ to search your pages by meaning."
+msgstr "Type a query, then press ↵ to search your pages by meaning."
 
 #: src/editor/components/CodePreviewEditModal.tsx
 msgid "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
@@ -5957,6 +5993,10 @@ msgstr "Your GitHub token is missing required scopes. Try signing in again."
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
 msgstr "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
+msgstr "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
 
 #: src/components/CloneDialog.tsx
 msgid "Your repositories"

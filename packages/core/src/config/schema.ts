@@ -230,6 +230,18 @@ export const ConfigSchema = z.looseObject({
                 "Optional output vector dimensions. Omit to use the model's native size (1536 for text-embedding-3-small). Set a smaller value (text-embedding-3 supports e.g. 512 / 1024) to shrink the on-disk cache, trading a little retrieval quality. Changing it re-embeds the corpus.",
             })
             .optional(),
+          similarityFloor: z
+            .number()
+            .min(0)
+            .max(1)
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Optional hard cutoff: drop any "by meaning" match whose cosine similarity is below this value. Off by default (0) because retrieval is rank-based (the closest pages are returned regardless of absolute score) and the right cutoff is model-specific. Set it only to suppress weak matches for a specific provider/model whose cosine scale you know. Most setups should leave it unset and rely on the result-count cap.',
+            })
+            .optional(),
         })
         .default({
           enabled: false,

@@ -344,6 +344,7 @@
     "9npOH9": ["Open file"],
     "9o1bIV": [["behind"], " behind"],
     "9oE4C3": ["Browse your repos:"],
+    "9tJX8r": ["By meaning"],
     "9zb2WA": ["Connecting"],
     "A1taO8": ["Search"],
     "A5CYnd": ["Broken link"],
@@ -496,7 +497,11 @@
     "FCxvG5": ["First item"],
     "FEr96N": ["Theme"],
     "FF5rwn": ["Connect Open Knowledge to other tools you use."],
+    "FNTx6u": ["Search \"", ["semanticSubmitQuery"], "\" by meaning"],
     "FOGD7m": ["Create something great."],
+    "FOyCTr": [
+      "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
+    ],
     "FRYB1Q": ["/api/config returned a malformed body"],
     "FTUGgh": ["Enter a repository URL or owner/repo"],
     "FUMerq": ["Could not enable sync: ", ["detail"]],
@@ -772,6 +777,7 @@
     "P6lAT3": ["Folder target: ", ["linkTitle"], ". Click to open the overview."],
     "P8yDjG": ["Name can’t be empty, \".\", \"..\", or contain / or \\"],
     "PB4upl": ["Find previous match"],
+    "PBwmDJ": ["Searching by meaning"],
     "PKLY-1": ["Opening..."],
     "PMyJ9C": ["No edit session yet"],
     "PQCdtv": ["\"", ["docName"], "\" doesn't exist."],
@@ -795,6 +801,7 @@
     "QR5SP1": ["created template"],
     "QWks14": ["A short line shown under the name in the template list."],
     "QcpeeE": ["Navigate to ", ["docName"]],
+    "QlxHAH": ["Showing results for \"", ["semanticResultsLabel"], "\""],
     "QqBQu1": ["Label <0>(visible link text)</0>"],
     "QyioBP": ["Move up"],
     "R0cyYB": [
@@ -921,9 +928,6 @@
     "Vlc75q": ["Keep file deleted"],
     "VuxVSP": ["Start source completion"],
     "VvS_k_": ["Config sharing is now local-only."],
-    "Vz1amp": [
-      "The API key semantic search uses to embed your content. Stored once for this machine and shared across all projects. Turn the feature on per project in This project → Search."
-    ],
     "W-ntoW": ["heading-slug"],
     "W1qRuM": ["This document is already active in the editor. Use Open to collapse the graph."],
     "W5A0Ly": ["An unexpected error occurred."],
@@ -987,6 +991,7 @@
     "XtRoxT": ["Page ", ["pageNumber"]],
     "XvPJaT": ["Diff layout"],
     "Xv_ijG": ["https://github.com/owner/repo or owner/repo"],
+    "Xw_maT": ["Type a query, then press ↵ to search your pages by meaning."],
     "XyOUTJ": ["Exit merge"],
     "Y-Urt2": ["Block math equation rendered with KaTeX from a LaTeX source string."],
     "Y8ViJx": ["A newer version may have been deployed since this tab opened."],
@@ -1368,6 +1373,13 @@
         { "one": ["Show ", "#", " auto-save"], "other": ["Show ", "#", " auto-saves"] }
       ]
     ],
+    "kCNU4q": [
+      "Indexing your pages — ",
+      ["semanticIndexedCount"],
+      " of ",
+      ["semanticTotalCount"],
+      " ready. Results may be incomplete."
+    ],
     "kCqCyf": ["Open CodeMirror's lint diagnostics panel."],
     "kDuh1E": ["Path resolves outside the project"],
     "kFLlsI": ["Insert a footnote reference + matching definition stub."],
@@ -1544,6 +1556,7 @@
       " · ",
       ["tabCount", "plural", { "one": ["#", " tab"], "other": ["#", " tabs"] }]
     ],
+    "qEIFZu": ["Key ending in ", ["keyHint"]],
     "qEue6Q": [" or "],
     "qNOgUu": ["Edits at the source land here — no copy-paste drift."],
     "qRZh7J": ["Let Tab leave the source editor instead of indenting."],
@@ -1577,6 +1590,7 @@
       ["repoName"],
       "</0>."
     ],
+    "rBc32v": ["Couldn't reach the embeddings provider — press ↵ to retry"],
     "rFw02Q": ["Uploading ", ["keyName"]],
     "rJVoVX": ["Source find results"],
     "rQAQus": ["Couldn't save template: ", ["error"]],
@@ -1772,6 +1786,7 @@
     "yEJ-sl": [
       "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
     ],
+    "yFyZMJ": ["No pages matched \"", ["semanticQueryText"], "\" by meaning."],
     "yHikCO": ["Open CodeMirror's go-to-line prompt."],
     "yKu_3Y": ["Restore"],
     "yLq4w4": ["Separator"],
@@ -1827,6 +1842,7 @@
       ["pickedRelative"],
       "</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
     ],
+    "zXj1rA": ["Search by meaning"],
     "zZ_I5K": ["Open project menu"],
     "zaXlhf": [
       "The properties block at the top of this doc has a formatting error. Switch to source mode to fix it."

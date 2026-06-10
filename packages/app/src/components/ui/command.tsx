@@ -23,6 +23,7 @@ interface CommandDialogProps extends ComponentProps<typeof Dialog> {
   className?: string;
   showCloseButton?: boolean;
   commandProps?: ComponentProps<typeof CommandPrimitive>;
+  onEscapeKeyDown?: ComponentProps<typeof DialogContent>['onEscapeKeyDown'];
 }
 
 function CommandDialog({
@@ -32,6 +33,7 @@ function CommandDialog({
   className,
   showCloseButton = true,
   commandProps,
+  onEscapeKeyDown,
   ...props
 }: CommandDialogProps) {
   const { className: commandClassName, ...restCommandProps } = commandProps ?? {};
@@ -40,6 +42,7 @@ function CommandDialog({
       <DialogContent
         className={cn('top-[12vh] translate-y-0 overflow-hidden p-0', className)}
         showCloseButton={showCloseButton}
+        onEscapeKeyDown={onEscapeKeyDown}
       >
         {/* Inside DialogContent so Radix wires aria within its portal (cf. SettingsDialogShell) */}
         <DialogTitle className="sr-only">{title}</DialogTitle>

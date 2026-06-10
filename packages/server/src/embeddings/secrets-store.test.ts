@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse } from 'yaml';
 import {
   clearEmbeddingsKeyFromAllBackends,
   describeStoredEmbeddingsKey,
@@ -54,6 +55,21 @@ describe('FileEmbeddingsBackend', () => {
     expect(statSync(secretsFile).mode & 0o777).toBe(0o600);
   });
 
+  test('get() self-heals a world-readable file to 0600 on the read path (no write needed)', async () => {
+    mkdirSync(join(dir, '.ok'), { recursive: true });
+    writeFileSync(secretsFile, `OPENAI_API_KEY: ${KEY}\n`);
+    chmodSync(secretsFile, 0o644);
+    const store = new FileEmbeddingsBackend(secretsFile);
+    expect(await store.get()).toBe(KEY); // read still returns the key...
+    expect(statSync(secretsFile).mode & 0o777).toBe(0o600); // ...and tightened it
+  });
+
+  test('get() leaves an already-0600 file untouched', async () => {
+    await new FileEmbeddingsBackend(secretsFile).set(KEY); // written 0600
+    expect(await new FileEmbeddingsBackend(secretsFile).get()).toBe(KEY);
+    expect(statSync(secretsFile).mode & 0o777).toBe(0o600);
+  });
+
   test('clear removes the key; get returns null again', async () => {
     const store = new FileEmbeddingsBackend(secretsFile);
     await store.set(KEY);
@@ -81,6 +97,31 @@ describe('FileEmbeddingsBackend', () => {
 
   test('empty / absent file reads as no key', async () => {
     const store = new FileEmbeddingsBackend(secretsFile);
+    expect(await store.get()).toBeNull();
+  });
+
+  test('get() falls back to a key stored under the legacy `embeddings` field', async () => {
+    mkdirSync(join(dir, '.ok'), { recursive: true });
+    writeFileSync(secretsFile, `embeddings: ${KEY}\n`);
+    expect(await new FileEmbeddingsBackend(secretsFile).get()).toBe(KEY);
+  });
+
+  test('set() migrates the legacy field to OPENAI_API_KEY and drops it (self-clearing)', async () => {
+    mkdirSync(join(dir, '.ok'), { recursive: true });
+    writeFileSync(secretsFile, 'embeddings: old-key\nother: keep-me\n');
+    await new FileEmbeddingsBackend(secretsFile).set(KEY);
+    expect(await new FileEmbeddingsBackend(secretsFile).get()).toBe(KEY);
+    const data = parse(readFileSync(secretsFile, 'utf-8')) as Record<string, unknown>;
+    expect(data.OPENAI_API_KEY).toBe(KEY);
+    expect(data.embeddings).toBeUndefined(); // legacy field dropped
+    expect(data.other).toBe('keep-me'); // co-resident secrets preserved
+  });
+
+  test('clear() removes the legacy field too — no resurrection via the fallback', async () => {
+    mkdirSync(join(dir, '.ok'), { recursive: true });
+    writeFileSync(secretsFile, `embeddings: ${KEY}\n`);
+    const store = new FileEmbeddingsBackend(secretsFile);
+    await store.clear();
     expect(await store.get()).toBeNull();
   });
 });

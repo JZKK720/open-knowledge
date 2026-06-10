@@ -167,6 +167,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       'search.semantic.dimensions',
       'search.semantic.enabled',
       'search.semantic.model',
+      'search.semantic.similarityFloor',
     ]);
   });
 });
