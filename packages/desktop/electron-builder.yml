@@ -243,6 +243,10 @@ dmg:
   # actual asset is `Open-Knowledge-0.4.1-arm64.dmg`. The arch suffix stays
   # because we only ship arm64 today; an x64 / universal build would need
   # a parallel artifactName + a splash decision rule.
+  # The docs site's /download/beta and /download/stable redirects also
+  # reference this exact asset name via DMG_ASSET_NAME in
+  # docs/src/lib/download-links.ts — changing the pattern breaks both
+  # routes and the share-splash URL together.
   artifactName: ${productName}-${arch}.${ext}
   title: ${productName}
   # The "drag me to Applications" arrow and branding are painted INTO the

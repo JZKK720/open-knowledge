@@ -62,9 +62,6 @@ export default {
     'packages/desktop/src/shared/ipc-channels.ts': ['types'],
     'packages/app/src/lib/desktop-bridge-types.ts': ['types'],
     'packages/server/src/share/git-context.ts': ['types'],
-    'docs/src/app/d/[encoded]/opengraph-image.test.ts': ['files'],
-    'docs/src/lib/share-splash.test.ts': ['files'],
-    'docs/src/middleware.test.ts': ['files'],
     'packages/server/src/git-preflight.ts': ['exports'],
     'packages/cli/src/commands/diagnose-health.ts': ['exports'],
     'packages/cli/src/commands/diagnose-health-checks/git.ts': ['exports'],
@@ -100,7 +97,7 @@ export default {
       project: 'src/**',
     },
     docs: {
-      entry: ['source.config.ts'],
+      entry: ['source.config.ts', 'src/**/*.test.{ts,tsx}'],
     },
     'packages/server': {
       entry: ['src/**/*.test.ts'],
