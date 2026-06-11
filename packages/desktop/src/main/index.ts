@@ -155,6 +155,7 @@ import {
   checkAndRepairMcpWiringOnStartup,
   type McpStartupRepairResult,
   type McpWiringCliSurface,
+  type McpWiringDispatchTarget,
   type RunMcpWiringHandle,
   runMcpWiringOnFirstLaunch,
 } from './mcp-wiring.ts';
@@ -1148,7 +1149,10 @@ async function runApplicationMenuRefresh(): Promise<void> {
             mcpWiringHandle?.destroy();
             mcpWiringHandle = null;
             try {
-              mcpWiringHandle = armMcpWiring({ forceShow: true });
+              mcpWiringHandle = armMcpWiring({
+                forceShow: true,
+                immediateDispatchTarget: pickLoadedRendererForMcpDialog(),
+              });
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               console.error('[main] reconfigureMcpWiring failed', { err: message });
@@ -1254,7 +1258,12 @@ function createProjectMcpReclaimCliSurface(): ProjectMcpReclaimCliSurface {
   };
 }
 
-function createMcpWiringOpts(opts: { forceShow?: boolean } = {}) {
+interface ArmMcpWiringOpts {
+  forceShow?: boolean;
+  immediateDispatchTarget?: McpWiringDispatchTarget;
+}
+
+function createMcpWiringOpts(opts: ArmMcpWiringOpts = {}) {
   return {
     isPackaged: app.isPackaged,
     executablePath: app.getPath('exe'),
@@ -1265,15 +1274,24 @@ function createMcpWiringOpts(opts: { forceShow?: boolean } = {}) {
     forceEnv: process.env.OK_M6B_FORCE ?? null,
     reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
     forceShow: opts.forceShow ?? false,
+    immediateDispatchTarget: opts.immediateDispatchTarget,
   };
 }
 
-function armMcpWiring(opts: { forceShow?: boolean } = {}): RunMcpWiringHandle {
+function armMcpWiring(opts: ArmMcpWiringOpts = {}): RunMcpWiringHandle {
   return runMcpWiringOnFirstLaunch(createMcpWiringOpts(opts));
 }
 
 function formatUnknownError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function pickLoadedRendererForMcpDialog(): McpWiringDispatchTarget | undefined {
+  const isUsable = (win: BrowserWindow): boolean =>
+    !win.isDestroyed() && !win.webContents.isLoading();
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && isUsable(focused)) return focused.webContents;
+  return BrowserWindow.getAllWindows().find(isUsable)?.webContents;
 }
 
 function dispatchStartupReclaimToastWhenReady(results: {
