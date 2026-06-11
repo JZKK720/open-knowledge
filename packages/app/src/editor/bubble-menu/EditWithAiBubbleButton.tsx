@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useOpenInAgentMenuRequest } from '@/components/handoff/OpenInAgentMenuRequestContext';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
 import { serializeWysiwygSelection } from '../edit-with-ai-selection.ts';
 import { getEditorDocName } from '../extensions/doc-context.ts';
@@ -27,6 +28,7 @@ export function EditWithAiBubbleButton({
   const { t } = useLingui();
   const { openSelection } = useOpenInAgentMenuRequest();
   const isMac = isMacOS();
+  const isEmbedded = useIsEmbedded();
 
   const openSelectionMenu = (): void => {
     let selectionMarkdown: string;
@@ -46,7 +48,7 @@ export function EditWithAiBubbleButton({
   };
 
   useEffect(() => {
-    if (!isMac) return;
+    if (!isMac || isEmbedded) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (!shortcutEnabled) return;
       if (!matchesKeyboardShortcut(event, 'edit-with-ai')) return;
@@ -62,12 +64,13 @@ export function EditWithAiBubbleButton({
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [
     isMac,
+    isEmbedded,
     shortcutEnabled,
     // biome-ignore lint/correctness/useExhaustiveDependencies: openSelectionMenu is render-bound; re-subscribing keeps the handler fresh for the current editor selection.
     openSelectionMenu,
   ]);
 
-  if (!isMac) return null;
+  if (!isMac || isEmbedded) return null;
 
   return (
     <>

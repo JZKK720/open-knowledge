@@ -63,6 +63,16 @@ function setPlatform(platform: string): void {
   });
 }
 
+function setUserAgent(userAgent: string): void {
+  Object.defineProperty(globalThis.navigator, 'userAgent', {
+    value: userAgent,
+    configurable: true,
+  });
+}
+
+const PLAIN_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120 Safari/537.36';
+const EMBEDDED_UA = `${PLAIN_UA} Cursor/1.2.3`;
+
 function renderButton({
   editor,
   shortcutEnabled = true,
@@ -91,6 +101,7 @@ afterEach(() => {
   cleanup();
   openRequests.length = 0;
   toastError.mockClear();
+  setUserAgent(PLAIN_UA);
 });
 
 describe('EditWithAiBubbleButton', () => {
@@ -110,6 +121,38 @@ describe('EditWithAiBubbleButton', () => {
 
     expect(screen.queryByTestId('edit-with-ai-bubble-button')).toBeNull();
     expect(container.firstChild).toBeNull();
+  });
+
+  test('does not render anything when embedded inside an agent host', () => {
+    setPlatform('MacIntel');
+    setUserAgent(EMBEDDED_UA);
+    const { editor } = makeEditor('specs/foo/SPEC', 'A passage.');
+    const { container } = renderButton({ editor });
+
+    expect(screen.queryByTestId('edit-with-ai-bubble-button')).toBeNull();
+    expect(container.firstChild).toBeNull();
+  });
+
+  test('Cmd+Shift+I does nothing when embedded inside an agent host', async () => {
+    setPlatform('MacIntel');
+    setUserAgent(EMBEDDED_UA);
+    const { editor } = makeEditor('specs/foo/SPEC', 'A passage.');
+    renderButton({ editor });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'I',
+          code: 'KeyI',
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(openRequests).toEqual([]);
   });
 
   test('clicking the trigger requests the header Open with AI menu', async () => {
