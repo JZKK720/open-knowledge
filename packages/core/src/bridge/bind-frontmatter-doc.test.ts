@@ -1350,3 +1350,32 @@ describe('bindFrontmatterDoc — multi-client convergence', () => {
     bindingB.dispose();
   });
 });
+
+describe('bindFrontmatterDoc — fence trailing whitespace (fm-delimiter hazard)', () => {
+  test('current() recognizes an FM region whose fences carry trailing whitespace', () => {
+    const provider = makeProvider('--- \ntitle: Hazard\n--- \n\nBody\n');
+    const binding = bindFrontmatterDoc(provider);
+
+    const snapshot = binding.current();
+
+    expect(snapshot.parseError).toBeUndefined();
+    expect(snapshot.map).toEqual({ title: 'Hazard' });
+    expect(snapshot.keys).toEqual(['title']);
+    binding.dispose();
+  });
+
+  test('an edit at byte >= 5 that completes a trailing-whitespace fence re-parses and notifies', () => {
+    const seed = '--- \ntitle: Hazard\n';
+    const provider = makeProvider(seed);
+    const binding = bindFrontmatterDoc(provider);
+    const snapshots: FrontmatterSnapshot[] = [];
+    binding.subscribe((s) => snapshots.push(s));
+
+    provider.document.getText('source').insert(seed.length, '---\n');
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(snapshots.at(-1)?.map).toEqual({ title: 'Hazard' });
+    expect(binding.current().map).toEqual({ title: 'Hazard' });
+    binding.dispose();
+  });
+});

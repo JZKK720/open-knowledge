@@ -1,4 +1,6 @@
-export const FRONTMATTER_RE = /^---\r?\n([\s\S]*?\r?\n)?---(\r?\n|$)/;
+export const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?\r?\n)?---[ \t]*(\r?\n|$)/;
+
+export const FM_FENCE_LINE_RE = /^---[ \t]*$/;
 
 export function stripFrontmatter(markdown: string): { frontmatter: string; body: string } {
   const match = markdown.match(FRONTMATTER_RE);

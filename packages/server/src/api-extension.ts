@@ -170,6 +170,7 @@ import {
   TrashCleanupSuccessSchema,
   UploadAssetSuccessSchema,
   UploadRequestSchema,
+  unwrapFrontmatterFences,
   type WorkspaceSearchCorpus,
   type WorkspaceSearchDocument,
   type WorkspaceSearchIntent,
@@ -1591,13 +1592,7 @@ interface WorkspaceSearchCacheEntry {
 const workspaceSearchCaches = new Map<string, WorkspaceSearchCacheEntry>();
 
 export function extractHeadings(content: string): HeadingEntry[] {
-  let body = content;
-  if (content.startsWith('---\n') || content.startsWith('---\r\n')) {
-    const closingIdx = content.indexOf('\n---', 3);
-    if (closingIdx !== -1) {
-      body = content.slice(closingIdx + 4);
-    }
-  }
+  const { body } = stripFrontmatter(content);
 
   const headings: HeadingEntry[] = [];
   const slugCounts = new Map<string, number>();
@@ -9414,21 +9409,18 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     });
   }
 
-  const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
   const parseTemplateFile = (
     raw: string,
   ): { frontmatter: Record<string, unknown>; body: string } => {
-    const match = raw.match(FRONTMATTER_RE);
+    const { frontmatter: fenced, body } = stripFrontmatter(raw);
     let frontmatter: Record<string, unknown> = {};
-    let body = raw;
-    if (match) {
+    if (fenced !== '') {
       try {
-        const parsed = parseYaml(match[1] ?? '');
+        const parsed = parseYaml(unwrapFrontmatterFences(fenced));
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           frontmatter = parsed as Record<string, unknown>;
         }
       } catch {}
-      body = raw.slice(match[0].length);
     }
     return { frontmatter, body };
   };

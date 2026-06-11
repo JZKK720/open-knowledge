@@ -1,19 +1,18 @@
+import { stripFrontmatter, unwrapFrontmatterFences } from '@inkeep/open-knowledge-core';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { output, ZodType } from 'zod';
 import { isObject } from './is-object.ts';
 
 type Resolve<T> = { [K in keyof T]: T[K] } & {};
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
-
 export function parseFrontmatter<S extends ZodType = ZodType<Record<string, unknown>>>(
   content: string,
   schema?: S,
 ): Resolve<output<S>> | null {
-  const match = content.match(FRONTMATTER_RE);
-  if (!match) return null;
+  const { frontmatter } = stripFrontmatter(content);
+  if (frontmatter === '') return null;
   try {
-    const parsed = parseYaml(match[1]);
+    const parsed = parseYaml(unwrapFrontmatterFences(frontmatter));
     if (isObject(parsed)) {
       if (schema) {
         const result = schema.safeParse(parsed);

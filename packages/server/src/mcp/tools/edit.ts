@@ -3,6 +3,7 @@ import {
   type FrontmatterPatch,
   renderInventoryFooter,
   stripFrontmatter,
+  unwrapFrontmatterFences,
 } from '@inkeep/open-knowledge-core';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
@@ -287,10 +288,7 @@ function templateFilePath(
 }
 
 function parseTemplateFrontmatter(raw: string): TemplateFrontmatter {
-  const inner = raw
-    .replace(/^---\r?\n/, '')
-    .replace(/\r?\n?---\r?\n?$/, '')
-    .trim();
+  const inner = unwrapFrontmatterFences(raw).trim();
   if (inner === '') return { title: '' };
   const parsed: unknown = parseYaml(inner);
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return { title: '' };

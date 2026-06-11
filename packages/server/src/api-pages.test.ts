@@ -133,6 +133,51 @@ describe('extractHeadings', () => {
     const content = ['# Real', '```js', '# inside', '## still inside'].join('\n');
     expect(extractHeadings(content)).toEqual([{ level: 1, text: 'Real', slug: 'real' }]);
   });
+
+  test('strips frontmatter whose opening fence carries a trailing space', () => {
+    const content = [
+      '--- ',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '---',
+      '',
+      '# Real Heading',
+    ].join('\n');
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: 'Real Heading', slug: 'real-heading' },
+    ]);
+  });
+
+  test('strips frontmatter whose opening fence carries a trailing tab', () => {
+    const content = [
+      '---\t',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '---',
+      '',
+      '# Real Heading',
+    ].join('\n');
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: 'Real Heading', slug: 'real-heading' },
+    ]);
+  });
+
+  test('strips frontmatter whose closing fence carries trailing whitespace', () => {
+    const content = [
+      '---',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '--- ',
+      '',
+      '# Real Heading',
+    ].join('\n');
+
+    expect(extractHeadings(content)).toEqual([
+      { level: 1, text: 'Real Heading', slug: 'real-heading' },
+    ]);
+  });
 });
 
 function makeReq(method: string): IncomingMessage {

@@ -231,7 +231,7 @@ function snapshotFromRaw(raw: string): FrontmatterSnapshot {
 }
 
 function detectOpenFencePrefix(raw: string): boolean {
-  return /^---\r?\n/.test(raw);
+  return raw.startsWith('---');
 }
 
 export function bindFrontmatterDoc(provider: FrontmatterDocProvider): FrontmatterBinding {

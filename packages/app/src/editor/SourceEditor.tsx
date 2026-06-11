@@ -33,6 +33,7 @@ import {
   consumePendingSourceNavigation,
 } from './source-editor-navigation';
 import { createSourcePolishExtension } from './source-polish';
+import { FM_FENCE_LINE_RE } from './source-polish/view-plugin';
 import { attachTypingBurstDetector } from './typing-burst-detector';
 
 const TOOLBAR_OVERLAP_PX = 56;
@@ -48,9 +49,9 @@ interface SourceEditorProps {
 function applyOutlineNavigation(view: EditorView, detail: OutlineNavDetail): void {
   const doc = view.state.doc;
   let startLine = 1;
-  if (doc.lines >= 1 && doc.line(1).text === '---') {
+  if (doc.lines >= 1 && FM_FENCE_LINE_RE.test(doc.line(1).text)) {
     for (let i = 2; i <= doc.lines; i++) {
-      if (doc.line(i).text === '---') {
+      if (FM_FENCE_LINE_RE.test(doc.line(i).text)) {
         startLine = i + 1;
         break;
       }

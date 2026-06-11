@@ -221,6 +221,29 @@ describe('source-polish view-plugin — buildDecorationsForRanges', () => {
       expect(classesAtLine(decos, bodyListStart).join(' ')).toContain('cm-list-item');
     });
 
+    test('FM region with a trailing space on the opening fence still skips decorations', () => {
+      const doc = '--- \ntags:\n  - characters\n  - air-nomads\n---\n# Body\n';
+      const decos = collect(doc);
+      const lineOne = doc.indexOf('  - characters');
+      const lineTwo = doc.indexOf('  - air-nomads');
+      expect(classesAtLine(decos, lineOne).join(' ')).not.toContain('cm-list-item');
+      expect(classesAtLine(decos, lineTwo).join(' ')).not.toContain('cm-list-item');
+    });
+
+    test('FM region with a trailing space on the closing fence still skips decorations', () => {
+      const doc = '---\ntags:\n  - characters\n--- \n# Body\n';
+      const decos = collect(doc);
+      const yamlListLine = doc.indexOf('  - characters');
+      expect(classesAtLine(decos, yamlListLine).join(' ')).not.toContain('cm-list-item');
+    });
+
+    test('a leading space before the opening fence means no FM region — list styling applies', () => {
+      const doc = ' ---\ntags:\n  - characters\n---\n# Body\n';
+      const decos = collect(doc);
+      const listLine = doc.indexOf('  - characters');
+      expect(classesAtLine(decos, listLine).join(' ')).toContain('cm-list-item');
+    });
+
     test('doc with no FM block: list items render with .cm-list-item as before', () => {
       const doc = '- alpha\n- beta\n';
       const decos = collect(doc);

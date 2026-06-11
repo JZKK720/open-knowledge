@@ -256,6 +256,7 @@ export {
   nextFootnoteIdentifier,
 } from './extensions/footnote-reference.ts';
 export {
+  FM_FENCE_LINE_RE,
   FRONTMATTER_RE,
   prependFrontmatter,
   stripFrontmatter,

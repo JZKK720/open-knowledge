@@ -53,6 +53,37 @@ describe('extractPageIdentity', () => {
   });
 });
 
+describe('extractPageIdentity — fence trailing whitespace (fm-delimiter hazard)', () => {
+  test('title and aliases survive trailing spaces on both fence lines', () => {
+    const content = [
+      '--- ',
+      'title: Project Alpha',
+      'aliases:',
+      '  - Alpha Project',
+      '--- ',
+      '',
+      '# Different Heading',
+      '',
+      'Body.',
+    ].join('\n');
+
+    const identity = extractPageIdentity(content, 'project-alpha');
+    expect(identity.title).toBe('Project Alpha');
+    expect(identity.aliases).toEqual(['Alpha Project']);
+    expect(identity.matchLabels).toEqual(['Project Alpha', 'Alpha Project']);
+  });
+
+  test('extractPageTitle reads the frontmatter title under a trailing-tab closing fence', () => {
+    const content = '---\ntitle: Tab Fence\n---\t\n\nBody.';
+    expect(extractPageTitle(content, 'fallback-name')).toBe('Tab Fence');
+  });
+
+  test('a leading space before the opening fence still disqualifies the block', () => {
+    const content = ' ---\ntitle: Not FM\n---\n\n# Heading\n';
+    expect(extractPageTitle(content, 'fallback-name')).toBe('Heading');
+  });
+});
+
 describe('extractPageAliases', () => {
   test('supports inline alias arrays and exact deduplication', () => {
     const content = ['---', 'aliases: ["Alpha", "Project, A", "Alpha"]', '---', '', 'Body.'].join(

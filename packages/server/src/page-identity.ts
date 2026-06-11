@@ -1,4 +1,8 @@
-import { stripFrontmatter, toWikiLinkSlug } from '@inkeep/open-knowledge-core';
+import {
+  stripFrontmatter,
+  toWikiLinkSlug,
+  unwrapFrontmatterFences,
+} from '@inkeep/open-knowledge-core';
 
 export interface PageIdentity {
   docName: string;
@@ -10,8 +14,7 @@ export interface PageIdentity {
 
 function splitFrontmatterLines(frontmatter: string): string[] {
   if (!frontmatter) return [];
-  const withoutDelimiters = frontmatter.replace(/^---\r?\n/, '').replace(/\r?\n---(?:\r?\n)?$/, '');
-  return withoutDelimiters.split(/\r?\n/);
+  return unwrapFrontmatterFences(frontmatter).split(/\r?\n/);
 }
 
 function normalizeFrontmatterScalar(value: string): string {

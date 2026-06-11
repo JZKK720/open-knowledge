@@ -31,13 +31,17 @@ function countLeadingIndent(text: string): number {
   return indent;
 }
 
+import { FM_FENCE_LINE_RE } from '@inkeep/open-knowledge-core';
+
+export { FM_FENCE_LINE_RE };
+
 function frontmatterRange(state: EditorState): { from: number; to: number } | null {
   if (state.doc.lines < 2) return null;
   const firstLine = state.doc.line(1);
-  if (firstLine.text !== '---') return null;
+  if (!FM_FENCE_LINE_RE.test(firstLine.text)) return null;
   for (let i = 2; i <= state.doc.lines; i++) {
     const line = state.doc.line(i);
-    if (line.text === '---') {
+    if (FM_FENCE_LINE_RE.test(line.text)) {
       return { from: firstLine.from, to: line.to };
     }
   }

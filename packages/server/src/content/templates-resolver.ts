@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix } from 'node:path';
+import { stripFrontmatter, unwrapFrontmatterFences } from '@inkeep/open-knowledge-core';
 import { parse as parseYaml } from 'yaml';
 
 type TemplateScope = 'local' | 'inherited';
@@ -226,6 +227,7 @@ function readTemplateMeta(absPath: string): TemplateMeta {
 
 function extractFrontmatterYaml(content: string): string | null {
   const normalized = content.replace(/^﻿/, '');
-  const match = /^[ \t]*---\r?\n([\s\S]*?)\r?\n[ \t]*---(\r?\n|$)/.exec(normalized);
-  return match ? (match[1] ?? null) : null;
+  const { frontmatter } = stripFrontmatter(normalized);
+  if (frontmatter === '') return null;
+  return unwrapFrontmatterFences(frontmatter);
 }
