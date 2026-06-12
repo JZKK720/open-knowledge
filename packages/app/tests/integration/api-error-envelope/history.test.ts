@@ -61,6 +61,26 @@ describe('history envelope (RFC 9457)', () => {
     }
   });
 
+  test('concurrent identical requests stay consistent through the single-flight path (no shared-state corruption)', async () => {
+    await fetch(`http://127.0.0.1:${server.port}/api/agent-write-md`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docName: 'sf-doc', markdown: '# Coalesce\n', position: 'replace' }),
+    });
+
+    const url = `http://127.0.0.1:${server.port}/api/history?docName=sf-doc&limit=10`;
+    const responses = await Promise.all(Array.from({ length: 8 }, () => fetch(url)));
+    expect(responses.every((r) => r.status === 200)).toBe(true);
+    const bodies = (await Promise.all(responses.map((r) => r.json()))) as Array<{
+      entries: unknown[];
+      hasMore?: boolean;
+    }>;
+    const first = JSON.stringify(bodies[0]?.entries);
+    expect(bodies.every((b) => JSON.stringify(b.entries) === first)).toBe(true);
+    const parsed = HistorySuccessSchema.safeParse(bodies[0]);
+    expect(parsed.success).toBe(true);
+  });
+
   test('method-not-allowed on POST emits problem+json with Allow: GET', async () => {
     const res = await fetch(`http://127.0.0.1:${server.port}/api/history?docName=test-doc`, {
       method: 'POST',

@@ -22,6 +22,12 @@ import {
 import type { ShadowHandle } from './shadow-repo.ts';
 import { shadowGit } from './shadow-repo.ts';
 import { getMeter, withSpan } from './telemetry.ts';
+import { recordTimelineQuery } from './timeline-telemetry.ts';
+
+const HISTORY_WALK_CEILING = 500;
+export function historyWalkCap(offset: number, limit: number): number {
+  return Math.min(HISTORY_WALK_CEILING, 3 * (Math.max(0, offset) + Math.max(1, limit)));
+}
 
 interface HistoryQuery {
   docName: string;
@@ -29,6 +35,7 @@ interface HistoryQuery {
   type?: string | string[];
   author?: string | string[];
   excludeAuthor?: string | string[];
+  includeAutoCheckpoints?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -217,9 +224,22 @@ export async function getDocumentHistory(
   const limit = Math.max(1, query.limit ?? 50);
   const offset = Math.max(0, query.offset ?? 0);
 
+  const walkCap = historyWalkCap(offset, limit);
+  const queryStart = performance.now();
+  let windowSaturated = false;
+  const finishMetric = (width: number, commits: number, error = false): void =>
+    recordTimelineQuery({
+      durationMs: performance.now() - queryStart,
+      width,
+      commits,
+      capped: windowSaturated,
+      error,
+    });
+
   const typeFilter = toArray(query.type);
   const authorFilter = toArray(query.author);
   const excludeAuthorFilter = toArray(query.excludeAuthor);
+  const includeAuto = query.includeAutoCheckpoints ?? false;
 
   const normalizedRoot = contentRoot === '.' ? '' : contentRoot.replace(/^\.\//, '');
   const pathFor = (name: string): string =>
@@ -316,6 +336,7 @@ export async function getDocumentHistory(
 
       const filtered = allEntries.filter(
         (e) =>
+          (includeAuto || e.checkpoint?.kind !== 'auto-consolidation') &&
           matchesAuthor(e, authorFilter) &&
           (excludeAuthorFilter.length === 0 || !matchesAuthor(e, excludeAuthorFilter)),
       );
@@ -323,6 +344,7 @@ export async function getDocumentHistory(
       const total = filtered.length;
       const page = filtered.slice(offset, offset + limit);
       const stripped: TimelineEntry[] = page.map(({ rawBody: _rawBody, ...rest }) => rest);
+      finishMetric(allShas.length, total);
       return { entries: stripped, total, hasMore: offset + limit < total };
     }
 
@@ -430,10 +452,13 @@ export async function getDocumentHistory(
         '--full-history',
         '--author-date-order',
         `--format=${GIT_LOG_FORMAT}`,
+        '-n',
+        String(walkCap),
         ...allStartRefs,
         ...(docPath ? ['--', docPath] : []),
       );
       wipEntries = parseGitLogOutput(currentRaw);
+      if (wipEntries.length >= walkCap) windowSaturated = true;
 
       if (hasRenameHistory) {
         for (let i = 0; i < chain.length - 1; i++) {
@@ -445,11 +470,19 @@ export async function getDocumentHistory(
             const predecessorPath = pathFor(step.path);
             const predRaw = await logSeededReachable(
               shadow,
-              ['--full-history', '--author-date-order', `--format=${GIT_LOG_FORMAT}`],
+              [
+                '--full-history',
+                '--author-date-order',
+                `--format=${GIT_LOG_FORMAT}`,
+                '-n',
+                String(walkCap),
+              ],
               seeds,
               predecessorPath,
             );
-            wipEntries = [...wipEntries, ...parseGitLogOutput(predRaw)];
+            const predEntries = parseGitLogOutput(predRaw);
+            if (predEntries.length >= walkCap) windowSaturated = true;
+            wipEntries = [...wipEntries, ...predEntries];
           } catch (e) {
             console.warn(
               `[timeline] predecessor walk failed for step ${i} (${step.path}); skipping:`,
@@ -490,6 +523,10 @@ export async function getDocumentHistory(
 
     filtered = filtered.filter((e) => e.type !== 'park');
 
+    if (!includeAuto) {
+      filtered = filtered.filter((e) => e.checkpoint?.kind !== 'auto-consolidation');
+    }
+
     if (typeFilter.length > 0) {
       filtered = filtered.filter((e) => typeFilter.includes(e.type));
     }
@@ -505,9 +542,15 @@ export async function getDocumentHistory(
     const total = filtered.length;
     const page = filtered.slice(offset, offset + limit);
     const stripped: TimelineEntry[] = page.map(({ rawBody: _rawBody, ...rest }) => rest);
-    return { entries: stripped, total, hasMore: offset + limit < total };
+    finishMetric(allStartRefs.length, unique.length);
+    return {
+      entries: stripped,
+      total,
+      hasMore: (windowSaturated && page.length > 0) || offset + limit < total,
+    };
   } catch (e) {
     console.warn('[timeline] getDocumentHistory failed, returning empty result:', e);
+    finishMetric(0, 0, true);
     return EMPTY;
   }
 }
@@ -543,19 +586,24 @@ export async function getFolderTimeline(
     }
     if (startRefs.length === 0) return EMPTY;
 
+    const walkCap = historyWalkCap(offset, limit);
     const raw = await sg.raw(
       'log',
       '--full-history',
       '--author-date-order',
       `--format=${GIT_LOG_FORMAT}`,
+      '-n',
+      String(walkCap),
       ...startRefs,
       '--',
       okPath,
     );
+    const parsedFolderEntries = parseGitLogOutput(raw);
+    const windowSaturated = parsedFolderEntries.length >= walkCap;
     const okDocPrefix = base ? `${base}/.ok/` : '.ok/';
     const seen = new Set<string>();
     const entries: TimelineEntry[] = [];
-    for (const parsed of parseGitLogOutput(raw)) {
+    for (const parsed of parsedFolderEntries) {
       if (seen.has(parsed.sha)) continue;
       if (!isFolderArtifactSubject(parsed.message)) continue;
       const touchesFolderArtifact = parsed.contributors.some((c) =>
@@ -567,10 +615,11 @@ export async function getFolderTimeline(
       entries.push(entry);
     }
     const total = entries.length;
+    const page = entries.slice(offset, offset + limit);
     return {
-      entries: entries.slice(offset, offset + limit),
+      entries: page,
       total,
-      hasMore: offset + limit < total,
+      hasMore: (windowSaturated && page.length > 0) || offset + limit < total,
     };
   } catch (e) {
     console.warn('[timeline] getFolderTimeline failed, returning empty result:', e);

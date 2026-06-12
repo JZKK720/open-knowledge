@@ -11,6 +11,7 @@ import { isAllowedApiOrigin } from './api-origin.ts';
 import { errorResponse } from './http/error-response.ts';
 import type { PinoLogger } from './logger.ts';
 import { isAllowedWorkspaceHostHeader, isLoopbackAddress } from './loopback.ts';
+import type { MaintenanceCoordinator } from './maintenance-coordinator.ts';
 import type { McpHttpHandler } from './mcp-http.ts';
 import { handleCollabSocketError, incrementCollabMessageTooLarge } from './metrics.ts';
 
@@ -31,6 +32,7 @@ export interface MountMcpAndApiOptions {
   sessionManager?: AgentSessionManager;
   agentFocusBroadcaster?: AgentFocusBroadcaster | null;
   agentPresenceBroadcaster?: AgentPresenceBroadcaster | null;
+  maintenanceCoordinator?: MaintenanceCoordinator;
   keepaliveGraceMs?: number;
   contentAssetMiddleware?: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
   reactShellMiddleware?: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
@@ -51,6 +53,7 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     contentAssetMiddleware,
     reactShellMiddleware,
     ephemeral,
@@ -291,6 +294,11 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
                 agentPresenceBroadcaster?.clearPresence(toBroadcasterKey(connectionId));
               } catch (err) {
                 log.error({ err, connectionId }, '[keepalive] clearPresence failed');
+              }
+              try {
+                await maintenanceCoordinator?.onSessionClose();
+              } catch (err) {
+                log.error({ err, connectionId }, '[keepalive] maintenance onSessionClose failed');
               }
             })();
             keepaliveGraceInflight.add(work);

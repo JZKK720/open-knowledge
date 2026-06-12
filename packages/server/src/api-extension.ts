@@ -442,6 +442,7 @@ import {
 } from './seed/index.ts';
 import type { PairedWriteOrigin } from './server-observers.ts';
 import {
+  enumerateWipChains,
   listRescueCheckpoints,
   SERVICE_WRITER,
   type ShadowRef,
@@ -451,11 +452,13 @@ import {
   type TimelineRescueEntry,
   type WriterIdentity,
 } from './shadow-repo.ts';
+import { createSingleFlight } from './single-flight.ts';
 import { SuggestLinksTargetNotFoundError, suggestLinks } from './suggest-links.ts';
 import type { SyncEngine } from './sync-engine.ts';
 import type { TagIndex } from './tag-index.ts';
 import { getMeter, getTracer, withSpan, withSpanSync } from './telemetry.ts';
 import { getDocumentHistory, getFolderTimeline } from './timeline-query.ts';
+import { recordTimelineCoalesced } from './timeline-telemetry.ts';
 
 let _httpDurationHist: ReturnType<ReturnType<typeof getMeter>['createHistogram']> | null = null;
 function httpDurationHist(): ReturnType<ReturnType<typeof getMeter>['createHistogram']> {
@@ -1669,6 +1672,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
   const localOpGuard = createConcurrencyGuard();
 
   const showAllInflight = new Map<string, InflightShowAllWalk>();
+
+  const historyInflight = createSingleFlight<Awaited<ReturnType<typeof getDocumentHistory>>>();
   let referencedAssetsCache: {
     signature: string;
     assets: ReturnType<typeof collectReferencedAssets>;
@@ -5159,6 +5164,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
         let writers: WriterIdentity[] = [];
+        let foldEnumeratedAll = false;
 
         if (Array.isArray(body.writers)) {
           try {
@@ -5185,6 +5191,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           }
         }
 
+        const saveVersionBranch = getCurrentBranch?.() ?? 'main';
+
         if (writers.length === 0) {
           if (svRawAgentId !== undefined) {
             const displayName = svClientName ? `${svAgentName} (${svClientName})` : svAgentName;
@@ -5192,7 +5200,17 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               { id: svAgentId, name: displayName, email: `${svAgentId}@openknowledge.local` },
             ];
           } else {
-            writers = [SERVICE_WRITER];
+            const chains = await enumerateWipChains(shadow, saveVersionBranch);
+            const foldable = chains.filter((c) => !c.isPark);
+            writers =
+              foldable.length > 0
+                ? foldable.map((c) => ({
+                    id: c.writerId,
+                    name: c.writerId,
+                    email: `${c.writerId}@openknowledge.local`,
+                  }))
+                : [SERVICE_WRITER];
+            foldEnumeratedAll = true;
           }
         }
 
@@ -5204,8 +5222,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           shadow,
           resolvedContentRoot,
           writers,
-          'main',
+          saveVersionBranch,
           checkpointSummary.kind === 'value' ? checkpointSummary.value : undefined,
+          foldEnumeratedAll ? { includeUpstream: false } : undefined,
         );
 
         getLogger('history').info({ checkpointRef: result.checkpointRef }, 'checkpoint');
@@ -5280,11 +5299,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const folderLimit = Math.min(200, Number.isFinite(rawFolderLimit) ? rawFolderLimit : 50);
         const rawFolderOffset = Number(url.searchParams.get('offset') ?? '0');
         const folderOffset = Math.max(0, Number.isFinite(rawFolderOffset) ? rawFolderOffset : 0);
-        const result = await getFolderTimeline(shadow, validated.folderRel, contentRoot ?? '.', {
-          branch,
-          limit: folderLimit,
-          offset: folderOffset,
-        });
+        const folderKey = `folder\0${branch}\0${validated.folderRel}\0${folderLimit}\0${folderOffset}`;
+        const { promise, coalesced } = historyInflight.run(folderKey, () =>
+          getFolderTimeline(shadow, validated.folderRel, contentRoot ?? '.', {
+            branch,
+            limit: folderLimit,
+            offset: folderOffset,
+          }),
+        );
+        if (coalesced) recordTimelineCoalesced('folder');
+        const result = await promise;
         successResponse(res, 200, HistorySuccessSchema, { ...result }, { handler: 'history' });
         return;
       }
@@ -5305,22 +5329,30 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const type = url.searchParams.get('type') ?? undefined;
       const author = url.searchParams.get('author') ?? undefined;
       const excludeAuthor = url.searchParams.get('excludeAuthor') ?? undefined;
+      const includeAutoCheckpoints = url.searchParams.get('includeAutoCheckpoints') === 'true';
+
+      const docKey = `doc\0${branch}\0${docName}\0${limit}\0${offset}\0${type ?? ''}\0${author ?? ''}\0${excludeAuthor ?? ''}\0${includeAutoCheckpoints ? '1' : '0'}`;
 
       const t0 = Date.now();
       try {
-        const result = await getDocumentHistory(
-          shadow,
-          {
-            docName,
-            branch,
-            limit,
-            offset,
-            type,
-            author,
-            excludeAuthor,
-          },
-          resolvedContentRoot,
+        const { promise, coalesced } = historyInflight.run(docKey, () =>
+          getDocumentHistory(
+            shadow,
+            {
+              docName,
+              branch,
+              limit,
+              offset,
+              type,
+              author,
+              excludeAuthor,
+              includeAutoCheckpoints,
+            },
+            resolvedContentRoot,
+          ),
         );
+        if (coalesced) recordTimelineCoalesced('doc');
+        const result = await promise;
 
         const duration = Date.now() - t0;
         getLogger('timeline').info(

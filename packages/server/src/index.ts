@@ -407,6 +407,13 @@ export {
   type WriterIdentity,
 } from './shadow-repo.ts';
 export {
+  countShadowObjects,
+  countStaleAgentWipRefs,
+  countWipRefs,
+  hasGcLogLatch,
+  type ShadowObjectStats,
+} from './shadow-repo-stats.ts';
+export {
   createEphemeralProjectDir,
   prepareSingleFileOpen,
   SingleFileNotAFileError,

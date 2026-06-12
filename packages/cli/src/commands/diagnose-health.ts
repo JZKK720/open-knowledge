@@ -12,6 +12,7 @@ import {
   makeGitCheck,
   makeMacosCodesigCheck,
   makeServerLockCheck,
+  makeShadowHealthCheck,
   makeShadowRepoCheck,
   runAllChecks,
 } from './diagnose-health-checks/index.ts';
@@ -39,6 +40,7 @@ export function defaultChecks(): CheckDefinition[] {
     makeContentDirCheck(),
     makeServerLockCheck(),
     makeShadowRepoCheck(),
+    makeShadowHealthCheck(),
     makeMacosCodesigCheck(),
   ];
 }

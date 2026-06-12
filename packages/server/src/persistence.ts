@@ -194,6 +194,7 @@ export interface PersistenceOptions {
   resolveSize?: (basename: string, sourcePath: string) => number | null;
   getPrincipal?: () => Principal | null;
   onAgentCommit?: () => void;
+  onFlushCommit?: () => void;
   onDiskFlush?: (
     docName: string,
     sv: Uint8Array,
@@ -317,6 +318,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
   const backlinkIndex = options?.backlinkIndex;
   const getPrincipal = options?.getPrincipal;
   const onAgentCommit = options?.onAgentCommit;
+  const onFlushCommit = options?.onFlushCommit;
   const onDiskFlush = options?.onDiskFlush;
   const mgr = options?.mdManager ?? mdManager;
   const ephemeral = options?.ephemeral ?? false;
@@ -475,6 +477,11 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         try {
           const sha = await commitWipFromTree(shadow, writer, treeSha, writerMessage, branch);
           anySuccess = true;
+          try {
+            onFlushCommit?.();
+          } catch (err) {
+            log.warn({ err }, '[persistence] onFlushCommit callback failed (non-fatal)');
+          }
           log.info(
             { sha: sha.slice(0, 8), writer: writerId, tree: treeSha.slice(0, 8) },
             `[persistence] Shadow WIP commit: ${sha.slice(0, 8)} on refs/wip/${writerId}`,

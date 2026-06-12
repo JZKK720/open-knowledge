@@ -51,6 +51,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { LruStringCache } from '@/lib/lru-string-cache';
+import { createSelfSchedulingPoll, type PollOutcome } from '@/lib/self-scheduling-poll';
 import {
   HISTORICAL_CONTENT_CACHE_LIMIT,
   useTimelineEntryDiff,
@@ -60,6 +61,41 @@ const LazyActivityPanelDiffView = lazy(async () => {
   const mod = await import('@/components/ActivityPanelDiffView');
   return { default: mod.ActivityPanelDiffView };
 });
+
+const TIMELINE_POLL_BASE_MS = 10_000;
+const TIMELINE_POLL_MAX_BACKOFF_MS = 60_000;
+
+async function pollHistoryOnce(
+  docName: string,
+  signal: AbortSignal,
+  handlers: {
+    setEntries: (entries: TimelineEntry[]) => void;
+    setError: (message: string | null) => void;
+    setLoading: (value: boolean) => void;
+    unavailableMessage: string;
+  },
+): Promise<PollOutcome> {
+  try {
+    const res = await fetch(`/api/history?docName=${encodeURIComponent(docName)}&limit=100`, {
+      signal,
+    });
+    if (!res.ok) {
+      handlers.setError(handlers.unavailableMessage);
+      return 'error';
+    }
+    const data = (await res.json()) as { entries: TimelineEntry[] };
+    handlers.setEntries(data.entries ?? []);
+    handlers.setError(null);
+    return 'ok';
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    handlers.setError(handlers.unavailableMessage);
+    console.error('[timeline]', e);
+    return 'error';
+  } finally {
+    if (!signal.aborted) handlers.setLoading(false);
+  }
+}
 
 interface TimelineContentProps {
   docName: string;
@@ -230,6 +266,7 @@ type CheckpointVariant = 'save' | 'bridge-merge-loss' | 'external-change-rescue'
 
 export function checkpointVariant(entry: TimelineEntry): CheckpointVariant {
   if (!entry.checkpoint) return 'save';
+  if (entry.checkpoint.kind === 'auto-consolidation') return 'save';
   return entry.checkpoint.kind;
 }
 
@@ -649,7 +686,6 @@ export function TimelineContent({
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [cache] = useState(() => new LruStringCache(HISTORICAL_CONTENT_CACHE_LIMIT));
   const [expandedShas, setExpandedShas] = useState<Set<string>>(() => new Set());
 
@@ -678,37 +714,31 @@ export function TimelineContent({
       return;
     }
 
-    let cancelled = false;
+    setLoading(true);
+    const loop = createSelfSchedulingPoll({
+      baseMs: TIMELINE_POLL_BASE_MS,
+      maxBackoffMs: TIMELINE_POLL_MAX_BACKOFF_MS,
+      isPaused: () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+      poll: (signal) =>
+        pollHistoryOnce(docName, signal, {
+          setEntries,
+          setError,
+          setLoading,
+          unavailableMessage: t`History unavailable`,
+        }),
+    });
 
-    async function fetchHistory() {
-      if (!docName) return;
-      try {
-        const res = await fetch(`/api/history?docName=${encodeURIComponent(docName)}&limit=100`);
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(t`History unavailable`);
-          return;
-        }
-        const data = (await res.json()) as { entries: TimelineEntry[] };
-        if (cancelled) return;
-        setEntries(data.entries ?? []);
-        setError(null);
-      } catch (e) {
-        if (cancelled) return;
-        setError(t`History unavailable`);
-        console.error('[timeline]', e);
-      }
+    loop.start();
+    const onVisibilityChange = () => loop.resume();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
     }
 
-    setLoading(true);
-    fetchHistory().finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-    intervalRef.current = setInterval(fetchHistory, 10_000);
-
     return () => {
-      cancelled = true;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      loop.stop();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
     };
   }, [docName, t]);
 

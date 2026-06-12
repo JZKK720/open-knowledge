@@ -1,8 +1,18 @@
 import { parseWriterId } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
+import { getLogger } from './logger.ts';
 import { gcRenameLog, getOrLoadRenameLogIndex } from './rename-log.ts';
-import type { CheckpointRetentionPolicy, ShadowHandle } from './shadow-repo.ts';
-import { DEFAULT_CHECKPOINT_RETENTION, gcCheckpointRefs, shadowGit } from './shadow-repo.ts';
+import type { CheckpointRetentionPolicy, ShadowHandle, WriterIdentity } from './shadow-repo.ts';
+import {
+  DEFAULT_CHECKPOINT_RETENTION,
+  enumerateWipChains,
+  gcCheckpointRefs,
+  MAINTENANCE_GIT_TIMEOUT_MS,
+  saveVersion,
+  shadowGit,
+} from './shadow-repo.ts';
+
+const log = getLogger('shadow-gc');
 
 const GC_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000;
 
@@ -18,6 +28,7 @@ interface GcResult {
       scanned: number;
       deletedBridgeMergeLoss: number;
       deletedExternalChangeRescue: number;
+      deletedAutoConsolidation: number;
       retained: number;
     }
   >;
@@ -60,7 +71,9 @@ async function listProjectBranches(projectGitDir: string): Promise<Set<string>> 
         if (line) branches.add(line);
       }
     }
-  } catch {}
+  } catch (err) {
+    log.warn({ err }, '[shadow-gc] listProjectBranches failed; treating as no project branches');
+  }
   return branches;
 }
 
@@ -68,6 +81,7 @@ export async function gcShadowBranches(
   shadow: ShadowHandle,
   projectGitDir: string,
   checkpointRetention: CheckpointRetentionPolicy = DEFAULT_CHECKPOINT_RETENTION,
+  contentRoot = '.',
 ): Promise<GcResult> {
   const result: GcResult = {
     deletedBranches: [],
@@ -77,7 +91,7 @@ export async function gcShadowBranches(
     deletedStaleSessionRefs: 0,
   };
 
-  const sg = shadowGit(shadow);
+  const sg = shadowGit(shadow, { timeoutMs: MAINTENANCE_GIT_TIMEOUT_MS });
 
   let wipRefsRaw: string;
   try {
@@ -137,8 +151,8 @@ export async function gcShadowBranches(
                   const sha = (await sg.raw('rev-parse', oldRef)).trim();
                   await sg.raw('update-ref', newRef, sha);
                   await sg.raw('update-ref', '-d', oldRef);
-                } catch (e) {
-                  console.error(`[shadow-gc] failed to migrate ${oldRef} → ${newRef}:`, e);
+                } catch (err) {
+                  log.error({ err, oldRef, newRef }, '[shadow-gc] failed to migrate WIP ref');
                 }
               }
               result.renamedBranches.push({ from: orphanedBranch, to: newBranch });
@@ -180,56 +194,68 @@ export async function gcShadowBranches(
       if (
         ckResult.scanned > 0 ||
         ckResult.deletedBridgeMergeLoss > 0 ||
-        ckResult.deletedExternalChangeRescue > 0
+        ckResult.deletedExternalChangeRescue > 0 ||
+        ckResult.deletedAutoConsolidation > 0
       ) {
         result.checkpointGc[branch] = {
           scanned: ckResult.scanned,
           deletedBridgeMergeLoss: ckResult.deletedBridgeMergeLoss,
           deletedExternalChangeRescue: ckResult.deletedExternalChangeRescue,
+          deletedAutoConsolidation: ckResult.deletedAutoConsolidation,
           retained: ckResult.retained,
         };
       }
     } catch (err) {
-      console.warn(`[shadow-gc] checkpoint GC failed for branch ${branch}:`, err);
+      log.warn({ err, branch }, '[shadow-gc] checkpoint GC failed');
     }
   }
 
   try {
     await gcRenameLog(shadow, getOrLoadRenameLogIndex(shadow.gitDir));
   } catch (err) {
-    console.warn('[shadow-gc] rename-log GC failed:', err);
+    log.warn({ err }, '[shadow-gc] rename-log GC failed');
   }
 
+  const now = Date.now();
   for (const branch of projectBranches) {
-    const branchPrefix = `refs/wip/${branch}/`;
-    const branchRefs = wipRefs.filter((r) => r.startsWith(branchPrefix));
-    for (const ref of branchRefs) {
-      const writerId = ref.slice(branchPrefix.length);
-      const { classification } = parseWriterId(writerId);
-
+    const chains = await enumerateWipChains(shadow, branch);
+    const aged: WriterIdentity[] = [];
+    for (const c of chains) {
       if (
-        classification === 'classified-file-system' ||
-        classification === 'classified-git-upstream' ||
-        classification === 'classified-openknowledge-service'
+        c.classification === 'classified-file-system' ||
+        c.classification === 'classified-git-upstream' ||
+        c.classification === 'classified-openknowledge-service'
       ) {
         continue;
       }
-
-      if (classification === 'unknown') {
-        console.warn(`[shadow-gc] unknown writer id in active branch ref ${ref} — preserved`);
+      if (c.classification === 'unknown') {
+        log.warn(
+          { branch, writerId: c.writerId },
+          '[shadow-gc] unknown writer id in active branch ref — preserved',
+        );
         continue;
       }
-
-      if (classification === 'agent' || classification === 'principal') {
-        try {
-          const commitDate = (await sg.raw('log', '-1', '--format=%ci', ref)).trim();
-          if (!commitDate) continue;
-          const age = Date.now() - new Date(commitDate).getTime();
-          if (age >= SESSION_WRITER_TTL_MS) {
-            await sg.raw('update-ref', '-d', ref);
-            result.deletedStaleSessionRefs++;
-          }
-        } catch {}
+      if (c.classification === 'agent' || c.classification === 'principal') {
+        if (c.isPark) continue; // branch-switch state — never fold
+        if (c.committedAtMs > 0 && now - c.committedAtMs >= SESSION_WRITER_TTL_MS) {
+          aged.push({
+            id: c.writerId,
+            name: c.writerId,
+            email: `${c.writerId}@openknowledge.local`,
+          });
+        }
+      }
+    }
+    if (aged.length > 0) {
+      try {
+        await saveVersion(shadow, contentRoot, aged, branch, undefined, {
+          checkpointKind: { foldedRefs: aged.length, trigger: 'ttl' },
+          includeUpstream: false,
+          timeoutMs: MAINTENANCE_GIT_TIMEOUT_MS,
+        });
+        result.deletedStaleSessionRefs += aged.length;
+      } catch (err) {
+        log.warn({ err, branch }, '[shadow-gc] TTL consolidation failed');
       }
     }
   }

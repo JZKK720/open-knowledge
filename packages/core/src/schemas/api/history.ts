@@ -59,6 +59,7 @@ export const HistorySuccessSchema = z
     entries: z.array(HistoryEntrySchema),
     total: z.number().int().nonnegative().optional(),
     truncated: z.boolean().optional(),
+    hasMore: z.boolean().optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type HistorySuccess = z.infer<typeof HistorySuccessSchema>;

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,7 +25,7 @@ import {
   saveVersion,
   type WriterIdentity,
 } from './shadow-repo';
-import { getDocumentHistory } from './timeline-query';
+import { getDocumentHistory, historyWalkCap } from './timeline-query';
 
 let tmpDir: string;
 
@@ -650,4 +651,108 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
     expect(result.entries.length).toBeGreaterThanOrEqual(2);
     expect(result.entries.every((e) => e.type === 'checkpoint')).toBe(true);
   });
+});
+
+describe('depth-bound history walk (PRD-6972 FR3 / D14)', () => {
+  test('historyWalkCap: 3x(offset+limit) with a 500-commit ceiling', () => {
+    expect(historyWalkCap(0, 50)).toBe(150); // 3 * 50
+    expect(historyWalkCap(0, 2)).toBe(6);
+    expect(historyWalkCap(100, 50)).toBe(450); // 3 * 150
+    expect(historyWalkCap(200, 50)).toBe(500); // 3 * 250 = 750 → ceiling 500
+    expect(historyWalkCap(10_000, 10)).toBe(500); // ceiling
+    for (const [o, l] of [
+      [0, 50],
+      [50, 50],
+      [149, 50],
+    ] as const) {
+      expect(historyWalkCap(o, l)).toBeGreaterThan(o);
+    }
+  });
+
+  function buildDeepDocChain(shadow: Awaited<ReturnType<typeof setup>>['shadow'], n: number) {
+    const ref = 'refs/wip/main/human-ada';
+    let stream = `reset ${ref}\n`;
+    for (let i = 0; i < n; i++) {
+      const content = `# Edit ${i}\n`;
+      const msg = `wip: edit ${i}`;
+      const ts = 1_700_000_000 + i; // monotonically increasing author/commit date
+      const blobMark = 2 * i + 1;
+      const commitMark = 2 * i + 2;
+      stream += `blob\nmark :${blobMark}\ndata ${Buffer.byteLength(content)}\n${content}\n`;
+      stream += `commit ${ref}\nmark :${commitMark}\n`;
+      stream += `author Ada <ada@example.com> ${ts} +0000\n`;
+      stream += `committer Ada <ada@example.com> ${ts} +0000\n`;
+      stream += `data ${Buffer.byteLength(msg)}\n${msg}\n`;
+      stream += `M 100644 :${blobMark} content/docs/intro.md\n\n`;
+    }
+    stream += 'done\n';
+    execFileSync('git', ['fast-import', '--done'], {
+      cwd: shadow.workTree,
+      env: { ...process.env, GIT_DIR: shadow.gitDir, GIT_WORK_TREE: shadow.workTree },
+      input: stream,
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+  }
+
+  test('bounds the walk on a >500-commit doc; saturates hasMore; paginates within window', async () => {
+    const { shadow } = await setup();
+    buildDeepDocChain(shadow, 505);
+
+    const page0 = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 0 },
+      'content/docs',
+    );
+    expect(page0.entries).toHaveLength(50);
+    expect(page0.total).toBeLessThanOrEqual(150);
+    expect(page0.hasMore).toBe(true);
+
+    const page1 = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 50 },
+      'content/docs',
+    );
+    expect(page1.entries).toHaveLength(50);
+    expect(page1.hasMore).toBe(true);
+    const page0Shas = new Set(page0.entries.map((e) => e.sha));
+    expect(page1.entries.every((e) => !page0Shas.has(e.sha))).toBe(true);
+
+    const beyond = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 10, offset: 500 },
+      'content/docs',
+    );
+    expect(beyond.entries).toHaveLength(0);
+    expect(beyond.hasMore).toBe(false);
+  }, 180_000);
+
+  test('does NOT falsely saturate when commits are under the cap', async () => {
+    const { shadow, contentDir } = await setup();
+    for (let i = 0; i < 5; i++) {
+      writeFileSync(resolve(contentDir, 'intro.md'), `# Edit ${i}\n`);
+      await commitWip(shadow, human, 'content/docs', `WIP: edit ${i}`);
+    }
+    const result = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 0 },
+      'content/docs',
+    );
+    expect(result.entries.length).toBe(5);
+    expect(result.hasMore).toBe(false);
+  });
+
+  test('noise-dominated multi-writer fixture still fills a full page (slack absorbs filtering)', async () => {
+    const { shadow, contentDir } = await setup();
+    for (let i = 0; i < 24; i++) {
+      const w = i % 2 === 0 ? human : agent;
+      writeFileSync(resolve(contentDir, 'intro.md'), `# Edit ${i}\n`);
+      await commitWip(shadow, w, 'content/docs', `WIP: edit ${i}`);
+    }
+    const result = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 10, offset: 0 },
+      'content/docs',
+    );
+    expect(result.entries).toHaveLength(10);
+  }, 60_000);
 });

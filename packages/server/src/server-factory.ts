@@ -81,6 +81,10 @@ import { type HeadWatcherHandle, readBranchFromHead, startHeadWatcher } from './
 import { createLiveDerivedIndexExtension } from './live-derived-index.ts';
 import { getLogger } from './logger.ts';
 import { isAllowedWorkspaceHostHeader, isLoopbackAddress } from './loopback.ts';
+import {
+  createMaintenanceCoordinator,
+  type MaintenanceCoordinator,
+} from './maintenance-coordinator.ts';
 import { recoverPendingManagedRename } from './managed-rename-journal.ts';
 import { mdManager, schema } from './md-manager.ts';
 import {
@@ -175,6 +179,7 @@ export interface ServerInstance {
   cc1Broadcaster: CC1Broadcaster;
   agentFocusBroadcaster: AgentFocusBroadcaster;
   agentPresenceBroadcaster: AgentPresenceBroadcaster;
+  maintenanceCoordinator?: MaintenanceCoordinator;
   contentFilter: ContentFilter;
   basenameIndex: BasenameIndex;
   readonly serverInstanceId: string;
@@ -310,6 +315,7 @@ export function createServer(options: ServerOptions): ServerInstance {
   let backlinkIndex: BacklinkIndex;
   let tagIndex: TagIndex;
   let shadowRef: ShadowRef;
+  let maintenanceCoordinator: MaintenanceCoordinator | undefined;
   let persistence: ReturnType<typeof createPersistenceExtension>;
   let hocuspocus: Hocuspocus;
   let sessionManager: AgentSessionManager;
@@ -441,6 +447,32 @@ export function createServer(options: ServerOptions): ServerInstance {
 
     shadowRef = { current: shadowRepo };
 
+    maintenanceCoordinator = gitEnabled
+      ? createMaintenanceCoordinator({
+          getShadow: () => shadowRef.current ?? null,
+          getCurrentBranch: () => headWatcher?.getLastKnownBranch() ?? null,
+          contentRoot: contentRoot ?? '',
+          projectGitDir: resolveGitDir(projectDir) ?? undefined,
+          isWriterLive: (writerId) => {
+            if (!agentPresenceBroadcaster && !sessionManager) {
+              getLogger('server-factory').debug(
+                { writerId },
+                '[server-factory] isWriterLive called before liveness deps populated — treating writer as dead',
+              );
+              return false;
+            }
+            if (agentPresenceBroadcaster?.getPresenceMap()[writerId]) return true;
+            const connId = writerId.startsWith('agent-')
+              ? writerId.slice('agent-'.length)
+              : writerId;
+            for (const _session of sessionManager?.sessionsForConnection(connId) ?? []) {
+              return true;
+            }
+            return false;
+          },
+        })
+      : undefined;
+
     const persistenceOpts: PersistenceOptions = {
       contentDir,
       projectDir,
@@ -457,6 +489,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       resolveSize,
       getPrincipal: () => loadedPrincipal,
       onAgentCommit: () => cc1Broadcaster?.signal('session-activity'),
+      onFlushCommit: () => maintenanceCoordinator?.noteFlushCommit(),
       onDiskFlush: (docName, sv, persistedMarkdown, previousMarkdown) => {
         cc1Broadcaster?.emitDiskAck(docName, sv);
         if (isSystemDoc(docName) || isConfigDoc(docName)) return;
@@ -1271,6 +1304,8 @@ export function createServer(options: ServerOptions): ServerInstance {
 
       const documentCount = hocuspocus.documents.size;
 
+      maintenanceCoordinator?.destroy();
+
       try {
         try {
           try {
@@ -1501,6 +1536,12 @@ export function createServer(options: ServerOptions): ServerInstance {
         } catch (e) {
           log.warn({ err: e }, '[rename-log] boot-time GC/rebuild failed; index loaded without GC');
         }
+      }
+
+      try {
+        await maintenanceCoordinator?.runBootMaintenance();
+      } catch (e) {
+        log.warn({ err: e }, '[shadow-maintenance] boot maintenance failed (non-fatal)');
       }
     }
 
@@ -2294,6 +2335,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     cc1Broadcaster,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     contentFilter,
     basenameIndex,
     serverInstanceId,

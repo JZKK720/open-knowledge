@@ -297,6 +297,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
   } = serverInstance;
 
   const mcpHost = (() => {
@@ -372,6 +373,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     keepaliveGraceMs: opts.keepaliveGraceMs,
     contentAssetMiddleware,
     reactShellMiddleware,

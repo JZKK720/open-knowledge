@@ -5,6 +5,7 @@ export const CHECK_NAMES = [
   'content-dir',
   'server-lock',
   'shadow-repo',
+  'shadow-health',
   'macos-codesig',
 ] as const;
 

@@ -7,14 +7,35 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
+import { formatOkActor, type OkActorEntry } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import {
   commitUpstreamImport,
   commitWip,
   initShadowRepo,
+  saveVersion,
   type WriterIdentity,
 } from '../shadow-repo.ts';
 import { readShadowLog } from './shadow-log.ts';
+
+/** Build a realistic WIP commit body with an ok-actor line (as the persistence
+ *  write path does in production — the saveVersion fallback attributes from it). */
+function wipBody(subject: string, writerId: string, displayName: string): string {
+  const actor: OkActorEntry = {
+    v: 1,
+    writer_id: writerId,
+    principal: null,
+    agent_session: writerId,
+    agent_type: null,
+    client_name: null,
+    client_version: null,
+    label: null,
+    display_name: displayName,
+    color_seed: writerId,
+    docs: ['content/auth'],
+  };
+  return `${subject}\n\n${formatOkActor(actor)}`;
+}
 
 let tmpDir: string;
 
@@ -234,5 +255,51 @@ describe('readShadowLog — FR14 summaries carry through (US-007)', () => {
     const { commits } = await readShadowLog(project, 'content/auth.md', 5);
     expect(commits).toHaveLength(1);
     expect(commits[0].contributors[0].summaries).toBeUndefined();
+  });
+});
+
+describe('readShadowLog — checkpoint-ancestry fallback (PRD-6972 FR7 / D15)', () => {
+  test('enriched read parity across a consolidation (WIP refs gone, checkpoint anchors)', async () => {
+    const project = await bootstrapProject();
+    const shadow = await initShadowRepo(project);
+    const contentDir = resolve(project, 'content');
+    mkdirSync(contentDir, { recursive: true });
+    const branch = (await simpleGit(project).revparse(['--abbrev-ref', 'HEAD'])).trim();
+    const writer: WriterIdentity = { id: 'agent-z', name: 'Agent Z', email: 'z@t.test' };
+
+    for (let i = 1; i <= 3; i++) {
+      writeFileSync(resolve(contentDir, 'auth.md'), `# v${i}\n`);
+      await commitWip(
+        shadow,
+        writer,
+        contentDir,
+        wipBody(`edit ${i}`, 'agent-z', 'Agent Z'),
+        branch,
+      );
+      await wait(5);
+    }
+
+    const before = await readShadowLog(project, 'content/auth.md', 5);
+    expect(before.commits.length).toBe(3);
+
+    await saveVersion(shadow, contentDir, [writer], branch, undefined, {
+      checkpointKind: { foldedRefs: 1, trigger: 'dead-chain' },
+    });
+
+    const after = await readShadowLog(project, 'content/auth.md', 5);
+    expect(after.commits.map((c) => c.hash).sort()).toEqual(
+      before.commits.map((c) => c.hash).sort(),
+    );
+    expect(after.commits.every((c) => !c.message.startsWith('checkpoint:'))).toBe(true);
+    expect(after.commits.every((c) => c.writerId === 'agent-z')).toBe(true);
+    expect(after.commits.every((c) => c.writerClassification === 'agent')).toBe(true);
+  });
+
+  test('no checkpoint + no WIP refs → still empty (no false fallback)', async () => {
+    const project = await bootstrapProject();
+    await initShadowRepo(project);
+    const result = await readShadowLog(project, 'content/auth.md', 5);
+    expect(result.source).toBe('shadow-repo');
+    expect(result.commits).toEqual([]);
   });
 });

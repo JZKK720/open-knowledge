@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { parseCheckpoint } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import { gcShadowBranches } from './shadow-branch-gc';
 import { commitWip, initShadowRepo, shadowGit, type WriterIdentity } from './shadow-repo';
@@ -275,5 +276,59 @@ describe('per-writer 30-day TTL GC on active branches (US-019, D54, FR-18)', () 
 
     expect(remaining).toContain(`refs/wip/${activeBranch}/agent-fresh`);
     expect(remaining).toContain(`refs/wip/${activeBranch}/principal-fresh`);
+  });
+
+  test('FR8/NG3: stale session writers are consolidated losslessly, not bare-deleted', async () => {
+    const projectRoot = resolve(tmpDir, 'ttl-lossless');
+    mkdirSync(resolve(projectRoot, 'content'), { recursive: true });
+    writeFileSync(resolve(projectRoot, 'content', 'readme.md'), '# readme\n');
+    const git = simpleGit(projectRoot);
+    await git.init();
+    await git.raw('config', 'user.name', 'Test');
+    await git.raw('config', 'user.email', 'test@test.com');
+    await git.add('.');
+    await git.commit('initial');
+    await git.raw('branch', '-M', activeBranch);
+
+    const shadow = await initShadowRepo(projectRoot);
+    await createRefWithDate(shadow, `refs/wip/${activeBranch}/agent-old`, staleDate);
+    const sg = shadowGit(shadow);
+    const staleSha = (await sg.raw('rev-parse', `refs/wip/${activeBranch}/agent-old`)).trim();
+
+    const result = await gcShadowBranches(
+      shadow,
+      resolve(projectRoot, '.git'),
+      undefined,
+      'content',
+    );
+    expect(result.deletedStaleSessionRefs).toBe(1);
+
+    let refGone = false;
+    try {
+      await sg.raw('rev-parse', `refs/wip/${activeBranch}/agent-old`);
+    } catch {
+      refGone = true;
+    }
+    expect(refGone).toBe(true);
+
+    const cpShas = (
+      await sg.raw('for-each-ref', '--format=%(objectname)', `refs/checkpoints/${activeBranch}/`)
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(cpShas.length).toBeGreaterThan(0);
+    let reachable = false;
+    let kind: string | null = null;
+    for (const cp of cpShas) {
+      const ancestors = (await sg.raw('rev-list', cp)).trim().split('\n');
+      if (ancestors.includes(staleSha)) {
+        reachable = true;
+        kind = parseCheckpoint((await sg.raw('log', '-1', '--format=%B', cp)).trim())?.kind ?? null;
+        break;
+      }
+    }
+    expect(reachable).toBe(true);
+    expect(kind).toBe('auto-consolidation'); // hidden (D16) + bounded (D21)
   });
 });

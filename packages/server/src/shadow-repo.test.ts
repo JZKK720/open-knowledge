@@ -4,17 +4,24 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { parseCheckpoint, parseOkActor } from '@inkeep/open-knowledge-core/shadow-repo-layout';
+import {
+  formatCheckpointBodyLine,
+  parseCheckpoint,
+  parseOkActor,
+} from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import {
   buildWipTree,
   commitUpstreamImport,
   commitWip,
+  DEFAULT_CHECKPOINT_RETENTION,
+  GIT_UPSTREAM_WRITER,
   type InMemoryCheckpointParams,
   initShadowRepo,
   type ParkableDoc,
   parkBranch,
   readParkedState,
+  resetFoldedWipRefs,
   SERVICE_WRITER,
   type ShadowHandle,
   safetyCheckpoint,
@@ -642,6 +649,145 @@ describe('saveVersion', () => {
     const parents = parentLine.split(' ').filter(Boolean);
     expect(parents).toContain(checkpoint1Sha);
   });
+
+  test('D21: every checkpoint adopts the latest prior checkpoint as a parent (even with WIP activity)', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# v1\n');
+    await commitWip(shadow, human, 'content/docs', 'WIP: v1');
+    const result1 = await saveVersion(shadow, 'content/docs', [human]);
+    const sg = shadowGit(shadow);
+    const checkpoint1Sha = (await sg.raw('rev-parse', result1.checkpointRef)).trim();
+
+    writeFileSync(resolve(contentDir, 'intro.md'), '# v2\n');
+    const wip2 = await commitWip(shadow, human, 'content/docs', 'WIP: v2');
+    const result2 = await saveVersion(shadow, 'content/docs', [human]);
+
+    const parents = (await sg.raw('log', '-1', '--format=%P', result2.checkpointRef))
+      .trim()
+      .split(' ')
+      .filter(Boolean);
+    expect(parents).toContain(wip2); // WIP tip is still a parent
+    expect(parents).toContain(checkpoint1Sha); // AND the prior checkpoint is chained
+    const reachable = (await sg.raw('rev-list', result2.checkpointRef)).trim().split('\n');
+    expect(reachable).toContain(checkpoint1Sha);
+  });
+
+  test('M3: checkpoints a feature branch (branch threaded through the spine)', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# feature work\n');
+    await commitWip(shadow, human, 'content/docs', 'WIP: feature', 'feature-x');
+    const sg = shadowGit(shadow);
+    expect((await sg.raw('rev-parse', 'refs/wip/feature-x/human-ada')).trim()).toHaveLength(40);
+
+    const result = await saveVersion(shadow, 'content/docs', [human], 'feature-x');
+    expect(result.checkpointRef).toContain('refs/checkpoints/feature-x/');
+
+    let featureWipGone = false;
+    try {
+      await sg.raw('rev-parse', 'refs/wip/feature-x/human-ada');
+    } catch {
+      featureWipGone = true;
+    }
+    expect(featureWipGone).toBe(true);
+  });
+
+  test('M6: concurrent saveVersion calls use isolated scratch indexes (no corruption)', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# human\n');
+    await commitWip(shadow, human, 'content/docs', 'WIP: human');
+    writeFileSync(resolve(contentDir, 'intro.md'), '# agent\n');
+    await commitWip(shadow, agent, 'content/docs', 'WIP: agent');
+
+    const [r1, r2] = await Promise.all([
+      saveVersion(shadow, 'content/docs', [human]),
+      saveVersion(shadow, 'content/docs', [agent]),
+    ]);
+
+    const sg = shadowGit(shadow);
+    for (const r of [r1, r2]) {
+      const sha = (await sg.raw('rev-parse', r.checkpointRef)).trim();
+      expect(sha).toHaveLength(40);
+      const tree = (await sg.raw('ls-tree', '-r', '--name-only', r.checkpointRef)).trim();
+      expect(tree).toContain('content/docs/intro.md');
+    }
+  });
+
+  test('resetFoldedWipRefs skips a ref advanced past the snapshot, deletes a matching one', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# agent v1\n');
+    const agentV1 = await commitWip(shadow, agent, 'content/docs', 'WIP: agent v1');
+    writeFileSync(resolve(contentDir, 'intro.md'), '# human stable\n');
+    const humanSha = await commitWip(shadow, human, 'content/docs', 'WIP: human stable');
+
+    const snapshot = new Map([
+      [agent.id, agentV1],
+      [human.id, humanSha],
+    ]);
+
+    writeFileSync(resolve(contentDir, 'intro.md'), '# agent v2\n');
+    const agentV2 = await commitWip(shadow, agent, 'content/docs', 'WIP: agent v2');
+
+    const sg = shadowGit(shadow);
+    await resetFoldedWipRefs(sg, 'main', [agent, human], snapshot);
+
+    expect((await sg.raw('rev-parse', `refs/wip/main/${agent.id}`)).trim()).toBe(agentV2);
+    let humanGone = false;
+    try {
+      await sg.raw('rev-parse', `refs/wip/main/${human.id}`);
+    } catch {
+      humanGone = true;
+    }
+    expect(humanGone).toBe(true);
+  });
+
+  test('includeUpstream:false does not fold or reset the git-upstream chain', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# agent\n');
+    const agentSha = await commitWip(shadow, agent, 'content/docs', 'WIP: agent');
+    writeFileSync(resolve(contentDir, 'intro.md'), '# upstream import\n');
+    const upstreamSha = await commitWip(
+      shadow,
+      GIT_UPSTREAM_WRITER,
+      'content/docs',
+      'WIP: upstream',
+    );
+
+    const result = await saveVersion(shadow, 'content/docs', [agent], 'main', undefined, {
+      includeUpstream: false,
+    });
+
+    const sg = shadowGit(shadow);
+    const parents = (await sg.raw('log', '-1', '--format=%P', result.checkpointRef))
+      .trim()
+      .split(' ')
+      .filter(Boolean);
+    expect(parents).toContain(agentSha);
+    expect(parents).not.toContain(upstreamSha);
+    expect((await sg.raw('rev-parse', `refs/wip/main/${GIT_UPSTREAM_WRITER.id}`)).trim()).toBe(
+      upstreamSha,
+    );
+  });
+
+  test('D9: checkpointKind tags the checkpoint as auto-consolidation', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# consolidated\n');
+    await commitWip(shadow, agent, 'content/docs', 'WIP: agent');
+    const result = await saveVersion(shadow, 'content/docs', [agent], 'main', undefined, {
+      checkpointKind: { foldedRefs: 4, trigger: 'dead-chain' },
+    });
+
+    const sg = shadowGit(shadow);
+    const body = (await sg.raw('log', '-1', '--format=%B', result.checkpointRef)).trim();
+    const parsed = parseCheckpoint(body);
+    expect(parsed?.kind).toBe('auto-consolidation');
+    if (parsed?.kind === 'auto-consolidation') {
+      expect(parsed.metadata.foldedRefs).toBe(4);
+      expect(parsed.metadata.trigger).toBe('dead-chain');
+    }
+  });
+
+  test('user Save Version checkpoints stay untyped (no auto-consolidation tag)', async () => {
+    writeFileSync(resolve(contentDir, 'intro.md'), '# user save\n');
+    await commitWip(shadow, human, 'content/docs', 'WIP: human');
+    const result = await saveVersion(shadow, 'content/docs', [human]);
+    const sg = shadowGit(shadow);
+    const body = (await sg.raw('log', '-1', '--format=%B', result.checkpointRef)).trim();
+    expect(parseCheckpoint(body)).toBe(null); // untyped = permanent (D17/D21)
+  });
 });
 
 describe('saveInMemoryCheckpoint (bridge-correctness SPEC §6 R7a)', () => {
@@ -805,6 +951,7 @@ describe('gcCheckpointRefs (bridge-correctness SPEC §6 R7 + review iteration 5)
     const result = await gcCheckpointRefs(shadow, 'main', {
       maxBridgeMergeLoss: 3,
       maxExternalChangeRescue: 50,
+      maxAutoConsolidation: 2,
       ttlMs: 0, // disable TTL; only count-based cap applies
     });
 
@@ -838,6 +985,7 @@ describe('gcCheckpointRefs (bridge-correctness SPEC §6 R7 + review iteration 5)
     const result = await gcCheckpointRefs(shadow, 'main', {
       maxBridgeMergeLoss: 50,
       maxExternalChangeRescue: 50,
+      maxAutoConsolidation: 2,
       ttlMs: 1, // everything older than 1 ms is eligible
     });
 
@@ -873,6 +1021,7 @@ describe('gcCheckpointRefs (bridge-correctness SPEC §6 R7 + review iteration 5)
     const result = await gcCheckpointRefs(shadow, 'main', {
       maxBridgeMergeLoss: 0, // forces deletion of the typed checkpoint
       maxExternalChangeRescue: 0,
+      maxAutoConsolidation: 2,
       ttlMs: 0,
     });
 
@@ -883,6 +1032,91 @@ describe('gcCheckpointRefs (bridge-correctness SPEC §6 R7 + review iteration 5)
       .split('\n')
       .filter(Boolean);
     expect(refs).toContain(`refs/checkpoints/main/${untypedSha}`);
+  });
+
+  async function writeAutoConsolidationCheckpoint(
+    s: ShadowHandle,
+    foldedRefs: number,
+    ageRank = foldedRefs,
+  ): Promise<string> {
+    const sg = shadowGit(s);
+    const emptyTreeSha = (await sg.raw('hash-object', '-t', 'tree', '-w', '/dev/null')).trim();
+    const body = `checkpoint: consolidated ${foldedRefs} inactive sessions\n\n${formatCheckpointBodyLine(
+      {
+        kind: 'auto-consolidation',
+        docName: null,
+        size: null,
+        metadata: { foldedRefs, trigger: 'dead-chain' },
+      },
+    )}`;
+    const date = `@${1_700_000_000 + ageRank * 100} +0000`;
+    const sha = (
+      await sg
+        .env({
+          GIT_DIR: s.gitDir,
+          GIT_AUTHOR_NAME: 'openknowledge-service',
+          GIT_AUTHOR_EMAIL: 'service@openknowledge.local',
+          GIT_AUTHOR_DATE: date,
+          GIT_COMMITTER_NAME: 'openknowledge-service',
+          GIT_COMMITTER_EMAIL: 'service@openknowledge.local',
+          GIT_COMMITTER_DATE: date,
+        })
+        .raw('commit-tree', emptyTreeSha, '-m', body)
+    ).trim();
+    await sg.raw('update-ref', `refs/checkpoints/main/${sha}`, sha);
+    return sha;
+  }
+
+  test('A3: adding the auto-consolidation kind does not throw the byKind partition', async () => {
+    const { gcCheckpointRefs } = await import('./shadow-repo.ts');
+    await writeAutoConsolidationCheckpoint(shadow, 3);
+    const result = await gcCheckpointRefs(shadow, 'main', DEFAULT_CHECKPOINT_RETENTION);
+    expect(result.scanned).toBe(1);
+    expect(result.deletedAutoConsolidation).toBe(0); // under the keep-newest-2 cap
+  });
+
+  test('keeps only the newest 2 auto-consolidation refs (count-only, D21)', async () => {
+    const { gcCheckpointRefs } = await import('./shadow-repo.ts');
+    const shas: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      shas.push(await writeAutoConsolidationCheckpoint(shadow, i + 1, i + 1));
+    }
+
+    const result = await gcCheckpointRefs(shadow, 'main', {
+      maxBridgeMergeLoss: 50,
+      maxExternalChangeRescue: 50,
+      maxAutoConsolidation: 2,
+      ttlMs: 0,
+    });
+
+    expect(result.scanned).toBe(5);
+    expect(result.deletedAutoConsolidation).toBe(3); // 5 - 2 kept
+
+    const sg = shadowGit(shadow);
+    const remaining = (
+      await sg.raw('for-each-ref', '--format=%(refname)', 'refs/checkpoints/main/')
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(remaining).toHaveLength(2);
+    expect(remaining).toContain(`refs/checkpoints/main/${shas[4]}`);
+    expect(remaining).toContain(`refs/checkpoints/main/${shas[3]}`);
+  });
+
+  test('TTL never reaps auto-consolidation refs (chained history must stay anchored)', async () => {
+    const { gcCheckpointRefs } = await import('./shadow-repo.ts');
+    await writeAutoConsolidationCheckpoint(shadow, 1);
+    await writeAutoConsolidationCheckpoint(shadow, 2);
+
+    const result = await gcCheckpointRefs(shadow, 'main', {
+      maxBridgeMergeLoss: 50,
+      maxExternalChangeRescue: 50,
+      maxAutoConsolidation: 2,
+      ttlMs: 1,
+    });
+
+    expect(result.deletedAutoConsolidation).toBe(0);
   });
 });
 

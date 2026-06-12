@@ -51,6 +51,22 @@ describe('checkpointVariant', () => {
       ),
     ).toBe('external-change-rescue');
   });
+
+  test('renders auto-consolidation checkpoints as "save" (D16 hidden by default, D17 no maintenance copy)', () => {
+    const entry = baseEntry({
+      checkpoint: {
+        kind: 'auto-consolidation',
+        docName: null,
+        size: null,
+        metadata: { foldedRefs: 6, trigger: 'dead-chain' },
+      },
+    });
+    expect(checkpointVariant(entry)).toBe('save');
+    const label = checkpointHeadlineLabel(entry);
+    expect(label).toBe('Save Version');
+    expect(label.toLowerCase()).not.toContain('consolidat');
+    expect(label.toLowerCase()).not.toContain('maintenance');
+  });
 });
 
 describe('checkpointHeadlineLabel (user-outcome language — review iteration 5)', () => {
