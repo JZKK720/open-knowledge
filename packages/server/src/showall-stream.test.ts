@@ -127,7 +127,6 @@ describe('streamShowAllEntries — abort + laziness', () => {
 });
 
 describe('streamShowAllEntries — .base/.canvas mediaKind', () => {
-
   test('.base and .canvas entries report mediaKind text in showAll output', async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ok-showall-mediakind-')));
     writeFileSync(join(dir, 'note.md'), '# Note\n');

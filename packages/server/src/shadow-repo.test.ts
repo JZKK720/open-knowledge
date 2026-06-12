@@ -69,7 +69,6 @@ describe('initShadowRepo', () => {
     await git.raw('config', 'user.email', 'test@test.com');
 
     await initShadowRepo(projectRoot);
-
   });
 
   test('is idempotent — second call does not error', async () => {

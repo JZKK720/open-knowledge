@@ -1,4 +1,3 @@
-
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 
 export const TOAST_A_ACTION = 'Relaunch';
@@ -36,7 +35,7 @@ export interface UpdateNotice {
   action?: { label: string; onClick: () => void };
   secondaryAction?: { label: string; onClick: () => void };
   onDismiss?: () => void;
-  variant?: 'info' | 'error';
+  variant?: 'info' | 'error' | 'success';
   priority: number;
   dismissible?: boolean;
 }
@@ -133,6 +132,7 @@ export function attachUpdateSubscribers(
       addNotice({
         id: noticeId,
         body: toastBBody(version),
+        variant: 'success',
         priority: PRIORITY_WHATS_NEW,
         action: {
           label: TOAST_B_ACTION,

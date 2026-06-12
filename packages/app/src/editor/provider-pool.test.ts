@@ -431,7 +431,6 @@ describe('ProviderPool dispose', () => {
 });
 
 describe('ProviderPool setupObservers init-throw recovery (S4)', () => {
-
   test('init-time throw rejects held syncPromise with BridgeSetupError + leaves entry pool-resident', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
 
@@ -1622,7 +1621,6 @@ describe('ProviderPool stored-state validation spine', () => {
 });
 
 describe("ProviderPool authenticationFailed handling (US-002 / 'server-instance-mismatch')", () => {
-
   test("reason 'server-instance-mismatch' recycles every pool entry", async () => {
     pool = new ProviderPool(3, DUMMY_WS, { storage: null });
     pool.setExpectedServerInstanceId('server-old');
@@ -1991,8 +1989,7 @@ function makeFakeNode(): FakeContainer {
     scrollTop: 0,
     children: [],
     style: {},
-    setAttribute() {
-    },
+    setAttribute() {},
     appendChild(child) {
       if (child.parentElement) child.parentElement.removeChild(child);
       node.children.push(child);
@@ -2008,7 +2005,6 @@ function makeFakeNode(): FakeContainer {
   };
   return node;
 }
-
 
 interface OkPerfCountersShape {
   providerObserverFires: Record<string, number>;
@@ -3174,7 +3170,6 @@ describe('ProviderPool observeDiskAckBatch (missed-frame recovery)', () => {
 });
 
 describe('ProviderPool handleServerInstanceMismatch baseline-selection', () => {
-
   test('handleServerInstanceMismatch uses lastDiskAckedSV when present', async () => {
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => undefined);
     try {

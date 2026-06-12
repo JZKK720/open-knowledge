@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -37,8 +36,7 @@ function makeRes(): { res: ServerResponse; captured: CapturedResponse } {
       captured.body = body ?? '';
       try {
         captured.parsed = JSON.parse(body ?? '{}') as Record<string, unknown>;
-      } catch {
-      }
+      } catch {}
     },
   } as unknown as ServerResponse;
   return { res, captured };
@@ -92,7 +90,6 @@ describe('save-version shadow checkpoint', () => {
     }
   });
 });
-
 
 describe('PRD-6716: save-version + rollback do not mutate parent git', () => {
   let tmpDir: string;

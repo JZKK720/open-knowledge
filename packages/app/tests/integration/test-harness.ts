@@ -1,4 +1,3 @@
-
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { type AddressInfo, createServer as createNetServer, type Socket } from 'node:net';
@@ -49,10 +48,8 @@ import { dispatchCC1Stateless, SYSTEM_DOC_NAME } from '../../src/lib/cc1';
 import { createSyncedReconnectGate, refreshServerInfo } from '../../src/lib/server-info-refresh';
 import { ControllableWebSocket } from './network-control';
 
-
 export const mdManager = new MarkdownManager({ extensions: sharedExtensions });
 export const schema = getSchema(sharedExtensions);
-
 
 async function getFreePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -63,7 +60,6 @@ async function getFreePort(): Promise<number> {
     });
   });
 }
-
 
 export interface TestServer {
   port: number;
@@ -185,7 +181,6 @@ export async function createTestServer(options: CreateTestServerOptions = {}): P
   };
 }
 
-
 export interface TestClient {
   doc: Y.Doc;
   ytext: Y.Text;
@@ -268,8 +263,7 @@ export async function createTestClient(
       observerCleanup();
       try {
         await testReset(port, resolvedDocName);
-      } catch {
-      }
+      } catch {}
       provider.destroy();
       doc.destroy();
     },
@@ -433,7 +427,6 @@ export function assertBridgeInvariant(ytext: Y.Text, fragment: Y.XmlFragment): v
     );
   }
 }
-
 
 export type FinalStateOutcome =
   | { outcome: 'converged-late' }
@@ -641,7 +634,6 @@ export async function awaitBacklinkIndexed(
   );
 }
 
-
 export type ServerDocState = {
   ytext: Y.Text;
   fragment: Y.XmlFragment;
@@ -678,13 +670,11 @@ export function getServerState(server: TestServer, docName: string): ServerDocSt
   };
 }
 
-
 const BRIDGE_ENFORCING_NON_PAIRED_ORIGINS: Set<LocalTransactionOrigin> = new Set([
   ORIGIN_TREE_TO_TEXT,
   ORIGIN_TEXT_TO_TREE,
   OBSERVER_SYNC_ORIGIN,
 ]);
-
 
 export function attachBridgeInvariantWatcher(
   doc: Y.Doc,
@@ -743,7 +733,6 @@ export function attachBridgeInvariantWatcher(
     doc.off('afterAllTransactions', afterAll);
   };
 }
-
 
 export interface ItemOriginProbe {
   recordCapture(label?: string): void;
@@ -825,7 +814,6 @@ export function createItemOriginProbe(
   };
 }
 
-
 export class ClientConvergenceError extends Error {
   constructor(details: string) {
     super(`Client convergence timed out.\n${details}`);
@@ -875,7 +863,6 @@ export async function assertAllConverged(
     .join('\n');
   throw new ClientConvergenceError(details);
 }
-
 
 export interface RestartableServer {
   port: number;
@@ -1008,23 +995,19 @@ export async function createRestartableServer(
     for (const client of wss.clients) {
       try {
         client.terminate();
-      } catch {
-      }
+      } catch {}
     }
     try {
       wss.close();
-    } catch {
-    }
+    } catch {}
     for (const socket of sockets) {
       try {
         socket.destroy();
-      } catch {
-      }
+      } catch {}
     }
     try {
       httpServer.close();
-    } catch {
-    }
+    } catch {}
   };
 
   const shutdown = async (): Promise<void> => {
@@ -1038,8 +1021,7 @@ export async function createRestartableServer(
     for (const prev of retired) {
       try {
         await prev.shutdown();
-      } catch {
-      }
+      } catch {}
     }
     if (!options.keepContentDir) {
       rmSync(contentDir, { recursive: true, force: true });
@@ -1068,7 +1050,6 @@ export async function createRestartableServer(
 
   return handle;
 }
-
 
 interface SystemDocSubscriberHandle {
   dispose: () => Promise<void>;
@@ -1117,7 +1098,6 @@ export function attachSystemDocSubscriber(
     },
   };
 }
-
 
 export function clientIdsInDoc(doc: Y.Doc): Set<number> {
   return new Set(doc.store.clients.keys());
@@ -1174,7 +1154,6 @@ export function assertNoClientIdDrift(
   );
 }
 
-
 type ProviderPoolCtor = typeof import('../../src/editor/provider-pool').ProviderPool;
 
 export interface MultiClientContext {
@@ -1213,8 +1192,7 @@ export async function createMultiClientContext(opts: {
       for (const pool of pools) {
         try {
           pool.dispose();
-        } catch {
-        }
+        } catch {}
       }
     },
   };

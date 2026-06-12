@@ -1,4 +1,3 @@
-
 import { FILE_TREE_TAG_NAME, type FileTree as PierreFileTreeModel } from '@pierre/trees';
 import { computeRevealScrollTop } from '@/components/file-tree-scroll';
 

@@ -1,4 +1,3 @@
-
 import {
   composeEmptySpacePrompt,
   composeFilePrompt,

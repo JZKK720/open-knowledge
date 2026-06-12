@@ -1,4 +1,3 @@
-
 import { composeFilePrompt, type TargetData } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { ExternalLink, Sparkles } from 'lucide-react';
