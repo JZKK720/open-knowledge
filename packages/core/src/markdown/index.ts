@@ -68,6 +68,10 @@ import {
 } from './pipeline.ts';
 import { normalizeDocRelativeAssetUrl } from './resolve-image-url.ts';
 import { toMarkdownHandlers } from './to-markdown-handlers.ts';
+import {
+  decodeInlineWhitespaceNumericCharRefRun,
+  isInlineWhitespaceNumericCharRef,
+} from './whitespace-char-ref.ts';
 
 interface MdastToPmState {
   all: (node: MdastNodes) => PmNode[];
@@ -452,9 +456,29 @@ function buildMdastToPmHandlers(
         ),
       ];
       markers.sort((a, b) => a.offset - b.offset);
+      const coalesced: Marker[] = [];
+      for (const marker of markers) {
+        const prev = coalesced[coalesced.length - 1];
+        if (
+          marker.kind === 'entity' &&
+          prev?.kind === 'entity' &&
+          prev.offset + prev.length === marker.offset &&
+          decodeInlineWhitespaceNumericCharRefRun(prev.raw) !== null &&
+          isInlineWhitespaceNumericCharRef(marker.raw)
+        ) {
+          coalesced[coalesced.length - 1] = {
+            kind: 'entity',
+            offset: prev.offset,
+            length: prev.length + marker.length,
+            raw: prev.raw + marker.raw,
+          };
+        } else {
+          coalesced.push(marker);
+        }
+      }
       const fragments: PmNode[] = [];
       let lastIdx = 0;
-      for (const marker of markers) {
+      for (const marker of coalesced) {
         if (marker.offset > lastIdx) {
           const segment = value.slice(lastIdx, marker.offset).replaceAll('\u00A0', ' ');
           if (segment) fragments.push(schema.text(segment));
@@ -467,8 +491,11 @@ function buildMdastToPmHandlers(
             if (marker.kind === 'escape') {
               fragments.push(schema.text(segmentText, [m.escapeMark.create()]));
             } else if (m.sourceLiteral) {
+              const decodedWhitespace = decodeInlineWhitespaceNumericCharRefRun(marker.raw);
               fragments.push(
-                schema.text(segmentText, [m.sourceLiteral.create({ sourceRaw: marker.raw })]),
+                schema.text(decodedWhitespace ?? segmentText, [
+                  m.sourceLiteral.create({ sourceRaw: marker.raw }),
+                ]),
               );
             } else {
               fragments.push(schema.text(segmentText));
