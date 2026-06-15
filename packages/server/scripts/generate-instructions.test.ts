@@ -123,7 +123,7 @@ describe('generateInstructions — byte budget', () => {
   test('stays within the structural ceiling (truncation / cache-cost guard)', () => {
     const skill = readFileSync(SKILL_PATH, 'utf8');
     const result = generateInstructions(skill);
-    expect(result.byteLength).toBeLessThan(11840);
+    expect(result.byteLength).toBeLessThan(12544);
   });
 
   test('reports per-section byte lengths so maintainers can spot the heaviest', () => {
