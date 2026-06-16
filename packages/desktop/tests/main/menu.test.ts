@@ -709,7 +709,6 @@ describe('buildMenuTemplate — View menu visibility toggles + tree-scoped expan
 });
 
 describe('buildMenuTemplate — View → Show/Hide Sidebar', () => {
-
   test('renders "Hide Sidebar" when sidebarVisible is true (or undefined default)', () => {
     const expanded = buildMenuTemplate(
       makeDeps({ onToggleSidebar: mock(() => {}), sidebarVisible: true }),

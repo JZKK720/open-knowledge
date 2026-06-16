@@ -205,8 +205,8 @@ msgid "{days, plural, one {# day ago} other {# days ago}}"
 msgstr "{days, plural, one {# day ago} other {# days ago}}"
 
 #: src/components/FileTree.tsx
-msgid "{deleteCount, plural, one {Delete} other {Delete # Items}}"
-msgstr "{deleteCount, plural, one {Delete} other {Delete # Items}}"
+msgid "{deleteCount, plural, one {Delete} other {Delete # items}}"
+msgstr "{deleteCount, plural, one {Delete} other {Delete # items}}"
 
 #: src/editor/extensions/JsxComponentView.tsx
 msgid "{descriptorLabel} — render error, source editable below"
@@ -1112,13 +1112,9 @@ msgid "Collapse {keyName}"
 msgstr "Collapse {keyName}"
 
 #: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 msgid "Collapse all"
 msgstr "Collapse all"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "Collapse All"
-msgstr "Collapse All"
 
 #: src/components/ActivityPanelBurstRow.tsx
 msgid "Collapse burst {burstNumber} diff"
@@ -1324,8 +1320,8 @@ msgid "Copy full path, No workspace"
 msgstr "Copy full path, No workspace"
 
 #: src/components/FileTree.tsx
-msgid "Copy Path"
-msgstr "Copy Path"
+msgid "Copy path"
+msgstr "Copy path"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Copy share link"
@@ -2078,13 +2074,9 @@ msgid "Expand {keyName}"
 msgstr "Expand {keyName}"
 
 #: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 msgid "Expand all"
 msgstr "Expand all"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "Expand All"
-msgstr "Expand All"
 
 #: src/components/ActivityPanelBurstRow.tsx
 msgid "Expand burst {burstNumber} diff"
@@ -2491,8 +2483,8 @@ msgid "Full guide"
 msgstr "Full guide"
 
 #: src/components/FileTree.tsx
-msgid "Full Path"
-msgstr "Full Path"
+msgid "Full path"
+msgstr "Full path"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "General"
@@ -3355,15 +3347,12 @@ msgstr "New"
 
 #: src/components/CommandPalette.tsx
 #: src/components/empty-state/CreateView.tsx
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/NewItemDialog.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "New file"
 msgstr "New file"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "New File"
-msgstr "New File"
 
 #: src/components/empty-state/CreateView.tsx
 msgid "New file from template \"{displayTitle}\" ({fileName}) in {targetLabel}"
@@ -3374,14 +3363,11 @@ msgid "New file from template \"{displayTitle}\" ({fileName}) in the project roo
 msgstr "New file from template \"{displayTitle}\" ({fileName}) in the project root"
 
 #: src/components/CommandPalette.tsx
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/NewItemDialog.tsx
 msgid "New folder"
 msgstr "New folder"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "New Folder"
-msgstr "New Folder"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
@@ -3774,12 +3760,12 @@ msgid "Open CodeMirror's lint diagnostics panel."
 msgstr "Open CodeMirror's lint diagnostics panel."
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder"
-msgstr "Open Containing Folder"
+msgid "Open containing folder"
+msgstr "Open containing folder"
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder, {hint}"
-msgstr "Open Containing Folder, {hint}"
+msgid "Open containing folder, {hint}"
+msgstr "Open containing folder, {hint}"
 
 #: src/components/PropertyWidgets.tsx
 msgid "Open date picker for {keyName}"
@@ -4428,8 +4414,8 @@ msgid "Reject"
 msgstr "Reject"
 
 #: src/components/FileTree.tsx
-msgid "Relative Path"
-msgstr "Relative Path"
+msgid "Relative path"
+msgstr "Relative path"
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Release notes"
@@ -5026,8 +5012,8 @@ msgstr "Show Files ({sidebarShortcutLabel})"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Show Hidden Files"
-msgstr "Show Hidden Files"
+msgid "Show hidden files"
+msgstr "Show hidden files"
 
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Show HTML preview"
@@ -5690,8 +5676,8 @@ msgid "Top linked pages"
 msgstr "Top linked pages"
 
 #: src/components/FileSidebar.tsx
-msgid "Tree View Options"
-msgstr "Tree View Options"
+msgid "Tree view options"
+msgstr "Tree view options"
 
 #: src/components/DocumentErrorBoundary.tsx
 #: src/components/InstallInClaudeDesktopDialog.tsx

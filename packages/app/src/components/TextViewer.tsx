@@ -1,4 +1,3 @@
-
 import { json } from '@codemirror/lang-json';
 import { type Language, StreamLanguage } from '@codemirror/language';
 import { toml } from '@codemirror/legacy-modes/mode/toml';

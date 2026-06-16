@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import * as actualSonner from 'sonner';
 import { dispatchOpenInTerminal } from './dispatch-open-in-terminal.ts';
 
-
 type ToastCall = { kind: 'error' | 'success'; message: string; description?: string };
 
 const toastCalls: ToastCall[] = [];

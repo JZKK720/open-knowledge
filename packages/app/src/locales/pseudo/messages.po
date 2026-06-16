@@ -205,7 +205,7 @@ msgid "{days, plural, one {# day ago} other {# days ago}}"
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "{deleteCount, plural, one {Delete} other {Delete # Items}}"
+msgid "{deleteCount, plural, one {Delete} other {Delete # items}}"
 msgstr ""
 
 #: src/editor/extensions/JsxComponentView.tsx
@@ -1107,12 +1107,8 @@ msgid "Collapse {keyName}"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
-msgid "Collapse all"
-msgstr ""
-
-#: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Collapse All"
+msgid "Collapse all"
 msgstr ""
 
 #: src/components/ActivityPanelBurstRow.tsx
@@ -1319,7 +1315,7 @@ msgid "Copy full path, No workspace"
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "Copy Path"
+msgid "Copy path"
 msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
@@ -2073,12 +2069,8 @@ msgid "Expand {keyName}"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
-msgid "Expand all"
-msgstr ""
-
-#: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Expand All"
+msgid "Expand all"
 msgstr ""
 
 #: src/components/ActivityPanelBurstRow.tsx
@@ -2486,7 +2478,7 @@ msgid "Full guide"
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "Full Path"
+msgid "Full path"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
@@ -3350,14 +3342,11 @@ msgstr ""
 
 #: src/components/CommandPalette.tsx
 #: src/components/empty-state/CreateView.tsx
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/NewItemDialog.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "New file"
-msgstr ""
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "New File"
 msgstr ""
 
 #: src/components/empty-state/CreateView.tsx
@@ -3369,13 +3358,10 @@ msgid "New file from template \"{displayTitle}\" ({fileName}) in the project roo
 msgstr ""
 
 #: src/components/CommandPalette.tsx
-#: src/components/NewItemDialog.tsx
-msgid "New folder"
-msgstr ""
-
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "New Folder"
+#: src/components/NewItemDialog.tsx
+msgid "New folder"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
@@ -3769,11 +3755,11 @@ msgid "Open CodeMirror's lint diagnostics panel."
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder"
+msgid "Open containing folder"
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder, {hint}"
+msgid "Open containing folder, {hint}"
 msgstr ""
 
 #: src/components/PropertyWidgets.tsx
@@ -4423,7 +4409,7 @@ msgid "Reject"
 msgstr ""
 
 #: src/components/FileTree.tsx
-msgid "Relative Path"
+msgid "Relative path"
 msgstr ""
 
 #: src/components/settings/SettingsDialogShell.tsx
@@ -5021,7 +5007,7 @@ msgstr ""
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Show Hidden Files"
+msgid "Show hidden files"
 msgstr ""
 
 #: src/editor/extensions/CodeBlockView.tsx
@@ -5685,7 +5671,7 @@ msgid "Top linked pages"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
-msgid "Tree View Options"
+msgid "Tree view options"
 msgstr ""
 
 #: src/components/DocumentErrorBoundary.tsx

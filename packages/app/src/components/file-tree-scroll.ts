@@ -1,4 +1,3 @@
-
 export interface RevealScrollInput {
   focusedIndex: number;
   itemHeight: number;

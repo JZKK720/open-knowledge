@@ -1,4 +1,3 @@
-
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -104,7 +103,7 @@ async function createSidebarFileAndType(
   docName: string,
   bodyText: string,
 ): Promise<void> {
-  await page.getByRole('button', { name: 'New File' }).click();
+  await page.getByRole('button', { name: 'New file' }).click();
   const renameInput = page.getByRole('textbox', { name: /rename Untitled\.md/i });
   await renameInput.fill(docName);
   await renameInput.press('Enter');
