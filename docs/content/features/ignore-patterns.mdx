@@ -84,7 +84,7 @@ The negation is an Open Knowledge behavior; `git` itself only reads `.gitignore`
 The sidebar's right-click menu and the macOS **View** menu carry two project-local visibility toggles for when you need to see hidden content without permanently editing `.okignore`:
 
 - **Show Hidden Files** stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Server-side `.gitignore` / `.okignore` filters still apply.
-- **Show all files** bypasses every filter (both client and server) and surfaces every file on disk under the content directory. Useful for one-off triage; flip it back off once you've found what you needed.
+- **Show all files** is on by default: it bypasses every filter (both client and server) and surfaces every file on disk under the content directory. Turn it off to scope the tree to indexed / linked content, with your `.gitignore` / `.okignore` honored.
 
 Both settings persist per-project per-machine. See [Editor → Show Hidden Files / Show all files](/docs/features/editor#show-hidden-files--show-all-files) for the full UX.
 

@@ -221,7 +221,8 @@ function focusEditorAfterRename(docName: string): void {
     if (!editor || editor.isDestroyed) return;
     try {
       editor.commands.focus();
-    } catch {}
+    } catch {
+    }
   });
 }
 
@@ -280,14 +281,16 @@ const MARKDOWN_FILE_ICON_SYMBOL = `<symbol id="${MARKDOWN_FILE_ICON_ID}" viewBox
 type IconNode = [string, Record<string, string>][];
 
 function iconNodeToSvg(iconNode: IconNode): string {
-  return iconNode
-    .map(([tag, { key: _, ...attrs }]) => {
-      const attrString = Object.entries(attrs)
-        .map(([k, v]) => `${k}="${v}"`)
-        .join(' ');
-      return `<${tag} ${attrString} />`;
-    })
-    .join('');
+  return (
+    iconNode
+      .map(([tag, { key: _, ...attrs }]) => {
+        const attrString = Object.entries(attrs)
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(' ');
+        return `<${tag} ${attrString} />`;
+      })
+      .join('')
+  );
 }
 
 function createLucideSpriteSymbol(id: string, iconNode: IconNode): string {
@@ -708,7 +711,7 @@ function FileTreeMenu({
   const canHide = okignoreTarget !== null && okignoreBinding !== null;
   const hideLabel = isFolder ? t`Hide folder` : t`Hide this file`;
   const showHiddenFiles = mergedConfig?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = mergedConfig?.appearance?.sidebar?.showAllFiles ?? false;
+  const showAllFiles = mergedConfig?.appearance?.sidebar?.showAllFiles ?? true;
   const canToggleVisibility = projectLocalBinding !== null;
   const folderConfig = useFolderConfig(isFolder ? treeDirectoryPathToFolderPath(item.path) : null);
   const folderHasTemplates =
@@ -1319,7 +1322,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const detectLazyFolderExpansionsRef = useRef<() => void>(() => {});
   const revalidateExpandedLazyDirsRef = useRef<() => void>(() => {});
   const showHiddenFilesRef = useRef<boolean>(false);
-  const showAllFilesRef = useRef<boolean>(false);
+  const showAllFilesRef = useRef<boolean>(true);
   const refreshDocsScheduleRef = useRef<(() => void) | null>(null);
   const fileTreeHostRef = useRef<HTMLDivElement | null>(null);
   const handleSelectionChangeRef = useRef<(selectedPaths: readonly string[]) => void>(() => {});
@@ -1457,7 +1460,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   };
   const { okignoreBinding, projectLocalBinding, merged } = useConfigContext();
   const showHiddenFiles = merged?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? false;
+  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? true;
 
   const isAvailable = () => busyPathRef.current === null;
 

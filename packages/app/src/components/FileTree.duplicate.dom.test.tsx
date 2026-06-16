@@ -441,7 +441,7 @@ describe('FileTree duplicate action runtime behavior', () => {
     fetchCalls = [];
     okignoreBindingMock = null;
     projectLocalBindingMock = null;
-    mergedConfigMock = null;
+    mergedConfigMock = { appearance: { sidebar: { showAllFiles: false } } };
     globalThis.fetch = makeFetchMock() as unknown as typeof fetch;
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();

@@ -47,6 +47,7 @@ function makeFetchMock() {
   });
 }
 
+
 class StubItem {
   expanded = false;
   selected = false;
@@ -287,7 +288,7 @@ describe('FileTree showAll truncation notice', () => {
   });
 
   test('does NOT render the notice when Show All Files is off, even if a stray truncated flag is present (QA-002 negative)', async () => {
-    mergedConfig = null; // showAllFiles → false
+    mergedConfig = { appearance: { sidebar: { showAllFiles: false } } };
     showAllBody = { documents: [docEntry('a')], truncated: true };
     render(<FileTree />);
 

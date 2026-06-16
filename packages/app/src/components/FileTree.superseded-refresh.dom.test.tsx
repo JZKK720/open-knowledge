@@ -6,7 +6,7 @@ function PassThrough({ children }: { children?: ReactNode }) {
   return <>{children}</>;
 }
 
-let mergedConfig: unknown = null;
+let mergedConfig: unknown = { appearance: { sidebar: { showAllFiles: false } } };
 const documentsFetchPlan: Array<
   (signal: AbortSignal | null | undefined) => Response | Promise<Response>
 > = [];
@@ -67,6 +67,7 @@ function makeFetchMock() {
     return jsonResponse({ ok: true });
   });
 }
+
 
 class StubItem {
   expanded = false;
@@ -243,7 +244,7 @@ describe('FileTree superseded documents refresh', () => {
 
   beforeEach(() => {
     model = new StubModel();
-    mergedConfig = null;
+    mergedConfig = { appearance: { sidebar: { showAllFiles: false } } };
     documentsFetchPlan.length = 0;
     documentsCallCount = 0;
     resolveTrailingDocuments = null;

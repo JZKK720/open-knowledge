@@ -1,3 +1,4 @@
+
 import { spawn } from 'node:child_process';
 import {
   closeSync,
@@ -301,7 +302,8 @@ function probeWsUpgrade(url: string, timeoutMs: number): Promise<boolean> {
       settled = true;
       try {
         ws.close();
-      } catch {}
+      } catch {
+      }
       resolveProbe(ok);
     };
     const ws = new WebSocket(url);
@@ -422,7 +424,7 @@ let editorActiveTarget: EditorActiveTargetSnapshot = { kind: null };
 
 let editorViewMenuState: EditorViewMenuStateSnapshot = {
   showHiddenFiles: false,
-  showAllFiles: false,
+  showAllFiles: true,
   canExpandAll: true,
   canCollapseAll: true,
   sidebarVisible: true,
@@ -448,7 +450,8 @@ function runDriverBootSmokeInProduction(): void {
     quit: () => {
       try {
         app.quit();
-      } catch {}
+      } catch {
+      }
     },
     setTimeout: (fn, ms) => {
       setTimeout(fn, ms);
@@ -585,7 +588,8 @@ function ensureWindowManager() {
             } catch (spawnErr) {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {}
+              } catch {
+              }
               throw Object.assign(
                 new Error(
                   `spawnDetachedServer: child_process.spawn threw synchronously: ${
@@ -626,7 +630,8 @@ function ensureWindowManager() {
             } finally {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {}
+              } catch {
+              }
             }
             childRef.unref();
             const pid = childRef.pid;
@@ -1255,6 +1260,7 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onToggleSpellCheck: () => setSpellCheckEnabledAppWide(!appState.spellCheckEnabled),
   });
 }
+
 
 function sendMenuActionToFocused(action: OkMenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -1977,6 +1983,7 @@ function registerIpcHandlers() {
       return { ok: false, reason: 'other' };
     }
   });
+
 
   handle('ok:fs:default-projects-root', async () => {
     return resolveDefaultProjectsRoot(appState.lastUsedProjectParent, app.getPath('documents'));

@@ -80,9 +80,9 @@ export const ConfigSchema = z.looseObject({
               agentSettable: false,
               defaultScope: 'project-local',
               description:
-                'Show every file, including those excluded by .gitignore / .okignore. Per-machine (project-local) — not shared.',
+                'Show every file, including those excluded by .gitignore / .okignore. On by default; turn off to scope the tree to indexed/linked content. Per-machine (project-local) — not shared.',
             })
-            .default(false),
+            .default(true),
         })
         .optional(),
     })
