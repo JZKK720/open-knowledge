@@ -290,6 +290,21 @@ describe('FileTree showAll lazy root seed', () => {
     );
   });
 
+  test('unresolved config still seeds the showAll root — Show all files is the default', async () => {
+    mergedConfig = null;
+    showAllResponseFactory = () =>
+      jsonResponse({
+        documents: [folderEntry('team', true), docEntry('README')],
+        truncated: false,
+      });
+    render(<FileTree />);
+
+    await screen.findByTestId('fake-pierre-tree');
+    await waitFor(() => expect(fetchUrls).toContain(SHOW_ALL_DEPTH1_URL));
+    expect(fetchUrls).not.toContain('/api/documents');
+    await waitFor(() => expect([...model.items.keys()].sort()).toEqual(['README.md', 'team/']));
+  });
+
   test('seeded folders are directory items for both hasChildren values; documents are files', async () => {
     showAllResponseFactory = () =>
       jsonResponse({
@@ -355,7 +370,7 @@ describe('FileTree showAll lazy root seed', () => {
   });
 
   test('Show All OFF keeps the index-backed fetch byte-for-byte unchanged', async () => {
-    mergedConfig = null; // showAllFiles → false
+    mergedConfig = { appearance: { sidebar: { showAllFiles: false } } };
     render(<FileTree />);
 
     await screen.findByTestId('fake-pierre-tree');
@@ -674,7 +689,7 @@ describe('FileTree showAll scoped refresh', () => {
   test('toggling Show All OFF returns to the index listing; back ON re-seeds the lazy root (QA-007)', async () => {
     const view = await renderTreeWithTeamLoaded();
 
-    mergedConfig = null; // appearance.sidebar.showAllFiles → false
+    mergedConfig = { appearance: { sidebar: { showAllFiles: false } } };
     const beforeOff = fetchUrls.length;
     view.rerender(<FileTree />);
 

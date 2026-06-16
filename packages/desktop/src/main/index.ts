@@ -422,7 +422,7 @@ let editorActiveTarget: EditorActiveTargetSnapshot = { kind: null };
 
 let editorViewMenuState: EditorViewMenuStateSnapshot = {
   showHiddenFiles: false,
-  showAllFiles: false,
+  showAllFiles: true,
   canExpandAll: true,
   canCollapseAll: true,
   sidebarVisible: true,

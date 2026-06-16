@@ -922,7 +922,11 @@
 
 .ProseMirror ol {
   list-style-type: decimal;
-  padding-left: 1.5em;
+  /* Wide enough for 3-digit markers (`100.`). The previous 1.5em fits
+     single-digit items only; 2-digit markers (`20.`/`21.`/`22.`) overflow
+     into the negative inline-start area where the surrounding canvas
+     container's clip horizon truncates the leading digit (PRD-7113). */
+  padding-left: 2.5em;
   margin-bottom: 0.5em;
 }
 

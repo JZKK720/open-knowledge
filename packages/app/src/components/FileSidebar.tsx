@@ -187,7 +187,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
   const emptySpaceHandoffInput = buildProjectScopedHandoffInput({ workspace });
   const { projectLocalBinding, merged } = useConfigContext();
   const showHiddenFiles = merged?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? false;
+  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? true;
   const showEmptySpaceExpandAll = hasFolders && !allExpanded;
   const showEmptySpaceCollapseAll = hasFolders && !noneExpanded;
   const showEmptySpaceTreeStateSection = showEmptySpaceExpandAll || showEmptySpaceCollapseAll;

@@ -105,7 +105,7 @@ Two toggle items on the empty-space and folder menus surface the corresponding f
 | Toggle | Effect |
 | --- | --- |
 | **Show Hidden Files** | Stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Server filters still apply, so `.git/`, `.ok/`, and `node_modules/` stay hidden. |
-| **Show all files** | Bypasses every filter (client dot-segment drop AND the server's `.gitignore` / `.okignore` / built-in exclusions). Surfaces literally everything on disk under the content directory, except synthetic system docs. Useful for one-off triage; flip it back off once you've found what you needed. On very large trees the walk is capped, and the sidebar shows a notice telling you the list is partial so you can use search to find the rest. |
+| **Show all files** | On by default. Bypasses every filter (client dot-segment drop AND the server's `.gitignore` / `.okignore` / built-in exclusions), so the tree shows literally everything on disk under the content directory, except synthetic system docs. Turn it off to scope the tree to indexed / linked content (`.gitignore` / `.okignore` honored). On very large trees the walk is capped, and the sidebar shows a notice telling you the list is partial so you can use search to find the rest. |
 When both are on, **Show all files** supersedes.
 
 ### Deleting via Trash
