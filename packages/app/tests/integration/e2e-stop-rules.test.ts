@@ -429,4 +429,29 @@ describe('E2E STOP rule — zero allowlist', () => {
       );
     }
   });
+
+  test('predev routes i18n compile through the OK_TEST_SKIP_I18N_COMPILE guard (not a direct compile)', () => {
+    const pkgPath = join(__dirname, '..', '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as {
+      scripts?: Record<string, string>;
+    };
+    const predev = pkg.scripts?.predev ?? '';
+    const errors: string[] = [];
+    if (!predev.includes('i18n-compile-unless-skipped.sh')) {
+      errors.push(
+        'packages/app/package.json "predev" must route the i18n compile through ' +
+          'scripts/i18n-compile-unless-skipped.sh (the OK_TEST_SKIP_I18N_COMPILE guard).',
+      );
+    }
+    if (/\b(?:bun run i18n:compile|lingui compile)\b/.test(predev)) {
+      errors.push(
+        'packages/app/package.json "predev" invokes the i18n compile directly, bypassing the ' +
+          'OK_TEST_SKIP_I18N_COMPILE guard — every concurrent e2e dev-server boot then rewrites ' +
+          'src/locales/<locale>/messages.json and Vite full-page-reloads running tests mid-evaluate.',
+      );
+    }
+    if (errors.length > 0) {
+      throw new Error(`${errors.join('\n')}\nFound predev:\n  ${predev}`);
+    }
+  });
 });
