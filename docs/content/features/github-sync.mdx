@@ -2,7 +2,7 @@
 title: GitHub sync
 description: Clone repos from GitHub, auto-sync changes with your team, and resolve conflicts.
 ---
-Open Knowledge can connect a knowledge base to a GitHub repository and keep it synced over time. When GitHub sync is enabled, Open Knowledge actively pulls commits from the remote and pushes commits back to it on a regular cadence.
+Open Knowledge can connect a project to a GitHub remote repository and keep it synced over time. When GitHub sync is enabled, Open Knowledge actively pulls commits from the remote and pushes commits back.
 
 <Callout type="warn">
   Only enable GitHub sync for repositories where you are comfortable with Open Knowledge writing commits to the remote history. If you are worried about automated commits corrupting or cluttering your Git history, do not enable sync for that repository.
@@ -10,67 +10,72 @@ Open Knowledge can connect a knowledge base to a GitHub repository and keep it s
 
 ## What GitHub sync is for
 
-Use GitHub sync when your docs, specs, notes, or internal knowledge already live in a repository and you want Open Knowledge to keep that repository up to date automatically.
+Use GitHub sync when you want to collaborate with your team on an Open Knowledge project.
 
 It helps you:
 
-- Start from an existing GitHub repository
-- Keep your knowledge base in sync with updates from your team
+- Keep your project in sync with updates from your team
 - Resolve conflicts between your edits and your team's edits
 
-## Clone from the app
+## Clone an existing GitHub repository
 
 In the app, the **Clone from GitHub** card opens a clone dialog for interactive setup.
 
 <Steps>
-  <Step>
+
+<Step>
     ### Open the clone dialog
 
     From the Navigator window, select **Clone from GitHub**.
-  </Step>
 
-  <Step>
+    ![The Open Knowledge Navigator window with cards for Create new project, Open folder on disk, and Clone from GitHub](/screenshots/navigator-window.png)
+</Step>
+
+<Step>
+    ### Sign into GitHub
+
+    If you are already signed in with the GitHub CLI, Open Knowledge will use those credentials by default. If not, click **Sign into GitHub** and complete the device authentication flow.
+</Step>
+
+<Step>
     ### Choose a repository
 
-    Paste a repository URL or `owner/repo` shorthand. If you are signed in to GitHub, you can also filter and select from repositories your account can access.
-  </Step>
+    Paste a repository URL or `owner/repo` shorthand. You can also filter and select from a list of repositories your account can access.
+</Step>
 
-  <Step>
-    ### Pick a local path
-
-    Choose where the repository should be cloned. The dialog auto-fills `~/Documents/<repo-name>` when it can infer the repo name.
-  </Step>
-
-  <Step>
-    ### Start the clone
-
-    Click **Clone**. The app shows cloning progress.
-  </Step>
-
-  <Step>
+<Step>
     ### Open the project
 
     When the clone completes, the cloned project opens in a new editor window and the Navigator closes. Re-summon the Navigator from inside the editor via the sidebar Switch Project pill, the File menu, or the Command Palette.
-  </Step>
+</Step>
 </Steps>
 
 ## Enable sync after cloning
 
-When you open a freshly cloned project, GitHub sync is off by default. Toggle it on from the project settings page once you are ready for Open Knowledge to start writing commits to the remote.
+When you open a freshly cloned project, you will be prompted to enable sync. You can also toggle it from the project settings page at any time.
 
 While sync is active, Open Knowledge:
 
-- Fetches and pulls commits from the remote on a regular cadence
-- Commits your edits locally using the configured Git identity.
+- Fetches commits from the remote
+- Commits your edits locally using the configured Git identity
 - Pushes those commits back to the remote so collaborators see your changes
 
 Pulls can overwrite uncommitted local file changes, so commit or discard work-in-progress before you enable sync.
 
+## Publish a local project
+
+You can publish your local project to GitHub directly from the Open Knowledge app by selecting a folder or file and clicking the *Share* button.
+
+This will open a dialog where you can choose an owner and repository name. You can also choose to make the repository public or private.
+
+
+![The publish dialog where you can choose an owner and repository name](/screenshots/repo-create.png)
+
 ## Authentication
 
-Private repositories require GitHub authentication. If you are logged in with the GitHub CLI, Open Knowledge will use those credentials. If not, you can complete device authentication to generate an OAuth token. Open Knowledge stores this token in the keychain and reuses it for each sync.
+If you are logged in with the GitHub CLI, Open Knowledge will use those credentials for GitHub operations. If not, you can complete device authentication to generate an OAuth token. Open Knowledge stores this token in the keychain and reuses it for syncing, cloning, and publishing.
 
-Manage the connection from **Settings → Account**. **Connect GitHub** authorizes Open Knowledge to browse and sync your repositories; **Disconnect** removes the credential Open Knowledge stored. Disconnecting clears Open Knowledge's own token only; repositories you have already cloned may keep syncing with credentials Git itself saved.
+Manage the connection from **Settings → Account**. **Connect GitHub** authorizes Open Knowledge to browse and sync your repositories; **Disconnect** clears Open Knowledge's GitHub token only.
 
 The sync status indicator surfaces an auth-error state when stored credentials stop working, and sync pauses until you reconnect.
 
@@ -78,7 +83,9 @@ The sync status indicator surfaces an auth-error state when stored credentials s
 
 The sync status indicator in the editor shows the current state of the connection: how many commits you are ahead or behind the remote, when the last sync ran, whether sync is paused, and how many files have unresolved conflicts. You can also trigger an immediate sync from the same control instead of waiting for the next scheduled run.
 
-### Resolving a conflict
+![The sync status popover in the editor showing the current state of the connection](/screenshots/sync-status-popover.png)
+
+## Resolving a conflict
 
 When a remote update conflicts with your local edits, Open Knowledge surfaces the conflict in three places at once: the conflicted file gains a `⚠` badge on its tab, a pinned **Conflicts** section appears at the top of the file tree listing every conflicted file, and the editor area swaps from the normal editor to a unified diff view.
 
@@ -111,3 +118,4 @@ A few situations stop sync from completing successfully. In each case the sync s
 ### Temporary problems
 
 - **Network or service hiccups.** Flaky Wi-Fi, a VPN drop, or a brief GitHub outage. Open Knowledge keeps retrying in the background; no action needed unless the issue lasts long enough that you want to manually trigger a sync from the indicator.
+
