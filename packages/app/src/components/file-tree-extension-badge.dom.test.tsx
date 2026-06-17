@@ -4,6 +4,7 @@ import {
   applyExtensionBadges,
   OK_EXT_BADGE_ATTR,
   OK_EXT_ROW_ATTR,
+  OK_FULLNAME_ROW_ATTR,
 } from './file-tree-extension-badge';
 
 interface PierreRowInit {
@@ -11,6 +12,7 @@ interface PierreRowInit {
   filename: string;
   includeDecoration?: boolean;
   includeAction?: boolean;
+  centerSplit?: [string, string];
 }
 
 function buildPierreRow(init: PierreRowInit): HTMLElement {
@@ -26,10 +28,16 @@ function buildPierreRow(init: PierreRowInit): HTMLElement {
   truncateGroup.setAttribute('data-truncate-group-container', 'middle');
   contentSection.appendChild(truncateGroup);
 
-  const lastDot = init.filename.lastIndexOf('.');
-  const splitIndex = lastDot >= 0 ? lastDot + 1 : init.filename.length;
-  const basenameText = init.filename.slice(0, splitIndex);
-  const extensionText = init.filename.slice(splitIndex);
+  let basenameText: string;
+  let extensionText: string;
+  if (init.centerSplit) {
+    [basenameText, extensionText] = init.centerSplit;
+  } else {
+    const lastDot = init.filename.lastIndexOf('.');
+    const splitIndex = lastDot >= 0 ? lastDot + 1 : init.filename.length;
+    basenameText = init.filename.slice(0, splitIndex);
+    extensionText = init.filename.slice(splitIndex);
+  }
 
   truncateGroup.appendChild(buildTruncateSegment('1', basenameText, 'truncate'));
   truncateGroup.appendChild(buildTruncateSegment('1', extensionText, 'fruncate'));
@@ -298,5 +306,71 @@ describe('applyExtensionBadges — extension badge injection', () => {
 
     const row = root.firstElementChild as HTMLElement;
     expect(badgeOf(row)?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  test('folder row: recomposes Pierre center-split into a single end-truncating full name', () => {
+    const root = document.createElement('div');
+    root.appendChild(
+      buildPierreRow({
+        path: 'projects/open-knowledge/',
+        filename: 'open-knowledge',
+        centerSplit: ['open-kn', 'owledge'],
+        includeAction: true,
+      }),
+    );
+
+    applyExtensionBadges(root);
+
+    const row = root.firstElementChild as HTMLElement;
+    expect(row.hasAttribute(OK_FULLNAME_ROW_ATTR)).toBe(true);
+    expect(row.hasAttribute(OK_EXT_ROW_ATTR)).toBe(false);
+    expect(badgeOf(row)).toBeNull();
+    expect(basenameTextOf(row)).toBe('open-knowledge');
+  });
+
+  test('folder recompose is idempotent (repeat call leaves the same text node)', () => {
+    const root = document.createElement('div');
+    root.appendChild(
+      buildPierreRow({
+        path: 'projects/open-knowledge/',
+        filename: 'open-knowledge',
+        centerSplit: ['open-kn', 'owledge'],
+        includeAction: true,
+      }),
+    );
+
+    applyExtensionBadges(root);
+    const first = basenameTextOf(root.firstElementChild as HTMLElement);
+    applyExtensionBadges(root);
+    const second = basenameTextOf(root.firstElementChild as HTMLElement);
+
+    expect(first).toBe('open-knowledge');
+    expect(second).toBe('open-knowledge');
+  });
+
+  test('flattened breadcrumb row (no middle truncate group) is left untouched', () => {
+    const root = document.createElement('div');
+    const row = document.createElement('div');
+    row.setAttribute('data-type', 'item');
+    row.setAttribute('data-item-path', 'public/open-knowledge/docs/');
+    const content = document.createElement('div');
+    content.setAttribute('data-item-section', 'content');
+    const flattened = document.createElement('div');
+    flattened.setAttribute('data-item-flattened-subitems', '');
+    for (const seg of ['public', 'open-knowledge', 'docs']) {
+      const sub = document.createElement('span');
+      sub.setAttribute('data-item-flattened-subitem', seg);
+      sub.textContent = seg;
+      flattened.appendChild(sub);
+    }
+    content.appendChild(flattened);
+    row.appendChild(content);
+    root.appendChild(row);
+
+    applyExtensionBadges(root);
+
+    expect(row.hasAttribute(OK_FULLNAME_ROW_ATTR)).toBe(false);
+    expect(row.hasAttribute(OK_EXT_ROW_ATTR)).toBe(false);
+    expect(badgeOf(row)).toBeNull();
   });
 });

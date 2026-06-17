@@ -26,7 +26,6 @@ import {
   type FileTreeDropResult,
   type FileTreeRenameEvent,
   type FileTree as PierreFileTreeModel,
-  themeToTreeStyles,
 } from '@pierre/trees';
 import { FileTree as PierreFileTree, useFileTree } from '@pierre/trees/react';
 import {
@@ -49,7 +48,6 @@ import { __iconNode as botIcon } from 'lucide-react/dist/esm/icons/bot';
 import { __iconNode as link2Icon } from 'lucide-react/dist/esm/icons/link-2';
 import { useTheme } from 'next-themes';
 import {
-  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -88,6 +86,12 @@ import {
   uploadedPathForSidebarDrop,
   uploadParentDocNameForFolderDrop,
 } from '@/components/file-tree-adapter';
+import {
+  createFileTreeStyle,
+  FILE_TREE_DENSITY_OPTIONS,
+  FILE_TREE_INDENT_GUIDE_CSS,
+  FILE_TREE_STICKY_HEADER_CSS,
+} from '@/components/file-tree-density';
 import {
   applyExtensionBadges,
   FILE_TREE_EXT_BADGE_CSS,
@@ -363,36 +367,7 @@ const FILE_TREE_CREATION_CLEARED_CSS = `
   }
 `;
 
-const FILE_TREE_UNSAFE_CSS = `${FILE_TREE_EXT_BADGE_CSS}\n${FILE_TREE_RENAME_CHIP_CSS}\n${FILE_TREE_ROOT_DROP_CSS}\n${FILE_TREE_EXTERNAL_FILE_DROP_CSS}\n${FILE_TREE_CREATION_CLEARED_CSS}`;
-
-function createFileTreeStyle(resolvedTheme: string | undefined): CSSProperties {
-  return {
-    ...themeToTreeStyles({
-      type: resolvedTheme === 'dark' ? 'dark' : 'light',
-      colors: {
-        'sideBar.background': 'var(--sidebar)',
-        'sideBar.foreground': 'var(--sidebar-foreground)',
-        'sideBar.border': 'var(--sidebar-border)',
-        'list.activeSelectionBackground': 'var(--sidebar-accent)',
-        'list.activeSelectionForeground': 'var(--sidebar-accent-foreground)',
-        'list.hoverBackground': 'var(--sidebar-hover)',
-        focusBorder: 'var(--color-primary)',
-        'input.background': 'var(--input)',
-        'input.border': 'var(--border)',
-      },
-    }),
-    '--trees-font-family-override': 'var(--font-sans)',
-    '--trees-font-size-override': '0.875rem',
-    '--trees-item-padding-x-override': '0.5rem',
-    '--trees-padding-inline-override': '0.5rem',
-    '--trees-border-radius-override': '0.375rem',
-    '--trees-selected-fg': 'var(--color-primary)',
-    '--truncate-marker-fade-in-duration': '0s', // render ellipsis without delay
-    '--trees-file-icon-color-markdown': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-    '--trees-file-icon-color-image': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-    '--trees-fg-muted': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-  } as CSSProperties;
-}
+const FILE_TREE_UNSAFE_CSS = `${FILE_TREE_EXT_BADGE_CSS}\n${FILE_TREE_RENAME_CHIP_CSS}\n${FILE_TREE_ROOT_DROP_CSS}\n${FILE_TREE_EXTERNAL_FILE_DROP_CSS}\n${FILE_TREE_CREATION_CLEARED_CSS}\n${FILE_TREE_INDENT_GUIDE_CSS}\n${FILE_TREE_STICKY_HEADER_CSS}`;
 
 function isAgentTreePath(treePath: string): boolean {
   const name = treePath.split('/').pop()?.replace(/\.md$/i, '').toLowerCase();
@@ -1410,11 +1385,11 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
 
   const { model } = useFileTree({
     paths: [],
-    flattenEmptyDirectories: false,
     initialExpansion: 'closed',
     fileTreeSearchMode: 'hide-non-matches',
     initialVisibleRowCount: 18,
     stickyFolders: true,
+    ...FILE_TREE_DENSITY_OPTIONS,
     icons: {
       set: 'complete',
       spriteSheet: FILE_TREE_DECORATION_SPRITE_SHEET,
@@ -2003,7 +1978,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeAncestorTreePathsSignature + treePathsSignature are re-run triggers — the row's visible index shifts when ancestors expand or the tree repopulates.
   useEffect(() => {
     if (loading || !activeTreePath) return;
-    revealActiveRow(fileTreeHostRef.current, model);
+    revealActiveRow(model);
   }, [activeTreePath, activeAncestorTreePathsSignature, treePathsSignature, loading, model]);
 
   useEffect(() => {

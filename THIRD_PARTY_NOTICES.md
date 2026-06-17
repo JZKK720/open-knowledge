@@ -744,7 +744,7 @@ Homepage: https://github.com/oramasearch/orama
 
 Copyright 2023 OramaSearch Inc
 
-### `@pierre/trees@1.0.0-beta.3`
+### `@pierre/trees@1.0.0-beta.4`
 
 Copyright 2025 Pierre Computer Company
 
@@ -6404,7 +6404,7 @@ The following MIT-licensed packages are patched in this repository via Bun's `pa
 | Package | Patch file |
 | --- | --- |
 | `@handlewithcare/remark-prosemirror@0.1.5` | `patches/@handlewithcare%2Fremark-prosemirror@0.1.5.patch` |
-| `@pierre/trees@1.0.0-beta.3` | `patches/@pierre%2Ftrees@1.0.0-beta.3.patch` |
+| `@pierre/trees@1.0.0-beta.4` | `patches/@pierre%2Ftrees@1.0.0-beta.4.patch` |
 | `@tiptap/extension-drag-handle@3.22.3` | `patches/@tiptap%2Fextension-drag-handle@3.22.3.patch` |
 | `@tiptap/y-tiptap@3.0.3` | `patches/@tiptap%2Fy-tiptap@3.0.3.patch` |
 | `react-medium-image-zoom@5.4.3` | `patches/react-medium-image-zoom@5.4.3.patch` |
