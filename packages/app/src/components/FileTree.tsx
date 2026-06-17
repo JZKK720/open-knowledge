@@ -40,7 +40,6 @@ import {
   Info,
   Pencil,
   SquarePen,
-  Terminal,
   Trash2,
   TriangleAlert,
   UnfoldVertical,
@@ -167,7 +166,6 @@ import { assetTabId, docTabId, folderTabId, remapPathForFolderRenames } from '@/
 import { useConflicts } from '@/hooks/use-conflicts';
 import { useFolderConfig } from '@/hooks/use-folder-config';
 import { useConfigContext } from '@/lib/config-provider';
-import { dispatchOpenInTerminal } from '@/lib/dispatch-open-in-terminal';
 import {
   hashFromAssetPath,
   hashFromDocName,
@@ -487,40 +485,6 @@ function RevealInFileManagerMenuItem({
   );
 }
 
-function OpenInTerminalMenuItem({
-  dirAbsPath,
-  onClose,
-}: {
-  dirAbsPath: string | null;
-  onClose: () => void;
-}) {
-  const { t } = useLingui();
-  const bridge = typeof window !== 'undefined' ? window.okDesktop : undefined;
-  if (!bridge) return null;
-  const hint = dirAbsPath === null ? t`No workspace` : null;
-  return (
-    <DropdownMenuItem
-      disabled={dirAbsPath === null}
-      onSelect={() => {
-        if (dirAbsPath === null) return;
-        onClose();
-        void dispatchOpenInTerminal(bridge, dirAbsPath);
-      }}
-      aria-label={hint ? t`Open in Terminal, ${hint}` : t`Open in Terminal`}
-    >
-      <Terminal aria-hidden="true" />
-      <span className="flex-1">
-        <Trans>Open in Terminal</Trans>
-      </span>
-      {hint ? (
-        <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-          {hint}
-        </span>
-      ) : null}
-    </DropdownMenuItem>
-  );
-}
-
 interface FileTreeMenuProps {
   item: ContextMenuItem;
   context: ContextMenuOpenContext;
@@ -722,21 +686,6 @@ function FileTreeMenu({
   const deleteTargets = selectedDeleteTargets.length > 1 ? selectedDeleteTargets : [target];
   const deleteCount = deleteTargets.length;
   const deleteLabel = plural(deleteCount, { one: 'Delete', other: 'Delete # items' });
-  const folderAbsPath =
-    isFolder && workspace
-      ? joinWorkspacePath(
-          workspace.contentDir,
-          relativePathForTreeItem(item),
-          workspace.pathSeparator,
-        )
-      : null;
-  const parentDirAbsPath: string | null = (() => {
-    if (!workspace || isFolder) return null;
-    const rel = relativePathForTreeItem(item);
-    const lastSep = rel.lastIndexOf('/');
-    if (lastSep === -1) return workspace.contentDir;
-    return joinWorkspacePath(workspace.contentDir, rel.slice(0, lastSep), workspace.pathSeparator);
-  })();
   const handoffInput: HandoffDispatchInput | null = isAsset
     ? null
     : isFolder
@@ -873,7 +822,6 @@ function FileTreeMenu({
               dispatch={handoff.dispatch}
               webFallbackVisible={false}
             />
-            <OpenInTerminalMenuItem dirAbsPath={folderAbsPath} onClose={close} />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />
@@ -1023,7 +971,6 @@ function FileTreeMenu({
                 webFallbackVisible={true}
               />
             )}
-            <OpenInTerminalMenuItem dirAbsPath={parentDirAbsPath} onClose={close} />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />

@@ -7,6 +7,7 @@ export {
   composeFolderPrompt,
   composeSelectionPrompt,
 } from './prompt-composer.ts';
+export { buildClaudeLaunchCommand, shellSingleQuote } from './terminal-launch.ts';
 export type {
   DocContext,
   HandoffFailureReason,

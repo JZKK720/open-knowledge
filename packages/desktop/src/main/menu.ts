@@ -31,7 +31,6 @@ export interface MenuDeps {
   onMoveToTrash?(): void;
   onCloseActiveTabOrWindow?(): void;
   onRevealInFinder?(): void;
-  onOpenInTerminal?(): void;
   onSendToAi?(): void;
   onCopyFullPath?(): void;
   onCopyRelativePath?(): void;
@@ -43,6 +42,8 @@ export interface MenuDeps {
   onToggleSidebar?(): void;
   docPanelVisible?: boolean;
   onToggleDocPanel?(): void;
+  terminalVisible?: boolean;
+  onToggleTerminal?(): void;
   canExpandAll?: boolean;
   canCollapseAll?: boolean;
   onExpandAll?(): void;
@@ -168,11 +169,6 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
           click: () => deps.onRevealInFinder?.(),
         },
         {
-          label: MENU_LABELS.openInTerminal,
-          enabled: deps.onOpenInTerminal !== undefined,
-          click: () => deps.onOpenInTerminal?.(),
-        },
-        {
           label: MENU_LABELS.openWithAi,
           enabled: deps.onSendToAi !== undefined && deps.activeTarget?.kind !== 'asset',
           click: () => deps.onSendToAi?.(),
@@ -295,6 +291,12 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
           accelerator: 'CmdOrCtrl+Alt+B',
           enabled: deps.onToggleDocPanel !== undefined,
           click: () => deps.onToggleDocPanel?.(),
+        },
+        {
+          label: deps.terminalVisible ? 'Hide Terminal' : 'Show Terminal',
+          accelerator: 'CmdOrCtrl+J',
+          enabled: deps.onToggleTerminal !== undefined,
+          click: () => deps.onToggleTerminal?.(),
         },
         { type: 'separator' },
         {

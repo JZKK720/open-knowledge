@@ -8,7 +8,6 @@ import {
   FoldVertical,
   ListCollapse,
   SquarePen,
-  Terminal,
   UnfoldVertical,
   Upload,
 } from 'lucide-react';
@@ -62,11 +61,9 @@ import { useFolderConfig } from '@/hooks/use-folder-config';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { useConfigContext } from '@/lib/config-provider';
 import { subscribeToCreateTopLevelFile } from '@/lib/create-file-events';
-import { dispatchOpenInTerminal } from '@/lib/dispatch-open-in-terminal';
 import {
   buildSendToAiInputForActiveTarget,
   resolveActiveTargetAbsPath,
-  resolveActiveTargetParentDirAbsPath,
   resolveActiveTargetRelativePath,
 } from '@/lib/file-menu-target-resolvers';
 import {
@@ -219,10 +216,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
     if (!workspace || !bridge) return;
     void bridge.shell.showItemInFolder(workspace.contentDir);
   };
-  const handleEmptySpaceOpenInTerminal = () => {
-    if (!workspace || !bridge) return;
-    void dispatchOpenInTerminal(bridge, workspace.contentDir);
-  };
   const handleEmptySpaceCopyFullPath = async () => {
     if (!workspace) return;
     try {
@@ -320,16 +313,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
           if (!bridge || !workspace) return;
           const absPath = resolveActiveTargetAbsPath(activeTarget, activeDocName, workspace);
           void bridge.shell.showItemInFolder(absPath);
-          return;
-        }
-        case 'open-in-terminal': {
-          if (!bridge || !workspace) return;
-          const dirAbsPath = resolveActiveTargetParentDirAbsPath(
-            activeTarget,
-            activeDocName,
-            workspace,
-          );
-          void dispatchOpenInTerminal(bridge, dirAbsPath);
           return;
         }
         case 'send-to-ai': {
@@ -686,8 +669,8 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
            * (parentDir = '' → contentDir). Upload opens the project-root file
            * picker. Disabled when workspace hasn't resolved.
            *
-           * Section 2: Act-on-project. Reveal in Finder + Open in Terminal
-           * are Electron-only (`if (!bridge) return null`); Open with AI submenu
+           * Section 2: Act-on-project. Reveal in Finder
+           * is Electron-only (`if (!bridge) return null`); Open with AI submenu
            * is cross-host (filtered via useInstalledAgents); Copy full path
            * is cross-host.
            *
@@ -769,24 +752,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             dispatch={dispatchHandoff}
             webFallbackVisible={false}
           />
-          {bridge ? (
-            <ContextMenuItem
-              disabled={!workspace}
-              onSelect={handleEmptySpaceOpenInTerminal}
-              data-testid="empty-space-menu-open-in-terminal"
-              aria-label={workspace ? t`Open in Terminal` : t`Open in Terminal, No workspace`}
-            >
-              <Terminal aria-hidden="true" />
-              <span className="flex-1">
-                <Trans>Open in Terminal</Trans>
-              </span>
-              {!workspace ? (
-                <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-                  <Trans>No workspace</Trans>
-                </span>
-              ) : null}
-            </ContextMenuItem>
-          ) : null}
           <ContextMenuItem
             disabled={!workspace}
             onSelect={handleEmptySpaceCopyFullPath}

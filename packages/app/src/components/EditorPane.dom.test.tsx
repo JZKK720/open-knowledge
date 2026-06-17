@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { isMacOS } from '@tiptap/core';
 import type { ReactNode } from 'react';
 
 mock.module('@lingui/react/macro', () => ({
@@ -43,7 +44,25 @@ mock.module('./EditorHeader', () => ({
 }));
 
 mock.module('./EditorArea', () => ({
-  EditorArea: () => <div data-testid="editor-area" />,
+  EditorArea: ({
+    terminalBridge,
+    terminalVisible,
+  }: {
+    terminalBridge?: unknown;
+    terminalVisible?: boolean;
+  }) => (
+    <div data-testid="editor-area">
+      {terminalBridge != null ? (
+        <div data-testid="terminal-dock" data-visible={String(terminalVisible)} />
+      ) : null}
+    </div>
+  ),
+}));
+
+const terminalOpenedCalls: true[] = [];
+mock.module('@/lib/terminal-telemetry', () => ({
+  recordTerminalOpened: () => terminalOpenedCalls.push(true),
+  recordShellConsentGranted: () => undefined,
 }));
 
 mock.module('./AuthModal', () => ({
@@ -124,5 +143,125 @@ describe('EditorPane auto-sync onboarding gate', () => {
     await userEvent.click(dialog);
 
     expect(screen.getByTestId('auto-sync-onboarding').getAttribute('data-open')).toBe('false');
+  });
+});
+
+function makeOkDesktopStub() {
+  const menuHandlers: Array<(action: string) => void> = [];
+  const viewMenuPushes: Array<{ terminalVisible?: boolean }> = [];
+  return {
+    viewMenuPushes,
+    dispatchMenuAction(action: string) {
+      for (const cb of menuHandlers) cb(action);
+    },
+    stub: {
+      onMenuAction(cb: (action: string) => void) {
+        menuHandlers.push(cb);
+        return () => {
+          const index = menuHandlers.indexOf(cb);
+          if (index >= 0) menuHandlers.splice(index, 1);
+        };
+      },
+      editor: {
+        notifyViewMenuStateChanged(state: { terminalVisible?: boolean }) {
+          viewMenuPushes.push(state);
+        },
+      },
+    },
+  };
+}
+
+describe('EditorPane terminal dock wiring', () => {
+  afterEach(() => {
+    cleanup();
+    delete (window as { okDesktop?: unknown }).okDesktop;
+    terminalOpenedCalls.length = 0;
+  });
+
+  test('web host renders the editor chrome without a terminal dock', async () => {
+    await renderEditorPane();
+
+    expect(screen.queryByTestId('terminal-dock')).toBeNull();
+    expect(screen.getByTestId('editor-header')).toBeTruthy();
+    expect(screen.getByTestId('editor-area')).toBeTruthy();
+  });
+
+  test('desktop host renders the editor chrome with the terminal dock under the editor area', async () => {
+    (window as { okDesktop?: unknown }).okDesktop = makeOkDesktopStub().stub;
+    await renderEditorPane();
+
+    expect(screen.getByTestId('editor-header')).toBeTruthy();
+    const area = screen.getByTestId('editor-area');
+    expect(area.querySelector('[data-testid="terminal-dock"]')).not.toBeNull();
+  });
+
+  test('desktop: toggle-terminal menu action flips dock visibility and pushes the view-menu state', async () => {
+    const desk = makeOkDesktopStub();
+    (window as { okDesktop?: unknown }).okDesktop = desk.stub;
+    await renderEditorPane();
+
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('false');
+    expect(desk.viewMenuPushes.at(-1)).toEqual({ terminalVisible: false });
+
+    act(() => desk.dispatchMenuAction('toggle-terminal'));
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('true');
+    expect(desk.viewMenuPushes.at(-1)).toEqual({ terminalVisible: true });
+
+    act(() => desk.dispatchMenuAction('toggle-terminal'));
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('false');
+    expect(desk.viewMenuPushes.at(-1)).toEqual({ terminalVisible: false });
+  });
+
+  test('desktop: an unrelated menu action does not toggle the terminal', async () => {
+    const desk = makeOkDesktopStub();
+    (window as { okDesktop?: unknown }).okDesktop = desk.stub;
+    await renderEditorPane();
+
+    act(() => desk.dispatchMenuAction('toggle-doc-panel'));
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('false');
+  });
+
+  test('desktop: each open records terminal-opened; mount (hidden) and close do not', async () => {
+    const desk = makeOkDesktopStub();
+    (window as { okDesktop?: unknown }).okDesktop = desk.stub;
+    await renderEditorPane();
+
+    expect(terminalOpenedCalls).toHaveLength(0);
+
+    act(() => desk.dispatchMenuAction('toggle-terminal')); // hidden → open
+    expect(terminalOpenedCalls).toHaveLength(1);
+
+    act(() => desk.dispatchMenuAction('toggle-terminal')); // open → hidden (no record)
+    expect(terminalOpenedCalls).toHaveLength(1);
+
+    act(() => desk.dispatchMenuAction('toggle-terminal')); // hidden → open again
+    expect(terminalOpenedCalls).toHaveLength(2);
+  });
+
+  test('web host: a Cmd/Ctrl+J keydown is intercepted (the toggle handler is wired)', async () => {
+    await renderEditorPane();
+
+    const init: KeyboardEventInit = { key: 'j', cancelable: true, bubbles: true };
+    if (isMacOS()) init.metaKey = true;
+    else init.ctrlKey = true;
+    const event = new KeyboardEvent('keydown', init);
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  test('web host: an unrelated keydown is not intercepted', async () => {
+    await renderEditorPane();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'g',
+      metaKey: true,
+      ctrlKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });

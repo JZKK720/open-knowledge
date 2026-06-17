@@ -10,6 +10,8 @@ import type {
   OkMcpWiringShowPayload,
   OkMenuAction,
   OkOnboardingShowPayload,
+  OkPtyData,
+  OkPtyExit,
   OkServerReclaimedInfo,
   OkServerRestartedInfo,
   OkServerVersionDriftInfo,
@@ -303,7 +305,6 @@ const bridge: OkDesktopBridge = {
     showAssetMenu: (params) => invoke('ok:shell:show-asset-menu', params),
     showItemInFolder: (path: string) => invoke('ok:shell:show-item-in-folder', path),
     trashItem: (absPath: string) => invoke('ok:shell:trash-item', absPath),
-    openInTerminal: (dirAbsPath: string) => invoke('ok:shell:open-in-terminal', dirAbsPath),
   },
 
   clipboard: {
@@ -492,6 +493,34 @@ const bridge: OkDesktopBridge = {
       ipcRenderer.on('ok:sidebar:collapse-all', listener);
       return () => ipcRenderer.removeListener('ok:sidebar:collapse-all', listener);
     },
+  },
+
+  terminal: {
+    create: (opts) => invoke('ok:pty:create', opts),
+    input: (ptyId, data) => {
+      invoke('ok:pty:input', { ptyId, data }).catch(() => {});
+    },
+    resize: (ptyId, cols, rows) => {
+      invoke('ok:pty:resize', { ptyId, cols, rows }).catch(() => {});
+    },
+    kill: (ptyId) => invoke('ok:pty:kill', { ptyId }),
+    drain: (ptyId, bytes) => {
+      invoke('ok:pty:drain', { ptyId, bytes }).catch(() => {});
+    },
+    onData(cb) {
+      const listener = (_event: IpcRendererEvent, msg: OkPtyData) => cb(msg);
+      // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+      ipcRenderer.on('ok:pty:data', listener);
+      return () => ipcRenderer.removeListener('ok:pty:data', listener);
+    },
+    onExit(cb) {
+      const listener = (_event: IpcRendererEvent, msg: OkPtyExit) => cb(msg);
+      // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+      ipcRenderer.on('ok:pty:exit', listener);
+      return () => ipcRenderer.removeListener('ok:pty:exit', listener);
+    },
+    claudePreflight: () => invoke('ok:terminal:claude-assist', { action: 'preflight' }),
+    rewireClaudeMcp: () => invoke('ok:terminal:claude-assist', { action: 'rewire' }),
   },
 
   platform: process.platform as 'darwin' | 'win32' | 'linux',

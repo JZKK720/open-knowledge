@@ -211,7 +211,6 @@ async function installDelayedDesktopSessionBridge(
           showAssetMenu: async () => {},
           showItemInFolder: async () => {},
           trashItem: async () => ({ ok: true as const }),
-          openInTerminal: async () => ({ ok: true as const }),
         },
         editor: {
           notifyActiveTargetChanged: () => {},

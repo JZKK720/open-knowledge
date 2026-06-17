@@ -458,7 +458,7 @@ describe('buildMenuTemplate — File menu state-aware items (US-020 / FR16 + FR1
     expect(findByLabel(template, 'Rename')?.enabled).toBe(false);
   });
 
-  test('Creation cluster + Reveal/Terminal/Send-to-AI/CopyPath always ENABLED when deps provided', () => {
+  test('Creation cluster + Reveal/Send-to-AI/CopyPath always ENABLED when deps provided', () => {
     const template = buildMenuTemplate(
       makeDeps({
         activeTarget: { kind: null },
@@ -466,7 +466,6 @@ describe('buildMenuTemplate — File menu state-aware items (US-020 / FR16 + FR1
         onNewFolder: mock(() => {}),
         onNewFromTemplate: mock(() => {}),
         onRevealInFinder: mock(() => {}),
-        onOpenInTerminal: mock(() => {}),
         onSendToAi: mock(() => {}),
         onCopyFullPath: mock(() => {}),
         onCopyRelativePath: mock(() => {}),
@@ -476,7 +475,6 @@ describe('buildMenuTemplate — File menu state-aware items (US-020 / FR16 + FR1
     expect(findByLabel(template, 'New folder')?.enabled).toBe(true);
     expect(findByLabel(template, 'New from template…')?.enabled).toBe(true);
     expect(findByLabel(template, 'Reveal in Finder')?.enabled).toBe(true);
-    expect(findByLabel(template, 'Open in Terminal')?.enabled).toBe(true);
     expect(findByLabel(template, 'Open with AI')?.enabled).toBe(true);
     expect(findByLabel(template, 'Copy path')?.enabled).toBe(true);
   });
@@ -488,7 +486,6 @@ describe('buildMenuTemplate — File menu state-aware items (US-020 / FR16 + FR1
     expect(findByLabel(template, 'New from template…')?.enabled).toBe(false);
     expect(findByLabel(template, 'Duplicate')?.enabled).toBe(false);
     expect(findByLabel(template, 'Reveal in Finder')?.enabled).toBe(false);
-    expect(findByLabel(template, 'Open in Terminal')?.enabled).toBe(false);
     expect(findByLabel(template, 'Open with AI')?.enabled).toBe(false);
     expect(findByLabel(template, 'Copy path')?.enabled).toBe(false);
     if (process.platform === 'darwin') {
@@ -821,6 +818,71 @@ describe('buildMenuTemplate — View → Show/Hide sidebar', () => {
     );
     (findByLabel(collapsed, 'Show document panel')?.click as (() => void) | undefined)?.();
     expect(onToggleDocPanel2).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('buildMenuTemplate — View → Show/Hide Terminal', () => {
+  test('renders "Show Terminal" when terminalVisible is unset or false', () => {
+    const unsetDeps = buildMenuTemplate(makeDeps({ onToggleTerminal: mock(() => {}) }));
+    expect(findByLabel(unsetDeps, 'Show Terminal')).toBeDefined();
+    expect(findByLabel(unsetDeps, 'Hide Terminal')).toBeUndefined();
+
+    const hidden = buildMenuTemplate(
+      makeDeps({ onToggleTerminal: mock(() => {}), terminalVisible: false }),
+    );
+    expect(findByLabel(hidden, 'Show Terminal')).toBeDefined();
+    expect(findByLabel(hidden, 'Hide Terminal')).toBeUndefined();
+  });
+
+  test('renders "Hide Terminal" when terminalVisible is true', () => {
+    const visible = buildMenuTemplate(
+      makeDeps({ onToggleTerminal: mock(() => {}), terminalVisible: true }),
+    );
+    expect(findByLabel(visible, 'Hide Terminal')).toBeDefined();
+    expect(findByLabel(visible, 'Show Terminal')).toBeUndefined();
+  });
+
+  test('Terminal binds CmdOrCtrl+J accelerator (⌘J on macOS, VS Code panel convention)', () => {
+    const hidden = buildMenuTemplate(makeDeps({ onToggleTerminal: mock(() => {}) }));
+    expect(findByLabel(hidden, 'Show Terminal')?.accelerator).toBe('CmdOrCtrl+J');
+
+    const visible = buildMenuTemplate(
+      makeDeps({ onToggleTerminal: mock(() => {}), terminalVisible: true }),
+    );
+    expect(findByLabel(visible, 'Hide Terminal')?.accelerator).toBe('CmdOrCtrl+J');
+  });
+
+  test('Terminal DISABLED when toggle handler missing (unit-test default)', () => {
+    const template = buildMenuTemplate(makeDeps());
+    expect(findByLabel(template, 'Show Terminal')?.enabled).toBe(false);
+  });
+
+  test('Terminal click dispatches deps.onToggleTerminal', () => {
+    const onToggleTerminal = mock(() => {});
+    const template = buildMenuTemplate(makeDeps({ onToggleTerminal }));
+    (findByLabel(template, 'Show Terminal')?.click as (() => void) | undefined)?.();
+    expect(onToggleTerminal).toHaveBeenCalledTimes(1);
+
+    const onToggleTerminal2 = mock(() => {});
+    const visible = buildMenuTemplate(
+      makeDeps({ onToggleTerminal: onToggleTerminal2, terminalVisible: true }),
+    );
+    (findByLabel(visible, 'Hide Terminal')?.click as (() => void) | undefined)?.();
+    expect(onToggleTerminal2).toHaveBeenCalledTimes(1);
+  });
+
+  test('Terminal follows the Document Panel toggle and precedes the Zoom cluster', () => {
+    const template = buildMenuTemplate(
+      makeDeps({ onToggleDocPanel: mock(() => {}), onToggleTerminal: mock(() => {}) }),
+    );
+    const view = findByLabel(template, 'View');
+    const sub = view?.submenu as MenuItemConstructorOptions[] | undefined;
+    const labels = sub?.map((i) => i.label ?? `[role:${i.role ?? 'sep'}]`) ?? [];
+    const docPanelIdx = labels.indexOf('Hide document panel');
+    const terminalIdx = labels.indexOf('Show Terminal');
+    const resetZoomIdx = labels.indexOf('[role:resetZoom]');
+    expect(terminalIdx).toBeGreaterThan(docPanelIdx);
+    expect(resetZoomIdx).toBeGreaterThan(terminalIdx);
   });
 });
 

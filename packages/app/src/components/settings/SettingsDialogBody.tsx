@@ -77,6 +77,7 @@ import {
   resolveLeafSchema,
 } from './schema-walker';
 import type { SlotForwardedProps } from './slot-forwarded-props';
+import { TerminalSection } from './TerminalSection';
 import { pickFirstIssueForPath, useConfigForm } from './use-config-form';
 
 type Scope = 'user' | 'project';
@@ -150,6 +151,9 @@ export function SettingsDialogBody({
   }
   if (activeId === 'search') {
     return <SearchSection />;
+  }
+  if (activeId === 'terminal') {
+    return <TerminalSection />;
   }
   if (activeId === 'project-templates') {
     return <ProjectTemplatesSection />;

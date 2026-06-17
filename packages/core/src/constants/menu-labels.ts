@@ -5,7 +5,6 @@ export const MENU_LABELS = {
   duplicate: 'Duplicate',
   rename: 'Rename',
   revealInFinder: 'Reveal in Finder',
-  openInTerminal: 'Open in Terminal',
   openWithAi: 'Open with AI',
   copyPath: 'Copy path',
   fullPath: 'Full path',

@@ -2,6 +2,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { FuseV1Options, FuseVersion, flipFuses } from '@electron/fuses';
+import { ensureNodePtySpawnHelperExecutable } from './ensure-node-pty-exec.mjs';
 import { targetFuses } from './target-fuses.mjs';
 
 export default async function afterPack(context) {
@@ -124,4 +125,8 @@ export default async function afterPack(context) {
   console.log(
     `[afterPack] cloned Electron Helper stub into Open Knowledge Server.app MacOS slot at ${serverHelperBinary}`,
   );
+
+  const resourcesDir = join(appOutDir, `${appName}.app`, 'Contents', 'Resources');
+  const ptyHelpers = ensureNodePtySpawnHelperExecutable(resourcesDir);
+  console.log(`[afterPack] node-pty spawn-helper marked executable (${ptyHelpers.length} file(s))`);
 }

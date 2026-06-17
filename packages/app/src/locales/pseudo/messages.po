@@ -455,6 +455,10 @@ msgstr ""
 msgid "A pull quote stands out from the surrounding text."
 msgstr ""
 
+#: src/components/settings/TerminalSection.tsx
+msgid "A real shell is off for this project. Turning it on runs commands with the full access of your macOS user account."
+msgstr ""
+
 #: src/components/NewTemplateDialog.tsx
 msgid "A reusable starting point for new documents in this folder."
 msgstr ""
@@ -952,6 +956,25 @@ msgstr ""
 msgid "Choose whether to commit <0>.ok/</0>, <1>.mcp.json</1> (and per-editor variants), project skills, and <2>.claude/launch.json</2> alongside content — or keep them on this machine only via <3>.git/info/exclude</3>."
 msgstr ""
 
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+msgid "Claude CLI"
+msgstr ""
+
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+msgid "Claude CLI, {hint}"
+msgstr ""
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Claude Code (claude) isn't installed or on your PATH."
+msgstr ""
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Claude Code is installed, but Open Knowledge tools aren't connected to it yet."
+msgstr ""
+
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Claude Desktop"
 msgstr ""
@@ -1070,6 +1093,10 @@ msgstr ""
 msgid "Close others"
 msgstr ""
 
+#: src/components/TerminalRefusalNotice.tsx
+msgid "Close terminal"
+msgstr ""
+
 #: src/components/GraphLegend.tsx
 msgid "Clusters"
 msgstr ""
@@ -1142,6 +1169,10 @@ msgstr ""
 
 #: src/components/CommandPalette.tsx
 msgid "Commands"
+msgstr ""
+
+#: src/components/settings/TerminalSection.tsx
+msgid "Commands run with the full access of your macOS user account on this machine. Turn this off to disable the shell."
 msgstr ""
 
 #: src/components/ShareBranchSwitchDialog.tsx
@@ -1233,6 +1264,10 @@ msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Connect to GitHub"
+msgstr ""
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Connect tools"
 msgstr ""
 
 #: src/components/AuthModal.tsx
@@ -1373,6 +1408,12 @@ msgstr ""
 msgid "Could not enable sync: {detail}"
 msgstr ""
 
+#. placeholder {0}: result.error
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalGate.tsx
+msgid "Could not enable the terminal: {0}"
+msgstr ""
+
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Could not fetch branch. Check your connection."
 msgstr ""
@@ -1384,10 +1425,6 @@ msgstr ""
 #. placeholder {0}: seed.candidatePath
 #: src/components/ShareReceiveDialog.tsx
 msgid "Could not initialize {0}."
-msgstr ""
-
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Could not launch Terminal"
 msgstr ""
 
 #: src/components/NewItemDialog.tsx
@@ -1414,10 +1451,6 @@ msgstr ""
 msgid "Could not open GitHub sign-in. Please try again."
 msgstr ""
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Could not open Terminal"
-msgstr ""
-
 #: src/components/FileTree.tsx
 msgid "Could not reach server"
 msgstr ""
@@ -1436,6 +1469,11 @@ msgstr ""
 
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Could not switch to {shareBranch}. Try switching manually."
+msgstr ""
+
+#. placeholder {0}: result.error
+#: src/components/settings/TerminalSection.tsx
+msgid "Could not turn off the terminal: {0}"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
@@ -1457,6 +1495,10 @@ msgstr ""
 
 #: src/components/settings/EmbeddingsKeySection.tsx
 msgid "Couldn't clear the key — please try again."
+msgstr ""
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Couldn't connect Open Knowledge tools to Claude Code. Please try again."
 msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
@@ -1788,6 +1830,7 @@ msgstr ""
 msgid "Disconnecting"
 msgstr ""
 
+#: src/components/ClaudeReadinessBanner.tsx
 #: src/components/NavigatorApp.tsx
 #: src/components/settings/SharingSection.tsx
 msgid "Dismiss"
@@ -2044,6 +2087,14 @@ msgstr ""
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Enable sync"
+msgstr ""
+
+#: src/components/TerminalGate.tsx
+msgid "Enable terminal"
+msgstr ""
+
+#: src/components/settings/TerminalSection.tsx
+msgid "Enable terminal for this project"
 msgstr ""
 
 #: src/components/ActivityModeContent.tsx
@@ -2506,6 +2557,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "General"
+msgstr ""
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Get Claude Code"
 msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
@@ -3140,10 +3195,6 @@ msgstr ""
 
 #: src/components/DocumentErrorBoundary.tsx
 msgid "Lost connection to \"{docName}\"."
-msgstr ""
-
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Lost connection to the main process"
 msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
@@ -3846,19 +3897,6 @@ msgstr ""
 msgid "Open in current branch"
 msgstr ""
 
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "Open in Terminal"
-msgstr ""
-
-#: src/components/FileTree.tsx
-msgid "Open in Terminal, {hint}"
-msgstr ""
-
-#: src/components/FileSidebar.tsx
-msgid "Open in Terminal, No workspace"
-msgstr ""
-
 #: src/components/ConsentDialogBody.tsx
 msgid "Open Knowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
 msgstr ""
@@ -4170,10 +4208,6 @@ msgstr ""
 
 #: src/components/TrashFailureModal.tsx
 msgid "Path resolves outside project"
-msgstr ""
-
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Path resolves outside the project"
 msgstr ""
 
 #: src/editor/link-path-suggestions.tsx
@@ -4607,6 +4641,10 @@ msgstr ""
 msgid "Resources"
 msgstr ""
 
+#: src/components/TerminalExitNotice.tsx
+msgid "Restart terminal"
+msgstr ""
+
 #: src/lib/install-server-drift-listener.ts
 msgid "Restart with this app's version"
 msgstr ""
@@ -4698,6 +4736,10 @@ msgstr ""
 
 #: src/components/NewItemDialog.tsx
 msgid "root"
+msgstr ""
+
+#: src/components/settings/TerminalSection.tsx
+msgid "Run a real terminal docked inside Open Knowledge, starting in this project's folder."
 msgstr ""
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
@@ -5049,6 +5091,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Show or hide Files"
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Show or hide terminal"
 msgstr ""
 
 #: src/components/EditorToolbar.tsx
@@ -5414,12 +5460,23 @@ msgstr ""
 msgid "Templates available"
 msgstr ""
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Terminal took too long to respond"
+#: src/components/settings/SettingsDialogShell.tsx
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalPanel.tsx
+msgid "Terminal"
 msgstr ""
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Terminal.app not found"
+#: src/components/TerminalRefusalNotice.tsx
+msgid "Terminal access isn't enabled for this project."
+msgstr ""
+
+#: src/components/TerminalGate.tsx
+msgid "Terminal disabled"
+msgstr ""
+
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalGate.tsx
+msgid "Terminal settings not loaded yet — try again in a moment."
 msgstr ""
 
 #: src/components/PropertyWidgets.tsx
@@ -5482,8 +5539,38 @@ msgstr ""
 msgid "The repository was moved, renamed, or deleted."
 msgstr ""
 
+#: src/components/TerminalGate.tsx
+msgid "The terminal is not enabled for this project."
+msgstr ""
+
+#: src/components/TerminalGate.tsx
+msgid "The terminal is turned off for this project. Turn it back on to run commands here."
+msgstr ""
+
+#. placeholder {0}: info.exitCode
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended (exit code {0})."
+msgstr ""
+
+#. placeholder {0}: info.signal
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended (signal {0})."
+msgstr ""
+
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended."
+msgstr ""
+
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal stopped unexpectedly."
+msgstr ""
+
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Theme"
+msgstr ""
+
+#: src/components/TerminalRefusalNotice.tsx
+msgid "There's no project folder for this window, so a terminal can't start here."
 msgstr ""
 
 #: src/components/ShareBranchSwitchDialog.tsx
@@ -5674,6 +5761,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Toggle strikethrough formatting."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Toggle the bottom terminal panel."
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
@@ -6052,6 +6143,10 @@ msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "you"
+msgstr ""
+
+#: src/components/TerminalGate.tsx
+msgid "You can also manage this in Settings."
 msgstr ""
 
 #: src/components/AutoSyncOnboardingDialog.tsx

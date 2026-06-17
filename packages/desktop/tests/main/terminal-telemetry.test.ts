@@ -1,0 +1,61 @@
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+
+interface CapturedSpanCall {
+  name: string;
+  options: { attributes?: Record<string, unknown> } | undefined;
+}
+
+const capturedCalls: CapturedSpanCall[] = [];
+
+mock.module('@inkeep/open-knowledge-server', () => ({
+  withSpanSync: <T>(
+    name: string,
+    options: { attributes?: Record<string, unknown> } | undefined,
+    fn: () => T,
+  ): T => {
+    capturedCalls.push({ name, options });
+    return fn();
+  },
+}));
+
+const { recordShellExit, recordTerminalSession } = await import(
+  '../../src/main/terminal-telemetry.ts'
+);
+
+describe('recordShellExit — span name + crashed attribute', () => {
+  beforeEach(() => {
+    capturedCalls.length = 0;
+  });
+
+  test('a clean exit emits ok.desktop.shellExit with shell_crashed=false', () => {
+    recordShellExit({ crashed: false });
+    expect(capturedCalls).toHaveLength(1);
+    expect(capturedCalls[0]?.name).toBe('ok.desktop.shellExit');
+    expect(capturedCalls[0]?.options?.attributes).toEqual({ 'ok.desktop.shell_crashed': false });
+  });
+
+  test('a crash emits ok.desktop.shellExit with shell_crashed=true', () => {
+    recordShellExit({ crashed: true });
+    expect(capturedCalls).toHaveLength(1);
+    expect(capturedCalls[0]?.options?.attributes).toEqual({ 'ok.desktop.shell_crashed': true });
+  });
+
+  test('the only attribute is the bounded crashed boolean — no path / code / signal leaks', () => {
+    recordShellExit({ crashed: true });
+    const attrs = capturedCalls[0]?.options?.attributes ?? {};
+    expect(Object.keys(attrs)).toEqual(['ok.desktop.shell_crashed']);
+  });
+});
+
+describe('recordTerminalSession — count-only marker', () => {
+  beforeEach(() => {
+    capturedCalls.length = 0;
+  });
+
+  test('emits ok.desktop.terminalSession with no attributes (the span is the count)', () => {
+    recordTerminalSession();
+    expect(capturedCalls).toHaveLength(1);
+    expect(capturedCalls[0]?.name).toBe('ok.desktop.terminalSession');
+    expect(capturedCalls[0]?.options?.attributes ?? {}).toEqual({});
+  });
+});

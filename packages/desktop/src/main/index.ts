@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -54,7 +55,6 @@ import {
   recordSkillInstallEvent,
   resolveBundledSkillDir,
   resolveLockDir,
-  spawnDetached,
   withSpan,
   writeTargetVersion,
 } from '@inkeep/open-knowledge-server';
@@ -74,7 +74,7 @@ import {
   shell,
   utilityProcess,
 } from 'electron';
-import type { OkMenuAction } from '../shared/bridge-contract.ts';
+import type { ClaudeReadiness, OkMenuAction } from '../shared/bridge-contract.ts';
 import { type EntryPoint, isEntryPoint } from '../shared/entry-point.ts';
 import type {
   EditorActiveTargetSnapshot,
@@ -85,6 +85,7 @@ import type {
 } from '../shared/ipc-channels.ts';
 import { createHandler } from '../shared/ipc-handler.ts';
 import { registerPendingDelivery, sendToRenderer } from '../shared/ipc-send.ts';
+import { resolveShell } from '../utility/pty-host.ts';
 import { buildAboutPanelOptions } from './about-panel.ts';
 import { appendOkIgnoreSync } from './append-okignore.ts';
 import { openAssetSafely, revealAssetSafely } from './asset-allowlist.ts';
@@ -110,6 +111,7 @@ import {
 } from './bundle-replace-detector.ts';
 import { cascadePosition } from './cascade-position.ts';
 import { checkTargetExists as checkTargetExistsImpl } from './check-target-exists.ts';
+import { resolveClaudeReadiness, runLoginShellProbe } from './claude-readiness.ts';
 import { requestUserConsent, walkExceedsCap } from './consent-dialog.ts';
 import {
   CreateNewProjectError,
@@ -144,7 +146,6 @@ import { handleSeedApply, handleSeedListPacks, handleSeedPlan } from './ipc/seed
 import { handleSharingSetMode, handleSharingStatus } from './ipc/sharing.ts';
 import {
   detectProtocol as detectProtocolImpl,
-  openInTerminal as openInTerminalImpl,
   recordHandoff as recordHandoffImpl,
   showItemInFolder as showItemInFolderImpl,
   spawnCursor as spawnCursorImpl,
@@ -209,6 +210,16 @@ import {
   setProjectSessionState,
   setSpellCheckEnabled as setSpellCheckEnabledState,
 } from './state-store.ts';
+import { isTerminalConsented, isTerminalConsentedWithGrace } from './terminal-consent.ts';
+import { type TerminalReaper, wireWindowTerminalReap } from './terminal-lifecycle.ts';
+import {
+  clampPtyDimension,
+  createTerminalManager,
+  DEFAULT_PTY_COLS,
+  DEFAULT_PTY_ROWS,
+  type PtyUtilityLike,
+} from './terminal-manager.ts';
+import { recordShellExit, recordTerminalSession } from './terminal-telemetry.ts';
 import { applyThemeApplied } from './theme-applied-handler.ts';
 import { applyThemeSource, isOkThemeSource } from './theme-handler.ts';
 import {
@@ -395,6 +406,7 @@ function attachSpellcheckMenuToWindow(win: BrowserWindow): void {
 }
 let navigatorWindow: BrowserWindowLike | null = null;
 let wm: WindowManager;
+let terminalReaper: TerminalReaper | null = null;
 const showGate: ShowGateRegistry = createShowGateRegistry({
   log: {
     warn: (obj, msg) => {
@@ -427,6 +439,7 @@ let editorViewMenuState: EditorViewMenuStateSnapshot = {
   canCollapseAll: true,
   sidebarVisible: true,
   docPanelVisible: true,
+  terminalVisible: false,
 };
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL ?? null;
@@ -512,6 +525,7 @@ function ensureWindowManager() {
       });
       applyCascadePosition(win);
       attachSpellcheckMenuToWindow(win);
+      if (terminalReaper) wireWindowTerminalReap(win, terminalReaper);
       return win as unknown as BrowserWindowLike;
     },
     forkUtility: (entry, args, opts) => {
@@ -1235,7 +1249,6 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onMoveToTrash: () => sendMenuActionToFocused('move-to-trash'),
     onCloseActiveTabOrWindow: () => sendMenuActionToFocused('close-active-tab-or-window'),
     onRevealInFinder: () => sendMenuActionToFocused('reveal-in-finder'),
-    onOpenInTerminal: () => sendMenuActionToFocused('open-in-terminal'),
     onSendToAi: () => sendMenuActionToFocused('send-to-ai'),
     onCopyFullPath: () => sendMenuActionToFocused('copy-full-path'),
     onCopyRelativePath: () => sendMenuActionToFocused('copy-relative-path'),
@@ -1245,10 +1258,12 @@ async function runApplicationMenuRefresh(): Promise<void> {
     canCollapseAll: editorViewMenuState.canCollapseAll,
     sidebarVisible: editorViewMenuState.sidebarVisible,
     docPanelVisible: editorViewMenuState.docPanelVisible,
+    terminalVisible: editorViewMenuState.terminalVisible,
     onToggleShowHiddenFiles: () => sendMenuActionToFocused('toggle-show-hidden-files'),
     onToggleShowAllFiles: () => sendMenuActionToFocused('toggle-show-all-files'),
     onToggleSidebar: () => sendMenuActionToFocused('toggle-sidebar'),
     onToggleDocPanel: () => sendMenuActionToFocused('toggle-doc-panel'),
+    onToggleTerminal: () => sendMenuActionToFocused('toggle-terminal'),
     onExpandAll: () => sendMenuActionToFocused('expand-all-tree'),
     onCollapseAll: () => sendMenuActionToFocused('collapse-all-tree'),
     spellCheckEnabled: appState.spellCheckEnabled,
@@ -1327,6 +1342,35 @@ function armMcpWiring(opts: ArmMcpWiringOpts = {}): RunMcpWiringHandle {
 
 function formatUnknownError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function resolveTerminalClaudeReadiness(): Promise<ClaudeReadiness> {
+  return resolveClaudeReadiness({
+    probeClaude: () =>
+      runLoginShellProbe(
+        (file, args) => {
+          const child = spawn(file, [...args], { stdio: 'ignore', shell: false });
+          return {
+            onExit: (cb) => {
+              child.on('exit', (code) => cb(code));
+            },
+            onError: (cb) => {
+              child.on('error', (err) => cb(err));
+            },
+            kill: () => {
+              child.kill('SIGKILL');
+            },
+          };
+        },
+        resolveShell(process.env),
+        {
+          setTimer: (cb, ms) => setTimeout(cb, ms),
+          clearTimer: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
+        },
+      ),
+    classifyMcpEntry: () =>
+      createMcpWiringCliSurface().classifyExistingMcpEntry('claude', osHomedir()).kind,
+  });
 }
 
 function pickLoadedRendererForMcpDialog(): McpWiringDispatchTarget | undefined {
@@ -1429,6 +1473,98 @@ function registerIpcHandlers() {
       recentGitRoots.delete(oldest);
     }
   };
+
+  const terminalManager = createTerminalManager({
+    forkPtyHost: () =>
+      utilityProcess.fork(join(__dirname, 'utility/pty-host.js')) as unknown as PtyUtilityLike,
+    sendData: (wc, payload) => sendToRenderer(wc, 'ok:pty:data', payload),
+    sendExit: (wc, payload) => sendToRenderer(wc, 'ok:pty:exit', payload),
+    newPtyId: () => randomUUID(),
+    setTimer: (cb, ms) => setTimeout(cb, ms),
+    clearTimer: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
+    logger: { warn: (data) => getLogger('terminal').warn(data, 'unexpected pty-host message') },
+    recordShellExit,
+    recordTerminalSession,
+  });
+  terminalReaper = terminalManager;
+
+  handle('ok:pty:create', async (event, opts) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const ctx =
+      win && wm ? wm.getContextForBrowserWindow(win as unknown as BrowserWindowLike) : null;
+    const projectPath = ctx?.projectPath ?? null;
+    if (!win || !wm || !projectPath) {
+      logIpcError({
+        event: 'ipc.error',
+        channel: 'ok:pty:create',
+        reason: 'no-project',
+        handler: 'createPty',
+      });
+      return { ok: false, reason: 'no-project' };
+    }
+    if (!isTerminalConsented(projectPath) && !(await isTerminalConsentedWithGrace(projectPath))) {
+      logIpcError({
+        event: 'ipc.error',
+        channel: 'ok:pty:create',
+        reason: 'not-consented',
+        handler: 'createPty',
+      });
+      return { ok: false, reason: 'not-consented' };
+    }
+    return terminalManager.create({
+      windowId: win.id,
+      webContents: win.webContents,
+      projectRoot: projectPath,
+      cols: clampPtyDimension(opts.cols, DEFAULT_PTY_COLS),
+      rows: clampPtyDimension(opts.rows, DEFAULT_PTY_ROWS),
+    });
+  });
+  handle('ok:pty:input', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.input({ windowId: win.id, ptyId: req.ptyId, data: req.data });
+    return undefined;
+  });
+  handle('ok:pty:resize', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) {
+      terminalManager.resize({
+        windowId: win.id,
+        ptyId: req.ptyId,
+        cols: clampPtyDimension(req.cols, DEFAULT_PTY_COLS),
+        rows: clampPtyDimension(req.rows, DEFAULT_PTY_ROWS),
+      });
+    }
+    return undefined;
+  });
+  handle('ok:pty:kill', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.kill({ windowId: win.id, ptyId: req.ptyId });
+    return undefined;
+  });
+  handle('ok:pty:drain', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.drain({ windowId: win.id, ptyId: req.ptyId, bytes: req.bytes });
+    return undefined;
+  });
+  handle('ok:terminal:claude-assist', async (event, req) => {
+    let rewireError: string | undefined;
+    if (req.action === 'rewire' && process.platform === 'darwin' && app.isPackaged) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      mcpWiringHandle?.destroy();
+      mcpWiringHandle = null;
+      try {
+        mcpWiringHandle = armMcpWiring({
+          forceShow: true,
+          immediateDispatchTarget: win?.webContents,
+        });
+      } catch (err) {
+        rewireError = formatUnknownError(err);
+        getLogger('terminal').warn({ err: rewireError }, 'claude mcp rewire failed');
+      }
+    }
+    const readiness = await resolveTerminalClaudeReadiness();
+    return rewireError === undefined ? readiness : { ...readiness, rewireError };
+  });
 
   handle('ok:dialog:open-folder', async (_event, opts) => {
     return promptForExistingFolder(dialog, opts);
@@ -1678,51 +1814,6 @@ function registerIpcHandlers() {
       console.warn('[main] trash-item refused', {
         reason: result.reason,
         detail: result.detail,
-      });
-    }
-    return result;
-  });
-
-  handle('ok:shell:open-in-terminal', async (event, dirAbsPath) => {
-    const callerWin = BrowserWindow.fromWebContents(event.sender);
-    const callerProjectPath =
-      callerWin && wm
-        ? wm.getContextForBrowserWindow(callerWin as unknown as BrowserWindowLike)?.projectPath
-        : undefined;
-    const start = performance.now();
-    const result = await withSpan(
-      'ok.shell.open_in_terminal',
-      {
-        attributes: {
-          'ok.shell.path': normalizeFsPath(dirAbsPath),
-          'ok.shell.path.role': classifyFsPath(dirAbsPath),
-        },
-      },
-      async (span) => {
-        const outcome = await openInTerminalImpl(
-          {
-            platform: process.platform,
-            projectPath: callerProjectPath,
-            realpath: (p) => realpathSync(p),
-            spawn: spawnDetached,
-          },
-          dirAbsPath,
-        );
-        span.setAttribute('ok.shell.outcome', outcome.ok ? 'ok' : 'failure');
-        if (!outcome.ok) {
-          span.setAttribute('ok.shell.reason', outcome.reason);
-        }
-        return outcome;
-      },
-    );
-    const elapsedMs = performance.now() - start;
-    _openInTerminalDurationHist().record(elapsedMs, {
-      'ok.shell.outcome': result.ok ? 'ok' : 'failure',
-    });
-    if (!result.ok) {
-      _openInTerminalFailureCounter().add(1, { 'ok.shell.reason': result.reason });
-      console.warn('[main] open-in-terminal refused', {
-        reason: result.reason,
       });
     }
     return result;
@@ -2698,6 +2789,7 @@ function bootPrimaryInstance(): void {
 
   app.on('will-quit', () => {
     getLogger('lifecycle').info({}, 'will-quit');
+    terminalReaper?.killAll();
     autoUpdaterHandle?.destroy();
     autoUpdaterHandle = null;
     bundleReplaceWatcherHandle?.stop();
@@ -2737,31 +2829,4 @@ function _trashItemFailureCounter() {
     description: 'Count of ok:shell:trash-item handler failures, labeled by reason',
   });
   return _trashItemFailureCounterCache;
-}
-
-let _openInTerminalDurationHistCache: ReturnType<
-  ReturnType<typeof getMeter>['createHistogram']
-> | null = null;
-function _openInTerminalDurationHist() {
-  _openInTerminalDurationHistCache ||= getMeter().createHistogram(
-    'ok.shell.open_in_terminal.duration_ms',
-    {
-      description: 'Duration of ok:shell:open-in-terminal IPC dispatches in milliseconds',
-      unit: 'ms',
-    },
-  );
-  return _openInTerminalDurationHistCache;
-}
-
-let _openInTerminalFailureCounterCache: ReturnType<
-  ReturnType<typeof getMeter>['createCounter']
-> | null = null;
-function _openInTerminalFailureCounter() {
-  _openInTerminalFailureCounterCache ||= getMeter().createCounter(
-    'ok.shell.open_in_terminal.failures',
-    {
-      description: 'Count of ok:shell:open-in-terminal handler failures, labeled by reason',
-    },
-  );
-  return _openInTerminalFailureCounterCache;
 }

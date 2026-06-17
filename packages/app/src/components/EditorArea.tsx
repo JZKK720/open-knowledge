@@ -31,6 +31,7 @@ import { syncPromiseHasResolved } from '@/editor/sync-promise';
 import { useDocumentStats } from '@/hooks/use-document-stats';
 import { useLifecycleStatus } from '@/hooks/use-lifecycle-status';
 import { useSelectionStats } from '@/hooks/use-selection-stats';
+import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { docNameFromHash, hashFromDocName } from '@/lib/doc-hash';
 import { getInitialDocPanelWidth, writeDocPanelWidth } from '@/lib/doc-panel-width-store';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
@@ -42,9 +43,10 @@ import { cn } from '@/lib/utils';
 import { useSyncStatus } from '@/presence/use-sync-status';
 import { EditorActivityPool } from './EditorActivityPool';
 import { EditorFooter } from './EditorFooter';
-import type { EditorMode } from './EditorPane';
+import type { EditorMode, TerminalLaunchIntent } from './EditorPane';
 import { EditorToolbar } from './EditorToolbar';
 import { shouldPaintOverlay } from './editor-area-overlay';
+import { TerminalDock } from './TerminalDock';
 
 const LazyActivityModeContent = lazy(async () => {
   const mod = await import('@/components/ActivityModeContent');
@@ -56,6 +58,12 @@ interface EditorAreaProps {
   onModeChange: (mode: EditorMode) => void;
   activeTab: PanelTab;
   onActiveTabChange: (tab: PanelTab) => void;
+  terminalBridge?: OkDesktopBridge | null;
+  terminalVisible?: boolean;
+  onTerminalVisibleChange?: (visible: boolean) => void;
+  /** "Open in terminal" launch intent — carried to the terminal session, which
+   *  writes the `claude` launch once per nonce. Null until a UI click. */
+  terminalLaunch?: TerminalLaunchIntent | null;
 }
 
 export function EditorArea(props: EditorAreaProps) {
@@ -92,6 +100,10 @@ function EditorAreaInner({
   onModeChange,
   activeTab,
   onActiveTabChange,
+  terminalBridge,
+  terminalVisible = false,
+  onTerminalVisibleChange,
+  terminalLaunch = null,
 }: EditorAreaProps) {
   const { t } = useLingui();
   const {
@@ -460,6 +472,20 @@ function EditorAreaInner({
     </div>
   );
 
+  const editorColumn =
+    terminalBridge != null ? (
+      <TerminalDock
+        bridge={terminalBridge}
+        visible={terminalVisible}
+        onVisibleChange={onTerminalVisibleChange ?? (() => {})}
+        launch={terminalLaunch}
+      >
+        {editorContent}
+      </TerminalDock>
+    ) : (
+      editorContent
+    );
+
   return (
     <div className="flex min-h-0 flex-1" ref={setGroupContainerEl}>
       <ResizablePanelGroup
@@ -475,7 +501,7 @@ function EditorAreaInner({
               : 'transition-[flex-grow] duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0'
           }
         >
-          {editorContent}
+          {editorColumn}
         </ResizablePanel>
         <ResizableHandle
           withHandle

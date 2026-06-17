@@ -32,7 +32,6 @@ type OkMenuAction =
   | 'duplicate'
   | 'move-to-trash'
   | 'reveal-in-finder'
-  | 'open-in-terminal'
   | 'send-to-ai'
   | 'copy-full-path'
   | 'copy-relative-path'
@@ -40,7 +39,8 @@ type OkMenuAction =
   | 'toggle-show-all-files'
   | 'expand-all-tree'
   | 'collapse-all-tree'
-  | 'toggle-doc-panel';
+  | 'toggle-doc-panel'
+  | 'toggle-terminal';
 
 type OkUnsubscribe = () => void;
 
@@ -379,6 +379,7 @@ interface OkEditorViewMenuStateSnapshot {
   readonly canCollapseAll: boolean;
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
+  readonly terminalVisible?: boolean;
 }
 
 export interface OkSharingStatusResult {
@@ -418,6 +419,30 @@ export interface OkServerReclaimedInfo {
 export type OkServerRestartOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: 'eperm' | 'other' };
+
+export type OkPtyCreateResult =
+  | { readonly ok: true; readonly ptyId: string }
+  | { readonly ok: false; readonly reason: 'no-project' | 'not-consented' };
+
+export interface OkPtyData {
+  readonly ptyId: string;
+  readonly data: string;
+}
+
+export interface OkPtyExit {
+  readonly ptyId: string;
+  readonly exitCode: number;
+  readonly signal: number | null;
+  readonly error?: string;
+}
+
+export interface ClaudeReadiness {
+  readonly claude: 'present' | 'not-found' | 'unknown';
+  readonly mcp: 'wired' | 'needs-rewire';
+  /** Set only on a `rewire`-action result when re-arming MCP wiring threw, so
+   *  the renderer can surface the failure instead of the button silently no-op'ing. */
+  readonly rewireError?: string;
+}
 
 export interface OkDesktopBridge {
   readonly config: OkDesktopConfig;
@@ -504,11 +529,6 @@ export interface OkDesktopBridge {
           reason: 'not-found' | 'permission-denied' | 'system-error' | 'path-escape';
           detail?: string;
         }
-    >;
-    openInTerminal(
-      dirAbsPath: string,
-    ): Promise<
-      { ok: true } | { ok: false; reason: 'not-found' | 'spawn-error' | 'timeout' | 'path-escape' }
     >;
   };
 
@@ -672,6 +692,18 @@ export interface OkDesktopBridge {
   sidebar: {
     expandAll(cb: () => void): OkUnsubscribe;
     collapseAll(cb: () => void): OkUnsubscribe;
+  };
+
+  terminal: {
+    create(opts: { cols: number; rows: number }): Promise<OkPtyCreateResult>;
+    input(ptyId: string, data: string): void;
+    resize(ptyId: string, cols: number, rows: number): void;
+    kill(ptyId: string): Promise<void>;
+    drain(ptyId: string, bytes: number): void;
+    onData(cb: (msg: OkPtyData) => void): OkUnsubscribe;
+    onExit(cb: (msg: OkPtyExit) => void): OkUnsubscribe;
+    claudePreflight(): Promise<ClaudeReadiness>;
+    rewireClaudeMcp(): Promise<ClaudeReadiness>;
   };
 
   readonly platform: 'darwin' | 'win32' | 'linux';

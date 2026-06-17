@@ -6,7 +6,7 @@ import {
   type TargetData,
 } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
@@ -24,6 +25,7 @@ import {
   OpenInAgentMenuItem,
   successToastForWebFallback,
 } from './OpenInAgentMenuItem';
+import { useTerminalLaunch } from './TerminalLaunchContext';
 import { type HandoffDispatchInput, useHandoffDispatch } from './useHandoffDispatch';
 import { useInstalledAgents } from './useInstalledAgents';
 
@@ -60,6 +62,7 @@ function OpenInAgentMenuContent({
   className = 'min-w-[220px]',
 }: OpenInAgentMenuContentProps): ReactNode {
   const { t } = useLingui();
+  const terminalLaunch = useTerminalLaunch();
   const isSelectionScope = Boolean(input?.selection);
   const prompt =
     input !== null && input.docContext !== null
@@ -122,6 +125,25 @@ function OpenInAgentMenuContent({
             <Trans>opens in browser</Trans>
           </span>
         </DropdownMenuItem>
+      ) : null}
+      {terminalLaunch !== null ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              if (input === null) return;
+              terminalLaunch.launchInTerminal(input);
+            }}
+            disabled={input === null}
+            data-testid="open-in-agent-terminal"
+            aria-label={t`Claude CLI`}
+          >
+            <SquareTerminal className="size-4" aria-hidden="true" />
+            <span className="flex-1">
+              <Trans>Claude CLI</Trans>
+            </span>
+          </DropdownMenuItem>
+        </>
       ) : null}
     </DropdownMenuContent>
   );

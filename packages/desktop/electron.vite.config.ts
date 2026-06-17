@@ -22,6 +22,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'utility/server-entry': resolve(__dirname, 'src/utility/server-entry.ts'),
+          'utility/pty-host': resolve(__dirname, 'src/utility/pty-host.ts'),
         },
         output: { format: 'es', entryFileNames: '[name].js' },
       },

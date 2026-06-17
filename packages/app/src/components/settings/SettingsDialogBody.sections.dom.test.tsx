@@ -266,6 +266,10 @@ describe('SettingsDialogBody section runtime dispatch', () => {
     await renderBody({ activeId: 'project-templates' });
     expect(screen.getByTestId('project-templates-section')).not.toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
+
+    cleanup();
+    await renderBody({ activeId: 'terminal' });
+    expect(screen.getByTestId('settings-terminal-body')).not.toBeNull();
   });
 
   test('hotkeys section renders from the shared shortcut registry', async () => {

@@ -146,6 +146,23 @@ describe('mergeLayered — scope-aware leaf short-circuits', () => {
     const merged = mergeLayered(user, project, projectLocal);
     expect(merged.autoSync?.enabled).toBe(true);
   });
+
+  test("scope: 'project-local' (terminal.enabled) returns the project-local grant, ignoring project + user", () => {
+    const user = makeConfig({});
+    const project = makeConfig({});
+    const projectLocal = makeConfig({ terminal: { enabled: true } });
+
+    const merged = mergeLayered(user, project, projectLocal);
+    expect(merged.terminal?.enabled).toBe(true);
+  });
+
+  test('a clone without the project-local layer resolves terminal.enabled to null (grant never inherited)', () => {
+    const user = makeConfig({});
+    const project = makeConfig({});
+
+    const merged = mergeLayered(user, project);
+    expect(merged.terminal?.enabled).toBeNull();
+  });
 });
 
 describe('mergeLayered — backward compat for two-layer call sites', () => {

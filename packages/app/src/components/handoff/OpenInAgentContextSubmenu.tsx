@@ -6,10 +6,11 @@ import {
 } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -18,6 +19,7 @@ import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { dispatchClaudeWebFallback, TargetIcon } from './OpenInAgentMenuItem';
+import { useTerminalLaunch } from './TerminalLaunchContext';
 import type { HandoffDispatchInput } from './useHandoffDispatch';
 
 export function contextRowHint(inputMissing: boolean): string | null {
@@ -56,6 +58,7 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
   const { merged } = useConfigContext();
+  const terminalLaunch = useTerminalLaunch();
   const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
   if (isEmbedded) return null;
   const { input, installStates, dispatch, webFallbackVisible = true } = props;
@@ -127,6 +130,30 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
               <Trans>opens in browser</Trans>
             </span>
           </DropdownMenuItem>
+        ) : null}
+        {terminalLaunch !== null ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                if (input === null) return;
+                terminalLaunch.launchInTerminal(input);
+              }}
+              disabled={inputMissing}
+              data-testid="file-tree-open-in-terminal"
+              aria-label={hint ? t`Claude CLI, ${hint}` : t`Claude CLI`}
+            >
+              <SquareTerminal className="size-4" aria-hidden="true" />
+              <span className="flex-1">
+                <Trans>Claude CLI</Trans>
+              </span>
+              {hint ? (
+                <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
+                  {hint}
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+          </>
         ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>

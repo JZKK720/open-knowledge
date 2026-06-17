@@ -180,6 +180,44 @@ describe('writeConfigPatch — project-local scope', () => {
     });
     expect(existsSync(join(testDir, '.ok', 'config.yml'))).toBe(false);
   });
+
+  test('persists terminal.enabled to .ok/local/config.yml and round-trips across reads', async () => {
+    const granted = await writeConfigPatch({
+      cwd: testDir,
+      scope: 'project-local',
+      patch: { terminal: { enabled: true } },
+    });
+    expect(granted.ok).toBe(true);
+    if (!granted.ok) throw new Error('expected success');
+    expect(granted.path).toBe(projectLocalConfigPath());
+    expect(granted.appliedPaths).toContain('terminal.enabled');
+
+    const onDisk = readFileSync(projectLocalConfigPath(), 'utf-8');
+    expect(onDisk).toContain('terminal:');
+    expect(onDisk).toContain('enabled: true');
+
+    const revoked = await writeConfigPatch({
+      cwd: testDir,
+      scope: 'project-local',
+      patch: { terminal: { enabled: false } },
+    });
+    expect(revoked.ok).toBe(true);
+    if (!revoked.ok) throw new Error('expected success');
+    expect(revoked.effective.terminal.enabled).toBe(false);
+    const after = readFileSync(projectLocalConfigPath(), 'utf-8');
+    expect(after).toContain('enabled: false');
+    expect(after).not.toContain('enabled: true');
+  });
+
+  test('terminal.enabled grant lands ONLY in the gitignored .ok/local/ file, never the committed project file', async () => {
+    await writeConfigPatch({
+      cwd: testDir,
+      scope: 'project-local',
+      patch: { terminal: { enabled: true } },
+    });
+    expect(existsSync(projectLocalConfigPath())).toBe(true);
+    expect(existsSync(join(testDir, '.ok', 'config.yml'))).toBe(false);
+  });
 });
 
 describe('writeConfigPatch — user scope', () => {
@@ -426,6 +464,40 @@ describe('writeConfigPatch — scope-violation gate', () => {
     expect(result.error.code).toBe('SCOPE_VIOLATION');
     if (result.error.code !== 'SCOPE_VIOLATION') throw new Error('wrong code');
     expect(result.error.expectedScope).toBe('user');
+  });
+
+  test('project writer rejects terminal.enabled with SCOPE_VIOLATION; no fs write', async () => {
+    const result = await writeConfigPatch({
+      cwd: testDir,
+      scope: 'project',
+      patch: { terminal: { enabled: true } },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected SCOPE_VIOLATION');
+    if (!isKnownConfigError(result.error)) throw new Error('expected known error');
+    expect(result.error.code).toBe('SCOPE_VIOLATION');
+    if (result.error.code !== 'SCOPE_VIOLATION') throw new Error('wrong code');
+    expect(result.error.path).toEqual(['terminal', 'enabled']);
+    expect(result.error.expectedScope).toBe('project-local');
+    expect(result.error.actualScope).toBe('project');
+    expect(existsSync(projectConfigPath())).toBe(false);
+  });
+
+  test('user writer rejects terminal.enabled with SCOPE_VIOLATION; no fs write', async () => {
+    const result = await writeConfigPatch({
+      cwd: testDir,
+      scope: 'user',
+      homedirOverride: testDir,
+      patch: { terminal: { enabled: false } },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected SCOPE_VIOLATION');
+    if (!isKnownConfigError(result.error)) throw new Error('expected known error');
+    expect(result.error.code).toBe('SCOPE_VIOLATION');
+    if (result.error.code !== 'SCOPE_VIOLATION') throw new Error('wrong code');
+    expect(result.error.expectedScope).toBe('project-local');
+    expect(result.error.actualScope).toBe('user');
+    expect(existsSync(userConfigPath(testDir))).toBe(false);
   });
 });
 

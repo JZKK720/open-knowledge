@@ -91,6 +91,10 @@ mock.module('@/lib/config-provider', () => ({
   ),
 }));
 
+mock.module('@/lib/config-context', () => ({
+  useConfigContext: () => ({ merged: null }),
+}));
+
 mock.module('@/lib/api-config', () => ({
   fetchApiConfig: (...args: Parameters<typeof fetchApiConfigMock>) => fetchApiConfigMock(...args),
 }));

@@ -6,10 +6,11 @@ import {
 } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -18,6 +19,7 @@ import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { dispatchClaudeWebFallback, TargetIcon } from './OpenInAgentMenuItem';
+import { useTerminalLaunch } from './TerminalLaunchContext';
 import type { HandoffDispatchInput } from './useHandoffDispatch';
 
 /** Status hint shown alongside per-target rows when the input is not ready
@@ -52,6 +54,7 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
   const { merged } = useConfigContext();
+  const terminalLaunch = useTerminalLaunch();
   const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
   if (isEmbedded) return null;
   const { input, installStates, dispatch, webFallbackVisible = true } = props;
@@ -75,7 +78,8 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
   };
 
   const fallbackRowVisible = webFallbackVisible && !claudeInstalled;
-  if (installedTargets.length === 0 && !fallbackRowVisible) {
+  const terminalRowVisible = terminalLaunch !== null;
+  if (installedTargets.length === 0 && !fallbackRowVisible && !terminalRowVisible) {
     return null;
   }
 
@@ -128,6 +132,30 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
               <Trans>opens in browser</Trans>
             </span>
           </ContextMenuItem>
+        ) : null}
+        {terminalLaunch !== null ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onSelect={() => {
+                if (input === null) return;
+                terminalLaunch.launchInTerminal(input);
+              }}
+              disabled={inputMissing}
+              data-testid="empty-space-open-in-terminal"
+              aria-label={hint ? t`Claude CLI, ${hint}` : t`Claude CLI`}
+            >
+              <SquareTerminal className="size-4" aria-hidden="true" />
+              <span className="flex-1">
+                <Trans>Claude CLI</Trans>
+              </span>
+              {hint ? (
+                <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
+                  {hint}
+                </span>
+              ) : null}
+            </ContextMenuItem>
+          </>
         ) : null}
       </ContextMenuSubContent>
     </ContextMenuSub>

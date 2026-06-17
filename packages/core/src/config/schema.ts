@@ -116,6 +116,21 @@ export const ConfigSchema = z.looseObject({
         .default(null),
     })
     .default({ enabled: null }),
+  terminal: z
+    .looseObject({
+      enabled: z
+        .boolean()
+        .register(fieldRegistry, {
+          scope: 'project-local',
+          agentSettable: false,
+          defaultScope: 'project-local',
+          description:
+            'Whether the in-app terminal (a real OS shell at full user privilege) is enabled for this project on this machine. null = not chosen yet (the first shell-open asks). Per-machine (project-local) — never shared via git, clone, or sync.',
+        })
+        .nullable()
+        .default(null),
+    })
+    .default({ enabled: null }),
   telemetry: z
     .looseObject({
       localSink: z

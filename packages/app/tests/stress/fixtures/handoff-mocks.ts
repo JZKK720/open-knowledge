@@ -200,7 +200,6 @@ export async function installHandoffMocks(page: Page, cfg: HandoffMockConfig): P
         showAssetMenu: async (): Promise<void> => {},
         showItemInFolder: async (): Promise<void> => {},
         trashItem: async (): Promise<{ ok: true }> => ({ ok: true }),
-        openInTerminal: async (): Promise<{ ok: true }> => ({ ok: true }),
       };
 
       const bridge = {
@@ -351,6 +350,17 @@ export async function installHandoffMocks(page: Page, cfg: HandoffMockConfig): P
         sidebar: {
           expandAll: (_cb: () => void) => () => {},
           collapseAll: (_cb: () => void) => () => {},
+        },
+        terminal: {
+          create: async () => ({ ok: true as const, ptyId: 'mock-pty' }),
+          input: () => {},
+          resize: () => {},
+          kill: async () => {},
+          drain: () => {},
+          onData: () => () => {},
+          onExit: () => () => {},
+          claudePreflight: async () => ({ claude: 'present' as const, mcp: 'wired' as const }),
+          rewireClaudeMcp: async () => ({ claude: 'present' as const, mcp: 'wired' as const }),
         },
         platform: 'darwin' as const,
         appVersion: 'test-0.0.0',

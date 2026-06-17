@@ -112,6 +112,15 @@ asarUnpack:
   - "**/@napi-rs/keyring/**"
   - "**/@napi-rs/keyring-*/**"
   - "**/simple-git/**"
+  # node-pty ships its native pty.node addon AND an extensionless `spawn-helper`
+  # binary under prebuilds/<platform>-<arch>/. The `**/*.node` rule above unpacks
+  # pty.node but NOT spawn-helper (no .node extension), so unpack the whole
+  # prebuilds tree. node-pty resolves the helper relative to the loaded pty.node
+  # and rewrites `app.asar` -> `app.asar.unpacked` itself, so spawn-helper MUST
+  # sit on the real filesystem or `pty.fork()` dies with "posix_spawnp failed".
+  # The prebuilt spawn-helper ships mode 0644 (node-pty#850) — scripts/afterPack.mjs
+  # chmods it 0755 before signing; the unpack rule and that chmod move in lockstep.
+  - "**/node-pty/prebuilds/**"
 
 mac:
   category: public.app-category.productivity

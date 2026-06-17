@@ -152,7 +152,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
     ]);
   });
 
-  test('project-local-strict fields cover autoSync.enabled + appearance.sidebar.* + search.semantic.*', () => {
+  test('project-local-strict fields cover autoSync.enabled + appearance.sidebar.* + search.semantic.* + terminal.enabled', () => {
     const leaves: { path: string[]; schema: unknown }[] = [];
     walkLeaves(ConfigSchema, [], leaves);
     const projectLocalStrict = leaves
@@ -168,6 +168,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       'search.semantic.enabled',
       'search.semantic.model',
       'search.semantic.similarityFloor',
+      'terminal.enabled',
     ]);
   });
 });

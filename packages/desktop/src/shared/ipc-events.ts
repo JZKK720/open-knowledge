@@ -3,6 +3,8 @@ import type {
   OkLocalOpAuthEvent,
   OkLocalOpCloneEvent,
   OkMenuAction,
+  OkPtyData,
+  OkPtyExit,
   OkServerReclaimedInfo,
   OkServerRestartedInfo,
   OkServerVersionDriftInfo,
@@ -87,4 +89,7 @@ export interface EventChannels {
   'ok:server-version-drift': { payload: OkServerVersionDriftInfo };
   'ok:server-restarted': { payload: OkServerRestartedInfo };
   'ok:server-reclaimed': { payload: OkServerReclaimedInfo };
+
+  'ok:pty:data': { payload: OkPtyData };
+  'ok:pty:exit': { payload: OkPtyExit };
 }

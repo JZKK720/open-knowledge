@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   buildSendToAiInputForActiveTarget,
   resolveActiveTargetAbsPath,
-  resolveActiveTargetParentDirAbsPath,
   resolveActiveTargetRelativePath,
 } from './file-menu-target-resolvers';
 import type { Workspace } from './workspace-paths';
@@ -67,62 +66,6 @@ describe('resolveActiveTargetAbsPath', () => {
     expect(resolveActiveTargetAbsPath({ kind: 'missing', target: 'gone' }, null, WORKSPACE)).toBe(
       '/Users/test/project',
     );
-  });
-});
-
-describe('resolveActiveTargetParentDirAbsPath', () => {
-  test('doc scope at nested depth returns parent dir', () => {
-    expect(
-      resolveActiveTargetParentDirAbsPath(
-        { kind: 'doc', target: 'specs/foo/SPEC', docName: 'specs/foo/SPEC' },
-        'specs/foo/SPEC',
-        WORKSPACE,
-      ),
-    ).toBe('/Users/test/project/specs/foo');
-  });
-
-  test('doc scope at root returns contentDir (no leading slash artifact)', () => {
-    expect(
-      resolveActiveTargetParentDirAbsPath(
-        { kind: 'doc', target: 'README', docName: 'README' },
-        'README',
-        WORKSPACE,
-      ),
-    ).toBe('/Users/test/project');
-  });
-
-  test('folder scope returns the folder itself (not its parent)', () => {
-    expect(
-      resolveActiveTargetParentDirAbsPath(
-        { kind: 'folder', target: 'reports', folderPath: 'reports' },
-        null,
-        WORKSPACE,
-      ),
-    ).toBe('/Users/test/project/reports');
-  });
-
-  test('null + missing scopes return contentDir', () => {
-    expect(resolveActiveTargetParentDirAbsPath(null, null, WORKSPACE)).toBe('/Users/test/project');
-    expect(
-      resolveActiveTargetParentDirAbsPath({ kind: 'missing', target: 'gone' }, null, WORKSPACE),
-    ).toBe('/Users/test/project');
-  });
-
-  test('asset scope returns the asset parent dir', () => {
-    expect(
-      resolveActiveTargetParentDirAbsPath(
-        { kind: 'asset', target: 'media/x.png', assetPath: 'media/x.png', mediaKind: null },
-        null,
-        WORKSPACE,
-      ),
-    ).toBe('/Users/test/project/media');
-    expect(
-      resolveActiveTargetParentDirAbsPath(
-        { kind: 'asset', target: 'x.png', assetPath: 'x.png', mediaKind: null },
-        null,
-        WORKSPACE,
-      ),
-    ).toBe('/Users/test/project');
   });
 });
 

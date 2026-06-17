@@ -345,6 +345,7 @@ export {
 export {
   assertNeverUrnIpcLookup,
   buildClaudeAiWebUrl,
+  buildClaudeLaunchCommand,
   buildClaudeUrl,
   buildCodexUrl,
   buildCursorUrl,
@@ -362,6 +363,7 @@ export {
   type IpcChannelReason,
   type IpcChannelWithUrn,
   lookupUrnInRegistry,
+  shellSingleQuote,
   type TargetData,
   URN_HTTP_ONLY,
   URN_IPC_REGISTRY,

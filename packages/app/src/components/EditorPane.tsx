@@ -9,6 +9,8 @@ import { type EditorModeValue, useEditorMode } from '@/editor/use-editor-mode';
 import { useGitSyncStatus } from '@/hooks/use-git-sync-status';
 import { useNoPushPermissionToast } from '@/hooks/use-no-push-permission-toast';
 import { useConfigContext } from '@/lib/config-provider';
+import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
+import { recordTerminalOpened } from '@/lib/terminal-telemetry';
 import { useWorkspace } from '@/lib/use-workspace';
 import { AuthModal } from './AuthModal';
 import { AutoSyncOnboardingDialog } from './AutoSyncOnboardingDialog';
@@ -17,10 +19,16 @@ import { type PanelTab, TABS } from './DocPanel';
 import { EditorArea } from './EditorArea';
 import { EditorHeader } from './EditorHeader';
 import { OpenInAgentMenuRequestProvider } from './handoff/OpenInAgentMenuRequestContext';
+import { subscribeToTerminalLaunchRequests } from './handoff/terminal-launch-events';
 import {
   buildSelectionOrDocHandoffInput,
   type HandoffDispatchInput,
 } from './handoff/useHandoffDispatch';
+
+export interface TerminalLaunchIntent {
+  readonly prompt: string;
+  readonly nonce: number;
+}
 
 export type EditorMode = EditorModeValue;
 
@@ -40,6 +48,9 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
   const [openInAgentMenuInput, setOpenInAgentMenuInput] = useState<HandoffDispatchInput | null>(
     null,
   );
+  const desktopBridge = typeof window !== 'undefined' ? (window.okDesktop ?? null) : null;
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalLaunch, setTerminalLaunch] = useState<TerminalLaunchIntent | null>(null);
 
   const syncStatus = useGitSyncStatus();
   const { projectLocalConfig, projectLocalSynced } = useConfigContext();
@@ -66,6 +77,45 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     window.addEventListener(RAW_MDX_NAV_EVENT, onRawMdxNav);
     return () => window.removeEventListener(RAW_MDX_NAV_EVENT, onRawMdxNav);
   }, [activeDocName]);
+
+  useEffect(() => {
+    const bridge = window.okDesktop;
+    if (bridge == null) return;
+    return bridge.onMenuAction((action) => {
+      if (action === 'toggle-terminal') {
+        setTerminalVisible((visible) => !visible);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (window.okDesktop != null) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (matchesKeyboardShortcut(event, 'toggle-terminal-panel')) {
+        event.preventDefault();
+        setTerminalVisible((visible) => !visible);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, []);
+
+  useEffect(() => {
+    return subscribeToTerminalLaunchRequests((prompt) => {
+      setTerminalVisible(true);
+      setTerminalLaunch((prev) => ({ prompt, nonce: (prev?.nonce ?? 0) + 1 }));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (window.okDesktop == null) return;
+    window.okDesktop.editor.notifyViewMenuStateChanged({ terminalVisible });
+  }, [terminalVisible]);
+
+  useEffect(() => {
+    if (window.okDesktop == null) return;
+    if (terminalVisible) recordTerminalOpened();
+  }, [terminalVisible]);
 
   useNoPushPermissionToast(syncStatus?.pausedReason);
 
@@ -114,11 +164,19 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
           openInAgentMenuInput={openInAgentMenuInput}
           onOpenInAgentMenuOpenChange={handleOpenInAgentMenuOpenChange}
         />
+        {/* The terminal docks under the editor/file column only — EditorArea
+            nests the vertical split inside its horizontal editor↔doc-panel
+            split so the doc panel stays full-height beside the terminal. The
+            ⌘J/menu/telemetry state stays owned here and is threaded down. */}
         <EditorArea
           editorMode={editorMode}
           onModeChange={handleModeChange}
           activeTab={activeTab}
           onActiveTabChange={setActiveTab}
+          terminalBridge={desktopBridge}
+          terminalVisible={terminalVisible}
+          onTerminalVisibleChange={setTerminalVisible}
+          terminalLaunch={terminalLaunch}
         />
       </OpenInAgentMenuRequestProvider>
       <AuthModal

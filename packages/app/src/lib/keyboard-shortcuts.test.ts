@@ -125,6 +125,56 @@ describe('keyboard shortcut registry', () => {
     ).toBe(false);
   });
 
+  test('formats the terminal-panel shortcut as Cmd/Ctrl + J', () => {
+    expect(formatShortcut('toggle-terminal-panel', 'mac')).toBe('⌘ J');
+    expect(formatShortcut('toggle-terminal-panel', 'windowsLinux')).toBe('Ctrl J');
+  });
+
+  test('matches the terminal-panel shortcut on Cmd+J / Ctrl+J and excludes extra modifiers', () => {
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, key: 'j' },
+        'toggle-terminal-panel',
+        'mac',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, key: 'j' },
+        'toggle-terminal-panel',
+        'windowsLinux',
+      ),
+    ).toBe(true);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: true, altKey: false, key: 'j' },
+        'toggle-terminal-panel',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: true, key: 'j' },
+        'toggle-terminal-panel',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: true, ctrlKey: false, altKey: false, shiftKey: true, key: 'j' },
+        'toggle-terminal-panel',
+        'mac',
+      ),
+    ).toBe(false);
+    expect(
+      matchesKeyboardShortcut(
+        { metaKey: false, ctrlKey: false, altKey: false, key: 'j' },
+        'toggle-terminal-panel',
+        'mac',
+      ),
+    ).toBe(false);
+  });
+
   test('matches command palette with allowed extra modifiers and rejects missing mod', () => {
     expect(
       matchesKeyboardShortcut(

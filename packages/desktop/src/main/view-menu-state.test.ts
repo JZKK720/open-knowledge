@@ -51,4 +51,19 @@ describe('mergeViewMenuState — two-publisher non-clobbering contract', () => {
     expect(afterFileSidebar.showHiddenFiles).toBe(true);
     expect(afterFileSidebar.sidebarVisible).toBe(false);
   });
+
+  test('EditorPane push (terminalVisible only) preserves the sidebar + doc-panel fields', () => {
+    const afterFileSidebar = mergeViewMenuState(initial, {
+      showHiddenFiles: true,
+      sidebarVisible: false,
+    });
+    const afterEditorArea = mergeViewMenuState(afterFileSidebar, { docPanelVisible: false });
+
+    const afterEditorPane = mergeViewMenuState(afterEditorArea, { terminalVisible: true });
+
+    expect(afterEditorPane.terminalVisible).toBe(true);
+    expect(afterEditorPane.docPanelVisible).toBe(false);
+    expect(afterEditorPane.sidebarVisible).toBe(false);
+    expect(afterEditorPane.showHiddenFiles).toBe(true);
+  });
 });

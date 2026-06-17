@@ -153,6 +153,20 @@ const KEYBOARD_SHORTCUT_DEFINITIONS = [
     ],
   },
   {
+    id: 'toggle-terminal-panel',
+    category: 'general',
+    title: msg`Show or hide terminal`,
+    description: msg`Toggle the bottom terminal panel.`,
+    scope: msg`OK Desktop`,
+    bindings: [
+      {
+        mac: '⌘ J',
+        windowsLinux: 'Ctrl J',
+        match: { key: 'j', mod: true },
+      },
+    ],
+  },
+  {
     id: 'open-folder',
     category: 'workspace',
     title: msg`Open folder`,

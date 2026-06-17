@@ -48,6 +48,8 @@ export function SettingsDialogShell({ open, onOpenChange }: SettingsDialogShellP
 
   const hasProject = collabUrl !== null;
 
+  const isOkDesktopHost = typeof window !== 'undefined' && window.okDesktop != null;
+
   const groups: SidebarGroup[] = [
     {
       id: 'user',
@@ -66,6 +68,7 @@ export function SettingsDialogShell({ open, onOpenChange }: SettingsDialogShellP
       items: [
         { id: 'sync', label: t`Sync` },
         { id: 'search', label: t`Search` },
+        ...(isOkDesktopHost ? [{ id: 'terminal', label: t`Terminal` }] : []),
         { id: 'project-templates', label: t`Templates` },
         { id: 'okignore', label: t`Ignore patterns` },
         { id: 'sharing', label: t`Config sharing` },

@@ -2569,6 +2569,31 @@ Homepage: https://github.com/vimeo/player.js
 
 Copyright (c) 2016 [Vimeo](https://vimeo.com)
 
+### `@xterm/addon-fit@0.11.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-fit
+
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-unicode11@0.9.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-unicode11
+
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-web-links@0.12.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-web-links
+
+Copyright (c) 2017, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-webgl@0.19.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-webgl
+
+Copyright (c) 2018, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/xterm@6.0.0`
+Homepage: https://github.com/xtermjs/xterm.js
+
+Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js) Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com) Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
+
 ### `accepts@2.0.0`
 Homepage: https://github.com/jshttp/accepts
 
@@ -4389,6 +4414,13 @@ Copyright (c) 2016 - 2020 Node Fetch Team
 Homepage: https://github.com/prebuild/node-gyp-build
 
 Copyright (c) 2017 Mathias Buus
+
+### `node-pty@1.1.0`
+Homepage: https://github.com/microsoft/node-pty
+
+Copyright (c) 2012-2015, Christopher Jeffrey (https://github.com/chjj/)
+Copyright (c) 2016, Daniel Imms (http://www.growingwiththeweb.com)
+Copyright (c) 2018 - present Microsoft Corporation
 
 ### `node-releases@2.0.37`
 Homepage: https://github.com/chicoxyzzy/node-releases

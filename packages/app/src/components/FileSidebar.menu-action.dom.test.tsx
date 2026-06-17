@@ -57,7 +57,6 @@ const ACTIVE_TARGET = {
 const notifyViewMenuStateChangedMock = mock(() => {});
 const toggleSidebarMock = mock(() => {});
 const showItemInFolderMock = mock((_path: string) => Promise.resolve());
-const dispatchOpenInTerminalMock = mock((_bridge: unknown, _path: string) => Promise.resolve());
 const handoffDispatchMock = mock((_target: string, _input: unknown) =>
   Promise.resolve({ ok: true }),
 );
@@ -130,6 +129,7 @@ mock.module('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: PassThrough,
   DropdownMenuContent: ElementPassThrough,
   DropdownMenuItem: Button,
+  DropdownMenuSeparator: () => null,
   DropdownMenuTrigger: PassThrough,
 }));
 
@@ -198,10 +198,6 @@ mock.module('@/lib/config-provider', () => ({
   }),
 }));
 
-mock.module('@/lib/dispatch-open-in-terminal', () => ({
-  dispatchOpenInTerminal: dispatchOpenInTerminalMock,
-}));
-
 mock.module('@/lib/use-workspace', () => ({
   useWorkspace: () => ({
     contentDir: '/tmp/open-knowledge',
@@ -230,7 +226,6 @@ describe('FileSidebar menu-action runtime routing', () => {
       notifyViewMenuStateChangedMock,
       toggleSidebarMock,
       showItemInFolderMock,
-      dispatchOpenInTerminalMock,
       handoffDispatchMock,
       projectLocalPatch,
       treeCalls.collapseAll,
@@ -346,12 +341,6 @@ describe('FileSidebar menu-action runtime routing', () => {
 
     menuActionCallback?.('reveal-in-finder' as MenuAction);
     expect(showItemInFolderMock).toHaveBeenCalledWith('/tmp/open-knowledge/notes/source.md');
-
-    menuActionCallback?.('open-in-terminal' as MenuAction);
-    expect(dispatchOpenInTerminalMock).toHaveBeenCalledWith(
-      window.okDesktop,
-      '/tmp/open-knowledge/notes',
-    );
 
     menuActionCallback?.('send-to-ai' as MenuAction);
     expect(handoffDispatchMock).toHaveBeenCalledWith(

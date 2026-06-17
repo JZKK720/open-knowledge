@@ -6,6 +6,12 @@ import { CreateProjectMenuTrigger } from '@/components/CreateProjectMenuTrigger'
 import { EditorPane } from '@/components/EditorPane';
 import { FileSidebar } from '@/components/FileSidebar';
 import { defaultInitialDir } from '@/components/file-tree-utils';
+import {
+  type TerminalLaunchContextValue,
+  TerminalLaunchProvider,
+} from '@/components/handoff/TerminalLaunchContext';
+import { requestTerminalLaunch } from '@/components/handoff/terminal-launch-events';
+import { selectScopedPrompt } from '@/components/handoff/useHandoffDispatch';
 import { InstallInClaudeDesktopDialog } from '@/components/InstallInClaudeDesktopDialog';
 import { McpConsentDialog } from '@/components/McpConsentDialog';
 import { isNewItemShortcut, NewItemDialog } from '@/components/NewItemDialog';
@@ -24,6 +30,7 @@ import {
   useDocumentTransition,
 } from '@/editor/DocumentContext';
 import { fetchApiConfig } from '@/lib/api-config';
+import { useConfigContext } from '@/lib/config-context';
 import { ConfigProvider } from '@/lib/config-provider';
 import { assetPathFromHash, docNameFromHash, isContentRootHash } from '@/lib/doc-hash';
 import { mark, ProfilerBoundary } from '@/lib/perf';
@@ -316,6 +323,16 @@ function AppBody() {
   const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const singleFile = useSingleFileMode();
+  const { merged } = useConfigContext();
+  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
+
+  const terminalLaunch: TerminalLaunchContextValue | null = desktopBridge
+    ? {
+        launchInTerminal: (input) => {
+          requestTerminalLaunch(selectScopedPrompt(input, 'claude-code', autoOpen));
+        },
+      }
+    : null;
 
   return (
     <>
@@ -363,14 +380,20 @@ function AppBody() {
             className="pointer-events-none fixed inset-x-0 top-0 z-50 h-2 [-webkit-app-region:drag]"
           />
         )}
-        <SidebarProvider className="h-screen overflow-hidden">
-          {/* No-project single-file mode drops the file sidebar (file tree +
-              project switcher); the editor inset takes the full width. */}
-          {!singleFile && <FileSidebar onOpenSearch={() => setCommandPaletteOpen(true)} />}
-          <SidebarInset className="overflow-hidden h-[calc(100vh-var(--layout-inset-offset))]">
-            <EditorPane onOpenSearch={() => setCommandPaletteOpen(true)} />
-          </SidebarInset>
-        </SidebarProvider>
+        {/* The "Open in terminal" entry point spans both the FileSidebar
+            menus and the EditorHeader/EditorPane, which are siblings here —
+            so the provider wraps both. Its value is desktop-gated; the docked
+            terminal that consumes the launch lives in EditorPane. */}
+        <TerminalLaunchProvider value={terminalLaunch}>
+          <SidebarProvider className="h-screen overflow-hidden">
+            {/* No-project single-file mode drops the file sidebar (file tree +
+                project switcher); the editor inset takes the full width. */}
+            {!singleFile && <FileSidebar onOpenSearch={() => setCommandPaletteOpen(true)} />}
+            <SidebarInset className="overflow-hidden h-[calc(100vh-var(--layout-inset-offset))]">
+              <EditorPane onOpenSearch={() => setCommandPaletteOpen(true)} />
+            </SidebarInset>
+          </SidebarProvider>
+        </TerminalLaunchProvider>
       </PageListProvider>
     </>
   );

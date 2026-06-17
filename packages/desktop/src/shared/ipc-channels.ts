@@ -16,10 +16,12 @@ import type { SeedApplyResult, SeedListPacksResult, SeedPlanResult } from '../ma
 import type { KeyringSmokeResult } from '../utility/keyring-smoke.ts';
 import type {
   CheckTargetExistsResult,
+  ClaudeReadiness,
   HeadBranchInfo,
   OkDesktopConfig,
   OkLocalOpAuthReposResponse,
   OkLocalOpAuthStatusResponse,
+  OkPtyCreateResult,
   OkServerRestartOutcome,
   OkSharePayloadFields,
   OkThemeSource,
@@ -249,6 +251,7 @@ export interface EditorViewMenuStateSnapshot {
   readonly canCollapseAll: boolean;
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
+  readonly terminalVisible?: boolean;
 }
 
 export interface RequestChannels {
@@ -293,12 +296,6 @@ export interface RequestChannels {
           reason: 'not-found' | 'permission-denied' | 'system-error' | 'path-escape';
           detail?: string;
         };
-  };
-  'ok:shell:open-in-terminal': {
-    args: [dirAbsPath: string];
-    result:
-      | { ok: true }
-      | { ok: false; reason: 'not-found' | 'spawn-error' | 'timeout' | 'path-escape' };
   };
   'ok:clipboard:write-text': { args: [text: string]; result: undefined };
   'ok:project:get-info': { args: []; result: OkDesktopConfig };
@@ -472,5 +469,30 @@ export interface RequestChannels {
   'ok:editor:view-menu-state-changed': {
     args: [state: Partial<EditorViewMenuStateSnapshot>];
     result: undefined;
+  };
+
+  'ok:pty:create': {
+    args: [opts: { cols: number; rows: number }];
+    result: OkPtyCreateResult;
+  };
+  'ok:pty:input': {
+    args: [req: { ptyId: string; data: string }];
+    result: undefined;
+  };
+  'ok:pty:resize': {
+    args: [req: { ptyId: string; cols: number; rows: number }];
+    result: undefined;
+  };
+  'ok:pty:kill': {
+    args: [req: { ptyId: string }];
+    result: undefined;
+  };
+  'ok:pty:drain': {
+    args: [req: { ptyId: string; bytes: number }];
+    result: undefined;
+  };
+  'ok:terminal:claude-assist': {
+    args: [req: { action: 'preflight' | 'rewire' }];
+    result: ClaudeReadiness;
   };
 }

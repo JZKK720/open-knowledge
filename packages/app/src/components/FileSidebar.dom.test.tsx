@@ -95,7 +95,6 @@ const treeCalls = {
   uploadFiles: mock((_parentDir: string) => {}),
 };
 const projectLocalPatch = mock((_patch: unknown) => projectPatchResult);
-const dispatchOpenInTerminalMock = mock((_bridge: unknown, _path: string) => Promise.resolve());
 const showItemInFolderMock = mock((_path: string) => Promise.resolve());
 const notifyViewMenuStateChangedMock = mock((_snapshot: unknown) => {});
 const onOpenSearch = mock(() => {});
@@ -276,6 +275,7 @@ mock.module('@/components/ui/dropdown-menu', () => ({
     <div data-testid="tree-options-menu">{children}</div>
   ),
   DropdownMenuItem: Button,
+  DropdownMenuSeparator: () => null,
   DropdownMenuTrigger: PassThrough,
 }));
 
@@ -363,10 +363,6 @@ mock.module('@/lib/config-provider', () => ({
   }),
 }));
 
-mock.module('@/lib/dispatch-open-in-terminal', () => ({
-  dispatchOpenInTerminal: dispatchOpenInTerminalMock,
-}));
-
 mock.module('@/lib/use-workspace', () => ({
   useWorkspace: () => workspace,
 }));
@@ -408,7 +404,6 @@ describe('FileSidebar runtime behavior', () => {
       treeCalls.startCreatingFromTemplate,
       treeCalls.uploadFiles,
       projectLocalPatch,
-      dispatchOpenInTerminalMock,
       showItemInFolderMock,
       notifyViewMenuStateChangedMock,
       onOpenSearch,
@@ -528,7 +523,6 @@ describe('FileSidebar runtime behavior', () => {
       'empty-space-menu-upload-file',
       'empty-space-menu-reveal-in-finder',
       'open-in-agent-empty-space-submenu',
-      'empty-space-menu-open-in-terminal',
       'empty-space-menu-copy-full-path',
       'empty-space-menu-show-hidden-files',
       'empty-space-menu-show-all-files',
@@ -553,12 +547,6 @@ describe('FileSidebar runtime behavior', () => {
 
     fireEvent.click(screen.getByTestId('empty-space-menu-reveal-in-finder'));
     expect(showItemInFolderMock).toHaveBeenCalledWith('/tmp/open-knowledge');
-
-    fireEvent.click(screen.getByTestId('empty-space-menu-open-in-terminal'));
-    expect(dispatchOpenInTerminalMock).toHaveBeenCalledWith(
-      window.okDesktop,
-      '/tmp/open-knowledge',
-    );
 
     fireEvent.click(screen.getByTestId('empty-space-menu-copy-full-path'));
     await waitFor(() =>
