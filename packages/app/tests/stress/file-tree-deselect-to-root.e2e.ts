@@ -12,7 +12,7 @@
  * still lands inside the active folder.
  */
 import type { Page } from '@playwright/test';
-import { expect, test } from './_helpers';
+import { expect, resetContentToFixtureBaseline, test } from './_helpers';
 
 const SIDEBAR = '[data-slot="sidebar-container"]';
 
@@ -50,10 +50,14 @@ async function createFileAndGetDocName(
 }
 
 test.describe('file-tree deselect-to-root', () => {
+  test.beforeEach(async ({ workerServer }) => {
+    await resetContentToFixtureBaseline(workerServer.baseURL, workerServer.contentDir);
+  });
+
   test('empty-space click deselects the row for creation but leaves the editor view', async ({
     page,
     api,
-    baseURL,
+    workerServer,
   }) => {
     await api.seedDocs([
       { name: 'folder/note', markdown: '# Note\n' },
@@ -93,7 +97,7 @@ test.describe('file-tree deselect-to-root', () => {
     await expect(sidebar.getByRole('treeitem', { name: 'note.md', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/folder\/note$/);
 
-    const names = await createFileAndGetDocName(page, baseURL, 'created-at-root');
+    const names = await createFileAndGetDocName(page, workerServer.baseURL, 'created-at-root');
     expect(names).toContain('created-at-root');
     expect(names).not.toContain('folder/created-at-root');
   });
@@ -101,7 +105,7 @@ test.describe('file-tree deselect-to-root', () => {
   test('without the empty-space click, New File still lands in the active folder', async ({
     page,
     api,
-    baseURL,
+    workerServer,
   }) => {
     await api.seedDocs([
       { name: 'folder/note', markdown: '# Note\n' },
@@ -114,7 +118,7 @@ test.describe('file-tree deselect-to-root', () => {
       sidebar.getByRole('treeitem', { name: 'note.md', exact: true, selected: true }),
     ).toBeVisible({ timeout: 20_000 });
 
-    const names = await createFileAndGetDocName(page, baseURL, 'created-in-folder');
+    const names = await createFileAndGetDocName(page, workerServer.baseURL, 'created-in-folder');
     expect(names).toContain('folder/created-in-folder');
     expect(names).not.toContain('created-in-folder');
   });

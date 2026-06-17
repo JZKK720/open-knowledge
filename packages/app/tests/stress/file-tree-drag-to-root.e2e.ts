@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './_helpers';
+import { expect, resetContentToFixtureBaseline, test } from './_helpers';
 
 async function dragRowToEmptyRootArea(
   page: Page,
@@ -114,10 +114,14 @@ async function expectDocNames(
 }
 
 test.describe('file-tree drag-to-root (PRD-7043)', () => {
+  test.beforeEach(async ({ workerServer }) => {
+    await resetContentToFixtureBaseline(workerServer.baseURL, workerServer.contentDir);
+  });
+
   test('dropping a nested folder on empty tree space promotes it to the project root', async ({
     page,
     api,
-    baseURL,
+    workerServer,
   }) => {
     await api.seedDocs([
       { name: 'parent/child/note', markdown: '# Note\n\nNested.\n' },
@@ -136,7 +140,10 @@ test.describe('file-tree drag-to-root (PRD-7043)', () => {
 
     await dragRowToEmptyRootArea(page, 'parent/child', true);
 
-    await expectDocNames(page, baseURL, { present: 'child/note', absent: 'parent/child/note' });
+    await expectDocNames(page, workerServer.baseURL, {
+      present: 'child/note',
+      absent: 'parent/child/note',
+    });
 
     await expect(sidebar.getByRole('treeitem', { name: 'child', exact: true })).toBeVisible({
       timeout: 10_000,
@@ -146,7 +153,7 @@ test.describe('file-tree drag-to-root (PRD-7043)', () => {
   test('dropping a nested file on empty tree space promotes it to the project root', async ({
     page,
     api,
-    baseURL,
+    workerServer,
   }) => {
     await api.seedDocs([
       { name: 'folder/note', markdown: '# Note\n\nNested file.\n' },
@@ -165,7 +172,7 @@ test.describe('file-tree drag-to-root (PRD-7043)', () => {
 
     await dragRowToEmptyRootArea(page, 'folder/note', false);
 
-    await expectDocNames(page, baseURL, { present: 'note', absent: 'folder/note' });
+    await expectDocNames(page, workerServer.baseURL, { present: 'note', absent: 'folder/note' });
 
     await expect(sidebar.getByRole('treeitem', { name: 'note.md', exact: true })).toBeVisible({
       timeout: 10_000,
