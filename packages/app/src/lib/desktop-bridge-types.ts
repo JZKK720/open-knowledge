@@ -53,7 +53,8 @@ export type OkPackId =
   | 'plain-notes'
   | 'worldbuilding'
   | 'writing-pipeline'
-  | 'entity-vault';
+  | 'entity-vault'
+  | 'okf';
 
 interface OkSeedPlanOptions {
   rootDir?: string;

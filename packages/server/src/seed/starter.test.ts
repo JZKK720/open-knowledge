@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   buildStarterFolderFrontmatterYaml,
   listStarterPacks,
+  OKF_RESERVED_FILENAMES,
   STARTER_FOLDER_FRONTMATTER_FILENAME,
   STARTER_PACK_IDS,
   STARTER_PACKS,
@@ -136,11 +137,12 @@ describe('STARTER_FOLDER_FRONTMATTER_FILENAME', () => {
 });
 
 describe('STARTER_PACKS — all packs structural validation', () => {
-  test('STARTER_PACK_IDS contains exactly the 6 expected packs (pinned to detect silent additions/deletions)', () => {
-    expect(STARTER_PACK_IDS.length).toBe(6);
+  test('STARTER_PACK_IDS contains exactly the 7 expected packs (pinned to detect silent additions/deletions)', () => {
+    expect(STARTER_PACK_IDS.length).toBe(7);
     expect([...STARTER_PACK_IDS].sort()).toEqual([
       'entity-vault',
       'knowledge-base',
+      'okf',
       'plain-notes',
       'software-lifecycle',
       'worldbuilding',
@@ -254,9 +256,12 @@ describe('STARTER_PACKS — all packs structural validation', () => {
     }
   });
 
-  test('every rootFile body has frontmatter with a non-empty title', () => {
+  const OKF_RESERVED_ROOTFILES = new Set(OKF_RESERVED_FILENAMES);
+
+  test('every non-reserved rootFile body has frontmatter with a non-empty title', () => {
     for (const pack of Object.values(STARTER_PACKS)) {
       for (const [filename, body] of Object.entries(pack.rootFiles ?? {})) {
+        if (pack.id === 'okf' && OKF_RESERVED_ROOTFILES.has(filename)) continue;
         expect(
           body.startsWith('---\n'),
           `Pack "${pack.id}" rootFile "${filename}" missing frontmatter`,

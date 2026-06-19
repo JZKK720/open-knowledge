@@ -4,7 +4,8 @@ export type PackId =
   | 'plain-notes'
   | 'worldbuilding'
   | 'writing-pipeline'
-  | 'entity-vault';
+  | 'entity-vault'
+  | 'okf';
 
 export const DEFAULT_PACK_ID: PackId = 'knowledge-base';
 
@@ -1047,6 +1048,132 @@ description: When the agent does scheduled work: daily briefings, end-of-day dos
 
 `;
 
+const OKF_FOLDERS: readonly StarterFolder[] = [
+  {
+    path: 'concepts',
+    title: 'Concepts',
+    description:
+      'Durable ideas and definitions, one file per concept. Each doc carries `type: concept` in its frontmatter. Link related concepts so the graph builds itself.',
+    tags: ['concept', 'okf'],
+    starterTemplate: 'concept',
+  },
+  {
+    path: 'references',
+    title: 'References',
+    description:
+      'External sources and citations you rely on, one file per source. Each doc carries `type: reference`. Link the docs that cite a reference so the evidence trail stays navigable.',
+    tags: ['reference', 'okf'],
+    starterTemplate: 'reference',
+  },
+  {
+    path: 'notes',
+    title: 'Notes',
+    description:
+      'Working notes and observations, one file per note. Each doc carries `type: note`. The lightest section — capture first, link as ideas connect.',
+    tags: ['note', 'okf'],
+    starterTemplate: 'note',
+  },
+] as const;
+
+const OKF_TEMPLATES: Readonly<Record<string, string>> = {
+  concept: `---
+title: Concept Name
+description: One-line definition of the concept.
+---
+---
+type: concept
+created: {{date}}
+author: {{user}}
+tags: [concept]
+---
+
+## Definition
+
+## Why it matters
+
+## Related
+
+- Link a related idea, e.g. [another concept](./another-concept.md).
+`,
+  reference: `---
+title: Reference Title
+description: One-line summary of the source.
+---
+---
+type: reference
+created: {{date}}
+author: {{user}}
+tags: [reference]
+---
+
+## Summary
+
+## Key points
+
+## Where this is used
+
+- Link the docs that cite this reference.
+`,
+  note: `---
+title: Note Title
+description: One-line summary of the note.
+---
+---
+type: note
+created: {{date}}
+author: {{user}}
+tags: [note]
+---
+
+## Note
+
+## Links
+`,
+};
+
+const OKF_WELCOME_MD = `---
+title: Welcome
+description: Start here — what this knowledge base is and how it is organized.
+type: Document
+tags: [welcome]
+---
+
+# Welcome
+
+This knowledge base was scaffolded with the **OKF starter pack**, so it is conformant with the Open Knowledge Format (OKF) from the first commit.
+
+## How it is organized
+
+- [index](./index.md) — the navigation hub (a reserved OKF file; carries no frontmatter).
+- [log](./log.md) — the change history (a reserved OKF file; carries no frontmatter).
+- [concepts/](./concepts/), [references/](./references/), [notes/](./notes/) — your content. Every document here carries a non-empty \`type\` in its frontmatter.
+
+## The one rule
+
+OKF requires exactly one thing of every non-reserved document: a non-empty \`type\`. The value is yours to choose — \`concept\`, \`reference\`, \`note\`, or anything that fits. \`Document\` is a fine generic fallback.
+
+See the project skill for the full set of conventions.
+`;
+
+const OKF_INDEX_MD = `# Index
+
+The navigation hub for this knowledge base. Start with [welcome](./welcome.md), then explore by section.
+
+## Sections
+
+- [welcome](./welcome.md) — what this knowledge base is and how it is organized
+- [concepts/](./concepts/) — durable ideas and definitions, one file per concept (\`type: concept\`)
+- [references/](./references/) — sources and citations you rely on (\`type: reference\`)
+- [notes/](./notes/) — working notes and observations (\`type: note\`)
+
+Every document outside this file and \`log.md\` carries a non-empty \`type\` in its frontmatter — that is all OKF requires.
+`;
+
+const OKF_LOG_MD = `# Log
+
+Change history for this knowledge base, newest entry first. Add a dated entry (\`## YYYY-MM-DD: <summary>\`) whenever you create, edit, or restructure content — one entry per working session, not per file.
+`;
+
 export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
   'knowledge-base': {
     id: 'knowledge-base',
@@ -1104,9 +1231,24 @@ export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
       'HEARTBEAT.md': ENTITY_VAULT_HEARTBEAT_MD,
     },
   },
+  okf: {
+    id: 'okf',
+    name: 'OKF starter',
+    description: 'An Open Knowledge Format–conformant knowledge base.',
+    defaultSubfolder: undefined,
+    folders: OKF_FOLDERS,
+    templates: OKF_TEMPLATES,
+    rootFiles: {
+      'welcome.md': OKF_WELCOME_MD,
+      'index.md': OKF_INDEX_MD,
+      'log.md': OKF_LOG_MD,
+    },
+  },
 };
 
 export const STARTER_PACK_IDS: readonly PackId[] = Object.keys(STARTER_PACKS) as PackId[];
+
+export const OKF_RESERVED_FILENAMES: readonly string[] = ['index.md', 'log.md'];
 
 export function resolvePack(packId?: PackId): StarterPack {
   if (!packId) return STARTER_PACKS[DEFAULT_PACK_ID];

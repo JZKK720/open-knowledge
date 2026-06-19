@@ -1,6 +1,15 @@
 // biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Compass, GitBranch, Library, Loader2, Network, PenLine, StickyNote } from 'lucide-react';
+import {
+  Compass,
+  FileCheck,
+  GitBranch,
+  Library,
+  Loader2,
+  Network,
+  PenLine,
+  StickyNote,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { OkPackId, OkSeedPackInfo } from '@/lib/desktop-bridge-types';
 import { seedClient } from '@/lib/seed-client';
@@ -13,6 +22,7 @@ const PACK_ICONS: Record<OkPackId, React.ComponentType<{ className?: string }>> 
   worldbuilding: Compass,
   'writing-pipeline': PenLine,
   'entity-vault': Network,
+  okf: FileCheck,
 };
 
 function iconForPack(id: string): React.ComponentType<{ className?: string }> {
@@ -74,7 +84,7 @@ export function PackCardGrid({ onPackSelect, className, packs: externalPacks }: 
         aria-busy="true"
         aria-label={t`Loading starter packs`}
       >
-        {Array.from({ length: 6 }, (_, i) => i).map((i) => (
+        {Array.from({ length: Object.keys(PACK_ICONS).length }, (_, i) => i).map((i) => (
           <PackCardSkeleton key={`skeleton-${i}`} />
         ))}
       </div>
