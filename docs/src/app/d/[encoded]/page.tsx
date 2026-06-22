@@ -1,12 +1,18 @@
-import { FolderIcon, GitBranchIcon } from 'lucide-react';
+import { ChevronDown, FolderIcon, GitBranchIcon } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { OkWordmark } from '@/components/ok-wordmark';
-import { buildSplashViewModel, SPLASH_DOWNLOAD_URL } from '@/lib/share-splash';
+import {
+  buildCloneCommand,
+  buildSplashViewModel,
+  SPLASH_DOWNLOAD_URL,
+  SPLASH_INSTALL_COMMAND,
+} from '@/lib/share-splash';
 import { SITE_URL } from '@/lib/site';
+import { cn } from '@/lib/utils';
 import { DotTexture } from '../../(home)/dot-texture';
 import { SplashButtonLabel, splashOutlineButton, splashPrimaryButton } from './splash-buttons';
-import { SplashCtaCluster } from './splash-cta-cluster';
+import { SplashCtaPanel } from './splash-cta-panel';
 
 export const dynamic = 'force-static';
 
@@ -118,10 +124,16 @@ export default async function SplashPage({ params }: SplashPageProps) {
             </p>
           )}
 
-          <SplashCtaCluster
+          <SplashCtaPanel
             downloadUrl={`/d/${encoded}/download`}
             customSchemeUrl={view.customSchemeUrl}
             githubUrl={view.githubUrl}
+            installCommand={SPLASH_INSTALL_COMMAND}
+            cloneCommand={buildCloneCommand({
+              owner: view.owner,
+              repo: view.repo,
+              branch: view.branch,
+            })}
           />
         </div>
       </section>
@@ -174,9 +186,55 @@ function SplashFallback({ heading }: { heading: string }) {
             </Link>
           </div>
 
-          <p className="mt-8 text-sm text-slide-muted">Share URLs are only opened on macOS.</p>
+          <p className="mt-8 text-sm text-slide-muted">
+            The desktop app runs on macOS. The CLI is cross-platform on macOS and Linux.
+          </p>
+
+          <SplashFallbackCli />
         </div>
       </section>
     </main>
+  );
+}
+
+function SplashFallbackCli() {
+  return (
+    <details className="group mt-6" data-testid="splash-fallback-cli-disclosure">
+      <summary
+        className={cn(
+          'inline-flex cursor-pointer list-none items-center gap-2 rounded-full border border-azure-blue px-5 py-[13px]',
+          'bg-transparent font-mono text-sm font-medium uppercase leading-[115%] tracking-[-0.64px] text-azure-blue sm:text-base',
+          'transition duration-200 ease-in-out outline-none',
+          'hover:bg-azure-blue hover:text-white',
+          'focus-visible:ring-2 focus-visible:ring-slide-accent focus-visible:ring-offset-2',
+          '[&::-webkit-details-marker]:hidden',
+        )}
+        data-testid="splash-fallback-cli-summary"
+      >
+        <span>Install the CLI</span>
+        <ChevronDown
+          className="size-4 shrink-0 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+      </summary>
+      <div
+        className="not-prose mt-3 rounded-lg border border-slide-border bg-slide-bg-elevated p-4"
+        data-testid="splash-fallback-cli-body"
+      >
+        <pre className="overflow-x-auto whitespace-pre rounded bg-black/5 p-3 font-mono text-sm leading-relaxed text-slide-text dark:bg-white/10">
+          <code className="block">{SPLASH_INSTALL_COMMAND}</code>
+        </pre>
+        <p className="mt-3 text-sm text-slide-muted">
+          See the{' '}
+          <Link
+            href="/docs/reference/cli"
+            className="font-medium text-slide-text underline underline-offset-4 transition-colors hover:text-slide-accent-strong focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slide-accent"
+          >
+            CLI reference
+          </Link>{' '}
+          for `ok clone &lt;owner/repo&gt;` and other commands.
+        </p>
+      </div>
+    </details>
   );
 }

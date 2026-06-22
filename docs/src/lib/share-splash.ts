@@ -86,6 +86,25 @@ export type ParsedGitHubShareTarget =
   | { kind: 'doc'; owner: string; repo: string; branch: string; path: string }
   | { kind: 'folder'; owner: string; repo: string; branch: string; path: string };
 
+const SHARE_OWNER_REPO_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+function isValidShareBranch(branch: string): boolean {
+  if (branch.length === 0) return false;
+  if (branch.startsWith('-')) return false;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control chars is the intent
+  if (/[\x00-\x1F\x7F]/.test(branch)) return false;
+  if (/\s/.test(branch)) return false;
+  if (branch.includes(':')) return false;
+  if (branch.split('/').includes('..')) return false;
+  return true;
+}
+
+function isShareSegmentSafe(owner: string, repo: string, branch: string): boolean {
+  const nameSafe = (s: string) =>
+    SHARE_OWNER_REPO_PATTERN.test(s) && !s.startsWith('-') && s !== '.' && s !== '..';
+  return nameSafe(owner) && nameSafe(repo) && isValidShareBranch(branch);
+}
+
 function parseGitHubBlobUrl(input: string): ParsedGitHubBlobUrl | null {
   let url: URL;
   try {
@@ -118,6 +137,7 @@ function parseGitHubBlobUrl(input: string): ParsedGitHubBlobUrl | null {
 
   if (!owner || !repo || !branch || pathParts.length === 0) return null;
   if (pathParts.some((p) => p.length === 0)) return null;
+  if (!isShareSegmentSafe(owner, repo, branch)) return null;
 
   return { owner, repo, branch, path: pathParts.join('/') };
 }
@@ -158,6 +178,7 @@ function parseGitHubTreeUrl(input: string): ParsedGitHubTreeUrl | null {
 
   if (!owner || !repo || !branch) return null;
   if (pathParts.some((p) => p.length === 0)) return null;
+  if (!isShareSegmentSafe(owner, repo, branch)) return null;
 
   return { owner, repo, branch, path: pathParts.join('/') };
 }
@@ -176,6 +197,94 @@ export { DOWNLOAD_URL as SPLASH_DOWNLOAD_URL } from './site';
 
 export function buildCustomSchemeUrl(sharedUrl: string): string {
   return `openknowledge://share?url=${encodeURIComponent(sharedUrl)}`;
+}
+
+export const SPLASH_INSTALL_COMMAND = 'npm install -g @inkeep/open-knowledge';
+
+function shellSingleQuoteShareArg(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+const SHARE_SHELL_SAFE_TOKEN = /^[A-Za-z0-9._/@+-]+$/;
+
+function quoteShareArg(s: string): string {
+  return SHARE_SHELL_SAFE_TOKEN.test(s) ? s : shellSingleQuoteShareArg(s);
+}
+
+export function buildCloneCommand({
+  owner,
+  repo,
+  branch,
+}: {
+  owner: string;
+  repo: string;
+  branch: string;
+}): string {
+  return `ok clone ${quoteShareArg(owner)}/${quoteShareArg(repo)} -b ${quoteShareArg(branch)}`;
+}
+
+export type SplashOs = 'macos' | 'linux' | 'windows' | 'unknown';
+
+export function classifySplashOs(input: string | null | undefined): SplashOs {
+  if (!input) return 'unknown';
+  const lower = input.toLowerCase();
+  if (
+    lower.includes('iphone') ||
+    lower.includes('ipad') ||
+    lower.includes('android') ||
+    lower === 'ios'
+  ) {
+    return 'unknown';
+  }
+  if (lower.includes('mac') || lower === 'darwin') return 'macos';
+  if (lower.includes('win')) return 'windows';
+  if (
+    lower.includes('linux') ||
+    lower.includes('x11') ||
+    lower.includes('cros') ||
+    lower.includes('chrome os')
+  ) {
+    return 'linux';
+  }
+  return 'unknown';
+}
+
+export interface SplashCtaLayout {
+  showWindowsNotice: boolean;
+  showCluster: boolean;
+  cliInline: boolean;
+  showStandaloneGithub: boolean;
+}
+
+export function splashCtaLayout(os: SplashOs): SplashCtaLayout {
+  if (os === 'windows') {
+    return {
+      showWindowsNotice: true,
+      showCluster: false,
+      cliInline: false,
+      showStandaloneGithub: false,
+    };
+  }
+  if (os === 'linux') {
+    return {
+      showWindowsNotice: false,
+      showCluster: false,
+      cliInline: true,
+      showStandaloneGithub: true,
+    };
+  }
+  return {
+    showWindowsNotice: false,
+    showCluster: true,
+    cliInline: false,
+    showStandaloneGithub: false,
+  };
+}
+
+export type ClipboardCopyOutcome = { kind: 'copied' } | { kind: 'fallback-select' };
+
+export function clipboardCopyOutcome(succeeded: boolean): ClipboardCopyOutcome {
+  return succeeded ? { kind: 'copied' } : { kind: 'fallback-select' };
 }
 
 function isCommonDefaultBranch(branch: string): boolean {

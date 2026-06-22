@@ -3,15 +3,148 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import type { TokenStore } from '../auth/token-store.ts';
 import { OK_DIR } from '../constants.ts';
 import {
   buildCloneArgs,
   buildCloneEnv,
+  buildCloneGitOptions,
   cloneWithBranchFallback,
+  emitCloneFailure,
   ensureOkExcludedFromGit,
+  formatCloneAuthFailure,
+  handleCloneFailure,
   isBranchNotFoundError,
+  resolveClonePrincipal,
+  resolveCloneUrl,
   shouldSkipAuthForPublicRepo,
 } from './clone.ts';
+
+describe('resolveClonePrincipal', () => {
+  const storeReturning = (entry: { login: string; token: string } | null): TokenStore =>
+    ({ get: async () => entry }) as unknown as TokenStore;
+
+  test('returns the stored login when present', async () => {
+    const store = storeReturning({ login: 'alice', token: 't' });
+    expect(await resolveClonePrincipal(store, 'github.com')).toBe('alice');
+  });
+
+  test('returns null when no entry is stored (hint omitted, no placeholder)', async () => {
+    expect(await resolveClonePrincipal(storeReturning(null), 'github.com')).toBeNull();
+  });
+
+  test('treats the "unknown" sentinel login as not-known', async () => {
+    const store = storeReturning({ login: 'unknown', token: 't' });
+    expect(await resolveClonePrincipal(store, 'github.com')).toBeNull();
+  });
+});
+
+describe('resolveCloneUrl', () => {
+  const parsed = (owner: string, name: string, hostname = 'github.com') => ({
+    hostname,
+    owner,
+    name,
+  });
+
+  test('reconstructs a canonical https URL for owner/repo shorthand', () => {
+    expect(resolveCloneUrl('inkeep/playbooks', parsed('inkeep', 'playbooks'))).toBe(
+      'https://github.com/inkeep/playbooks',
+    );
+  });
+
+  test('passes a full https URL through unchanged', () => {
+    const url = 'https://github.com/inkeep/playbooks.git';
+    expect(resolveCloneUrl(url, parsed('inkeep', 'playbooks'))).toBe(url);
+  });
+
+  test('passes an SSH/SCP URL through unchanged', () => {
+    const url = 'git@github.com:inkeep/playbooks.git';
+    expect(resolveCloneUrl(url, parsed('inkeep', 'playbooks'))).toBe(url);
+  });
+
+  test('passes an @-less SCP/GHES SSH URL through unchanged (not rewritten to https)', () => {
+    const url = 'host.ghe.com:inkeep/playbooks.git';
+    expect(resolveCloneUrl(url, parsed('inkeep', 'playbooks', 'host.ghe.com'))).toBe(url);
+  });
+
+  test('reconstructs shorthand with a trailing .git suffix', () => {
+    expect(resolveCloneUrl('inkeep/playbooks.git', parsed('inkeep', 'playbooks'))).toBe(
+      'https://github.com/inkeep/playbooks',
+    );
+  });
+});
+
+describe('handleCloneFailure', () => {
+  const collectors = () => {
+    const emitted: Record<string, unknown>[] = [];
+    const stderr: string[] = [];
+    return {
+      emitted,
+      stderr,
+      emit: (e: Record<string, unknown>) => emitted.push(e),
+      printStderr: (t: string) => stderr.push(t),
+    };
+  };
+
+  test('403 resolves the principal and threads it into the access-denied hint', async () => {
+    const c = collectors();
+    let resolvedHost: string | null = null;
+    await handleCloneFailure({
+      error: new Error('remote: HTTP 403 Forbidden'),
+      url: 'https://github.com/owner/repo',
+      branch: 'main',
+      json: false,
+      emit: c.emit,
+      printStderr: c.printStderr,
+      resolvePrincipal: async (host) => {
+        resolvedHost = host;
+        return 'alice';
+      },
+    });
+    expect(resolvedHost).toBe('github.com');
+    expect(c.stderr.join('')).toContain('@alice');
+    expect(c.stderr.join('')).not.toContain('ok auth login');
+  });
+
+  test('non-403 auth failure does not resolve the principal (skips keyring init)', async () => {
+    const c = collectors();
+    let called = false;
+    await handleCloneFailure({
+      error: new Error('fatal: could not read Username for https://github.com'),
+      url: 'https://github.com/owner/repo',
+      branch: 'main',
+      json: false,
+      emit: c.emit,
+      printStderr: c.printStderr,
+      resolvePrincipal: async () => {
+        called = true;
+        return 'alice';
+      },
+    });
+    expect(called).toBe(false);
+    expect(c.stderr.join('')).toContain('ok auth login');
+  });
+
+  test('--json keeps the raw {type:error,message} wire shape and skips principal resolution', async () => {
+    const c = collectors();
+    let called = false;
+    await handleCloneFailure({
+      error: new Error('remote: HTTP 403 Forbidden'),
+      url: 'https://github.com/owner/repo',
+      branch: null,
+      json: true,
+      emit: c.emit,
+      printStderr: c.printStderr,
+      resolvePrincipal: async () => {
+        called = true;
+        return 'alice';
+      },
+    });
+    expect(called).toBe(false);
+    expect(c.emitted).toEqual([{ type: 'error', message: 'remote: HTTP 403 Forbidden' }]);
+    expect(c.stderr).toEqual([]);
+  });
+});
 
 describe('buildCloneEnv', () => {
   test('inherits PATH and HOME from the source env', () => {
@@ -30,6 +163,26 @@ describe('buildCloneEnv', () => {
   test('drops undefined entries (no `undefined` strings reach the child env)', () => {
     const env = buildCloneEnv({ PATH: '/usr/bin', SOME_UNSET: undefined });
     expect('SOME_UNSET' in env).toBe(false);
+  });
+});
+
+describe('buildCloneGitOptions', () => {
+  test('opts into the env-based unsafe flags so the user PAGER/SSH/askpass env is honored', () => {
+    const o = buildCloneGitOptions('/work/dir', ['credential.helper=!gh auth git-credential']);
+    expect(o.baseDir).toBe('/work/dir');
+    expect(o.config).toEqual(['credential.helper=!gh auth git-credential']);
+    expect(o.unsafe).toEqual({
+      allowUnsafeCredentialHelper: true,
+      allowUnsafePager: true,
+      allowUnsafeSshCommand: true,
+      allowUnsafeAskPass: true,
+    });
+  });
+
+  test('passes an empty config through unchanged (no credential helper injected)', () => {
+    const o = buildCloneGitOptions('/work/dir', []);
+    expect(o.config).toEqual([]);
+    expect(o.unsafe?.allowUnsafePager).toBe(true);
   });
 });
 
@@ -378,5 +531,221 @@ describe('isBranchNotFoundError', () => {
     expect(isBranchNotFoundError('Remote branch foo not found')).toBe(true);
     expect(isBranchNotFoundError(null)).toBe(false);
     expect(isBranchNotFoundError(undefined)).toBe(false);
+  });
+});
+
+describe('formatCloneAuthFailure', () => {
+  test('returns null for non-auth errors so the caller falls through to the raw git error', () => {
+    expect(
+      formatCloneAuthFailure({
+        error: new Error("fatal: couldn't find remote ref refs/heads/foo"),
+        url: 'https://github.com/o/r',
+        branch: 'foo',
+      }),
+    ).toBeNull();
+    expect(
+      formatCloneAuthFailure({
+        error: new Error('connection timed out'),
+        url: 'https://github.com/o/r',
+      }),
+    ).toBeNull();
+  });
+
+  test('login-fixable (no-credential) → 2-step instruction with reconstructed -b command', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('fatal: could not read Username for https://github.com'),
+      url: 'https://github.com/inkeep/playbooks',
+      branch: 'feat-x',
+    });
+    expect(out).not.toBeNull();
+    expect(out).toContain("Couldn't clone https://github.com/inkeep/playbooks");
+    expect(out).toContain('authentication is required');
+    expect(out).toContain('1. Run: ok auth login');
+    expect(out).toContain('2. Then re-run: ok clone https://github.com/inkeep/playbooks -b feat-x');
+  });
+
+  test('login-fixable reconstruction omits -b when no branch was supplied', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('fatal: terminal prompts disabled'),
+      url: 'inkeep/playbooks',
+      branch: null,
+    });
+    expect(out).toMatch(/ok clone inkeep\/playbooks$/);
+    expect(out).not.toContain('-b');
+  });
+
+  test('login-fixable (401 expired token) → same 2-step recovery shape', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('remote: HTTP 401 Unauthorized'),
+      url: 'inkeep/playbooks',
+      branch: 'main',
+    });
+    expect(out).toContain('1. Run: ok auth login');
+    expect(out).toContain('2. Then re-run: ok clone inkeep/playbooks -b main');
+  });
+
+  test('login-fixable (unknown-auth) → 2-step recovery', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('remote: Authentication failed'),
+      url: 'inkeep/playbooks',
+      branch: 'main',
+    });
+    expect(out).toContain('1. Run: ok auth login');
+  });
+
+  test('403 → access-denied hint without the login instruction', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('remote: HTTP 403 Forbidden'),
+      url: 'https://github.com/o/private',
+      branch: 'main',
+    });
+    expect(out).toContain('Access denied when cloning https://github.com/o/private');
+    expect(out).toContain('Check that your account has access');
+    expect(out).not.toContain('ok auth login');
+  });
+
+  test('403 + known principal → "signed in as @user" hint', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('remote: HTTP 403 Forbidden'),
+      url: 'https://github.com/o/private',
+      principal: 'miles',
+    });
+    expect(out).toContain('signed in as @miles');
+    expect(out).toContain('may lack access');
+  });
+
+  test('scope-mismatch → actionable PAT recovery (ok auth pat + re-run), not ok auth login', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('insufficient scopes'),
+      url: 'inkeep/private-repo',
+      branch: 'main',
+    });
+    expect(out).toContain('missing required OAuth scopes');
+    expect(out).toContain('repo');
+    expect(out).not.toContain('ok auth login');
+    expect(out).toContain('ok auth pat');
+    expect(out).toContain('https://github.com/settings/tokens');
+    expect(out).toContain('re-run: ok clone inkeep/private-repo -b main');
+  });
+
+  test('ssh-auth → SSH transport hint, never the ok auth login recovery', () => {
+    for (const message of ['Permission denied (publickey).', 'Host key verification failed.']) {
+      const out = formatCloneAuthFailure({
+        error: new Error(message),
+        url: 'git@github.com:inkeep/playbooks.git',
+        branch: 'main',
+      });
+      expect(out).not.toBeNull();
+      expect(out).toContain('SSH');
+      expect(out).not.toContain('ok auth login');
+    }
+  });
+
+  test('shell-quotes a branch with spaces in the reconstructed re-run command', () => {
+    const out = formatCloneAuthFailure({
+      error: new Error('fatal: could not read Username'),
+      url: 'inkeep/playbooks',
+      branch: 'feat my idea',
+    });
+    expect(out).toContain("-b 'feat my idea'");
+  });
+});
+
+describe('emitCloneFailure', () => {
+  function makeCollectors() {
+    const emitted: Record<string, unknown>[] = [];
+    const stderr: string[] = [];
+    return {
+      emit: (event: Record<string, unknown>) => emitted.push(event),
+      printStderr: (text: string) => stderr.push(text),
+      emitted,
+      stderr,
+    };
+  }
+
+  test('--json: emits {type:"error", message} with the raw error message — wire shape unchanged', () => {
+    const c = makeCollectors();
+    emitCloneFailure({
+      error: new Error('fatal: could not read Username'),
+      url: 'inkeep/playbooks',
+      branch: 'main',
+      json: true,
+      emit: c.emit,
+      printStderr: c.printStderr,
+    });
+    expect(c.emitted).toHaveLength(1);
+    expect(c.emitted[0]).toEqual({
+      type: 'error',
+      message: 'fatal: could not read Username',
+    });
+    expect(c.stderr).toHaveLength(0);
+  });
+
+  test('--json: shape unchanged for non-auth failures too', () => {
+    const c = makeCollectors();
+    emitCloneFailure({
+      error: new Error('connection timed out'),
+      url: 'inkeep/playbooks',
+      json: true,
+      emit: c.emit,
+      printStderr: c.printStderr,
+    });
+    expect(c.emitted[0]).toEqual({ type: 'error', message: 'connection timed out' });
+  });
+
+  test('interactive + login-fixable: prints the 2-step instruction; does not emit JSON', () => {
+    const c = makeCollectors();
+    emitCloneFailure({
+      error: new Error('fatal: could not read Username'),
+      url: 'inkeep/playbooks',
+      branch: 'main',
+      json: false,
+      emit: c.emit,
+      printStderr: c.printStderr,
+    });
+    expect(c.emitted).toHaveLength(0);
+    expect(c.stderr.join('')).toContain('1. Run: ok auth login');
+    expect(c.stderr.join('')).toContain('2. Then re-run: ok clone inkeep/playbooks -b main');
+  });
+
+  test('interactive + 403: prints the hint, no login instruction', () => {
+    const c = makeCollectors();
+    emitCloneFailure({
+      error: new Error('HTTP 403 Forbidden'),
+      url: 'inkeep/private',
+      json: false,
+      emit: c.emit,
+      printStderr: c.printStderr,
+    });
+    const out = c.stderr.join('');
+    expect(out).toContain('Access denied when cloning inkeep/private');
+    expect(out).not.toContain('ok auth login');
+  });
+
+  test("interactive + non-auth: falls through to today's ✗ <message> line", () => {
+    const c = makeCollectors();
+    emitCloneFailure({
+      error: new Error("fatal: couldn't find remote ref refs/heads/foo"),
+      url: 'inkeep/playbooks',
+      branch: 'foo',
+      json: false,
+      emit: c.emit,
+      printStderr: c.printStderr,
+    });
+    expect(c.stderr.join('')).toBe("✗ fatal: couldn't find remote ref refs/heads/foo\n");
+  });
+
+  test('same actionable message regardless of TTY — no isTTY branch in the helper', () => {
+    const c1 = makeCollectors();
+    const c2 = makeCollectors();
+    const args = {
+      error: new Error('fatal: terminal prompts disabled'),
+      url: 'inkeep/playbooks',
+      branch: 'main',
+      json: false,
+    };
+    emitCloneFailure({ ...args, emit: c1.emit, printStderr: c1.printStderr });
+    emitCloneFailure({ ...args, emit: c2.emit, printStderr: c2.printStderr });
+    expect(c1.stderr.join('')).toBe(c2.stderr.join(''));
   });
 });

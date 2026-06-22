@@ -47,8 +47,27 @@ This opens your file directly in the WYSIWYG/source editor without any of the ve
 
 You can pull repositories directly from GitHub and open them with Open Knowledge:
 
-1. Run `ok auth login` to complete device authentication (if you are already logged in with the `gh` CLI you can skip this step)
-2. Clone your repo with `ok clone <repo-url>`. This will clone the repository and initialize Open Knowledge if it is not already.
+```bash
+ok clone <owner/repo>
+```
+
+`ok clone` accepts a full `https://github.com/...` URL or the `owner/repo` shorthand. It clones the repository, initializes Open Knowledge if it isn't already, and opens the editor.
+
+Pin a branch with `-b <branch>`:
+
+```bash
+ok clone <owner/repo> -b <branch>
+```
+
+If the branch no longer exists, `ok clone` falls back to the repository's default branch.
+
+A **public** repo clones without authentication. For a **private** repo, sign in first:
+
+```bash
+ok auth login
+```
+
+If you're already logged in with the `gh` CLI, you can skip this step.
 
 ## Manage local servers
 

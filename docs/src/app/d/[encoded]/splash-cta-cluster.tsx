@@ -160,7 +160,7 @@ export function SplashCtaCluster({
               href={downloadUrl}
               onClick={handleDownloadClick}
               data-testid="splash-download-cta"
-              className="touch-manipulation font-medium text-slide-text underline underline-offset-4 transition-colors hover:text-slide-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slide-accent focus-visible:rounded"
+              className="touch-manipulation font-medium text-slide-text underline underline-offset-4 transition-colors hover:text-slide-accent-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slide-accent focus-visible:rounded"
             >
               Download for macOS
             </a>

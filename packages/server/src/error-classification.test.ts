@@ -97,6 +97,13 @@ describe('classifyGitError', () => {
       expect(r.retryable).toBe(false);
     });
 
+    test('reversed "expired token" wording → unknown-auth, not 401 (delegation preserves output)', () => {
+      const r = classifyGitError(mkErr('expired token'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+      expect(r.retryable).toBe(false);
+    });
+
     test('permission denied (publickey)', () => {
       const r = classifyGitError(mkErr('Permission denied (publickey).'));
       expect(r.class).toBe('auth');
@@ -149,6 +156,34 @@ describe('classifyGitError', () => {
 
     test('deriveUserFacingCode maps auth/no-credential', () => {
       expect(deriveUserFacingCode('auth', 'no-credential')).toBe('auth-no-credential');
+    });
+
+    test('unknown-auth subclass — "Authentication failed" without 401/403 signal', () => {
+      const r = classifyGitError(mkErr('Authentication failed for remote'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+      expect(r.retryable).toBe(false);
+      expect(r.message).toBe('Authentication failed');
+    });
+
+    test('unknown-auth subclass — bad credentials without 401/403 signal', () => {
+      const r = classifyGitError(mkErr('remote: Bad credentials'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+    });
+
+    test('ssh-auth subclass — SSH publickey denied (delegation preserves output)', () => {
+      const r = classifyGitError(mkErr('Permission denied (publickey).'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('ssh-auth');
+      expect(r.retryable).toBe(false);
+      expect(r.message).toBe('SSH authentication failed — check your SSH key or host-key trust');
+    });
+
+    test('ssh-auth subclass — host key verification failed', () => {
+      const r = classifyGitError(mkErr('Host key verification failed.'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('ssh-auth');
     });
   });
 
@@ -317,8 +352,8 @@ describe('classifyGitError', () => {
       expect(r.retryable).toBe(true);
     });
 
-    test('ENOSPC', () => {
-      const r = classifyGitError(mkErr('ENOSPC: no space left on device'));
+    test('bare ENOSPC (case-insensitive, no "no space left" text to fall back on)', () => {
+      const r = classifyGitError(mkErr('fatal: write error: ENOSPC'));
       expect(r.class).toBe('local');
       expect(r.subclass).toBe('disk-full');
       expect(r.retryable).toBe(true);
