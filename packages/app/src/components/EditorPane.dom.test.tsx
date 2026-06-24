@@ -14,7 +14,9 @@ mock.module('@lingui/react/macro', () => ({
 
 let hasRemote = false;
 let projectLocalSynced = false;
+let projectSynced = false;
 let projectLocalConfig: { autoSync?: { enabled?: boolean | null } } | null = null;
+let projectConfig: { autoSync?: { default?: boolean | null } } | null = null;
 
 mock.module('@/hooks/use-git-sync-status', () => ({
   useGitSyncStatus: () => ({
@@ -24,7 +26,12 @@ mock.module('@/hooks/use-git-sync-status', () => ({
 }));
 
 mock.module('@/lib/config-provider', () => ({
-  useConfigContext: () => ({ projectLocalConfig, projectLocalSynced }),
+  useConfigContext: () => ({
+    projectConfig,
+    projectLocalConfig,
+    projectLocalSynced,
+    projectSynced,
+  }),
 }));
 
 mock.module('@/lib/use-workspace', () => ({
@@ -102,7 +109,9 @@ describe('EditorPane auto-sync onboarding gate', () => {
     cleanup();
     hasRemote = false;
     projectLocalSynced = false;
+    projectSynced = false;
     projectLocalConfig = null;
+    projectConfig = null;
   });
 
   test('exports the EditorPane component', async () => {
@@ -110,10 +119,12 @@ describe('EditorPane auto-sync onboarding gate', () => {
     expect(typeof mod.EditorPane).toBe('function');
   });
 
-  test('opens only when remote exists, project-local config is synced, and autoSync.enabled is null', async () => {
+  test('opens when remote exists, both configs synced, enabled is null, and no committed default', async () => {
     hasRemote = true;
+    projectSynced = true;
     projectLocalSynced = true;
     projectLocalConfig = { autoSync: { enabled: null } };
+    projectConfig = { autoSync: { default: null } };
 
     await renderEditorPane();
 
@@ -121,16 +132,77 @@ describe('EditorPane auto-sync onboarding gate', () => {
   });
 
   test.each([
-    ['no remote', false, true, { autoSync: { enabled: null } }],
-    ['project-local config not synced', true, false, { autoSync: { enabled: null } }],
-    ['project-local config missing', true, true, null],
-    ['enabled true already answered', true, true, { autoSync: { enabled: true } }],
-    ['enabled false already answered', true, true, { autoSync: { enabled: false } }],
-    ['enabled undefined is not the unanswered sentinel', true, true, { autoSync: {} }],
-  ] as const)('stays closed when %s', async (_label, nextHasRemote, nextSynced, nextProjectLocalConfig) => {
+    [
+      'no remote',
+      false,
+      true,
+      true,
+      { autoSync: { enabled: null } },
+      { autoSync: { default: null } },
+    ],
+    [
+      'committed config not synced',
+      true,
+      false,
+      true,
+      { autoSync: { enabled: null } },
+      { autoSync: { default: null } },
+    ],
+    [
+      'project-local config not synced',
+      true,
+      true,
+      false,
+      { autoSync: { enabled: null } },
+      { autoSync: { default: null } },
+    ],
+    ['project-local config missing', true, true, true, null, { autoSync: { default: null } }],
+    [
+      'enabled true already answered',
+      true,
+      true,
+      true,
+      { autoSync: { enabled: true } },
+      { autoSync: { default: null } },
+    ],
+    [
+      'enabled false already answered',
+      true,
+      true,
+      true,
+      { autoSync: { enabled: false } },
+      { autoSync: { default: null } },
+    ],
+    [
+      'enabled undefined is not the unanswered sentinel',
+      true,
+      true,
+      true,
+      { autoSync: {} },
+      { autoSync: { default: null } },
+    ],
+    [
+      'committed default off suppresses the prompt',
+      true,
+      true,
+      true,
+      { autoSync: { enabled: null } },
+      { autoSync: { default: false } },
+    ],
+    [
+      'committed default on suppresses the prompt',
+      true,
+      true,
+      true,
+      { autoSync: { enabled: null } },
+      { autoSync: { default: true } },
+    ],
+  ] as const)('stays closed when %s', async (_label, nextHasRemote, nextProjectSynced, nextSynced, nextProjectLocalConfig, nextProjectConfig) => {
     hasRemote = nextHasRemote;
+    projectSynced = nextProjectSynced;
     projectLocalSynced = nextSynced;
     projectLocalConfig = nextProjectLocalConfig;
+    projectConfig = nextProjectConfig;
 
     await renderEditorPane();
 
@@ -139,8 +211,10 @@ describe('EditorPane auto-sync onboarding gate', () => {
 
   test('resolved onboarding dismisses the dialog in the same render path', async () => {
     hasRemote = true;
+    projectSynced = true;
     projectLocalSynced = true;
     projectLocalConfig = { autoSync: { enabled: null } };
+    projectConfig = { autoSync: { default: null } };
     await renderEditorPane();
 
     const dialog = screen.getByTestId('auto-sync-onboarding');

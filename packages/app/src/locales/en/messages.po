@@ -2438,6 +2438,10 @@ msgstr "Failed to reorder"
 msgid "Failed to update property"
 msgstr "Failed to update property"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Failed to update the project sync default — {detail}"
+msgstr "Failed to update the project sync default — {detail}"
+
 #: src/components/FileTree.tsx
 msgid "Failed to upload file"
 msgstr "Failed to upload file"
@@ -3764,6 +3768,10 @@ msgstr "No templates yet. Add one to give new docs in this folder a ready-made s
 msgid "No workspace"
 msgstr "No workspace"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "None"
+msgstr "None"
+
 #: src/components/settings/AccountSection.tsx
 msgid "Not connected"
 msgstr "Not connected"
@@ -3813,6 +3821,10 @@ msgstr "Object"
 msgid "of {totalPages}"
 msgstr "of {totalPages}"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Off"
+msgstr "Off"
+
 #: src/components/settings/SearchSection.tsx
 msgid "Off — search ranks by keyword only. No content leaves this computer."
 msgstr "Off — search ranks by keyword only. No content leaves this computer."
@@ -3828,6 +3840,10 @@ msgstr "OK Desktop"
 #: src/components/ConnectingBanner.tsx
 msgid "ok ui responded but server.lock has no port yet"
 msgstr "ok ui responded but server.lock has no port yet"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "On"
+msgstr "On"
 
 #: src/components/settings/SearchSection.tsx
 msgid "On — your search queries and the text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
@@ -5058,6 +5074,10 @@ msgid "Set identity"
 msgstr "Set identity"
 
 #: src/components/settings/SettingsDialogBody.tsx
+msgid "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+msgstr "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+
+#: src/components/settings/SettingsDialogBody.tsx
 msgid "Set up syncing"
 msgstr "Set up syncing"
 
@@ -5118,6 +5138,14 @@ msgstr "Share URL"
 #: src/components/SharingModeField.tsx
 msgid "Shared"
 msgstr "Shared"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared auto-sync default"
+msgstr "Shared auto-sync default"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared default"
+msgstr "Shared default"
 
 #: src/components/AutoSyncEnableWarning.tsx
 msgid "Shared repositories"
@@ -5432,6 +5460,7 @@ msgid "Sync paused — you don't have permission to push to this repo"
 msgstr "Sync paused — you don't have permission to push to this repo"
 
 #: src/components/AutoSyncOnboardingDialog.tsx
+#: src/components/settings/SettingsDialogBody.tsx
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Sync settings not yet loaded — try again in a moment"
 msgstr "Sync settings not yet loaded — try again in a moment"

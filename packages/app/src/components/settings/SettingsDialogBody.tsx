@@ -51,6 +51,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   useEnableSyncWithConfirm,
+  useSyncDefaultWriter,
   useSyncEnabledWriter,
 } from '@/hooks/use-enable-sync-with-confirm';
 import { useGitSyncStatus } from '@/hooks/use-git-sync-status';
@@ -108,6 +109,9 @@ const FIELDS_USER_PREFERENCES: FieldDef[] = [
     description: msg`When enabled, the agent opens or refreshes the preview after each edit. Disable if you manage your own preview window (OK Desktop, a browser tab on another display, etc.).`,
   },
 ];
+
+const COMMITTED_DEFAULT_SELECTED_CLASS =
+  'data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90';
 
 interface SettingsDialogBodyProps {
   activeId: string;
@@ -410,8 +414,10 @@ function SchemaSection({
 function SyncSection() {
   const { t } = useLingui();
   const status = useGitSyncStatus();
-  const { projectLocalConfig, projectLocalSynced } = useConfigContext();
+  const { projectConfig, projectLocalConfig, projectLocalSynced, projectSynced } =
+    useConfigContext();
   const writer = useSyncEnabledWriter();
+  const defaultWriter = useSyncDefaultWriter();
   const { confirmOpen, setConfirmOpen, onToggleRequest, onConfirm } =
     useEnableSyncWithConfirm(writer);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -485,6 +491,23 @@ function SyncSection() {
     status?.pausedReason === 'no-push-permission';
   const sectionMessage =
     isPushDenied || !status?.pausedReason ? null : formatPausedReason(status.pausedReason);
+
+  const committedDefault = projectConfig?.autoSync?.default ?? null;
+  const committedDefaultValue =
+    committedDefault === true ? 'on' : committedDefault === false ? 'off' : 'ask';
+  function onCommittedDefaultChange(next: string) {
+    if (next !== 'ask' && next !== 'on' && next !== 'off') return;
+    if (defaultWriter === null) {
+      toast.error(t`Sync settings not yet loaded — try again in a moment`);
+      return;
+    }
+    const value = next === 'on' ? true : next === 'off' ? false : null;
+    const result = defaultWriter(value);
+    if (!result.ok) {
+      const detail = result.error;
+      toast.error(t`Failed to update the project sync default — ${detail}`);
+    }
+  }
 
   return (
     <section aria-labelledby="settings-sync-title" className="space-y-3">
@@ -582,6 +605,51 @@ function SyncSection() {
             </Button>
           </div>
         )}
+      </div>
+      <div className="rounded-md border p-3 space-y-2" data-testid="settings-sync-default">
+        <div className="space-y-0.5">
+          <div className="text-sm font-medium">
+            <Trans>Shared default</Trans>
+          </div>
+          <p className="text-muted-foreground text-1sm">
+            <Trans>
+              Set the auto-sync default for users opening this project for the first time. This
+              setting is committed to your repository.
+            </Trans>
+          </p>
+        </div>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          spacing={2}
+          value={committedDefaultValue}
+          onValueChange={onCommittedDefaultChange}
+          disabled={!projectSynced}
+          aria-label={t`Shared auto-sync default`}
+          data-testid="settings-sync-default-toggle"
+        >
+          <ToggleGroupItem
+            value="ask"
+            className={COMMITTED_DEFAULT_SELECTED_CLASS}
+            data-testid="settings-sync-default-ask"
+          >
+            <Trans>None</Trans>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="on"
+            className={COMMITTED_DEFAULT_SELECTED_CLASS}
+            data-testid="settings-sync-default-on"
+          >
+            <Trans>On</Trans>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="off"
+            className={COMMITTED_DEFAULT_SELECTED_CLASS}
+            data-testid="settings-sync-default-off"
+          >
+            <Trans>Off</Trans>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       <EnableSyncConfirmDialog
         open={confirmOpen}

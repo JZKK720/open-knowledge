@@ -136,7 +136,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
     ]);
   });
 
-  test('project-strict fields cover content.dir + telemetry.localSink.*', () => {
+  test('project-strict fields cover autoSync.default + content.dir + telemetry.localSink.*', () => {
     const leaves: { path: string[]; schema: unknown }[] = [];
     walkLeaves(ConfigSchema, [], leaves);
     const projectStrict = leaves
@@ -144,6 +144,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       .map((l) => l.path.join('.'))
       .sort();
     expect(projectStrict).toEqual([
+      'autoSync.default',
       'content.dir',
       'telemetry.localSink.attributeDenylist',
       'telemetry.localSink.enabled',

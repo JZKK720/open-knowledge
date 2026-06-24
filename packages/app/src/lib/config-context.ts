@@ -10,6 +10,7 @@ export interface ConfigContextValue {
   okignoreSynced: boolean;
   userConfig: Config | null;
   projectConfig: Config | null;
+  projectSynced: boolean;
   projectLocalConfig: Config | null;
   projectLocalSynced: boolean;
   merged: Config | null;

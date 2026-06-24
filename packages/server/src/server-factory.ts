@@ -240,7 +240,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     if (!local.valid) {
       log.warn(
         {},
-        '[config] project-local autoSync.enabled unavailable (config invalid) — falling back to project config',
+        '[config] project-local autoSync.enabled unavailable (config invalid) — falling back to the committed project default',
       );
     }
     const project = readConfigSafely({
@@ -248,7 +248,13 @@ export function createServer(options: ServerOptions): ServerInstance {
       sideline: false,
       warn: (message) => log.warn({ message }, '[config] could not read project config'),
     });
-    return project.value.autoSync?.enabled === true;
+    if (!project.valid) {
+      log.warn(
+        {},
+        '[config] committed autoSync.default unavailable (project config invalid) — defaulting to disabled',
+      );
+    }
+    return project.value.autoSync?.default === true;
   }
 
   function readSemanticSearchConfig(): ResolvedSemanticConfig {

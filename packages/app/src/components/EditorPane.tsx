@@ -54,7 +54,8 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
   const launchNonceRef = useRef(0);
 
   const syncStatus = useGitSyncStatus();
-  const { projectLocalConfig, projectLocalSynced } = useConfigContext();
+  const { projectConfig, projectLocalConfig, projectLocalSynced, projectSynced } =
+    useConfigContext();
   const workspace = useWorkspace();
 
   const { activeDocName } = useDocumentContext();
@@ -63,7 +64,9 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     autoSyncOnboardingDismissed,
     hasRemote: syncStatus?.hasRemote,
     projectLocalSynced,
+    projectSynced,
     projectLocalConfig,
+    projectConfig,
     pushPermissionCheckStatus: syncStatus?.pushPermission?.checkStatus,
   });
 
