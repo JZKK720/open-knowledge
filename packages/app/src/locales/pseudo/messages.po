@@ -2433,6 +2433,10 @@ msgstr ""
 msgid "Failed to update property"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Failed to update the project sync default — {detail}"
+msgstr ""
+
 #: src/components/FileTree.tsx
 msgid "Failed to upload file"
 msgstr ""
@@ -3759,6 +3763,10 @@ msgstr ""
 msgid "No workspace"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "None"
+msgstr ""
+
 #: src/components/settings/AccountSection.tsx
 msgid "Not connected"
 msgstr ""
@@ -3808,6 +3816,10 @@ msgstr ""
 msgid "of {totalPages}"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Off"
+msgstr ""
+
 #: src/components/settings/SearchSection.tsx
 msgid "Off — search ranks by keyword only. No content leaves this computer."
 msgstr ""
@@ -3822,6 +3834,10 @@ msgstr ""
 
 #: src/components/ConnectingBanner.tsx
 msgid "ok ui responded but server.lock has no port yet"
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "On"
 msgstr ""
 
 #: src/components/settings/SearchSection.tsx
@@ -5053,6 +5069,10 @@ msgid "Set identity"
 msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
+msgid "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
 msgid "Set up syncing"
 msgstr ""
 
@@ -5112,6 +5132,14 @@ msgstr ""
 #: src/components/settings/SharingSection.tsx
 #: src/components/SharingModeField.tsx
 msgid "Shared"
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared auto-sync default"
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared default"
 msgstr ""
 
 #: src/components/AutoSyncEnableWarning.tsx
@@ -5427,6 +5455,7 @@ msgid "Sync paused — you don't have permission to push to this repo"
 msgstr ""
 
 #: src/components/AutoSyncOnboardingDialog.tsx
+#: src/components/settings/SettingsDialogBody.tsx
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Sync settings not yet loaded — try again in a moment"
 msgstr ""

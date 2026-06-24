@@ -104,8 +104,19 @@ export const ConfigSchema = z.looseObject({
         })
         .nullable()
         .default(null),
+      default: z
+        .boolean()
+        .register(fieldRegistry, {
+          scope: 'project',
+          agentSettable: false,
+          defaultScope: 'project',
+          description:
+            "Committed project default for a machine's autoSync.enabled on first open: true = auto-sync on, false = off, null = ask (show the onboarding prompt). Shared via git. A per-machine autoSync.enabled choice overrides it.",
+        })
+        .nullable()
+        .default(null),
     })
-    .default({ enabled: null }),
+    .default({ enabled: null, default: null }),
   terminal: z
     .looseObject({
       enabled: z

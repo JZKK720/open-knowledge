@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { type ReactNode, useState } from 'react';
+import { createContext, type ReactNode, use, useState } from 'react';
 import { renderLinguiTemplate } from '@/test-utils/lingui-mock';
 
 type SyncStatus = {
@@ -21,7 +21,12 @@ let projectLocalConfig: { autoSync?: { enabled?: boolean } } | null = {
   autoSync: { enabled: true },
 };
 let projectLocalSynced = true;
+let projectConfig: { autoSync?: { default?: boolean | null } } | null = {
+  autoSync: { default: null },
+};
+let projectSynced = true;
 let syncWriterCalls: boolean[] = [];
+let syncDefaultWriterCalls: Array<boolean | null> = [];
 let okignoreProps: Array<{ binding: unknown; synced: boolean }> = [];
 let installDialogProps: Array<{
   open: boolean;
@@ -109,13 +114,43 @@ mock.module('@/components/ui/input', () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
+const ToggleGroupHandlerCtx = createContext<((value: string) => void) | undefined>(undefined);
 mock.module('@/components/ui/toggle-group', () => ({
-  ToggleGroup: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  ToggleGroupItem: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
+  ToggleGroup: ({
+    children,
+    value,
+    onValueChange,
+    disabled,
+    ...props
+  }: {
+    children?: ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+    disabled?: boolean;
+    [key: string]: unknown;
+  }) => (
+    <ToggleGroupHandlerCtx.Provider value={onValueChange}>
+      <div data-value={value} data-disabled={String(Boolean(disabled))} {...props}>
+        {children}
+      </div>
+    </ToggleGroupHandlerCtx.Provider>
   ),
+  ToggleGroupItem: ({
+    children,
+    value,
+    ...props
+  }: {
+    children?: ReactNode;
+    value?: string;
+    [key: string]: unknown;
+  }) => {
+    const onValueChange = use(ToggleGroupHandlerCtx);
+    return (
+      <button type="button" onClick={() => onValueChange?.(value as string)} {...props}>
+        {children}
+      </button>
+    );
+  },
 }));
 
 mock.module('@/components/ui/tooltip', () => ({
@@ -167,8 +202,10 @@ mock.module('@/hooks/use-git-sync-status', () => ({
 
 mock.module('@/lib/config-provider', () => ({
   useConfigContext: () => ({
+    projectConfig,
     projectLocalConfig,
     projectLocalSynced,
+    projectSynced,
   }),
 }));
 
@@ -179,6 +216,10 @@ mock.module('@/hooks/use-enable-sync-with-confirm', () => ({
       return true;
     },
   }),
+  useSyncDefaultWriter: () => (next: boolean | null) => {
+    syncDefaultWriterCalls.push(next);
+    return { ok: true };
+  },
   useEnableSyncWithConfirm: (writer: { write: (enabled: boolean) => boolean }) => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     return {
@@ -246,7 +287,10 @@ describe('SettingsDialogBody section runtime dispatch', () => {
     syncStatus = null;
     projectLocalConfig = { autoSync: { enabled: true } };
     projectLocalSynced = true;
+    projectConfig = { autoSync: { default: null } };
+    projectSynced = true;
     syncWriterCalls = [];
+    syncDefaultWriterCalls = [];
     okignoreProps = [];
     installDialogProps = [];
     publishDialogProps = [];
@@ -323,6 +367,52 @@ describe('SettingsDialogBody section runtime dispatch', () => {
     expect(screen.getByTestId('settings-sync-toggle').hasAttribute('disabled')).toBe(true);
     expect(screen.getByTestId('settings-sync-remote-label').textContent).toBe(
       'ssh://git.example/repo.git',
+    );
+  });
+
+  test('committed default control reflects autoSync.default and writes the chosen seed', async () => {
+    syncStatus = {
+      state: 'enabled',
+      hasRemote: true,
+      syncEnabled: false,
+      remote: {
+        label: 'inkeep/open-knowledge',
+        webUrl: 'https://github.com/inkeep/open-knowledge',
+      },
+    };
+    projectConfig = { autoSync: { default: false } };
+    projectSynced = true;
+
+    await renderBody({ activeId: 'sync' });
+
+    expect(screen.getByTestId('settings-sync-default-toggle').getAttribute('data-value')).toBe(
+      'off',
+    );
+
+    fireEvent.click(screen.getByTestId('settings-sync-default-on'));
+    expect(syncDefaultWriterCalls).toEqual([true]);
+
+    fireEvent.click(screen.getByTestId('settings-sync-default-ask'));
+    expect(syncDefaultWriterCalls).toEqual([true, null]);
+  });
+
+  test('committed default control is disabled until the committed config has synced', async () => {
+    syncStatus = {
+      state: 'enabled',
+      hasRemote: true,
+      syncEnabled: false,
+      remote: {
+        label: 'inkeep/open-knowledge',
+        webUrl: 'https://github.com/inkeep/open-knowledge',
+      },
+    };
+    projectConfig = { autoSync: { default: null } };
+    projectSynced = false;
+
+    await renderBody({ activeId: 'sync' });
+
+    expect(screen.getByTestId('settings-sync-default-toggle').getAttribute('data-disabled')).toBe(
+      'true',
     );
   });
 

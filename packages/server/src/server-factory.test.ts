@@ -777,6 +777,31 @@ describe('createServer() — project-local file watcher → engine.setEnabled', 
 
     await srv.destroy();
   });
+
+  test('external write of committed autoSync.default: true flips engine state (unanswered machine)', async () => {
+    const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
+    const srv = createServer({
+      contentDir,
+      projectDir: testProjectDir,
+      quiet: true,
+      configHomedirOverride: testHomedir,
+    });
+    await srv.ready;
+
+    expect(srv.syncEngine?.getStatus().syncEnabled).toBe(false);
+
+    mkdirSync(join(testProjectDir, '.ok'), { recursive: true });
+    writeFileSync(
+      join(testProjectDir, '.ok', 'config.yml'),
+      'autoSync:\n  default: true\n',
+      'utf-8',
+    );
+
+    const flipped = await waitFor(() => srv.syncEngine?.getStatus().syncEnabled === true);
+    expect(flipped).toBe(true);
+
+    await srv.destroy();
+  });
 });
 
 describe('createServer() — okignore + gitignore multi-path watcher (US-005)', () => {
@@ -1728,8 +1753,8 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     await srv.destroy();
   });
 
-  test('project-local absent + project autoSync.enabled: true → engine boots enabled (legacy fallback)', async () => {
-    seedProjectConfig('autoSync:\n  enabled: true\n');
+  test('project-local absent + committed autoSync.default: true → engine boots enabled', async () => {
+    seedProjectConfig('autoSync:\n  default: true\n');
     const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
     const srv = createServer({
       contentDir,
@@ -1739,6 +1764,34 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     });
     await srv.ready;
     expect(srv.syncEngine?.getStatus().syncEnabled).toBe(true);
+    await srv.destroy();
+  });
+
+  test('project-local absent + committed autoSync.default: false → engine boots disabled', async () => {
+    seedProjectConfig('autoSync:\n  default: false\n');
+    const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
+    const srv = createServer({
+      contentDir,
+      projectDir: testProjectDir,
+      quiet: true,
+      configHomedirOverride: testHomedir,
+    });
+    await srv.ready;
+    expect(srv.syncEngine?.getStatus().syncEnabled).toBe(false);
+    await srv.destroy();
+  });
+
+  test('committed autoSync.enabled is ignored (scope-mismatched) → engine boots disabled', async () => {
+    seedProjectConfig('autoSync:\n  enabled: true\n');
+    const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
+    const srv = createServer({
+      contentDir,
+      projectDir: testProjectDir,
+      quiet: true,
+      configHomedirOverride: testHomedir,
+    });
+    await srv.ready;
+    expect(srv.syncEngine?.getStatus().syncEnabled).toBe(false);
     await srv.destroy();
   });
 
@@ -1755,9 +1808,9 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     await srv.destroy();
   });
 
-  test('project-local autoSync.enabled: false short-circuits — does NOT fall through to project: true', async () => {
+  test('project-local enabled: false beats committed default: true (machine override wins)', async () => {
     seedProjectLocalConfig('autoSync:\n  enabled: false\n');
-    seedProjectConfig('autoSync:\n  enabled: true\n');
+    seedProjectConfig('autoSync:\n  default: true\n');
     const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
     const srv = createServer({
       contentDir,
@@ -1770,9 +1823,9 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     await srv.destroy();
   });
 
-  test('project-local autoSync.enabled: null falls through to project: true', async () => {
-    seedProjectLocalConfig('autoSync:\n  enabled: null\n');
-    seedProjectConfig('autoSync:\n  enabled: true\n');
+  test('project-local enabled: true beats committed default: false (machine override wins)', async () => {
+    seedProjectLocalConfig('autoSync:\n  enabled: true\n');
+    seedProjectConfig('autoSync:\n  default: false\n');
     const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
     const srv = createServer({
       contentDir,
@@ -1785,9 +1838,9 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     await srv.destroy();
   });
 
-  test('invalid project-local YAML falls through to project (degraded path)', async () => {
-    seedProjectLocalConfig('autoSync:\n  enabled: : not-yaml [[[\n');
-    seedProjectConfig('autoSync:\n  enabled: true\n');
+  test('project-local autoSync.enabled: null falls through to committed default: true', async () => {
+    seedProjectLocalConfig('autoSync:\n  enabled: null\n');
+    seedProjectConfig('autoSync:\n  default: true\n');
     const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
     const srv = createServer({
       contentDir,
@@ -1797,6 +1850,35 @@ describe('createServer() — readProjectAutoSyncEnabled precedence', () => {
     });
     await srv.ready;
     expect(srv.syncEngine?.getStatus().syncEnabled).toBe(true);
+    await srv.destroy();
+  });
+
+  test('invalid project-local YAML falls through to committed default (degraded path)', async () => {
+    seedProjectLocalConfig('autoSync:\n  enabled: : not-yaml [[[\n');
+    seedProjectConfig('autoSync:\n  default: true\n');
+    const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
+    const srv = createServer({
+      contentDir,
+      projectDir: testProjectDir,
+      quiet: true,
+      configHomedirOverride: testHomedir,
+    });
+    await srv.ready;
+    expect(srv.syncEngine?.getStatus().syncEnabled).toBe(true);
+    await srv.destroy();
+  });
+
+  test('invalid committed config defaults to disabled (degraded path)', async () => {
+    seedProjectConfig('autoSync:\n  default: : not-yaml [[[\n');
+    const contentDir = mkdtempSync(resolve(testProjectDir, 'content-'));
+    const srv = createServer({
+      contentDir,
+      projectDir: testProjectDir,
+      quiet: true,
+      configHomedirOverride: testHomedir,
+    });
+    await srv.ready;
+    expect(srv.syncEngine?.getStatus().syncEnabled).toBe(false);
     await srv.destroy();
   });
 });

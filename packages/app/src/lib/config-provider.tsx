@@ -113,6 +113,7 @@ export function ConfigProvider({
   const [projectState, setProjectState] = useState<{
     binding: ConfigBinding;
     config: Config;
+    synced: boolean;
   } | null>(null);
   const [projectLocalState, setProjectLocalState] = useState<{
     binding: ConfigBinding;
@@ -145,7 +146,11 @@ export function ConfigProvider({
       config: userScoped.config,
       synced: userScoped.binding.hasSynced(),
     });
-    setProjectState({ binding: projectScoped.binding, config: projectScoped.config });
+    setProjectState({
+      binding: projectScoped.binding,
+      config: projectScoped.config,
+      synced: projectScoped.binding.hasSynced(),
+    });
     setProjectLocalState({
       binding: projectLocalScoped.binding,
       config: projectLocalScoped.config,
@@ -166,6 +171,11 @@ export function ConfigProvider({
     const unsubProject = projectScoped.binding.subscribe((next) => {
       setProjectState((prev) =>
         prev?.binding === projectScoped.binding ? { ...prev, config: next } : prev,
+      );
+    });
+    const unsubProjectSynced = projectScoped.binding.subscribeSynced(() => {
+      setProjectState((prev) =>
+        prev?.binding === projectScoped.binding ? { ...prev, synced: true } : prev,
       );
     });
     const unsubProjectLocal = projectLocalScoped.binding.subscribe((next) => {
@@ -189,6 +199,7 @@ export function ConfigProvider({
       unsubUser();
       unsubUserSynced();
       unsubProject();
+      unsubProjectSynced();
       unsubProjectLocal();
       unsubProjectLocalSynced();
       okignoreScoped.provider.off('synced', handleOkignoreSynced);
@@ -235,6 +246,7 @@ export function ConfigProvider({
     okignoreSynced: okignoreState?.synced ?? false,
     userConfig: userState?.config ?? null,
     projectConfig: projectState?.config ?? null,
+    projectSynced: projectState?.synced ?? false,
     projectLocalConfig: projectLocalState?.config ?? null,
     projectLocalSynced: projectLocalState?.synced ?? false,
     merged,

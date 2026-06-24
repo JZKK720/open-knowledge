@@ -37,6 +37,7 @@ function makeConfigValue(wordWrap: boolean): ConfigContextValue {
     userConfig: null,
     projectConfig: null,
     projectLocalConfig: null,
+    projectSynced: false,
     projectLocalSynced: false,
     merged: { editor: { wordWrap } } as Config,
   };

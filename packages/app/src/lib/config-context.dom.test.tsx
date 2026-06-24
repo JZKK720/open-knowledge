@@ -14,6 +14,7 @@ function makeContextValue(): ConfigContextValue {
     userConfig: null,
     projectConfig: null,
     projectLocalConfig: null,
+    projectSynced: false,
     projectLocalSynced: false,
     merged: { editor: { wordWrap: false } } as Config,
   };

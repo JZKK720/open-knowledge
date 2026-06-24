@@ -511,6 +511,7 @@
     "EbZT7P": ["Toggle the left file sidebar."],
     "EcM3k7": ["Failed to clean up pending ", ["kind"]],
     "EcR0fl": ["Checking for installed agents"],
+    "EdQY6l": ["None"],
     "EeRZnZ": ["Expand burst ", ["burstNumber"], " diff"],
     "Ef7StM": ["Unknown"],
     "EhDLBx": ["You modified <0>", ["filePath"], "</0> locally, but it was deleted upstream."],
@@ -1012,6 +1013,9 @@
     "W-ntoW": ["heading-slug"],
     "W0i24j": ["Object"],
     "W1qRuM": ["This document is already active in the editor. Use Open to collapse the graph."],
+    "W3Xlpc": [
+      "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+    ],
     "W5A0Ly": ["An unexpected error occurred."],
     "W8vpBM": ["starter pack"],
     "W9_Bub": ["Local changes overlap with incoming sync"],
@@ -1099,6 +1103,7 @@
     "Z1LF1M": ["Sharing a doc needs a GitHub repository. Create one for this project."],
     "Z2M5XM": ["Reason: ", ["reason"], " (", ["osDetail"], ")"],
     "Z3FXyt": ["Loading..."],
+    "Z5HWHd": ["On"],
     "Z5h97D": [
       "Hide files and folders from your knowledge base. Hidden items don’t appear in the file tree, search, or AI tools. <0>Learn more about patterns</0>."
     ],
@@ -1194,6 +1199,7 @@
     "aiArms": ["We couldn't clone this repository."],
     "ajz9F8": ["Couldn't load conflict content for ", ["filePath"], ". Try reloading the page."],
     "aoa6xA": ["network error (is `ok ui` running?)"],
+    "az8lvo": ["Off"],
     "b3Thhd": ["Upload failed"],
     "b4AQFK": ["Open activity panel for ", ["tooltipName"], ", editing ", ["realCurrentDoc"]],
     "b4itZn": ["Working"],
@@ -1275,6 +1281,7 @@
     ],
     "dprWmL": ["Anchor in this page"],
     "dr1vFs": ["Replace all matches"],
+    "dvGKu2": ["Shared auto-sync default"],
     "dw_dUJ": ["Failed to duplicate path"],
     "e0NrBM": ["Project"],
     "e1Rn_k": ["Open containing folder"],
@@ -1432,6 +1439,7 @@
     "jSY41h": ["\"", ["docName"], "\" took too long. Check your connection."],
     "jTLWxh": ["Embed an external page in an inline iframe (docs, demos, Figma, CodeSandbox)."],
     "jZ_E5M": ["Fetch failed — check the server logs for details."],
+    "j_Z6g7": ["Shared default"],
     "jbSG8V": ["Show Files (", ["sidebarShortcutLabel"], ")"],
     "jdGUeI": ["Couldn't create template: ", ["error"]],
     "jerqF0": ["Loading branch state"],
@@ -1585,6 +1593,7 @@
     "o5gfs1": [
       "This setting is per-machine and isn't shared with collaborators. It needs an API key set with <0>ok embeddings set-key</0>."
     ],
+    "oAFVKX": ["Failed to update the project sync default — ", ["detail"]],
     "oBXkm2": ["Delete code block"],
     "oCZkaG": ["Copy path"],
     "oJl7eO": ["Unknown component: ", ["componentName"], " — source editable below"],

@@ -19,9 +19,12 @@ mock.module('sonner', () => ({
 let projectLocalBinding: null | {
   patch: (patch: unknown) => { ok: true } | { ok: false; error: unknown };
 } = null;
+let projectBinding: null | {
+  patch: (patch: unknown) => { ok: true } | { ok: false; error: unknown };
+} = null;
 
 mock.module('@/lib/config-provider', () => ({
-  useConfigContext: () => ({ projectLocalBinding }),
+  useConfigContext: () => ({ projectBinding, projectLocalBinding }),
 }));
 
 type Writer = ((enabled: boolean) => { ok: true } | { ok: false; error: string }) | null;
@@ -52,6 +55,15 @@ function WriterProbe({ children: _children }: { children?: ReactNode }) {
   return <div data-testid="writer-present">{String(latestWriter !== null)}</div>;
 }
 
+type DefaultWriter = ((next: boolean | null) => { ok: true } | { ok: false; error: string }) | null;
+let latestDefaultWriter: DefaultWriter | undefined;
+
+function DefaultWriterProbe() {
+  if (!hooks) throw new Error('hooks not loaded');
+  latestDefaultWriter = hooks.useSyncDefaultWriter();
+  return <div data-testid="default-writer-present">{String(latestDefaultWriter !== null)}</div>;
+}
+
 describe('useEnableSyncWithConfirm runtime behavior', () => {
   let consoleErrorSpy: ReturnType<typeof spyOn>;
 
@@ -59,15 +71,18 @@ describe('useEnableSyncWithConfirm runtime behavior', () => {
     cleanup();
     latestConfirmState = null;
     latestWriter = undefined;
+    latestDefaultWriter = undefined;
     projectLocalBinding = null;
+    projectBinding = null;
     toastErrors.length = 0;
     consoleErrorSpy?.mockRestore();
   });
 
-  test('exports the hook and project-local writer adapter', async () => {
+  test('exports the hook and both writer adapters', async () => {
     const mod = await loadHooks();
     expect(typeof mod.useEnableSyncWithConfirm).toBe('function');
     expect(typeof mod.useSyncEnabledWriter).toBe('function');
+    expect(typeof mod.useSyncDefaultWriter).toBe('function');
   });
 
   test('off to on opens confirmation and writes true only after confirm', async () => {
@@ -164,6 +179,67 @@ describe('useSyncEnabledWriter runtime behavior', () => {
     render(<WriterProbe />);
 
     expect(latestWriter?.(false)).toEqual({
+      ok: false,
+      error: 'Failed to write config file: disk denied',
+    });
+  });
+});
+
+describe('useSyncDefaultWriter runtime behavior', () => {
+  afterEach(() => {
+    cleanup();
+    latestDefaultWriter = undefined;
+    projectBinding = null;
+    projectLocalBinding = null;
+  });
+
+  test('returns null until the committed project binding mounts', async () => {
+    await loadHooks();
+    projectBinding = null;
+    render(<DefaultWriterProbe />);
+
+    expect(screen.getByTestId('default-writer-present').textContent).toBe('false');
+    expect(latestDefaultWriter).toBeNull();
+  });
+
+  test('patches autoSync.default on the COMMITTED project binding, not project-local', async () => {
+    await loadHooks();
+    const committedPatches: unknown[] = [];
+    const localPatches: unknown[] = [];
+    projectBinding = {
+      patch: (patch: unknown) => {
+        committedPatches.push(patch);
+        return { ok: true };
+      },
+    };
+    projectLocalBinding = {
+      patch: (patch: unknown) => {
+        localPatches.push(patch);
+        return { ok: true };
+      },
+    };
+    render(<DefaultWriterProbe />);
+
+    expect(latestDefaultWriter?.(false)).toEqual({ ok: true });
+    expect(committedPatches).toEqual([{ autoSync: { default: false } }]);
+    expect(localPatches).toEqual([]);
+
+    expect(latestDefaultWriter?.(null)).toEqual({ ok: true });
+    expect(committedPatches).toEqual([
+      { autoSync: { default: false } },
+      { autoSync: { default: null } },
+    ]);
+    expect(localPatches).toEqual([]);
+  });
+
+  test('wraps binding errors into a string result for toast rendering', async () => {
+    await loadHooks();
+    projectBinding = {
+      patch: () => ({ ok: false, error: { code: 'WRITE_ERROR', detail: 'disk denied' } }),
+    };
+    render(<DefaultWriterProbe />);
+
+    expect(latestDefaultWriter?.(true)).toEqual({
       ok: false,
       error: 'Failed to write config file: disk denied',
     });

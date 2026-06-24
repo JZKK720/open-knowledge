@@ -16,6 +16,7 @@ function makeConfigValue(merged: Config | null): ConfigContextValue {
     userConfig: null,
     projectConfig: null,
     projectLocalConfig: null,
+    projectSynced: false,
     projectLocalSynced: false,
     merged,
   };
