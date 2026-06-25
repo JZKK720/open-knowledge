@@ -13,10 +13,10 @@ const PACKAGED_EXECUTABLE = resolve(
   '..',
   'dist-desktop',
   'mac-arm64',
-  'Open Knowledge.app',
+  'OpenKnowledge.app',
   'Contents',
   'MacOS',
-  'Open Knowledge',
+  'OpenKnowledge',
 );
 
 const SMOKE_ENABLED = process.env.OK_DESKTOP_E2E_SMOKE === '1';

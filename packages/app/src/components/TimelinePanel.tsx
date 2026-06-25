@@ -173,7 +173,7 @@ function ContributorIcon({ entry, isDark }: { entry: TimelineEntry; isDark: bool
     }
 
     if (c.name === 'File System') return <HardDrive className={iconClass} />;
-    if (c.name === 'Open Knowledge (service)' || c.name === 'Git (upstream)') {
+    if (c.name === 'OpenKnowledge (service)' || c.name === 'Git (upstream)') {
       return <ArrowDownToLine className={iconClass} />;
     }
 

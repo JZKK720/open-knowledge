@@ -34,7 +34,7 @@ export function ClaudeReadinessBanner({
   const isClaudeMissing = kind === 'claude-missing';
   const message = isClaudeMissing
     ? t`Claude Code (claude) isn't installed or on your PATH.`
-    : t`Claude Code is installed, but Open Knowledge tools aren't connected to it yet.`;
+    : t`Claude Code is installed, but OpenKnowledge tools aren't connected to it yet.`;
   const actionLabel = isClaudeMissing ? t`Get Claude Code` : t`Connect tools`;
 
   function handleAction() {
@@ -46,14 +46,14 @@ export function ClaudeReadinessBanner({
       .rewireClaudeMcp()
       .then((result) => {
         if (result.rewireError != null) {
-          toast.error(t`Couldn't connect Open Knowledge tools to Claude Code. Please try again.`);
+          toast.error(t`Couldn't connect OpenKnowledge tools to Claude Code. Please try again.`);
           return;
         }
         onDismiss();
       })
       .catch((err) => {
         console.warn('[terminal] rewireClaudeMcp failed:', err);
-        toast.error(t`Couldn't connect Open Knowledge tools to Claude Code. Please try again.`);
+        toast.error(t`Couldn't connect OpenKnowledge tools to Claude Code. Please try again.`);
       });
   }
 

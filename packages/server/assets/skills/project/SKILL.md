@@ -1,17 +1,17 @@
 ---
 name: open-knowledge
-description: "MUST invoke before reading or editing any `.md` / `.mdx` file, and before any `mcp__open-knowledge__*` tool call (`exec`, `search`, `write`, `edit`, and the rest). This skill is installed into the repository by `ok init`, so its presence alone means this is an Open Knowledge project — its runtime contract governs every markdown file here, with no need to probe for a `.ok/` directory. Authoritative agent-runtime contract for working inside this Open Knowledge project."
-compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires Open Knowledge MCP server + code execution."
+description: "MUST invoke before reading or editing any `.md` / `.mdx` file, and before any `mcp__open-knowledge__*` tool call (`exec`, `search`, `write`, `edit`, and the rest). This skill is installed into the repository by `ok init`, so its presence alone means this is an OpenKnowledge project — its runtime contract governs every markdown file here, with no need to probe for a `.ok/` directory. Authoritative agent-runtime contract for working inside this OpenKnowledge project."
+compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires OpenKnowledge MCP server + code execution."
 metadata:
   version: "0.19.0"
   author: "Inkeep"
   repository: "https://github.com/inkeep/open-knowledge"
 ---
-# Open Knowledge — agent guidance
+# OpenKnowledge — agent guidance
 
-Open Knowledge (OK) is a markdown-CRDT collaboration platform exposed via MCP. This skill carries the behavioral rules agents need to use it fluently. Every section is a MUST unless marked otherwise.
+OpenKnowledge (OK) is a markdown-CRDT collaboration platform exposed via MCP. This skill carries the behavioral rules agents need to use it fluently. Every section is a MUST unless marked otherwise.
 
-> **Authoritative source.** This skill is the single source of Open Knowledge agent guidance — the full attach rule, grounding rule, media rules, dead-link verification, and failure-mode guidance live only here.
+> **Authoritative source.** This skill is the single source of OpenKnowledge agent guidance — the full attach rule, grounding rule, media rules, dead-link verification, and failure-mode guidance live only here.
 
 > Skill version: tracks `@inkeep/open-knowledge-server` package version. Check `cat ~/.ok/skill-state.yml` to see what's installed locally. **Version floor:** `ok seed` (referenced below) requires `@inkeep/open-knowledge` >= 0.4.0. If `ok seed` errors with `unknown command`, upgrade: `npm install -g @inkeep/open-knowledge`.
 
@@ -45,19 +45,19 @@ Tools NOT in OK MCP (they belong to your agent host): `preview_start`, `preview_
 
 ## STOP — native tools on in-scope `.md` / `.mdx`
 
-When this workspace has Open Knowledge MCP configured, do **not** use your host's native file tools on markdown paths inside the content directory. The ban covers every common rationalization:
+When this workspace has OpenKnowledge MCP configured, do **not** use your host's native file tools on markdown paths inside the content directory. The ban covers every common rationalization:
 
 - **Native `Read` / `Grep` / `Glob` on in-scope `.md` / `.mdx`** — the original case.
 - **`Bash ls` / `Bash find` / `Bash cat` on dirs containing in-scope markdown** — use `exec("ls -A …")` / `exec("find … -name '*.md'")` / `exec("cat …")` instead. Native returns bare names; `exec` returns frontmatter, backlink counts, and recent activity per child. `-A` shows hidden entries (`.ok/`, `.okignore`) which OK projects carry; omit `.` and `..` rows that `-a` would add.
 - **Glob patterns that target markdown** (`**/*.md`, any dir known to be markdown-heavy like `specs/**`, `reports/**`, `docs/**`) — use `exec` with `find`, or `exec("ls -A <dir>")`.
-- **Dispatching the Explore / general-purpose subagent for markdown-heavy exploration** — subagents use native `Read` / `Grep` / `Glob` internally and bypass Open Knowledge entirely. Do markdown exploration yourself via `exec` / `search`. Subagents remain appropriate for **source-code** exploration.
+- **Dispatching the Explore / general-purpose subagent for markdown-heavy exploration** — subagents use native `Read` / `Grep` / `Glob` internally and bypass OpenKnowledge entirely. Do markdown exploration yourself via `exec` / `search`. Subagents remain appropriate for **source-code** exploration.
 - **Native `Read` / `Grep` on any in-scope markdown inside `.ok/`** — the `.ok/` directory is in-scope; if it carries `.md` / `.mdx`, treat those the same as any other knowledge-base file.
 
 Why: native tools skip frontmatter, backlinks, shadow-repo activity, and project git history that OK's tools return for every matched knowledge-base file. `exec` is the primary read surface; it runs read-only bash (`cat`, `ls`, `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut`) and returns raw stdout plus enriched metadata per file. One command or a pipe (`|`) per call — it is NOT a shell, so `&&` / `;` / redirects are rejected; list several dirs with `ls -A a b c` or make separate calls.
 
-**MCP tool visibility — not seeing `exec` is NOT the escape hatch.** MCP wiring varies by client. Claude Code, Cursor, Codex, Windsurf, VS Code — each surfaces MCP differently. Server labels are user-defined; tools may not appear as top-level symbols named `exec` in your specific UI. If Open Knowledge is registered as an MCP server in this workspace, route markdown reads through its `exec` / `search` via your client's documented MCP invocation (including any generic "call MCP tool" flow). Registration is the test, not top-level-symbol visibility.
+**MCP tool visibility — not seeing `exec` is NOT the escape hatch.** MCP wiring varies by client. Claude Code, Cursor, Codex, Windsurf, VS Code — each surfaces MCP differently. Server labels are user-defined; tools may not appear as top-level symbols named `exec` in your specific UI. If OpenKnowledge is registered as an MCP server in this workspace, route markdown reads through its `exec` / `search` via your client's documented MCP invocation (including any generic "call MCP tool" flow). Registration is the test, not top-level-symbol visibility.
 
-**Escape hatch.** Native `Read` / `Grep` / `Glob` on `.md` / `.mdx` is allowed **only** when no Open Knowledge MCP server is registered for this project, **or** immediately after you tried an MCP call and it failed — then begin a user-visible sentence with `Open Knowledge MCP unavailable:`. Never use the hatch because you skipped your client's MCP path, didn't see `exec` as a top-level tool, or rationalized the skill wasn't necessary.
+**Escape hatch.** Native `Read` / `Grep` / `Glob` on `.md` / `.mdx` is allowed **only** when no OpenKnowledge MCP server is registered for this project, **or** immediately after you tried an MCP call and it failed — then begin a user-visible sentence with `OpenKnowledge MCP unavailable:`. Never use the hatch because you skipped your client's MCP path, didn't see `exec` as a top-level tool, or rationalized the skill wasn't necessary.
 
 **Source code and non-markdown files** (`.ts`, `.py`, `package.json`, …): native `Read` / `Grep` / `Glob` always.
 
@@ -141,7 +141,7 @@ To author an MDX doc (the KB renders MDX/JSX components), set `extension: ".mdx"
 
 To delete a doc, call `delete({ document })` — never `rm` / `unlink` / native `Bash` removal on in-scope markdown. The MCP path closes open agent sessions and unloads the doc from Hocuspocus before unlinking; native `rm` desynchronizes those. Deletion is irreversible — call `checkpoint()` first if you may need to roll back (it snapshots the whole project; afterwards restore the doc via `restore_version({ document, version })`, finding the `version` in `history`), and `links({ kind: "backlinks", document })` first if you want to fix referrers that will become redlinks. To move or rename a doc instead of delete + rewrite, use `move({ from, to })` — it auto-detects document vs folder vs asset and rewrites incoming references atomically.
 
-**If `edit` returns "Text not found" on text you can verify exists on disk** (via `exec("cat …")`), the MCP session is likely stale (e.g., after a folder rename or server restart). Treat this as the escape-hatch trigger from the STOP block: prefix your next user-visible sentence with `Open Knowledge MCP unavailable:` and report the inconsistency. Don't loop on retries — the symptom is structural, not transient.
+**If `edit` returns "Text not found" on text you can verify exists on disk** (via `exec("cat …")`), the MCP session is likely stale (e.g., after a folder rename or server restart). Treat this as the escape-hatch trigger from the STOP block: prefix your next user-visible sentence with `OpenKnowledge MCP unavailable:` and report the inconsistency. Don't loop on retries — the symptom is structural, not transient.
 
 ## Conflict-aware writes
 
@@ -504,9 +504,9 @@ If `write` or `edit` returns a "Hocuspocus server is not running" error, start i
 
 ## Scope recap
 
-Open Knowledge looks for documents under the resolved `content.dir` (discoverable at runtime via `config({ key: 'content.dir' })`). `.gitignore` and `.okignore` (at the project root and at any folder depth) define exclusions. A folder's own metadata + templates live in nested `<folder>/.ok/frontmatter.yml` + `<folder>/.ok/templates/` — NOT in `.ok/config.yml`.
+OpenKnowledge looks for documents under the resolved `content.dir` (discoverable at runtime via `config({ key: 'content.dir' })`). `.gitignore` and `.okignore` (at the project root and at any folder depth) define exclusions. A folder's own metadata + templates live in nested `<folder>/.ok/frontmatter.yml` + `<folder>/.ok/templates/` — NOT in `.ok/config.yml`.
 
-Default mental model (no jargon): **every `.md` and `.mdx` under `content.dir`** not excluded by `.gitignore` or `.okignore` is an Open Knowledge document — including under `specs/`, `reports/`, `docs/`, etc. Read `.okignore` (and any nested `.okignore` files) once per turn to know what's excluded.
+Default mental model (no jargon): **every `.md` and `.mdx` under `content.dir`** not excluded by `.gitignore` or `.okignore` is an OpenKnowledge document — including under `specs/`, `reports/`, `docs/`, etc. Read `.okignore` (and any nested `.okignore` files) once per turn to know what's excluded.
 
 **First session in this project?** If substantial folders have no frontmatter of their own and no `templates_available`, the project isn't onboarded — invoke `workflow({ kind: 'discover' })` before writing.
 

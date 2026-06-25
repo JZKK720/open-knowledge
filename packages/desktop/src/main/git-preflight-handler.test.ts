@@ -196,7 +196,7 @@ describe('ensureGitAvailable', () => {
 
     expect(outcome).toBe('aborted');
     expect(boxCalls[0]?.title).toBe('Git too old');
-    expect(boxCalls[0]?.message).toBe('Open Knowledge requires Git 2.31.0 or newer.');
+    expect(boxCalls[0]?.message).toBe('OpenKnowledge requires Git 2.31.0 or newer.');
     expect(boxCalls[0]?.detail).toContain('detected 2.20.0 at /usr/bin/git');
   });
 
@@ -222,7 +222,7 @@ describe('ensureGitAvailable', () => {
     expect(boxCalls).toHaveLength(1);
     expect(boxCalls[0]?.type).toBe('error');
     expect(boxCalls[0]?.buttons).toEqual(['Quit']);
-    expect(boxCalls[0]?.title).toBe('Open Knowledge could not start');
+    expect(boxCalls[0]?.title).toBe('OpenKnowledge could not start');
     expect(boxCalls[0]?.detail).toContain('something completely different');
     expect(openExternal).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);

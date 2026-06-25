@@ -23,7 +23,7 @@ type ShareKind = 'doc' | 'folder';
 const DESCRIPTION = [
   "[Requires: Hocuspocus server] Build a shareable GitHub-substrate URL (`https://openknowledge.ai/d/...`) pinned to the project's current branch + the focused target (a doc or a folder). Read-only against the working tree — no commits, no pushes, no `git fetch`.",
   '',
-  'Use this when the user asks for a share link / shareable link / URL to send to a teammate. Recipients open the link to receive the doc (or folder subtree) into their own Open Knowledge install.',
+  'Use this when the user asks for a share link / shareable link / URL to send to a teammate. Recipients open the link to receive the doc (or folder subtree) into their own OpenKnowledge install.',
   '',
   '**Publishing is a user act.** Agents do NOT publish projects to GitHub from this tool. When the project has no GitHub remote, this tool returns an error pointing the user at the Share wizard (or `gh repo create` + `git push`) — it does not run those steps itself.',
   '',

@@ -12,7 +12,7 @@ const LEGACY_NPX_AT_LATEST = {
   args: ['-y', '@inkeep/open-knowledge@latest', 'mcp'],
 };
 const BUNDLE_ABSOLUTE = {
-  command: '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh',
+  command: '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh',
   args: ['mcp'],
 };
 const SYMLINK = { command: '/usr/local/bin/ok', args: ['mcp'] };

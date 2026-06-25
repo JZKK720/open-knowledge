@@ -13,8 +13,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { ensureCliOnPath, pathInstallMarkerPath } from './path-install.ts';
 
-const EXE = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
-const WRAPPER = '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh';
+const EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
+const WRAPPER = '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
 
 function home() {
   return mkdtempSync(join(tmpdir(), 'ok-path-install-'));
@@ -276,9 +276,9 @@ describe('ensureCliOnPath', () => {
       spawn: async () => ({ code: 0, stdout: `${h}/.ok/bin`, stderr: '' }),
     });
     await ensureCliOnPath(opts(EXE));
-    const newExe = '/Users/someone/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+    const newExe = '/Users/someone/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
     const newWrapper =
-      '/Users/someone/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh';
+      '/Users/someone/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
     const result = await ensureCliOnPath(opts(newExe));
     expect(result.status).toBe('installed');
     expect(readlinkSync(join(h, '.ok', 'bin', 'ok'))).toBe(newWrapper);

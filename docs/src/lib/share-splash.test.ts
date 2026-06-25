@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { encodeShareUrl } from '@inkeep/open-knowledge-core';
+import { STABLE_DMG_URL } from './download-links.ts';
 import {
   buildCloneCommand,
   buildCustomSchemeUrl,
@@ -344,9 +345,7 @@ describe('buildCustomSchemeUrl', () => {
 
 describe('SPLASH_DOWNLOAD_URL', () => {
   test('points at the open-knowledge releases latest DMG asset', () => {
-    expect(SPLASH_DOWNLOAD_URL).toBe(
-      'https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg',
-    );
+    expect(SPLASH_DOWNLOAD_URL).toBe(STABLE_DMG_URL);
   });
 });
 

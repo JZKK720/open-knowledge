@@ -22,7 +22,7 @@ export class SingleFileNotAFileError extends Error {
 
 export class SingleFileNotMarkdownError extends Error {
   constructor(readonly filePath: string) {
-    super(`Open Knowledge edits markdown files (.md / .mdx): ${filePath}`);
+    super(`OpenKnowledge edits markdown files (.md / .mdx): ${filePath}`);
     this.name = 'SingleFileNotMarkdownError';
   }
 }

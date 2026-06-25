@@ -14,7 +14,6 @@
       "Mark a block as the source of truth. Mirror references elsewhere render this content read-only and update live as you edit here."
     ],
     "-LHLx7": ["edited template"],
-    "-Q7TT9": ["That folder isn't an Open Knowledge project yet. Initialize it and open?"],
     "-QCLWk": ["Templates available"],
     "-Qw-1t": ["GitHub authentication failed. Try signing in again."],
     "-WFFG2": ["Default properties"],
@@ -64,6 +63,7 @@
       "Select, enter, or leave block components and fallback source blocks from keyboard boundaries."
     ],
     "0t0bbC": ["Could not save sync preference: ", ["detail"]],
+    "0uTHCg": ["Start a new OpenKnowledge project."],
     "0wswKc": ["Horizontal rule that divides sections."],
     "0xnmlQ": ["Repository name"],
     "0yL--g": ["Review conflicts"],
@@ -190,6 +190,11 @@
     "5Ajb15": ["The formula <0>c = √(a² + b²)</0> renders inline."],
     "5ClEAu": ["Inline hashtag for cross-doc grouping."],
     "5D3Ior": ["Hide folder"],
+    "5DFPDh": [
+      "Started a fresh OpenKnowledge server (v",
+      ["appRuntime"],
+      ") for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+    ],
     "5F5HYj": [["ahead"], " ahead, ", ["behind"], " behind"],
     "5GKMSz": ["Indent or outdent the current list item."],
     "5GRxoA": ["Search files, folders, and commands for the current workspace."],
@@ -215,11 +220,6 @@
     "5kWklo": ["(some may already be hidden by other rules)"],
     "5lWFkC": ["Sign in"],
     "5mksg0": ["Failed to disable semantic search — ", ["detail"]],
-    "5o4lc1": [
-      "Open Knowledge will be initialized at <0>",
-      ["gitRoot"],
-      "</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
-    ],
     "5qNxOe": [
       [
         "count",
@@ -236,16 +236,8 @@
         }
       ]
     ],
-    "5rJ0w2": ["Open Knowledge is using this GitHub account."],
     "5wV2qQ": ["and more"],
     "5y_9lO": ["Waiting for authorization"],
-    "5z2tUG": [
-      "This project is running an older version of Open Knowledge (v",
-      ["0"],
-      ") than this app (v",
-      ["1"],
-      ")."
-    ],
     "62Pc08": ["Install for Claude Chat & Cowork (Desktop App)"],
     "636K3K": ["Delete adjacent chip"],
     "67f-3g": ["Duplicate succeeded but the sidebar may be out of date — refresh to resync"],
@@ -296,6 +288,9 @@
     "7OwvEL": ["Show HTML preview"],
     "7PNNNs": ["This sends content off your machine"],
     "7PzzBU": ["User"],
+    "7YRrJ9": [
+      "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
+    ],
     "7_bFEL": ["Drag ", ["patternText"], " to reorder"],
     "7apDiJ": [
       "A folder named <0>",
@@ -304,9 +299,6 @@
     ],
     "7d1a0d": ["Public"],
     "7hctf2": ["Describe the project you want to create"],
-    "7nrKys": [
-      "Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate Open Knowledge credential to disconnect."
-    ],
     "7qRHf0": ["Install for Claude Chat & Cowork"],
     "80c4-P": ["Code copied to clipboard"],
     "81H_23": ["Add properties"],
@@ -329,6 +321,7 @@
         { "one": ["#", " unresolved hunk"], "other": ["#", " unresolved hunks"] }
       ]
     ],
+    "8IP5jY": ["Each selected tool gets an OpenKnowledge MCP entry."],
     "8Jm2EP": ["Toggle heading levels 1 through 6."],
     "8OGgNM": ["Open or close visual-editor find."],
     "8OxKZy": ["Move succeeded but the sidebar may be out of date — refresh to resync"],
@@ -360,6 +353,9 @@
     "9PQysm": ["Hide advanced"],
     "9R7pRC": ["No tags match \"", ["trimmed"], "\". Continue typing to create one."],
     "9UQ730": ["Clone"],
+    "9V0W-R": [
+      "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
+    ],
     "9bCiQ8": ["No pages are missing incoming graph links."],
     "9clcD5": ["Open documents tagged #", ["chip"]],
     "9dw5bW": ["Create with ", ["0"]],
@@ -394,15 +390,9 @@
     "AE7BY3": ["The terminal session ended."],
     "AIn2Yv": [["displayName"], " CLI, ", ["hint"]],
     "ALhMYW": ["Terminal"],
-    "AMyJts": [
-      "This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects."
-    ],
     "AQ-Lfg": ["Couldn't load templates"],
     "AQGtjK": [
       "Commands run with the full access of your macOS user account on this machine. Turn this off to disable the shell."
-    ],
-    "AThCb_": [
-      "Open Knowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
     ],
     "AVW-K9": ["Failed to load orphan pages"],
     "AWOSPo": ["Zoom in"],
@@ -453,7 +443,6 @@
     "Bx4EXG": ["Actions for ", ["label"]],
     "By-7Pn": ["Toggle a bullet list."],
     "BymzO4": ["Document outline"],
-    "C0NPNd": ["Add Open Knowledge to your AI tools"],
     "C37Zkt": ["Send to"],
     "C62P6b": ["Editor selection"],
     "C9TBvF": ["No Outgoing"],
@@ -499,6 +488,9 @@
     "E1tG2u": ["Get Claude Code"],
     "E2Mv-X": ["Copy source"],
     "E4XYYH": ["Enable terminal for this project"],
+    "E6lrpp": [
+      "Manage the GitHub account OpenKnowledge uses to browse and sync your repositories."
+    ],
     "E7BhZn": ["Blank note"],
     "E9bKSA": ["Creating"],
     "EBVbtP": ["Could not duplicate item"],
@@ -548,9 +540,16 @@
     "F4vEsL": ["Sync status: ", ["syncStateLabel"]],
     "F6pfE9": ["Active"],
     "FBknns": ["HTML"],
+    "FCAcjR": [
+      "Run a real terminal docked inside OpenKnowledge, starting in this project's folder."
+    ],
     "FCxvG5": ["First item"],
+    "FEK4oC": [
+      "OpenKnowledge will be initialized at <0>",
+      ["gitRoot"],
+      "</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
+    ],
     "FEr96N": ["Theme"],
-    "FF5rwn": ["Connect Open Knowledge to other tools you use."],
     "FNTx6u": ["Search \"", ["semanticSubmitQuery"], "\" by meaning"],
     "FOGD7m": ["Create something great."],
     "FOyCTr": [
@@ -559,6 +558,11 @@
     "FRYB1Q": ["/api/config returned a malformed body"],
     "FTUGgh": ["Enter a repository URL or owner/repo"],
     "FUMerq": ["Could not enable sync: ", ["detail"]],
+    "FWQuPE": [
+      "This project is running a different, incompatible build of OpenKnowledge than this app (v",
+      ["0"],
+      ")."
+    ],
     "FjkaiT": ["Zoom out"],
     "FnMkli": ["Sync disabled — you don't have permission to push"],
     "FqTpiN": ["Bird wiki"],
@@ -580,6 +584,14 @@
     "GA-UkN": [["keyName"], " type: ", ["typeLabel"], ". Click to change."],
     "GDvlUT": ["Role"],
     "GGsM4y": ["Selected in graph"],
+    "GJH-AT": [
+      ["docName"],
+      " is ",
+      ["0"],
+      ". OpenKnowledge currently opens files up to ",
+      ["1"],
+      "."
+    ],
     "GK-IRZ": ["Undo buttons are disabled — per-session state has been garbage-collected."],
     "GN6L5F": ["Filename"],
     "GQDSBN": ["Layout options"],
@@ -592,9 +604,6 @@
     "GamjcN": ["Template saved"],
     "GemPfn": ["Failed to parse forward-links error response (HTTP ", ["status"], ")"],
     "Gfr4fu": ["Server can't open documents"],
-    "GgQgML": [
-      "You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files."
-    ],
     "GhjUB_": ["Reconnected"],
     "Gp_twO": ["Local path"],
     "GsBUCk": ["Loading settings"],
@@ -611,9 +620,6 @@
     "HM56Bx": ["Creating..."],
     "HNnVG1": ["No other recent projects."],
     "HPTPGr": ["Create a new spec file for my user story"],
-    "HRU-eL": [
-      "You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
-    ],
     "HXFyWD": ["Split diff"],
     "HdkSiO": ["New file"],
     "HfI1dR": ["I already have it locally →"],
@@ -621,6 +627,9 @@
     "HlmZBk": ["Documents response did not match expected shape."],
     "HpK_8d": ["Reload"],
     "HptUxX": ["Number"],
+    "HqiZvw": [
+      "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
+    ],
     "Hrz9NY": ["Wiki link"],
     "I1gRhX": ["Failed to rename"],
     "I5AfhE": ["Sync status unavailable — server unreachable."],
@@ -681,6 +690,12 @@
     "KDuPiY": ["Uploading ", ["fileName"]],
     "KDw4GX": ["Try again"],
     "KFdXwz": ["Show panel (", ["panelShortcut"], ")"],
+    "KH5bQi": [
+      "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside OpenKnowledge)."
+    ],
+    "KIIamL": [
+      "OpenKnowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
+    ],
     "KOZud0": [
       "Build a competitor research knowledge base. Start with an overview page, then add cross-linked pages for each competitor, their products and pricing, and the sources behind every claim."
     ],
@@ -710,11 +725,6 @@
     "L1ZE3M": ["Document statistics"],
     "L3CEC1": ["this item"],
     "L4Cdd9": ["or create a new file <0/>"],
-    "L5Xu8C": [
-      "This project is running a different, incompatible build of Open Knowledge than this app (v",
-      ["0"],
-      ")."
-    ],
     "L6Hhh6": ["(root)"],
     "L8fKuc": ["Run this in your terminal"],
     "L9Y9Om": ["Top linked pages"],
@@ -731,6 +741,13 @@
     "Lcehxn": ["Save resolution"],
     "LdABLa": ["Could not open ", ["target"], ". Try opening it manually."],
     "LdKIHS": ["Draft a spec"],
+    "LhQlGR": [
+      "This project is running an older version of OpenKnowledge (v",
+      ["0"],
+      ") than this app (v",
+      ["1"],
+      ")."
+    ],
     "LhWYpm": ["Other OK paths are tracked upstream:"],
     "LlHqdU": ["Initializing project"],
     "Llyqvo": ["This usually means one of:"],
@@ -786,6 +803,9 @@
     "N2S1rs": ["Empty"],
     "N2eHWq": ["Code Block"],
     "N3_ozB": ["Hubs"],
+    "N55YNr": [
+      "Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
+    ],
     "NIWAux": ["No docs registered under #", ["tagDocsName"], "."],
     "NJyQi_": ["Branch ", ["shareBranch"], " no longer exists on the remote."],
     "NKkZXl": ["Initialize and open"],
@@ -800,9 +820,6 @@
     ],
     "NjrIak": ["File: <0>", ["fixedName"], ".md</0>"],
     "NkXEFS": ["Restore failed — document unchanged"],
-    "NlZjSM": [
-      "Manage the GitHub account Open Knowledge uses to browse and sync your repositories."
-    ],
     "NmPNJJ": ["Copy code"],
     "Nn4GgW": ["Will be created as <0>", ["sanitizedName"], "</0>"],
     "NnQapF": ["Open with AI ", ["targetDisplayName"]],
@@ -818,6 +835,7 @@
     "O0Z2Xr": ["Outgoing"],
     "O2UpM1": ["Browse"],
     "O3oNi5": ["Email"],
+    "O6yEPk": ["Create a new OpenKnowledge project in the folder of your choice."],
     "O7_W_a": ["Open with AI"],
     "OD0FCX": ["Hidden “", ["basename"], "”"],
     "ODD5Jc": ["Edit ", ["templateLabel"]],
@@ -854,9 +872,6 @@
     "P47EWZ": ["Could not update sidebar settings"],
     "P6gXB-": ["Replace ", ["keyName"]],
     "P6lAT3": ["Folder target: ", ["linkTitle"], ". Click to open the overview."],
-    "P8jws3": [
-      "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their Open Knowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
-    ],
     "P8yDjG": ["Name can’t be empty, \".\", \"..\", or contain / or \\"],
     "PB4upl": ["Find previous match"],
     "PBwmDJ": ["Searching by meaning"],
@@ -958,6 +973,7 @@
     "T67A0Y": [
       "Auto-sync pushes/pulls commits to your git remote on intervals and on save. Toggling on requires confirmation."
     ],
+    "TEEPPF": ["Will replace existing OpenKnowledge entry"],
     "TJnkyf": ["ok ui responded but server.lock has no port yet"],
     "TKQ7K-": ["Install"],
     "TLIO3j": ["Toggle italic formatting."],
@@ -974,9 +990,6 @@
     "U3IvM5": ["Full guide"],
     "U5Spo9": ["Content directory must be inside the project"],
     "U8CD-l": ["Copy full path, No workspace"],
-    "UA171M": [
-      "Run a real terminal docked inside Open Knowledge, starting in this project's folder."
-    ],
     "UBv8UK": ["Delete Permanently"],
     "UDFrWm": ["Checking GitHub connection..."],
     "UL8A9w": ["Tag"],
@@ -985,13 +998,13 @@
     "UTNVyS": ["Select the full source document."],
     "UTZ97u": ["Selection must be inside the project"],
     "UVLlMV": ["Couldn't reach GitHub. Try again?"],
+    "UW2Fg3": [
+      "This project's running server doesn't support live editing. Restart OpenKnowledge to fix."
+    ],
     "UW93oq": ["Replace key"],
     "UYcGIW": ["Connecting — waiting for collab server"],
     "Ua78MH": ["no response"],
     "UaDyeb": ["Hide selection preview"],
-    "UaXXIF": [
-      "Available in the Open Knowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
-    ],
     "Uci-Ph": ["Ordered List"],
     "Ud0Pj9": [
       "<0>Mirror source removed.</0> The doc <1>",
@@ -1021,11 +1034,6 @@
     "VcqWBy": ["Upload may have succeeded but the sidebar is out of date — refresh to resync"],
     "VdXv4D": ["Clone from GitHub"],
     "Vlc75q": ["Keep file deleted"],
-    "VsBxkh": [
-      "Started a fresh Open Knowledge server (v",
-      ["appRuntime"],
-      ") for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their Open Knowledge MCP connection; restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
-    ],
     "VuxVSP": ["Start source completion"],
     "VvS_k_": ["Config sharing is now local-only."],
     "W-ntoW": ["heading-slug"],
@@ -1035,9 +1043,13 @@
       "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
     ],
     "W5A0Ly": ["An unexpected error occurred."],
+    "W7XJN4": [
+      "Can't nest projects. An OpenKnowledge project already exists at <0>",
+      ["rootPath"],
+      "</0>. Choose a location outside it, or open that project instead."
+    ],
     "W8vpBM": ["starter pack"],
     "W9_Bub": ["Local changes overlap with incoming sync"],
-    "WEzuMq": ["Create a new Open Knowledge project in the folder of your choice."],
     "WL6puM": ["Path resolves outside project"],
     "WMIKXK": [
       "Are you sure you want to delete ",
@@ -1099,10 +1111,20 @@
     "XyOUTJ": ["Exit merge"],
     "Xzy0s0": ["Remove ", ["fullLabel"], " from context"],
     "Y-Urt2": ["Block math equation rendered with KaTeX from a LaTeX source string."],
+    "Y1kX2z": [
+      "OpenKnowledge initializes at <0>",
+      ["projectDir"],
+      "</0> — the parent of <1>",
+      ["pickedRelative"],
+      "</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
+    ],
     "Y8ViJx": ["A newer version may have been deployed since this tab opened."],
     "YC6_wP": ["Edit ", ["keyName"]],
     "YEP3X2": ["Delete a table when the active table cell selection covers the full table."],
     "YGIi_c": ["Reinstall"],
+    "YGQm6y": [
+      "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
+    ],
     "YKLP_-": ["Template renamed"],
     "YPFBfr": [["detail"], " - ", ["kind"], " \"", ["createdPath"], "\" still exists on disk"],
     "YSFv5w": ["No git repository — config sharing does not apply here."],
@@ -1168,23 +1190,19 @@
       "</1>."
     ],
     "_BthEY": ["Open in ", ["shareBranch"]],
-    "_GBioJ": [
-      ["docName"],
-      " is ",
-      ["0"],
-      ". Open Knowledge currently opens files up to ",
-      ["1"],
-      "."
-    ],
     "_K2CvV": ["Template"],
     "_PACVa": ["Release notes"],
     "_PBJRl": ["Add at least one letter or number."],
     "_QwkMu": ["No matching paths"],
+    "_RcqUM": [
+      "You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files."
+    ],
     "_TDESN": ["Network error - ", ["kind"], " \"", ["createdPath"], "\" still exists on disk"],
     "_TF8ep": ["Failed to render PDF"],
     "_VRtd7": ["Couldn't send the selection — please try again."],
     "_W-elG": ["(inline)"],
     "_XWY2J": ["Terminal disabled"],
+    "_bth6g": ["Claude Code is installed, but OpenKnowledge tools aren't connected to it yet."],
     "_eguJc": ["Uploading"],
     "_gkGSK": ["deleted template"],
     "_pY_Vq": ["The repository was moved, renamed, or deleted."],
@@ -1204,11 +1222,6 @@
     "aE2_XM": ["One pattern per line — appended to <0>.okignore</0>."],
     "aENGMB": [
       "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
-    ],
-    "aIgBKf": [
-      "Can't nest projects. An Open Knowledge project already exists at <0>",
-      ["rootPath"],
-      "</0>. Choose a location outside it, or open that project instead."
     ],
     "aM23Wr": ["page-name"],
     "aOp3hw": ["Couldn't move to Trash"],
@@ -1250,7 +1263,6 @@
     "c863eW": ["Could not switch to ", ["shareBranch"], ". Try switching manually."],
     "c8iK2Y": ["No templates found."],
     "cEoyWz": ["Add item to ", ["keyName"]],
-    "cEx1UT": ["Setup Open Knowledge in this folder?"],
     "cF9DyA": ["Reconnecting after server restart"],
     "cIptmH": ["In the Claude Desktop App"],
     "cKjLuT": ["(project + user)"],
@@ -1269,10 +1281,8 @@
     "cdmk8A": ["Uncommitted changes"],
     "cio8--": ["Codex (CLI)"],
     "cklVjM": ["Timeline"],
+    "cn1sLi": ["Couldn't connect OpenKnowledge tools to Claude Code. Please try again."],
     "cnGeoo": ["Delete"],
-    "coIbL2": [
-      "Choose whether this project's Open Knowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
-    ],
     "cqQyPB": ["Folder name"],
     "cs4mps": ["Config sharing"],
     "csDS2L": ["Available"],
@@ -1336,11 +1346,13 @@
     "fIgqfQ": ["Reinstalling"],
     "fJgQHX": ["Failed to create file"],
     "fNr-MX": ["Disable semantic search"],
-    "fRv-ei": ["Start a new Open Knowledge project."],
     "fVcm9t": [["0", "plural", { "one": ["#", " doc"], "other": ["#", " docs"] }]],
     "fWi7pn": ["Initialize starter pack"],
     "fYKgzG": ["Failed to load recent projects."],
     "fYjgXu": ["Unordered list of items."],
+    "f_PkYv": [
+      "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+    ],
     "fbdLmk": ["Toggle bold formatting."],
     "fbsiBw": ["Something went wrong starting the terminal."],
     "fcgvCA": ["Claude"],
@@ -1394,8 +1406,8 @@
       "</1>. Your current content is already saved in the timeline — you can restore it anytime."
     ],
     "h7FzJC": ["Link-graph response did not match expected shape."],
-    "hA8GQ6": ["Will replace existing Open Knowledge entry"],
     "hBMK4W": ["Project templates"],
+    "hDEaQu": ["Connect OpenKnowledge to other tools you use."],
     "hDKtoF": [["diffHrs"], "h ago"],
     "hDoLrm": ["Remove ", ["projectName"], " from recent projects"],
     "hGmuTc": ["Docs tagged #", ["tagDocsName"]],
@@ -1455,9 +1467,6 @@
     "isRobC": ["New"],
     "iuTKci": ["No edits yet."],
     "iycx_A": ["Pushing"],
-    "j6LB7S": [
-      "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
-    ],
     "j9Vqvc": ["inherited"],
     "jBVUXo": ["Couldn't open the terminal — please try again."],
     "jEZ6Lf": ["provisional"],
@@ -1524,7 +1533,6 @@
     "lGs_bQ": ["Page <0>*</0>"],
     "lHwYMr": ["Server error: ", ["status"], " ", ["statusText"]],
     "lIn9L9": ["Disable sync"],
-    "lLGJG6": ["Couldn't connect Open Knowledge tools to Claude Code. Please try again."],
     "lPzyrU": ["All hunks resolved"],
     "lVWEIL": ["Indexed ", ["embedded"], " of ", ["total"], " pages."],
     "lWNpNB": ["Add cursors or select matching occurrences through CodeMirror."],
@@ -1550,9 +1558,6 @@
     "mBltnd": ["Path suggestions"],
     "mGaZwZ": ["See the full install guide"],
     "mHVPm5": ["Reconnect required"],
-    "mKZODc": [
-      "Adds the Open Knowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
-    ],
     "mNY1G6": ["Undo all edits"],
     "mPy9lS": [
       "Organize my existing specs into a linked index grouped by area, and flag any that have drifted out of sync with the current code."
@@ -1561,7 +1566,6 @@
     "mU3j1b": ["Remove item ", ["0"]],
     "mWVJRX": ["Collapsible section with a clickable summary."],
     "mYGY3B": ["Date"],
-    "mYLRjR": ["You picked ~/Desktop. Open Knowledge will index everything on your desktop."],
     "mZ1r4i": ["Create a document from ", ["label"]],
     "maDWIB": ["Mirror source <0>api-spec</0>"],
     "makN88": ["No patterns yet. Type a folder or file name below to start hiding files."],
@@ -1592,8 +1596,10 @@
     "n7aopT": ["Editor mode"],
     "nCzR-G": ["Copy code ", ["userCode"]],
     "nDT8qt": ["Initialized ", ["0"], " but could not open it."],
+    "nMSYz5": [
+      "This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects."
+    ],
     "nNYV3Y": ["and ", ["remaining"], " more"],
-    "nPhvQ_": ["Claude Code is installed, but Open Knowledge tools aren't connected to it yet."],
     "nTwL53": ["Open a doc to share its URL."],
     "nUNZL4": ["Ask ", ["0"]],
     "nWv1ja": ["Manage hidden files in Settings → Ignore patterns."],
@@ -1617,6 +1623,10 @@
       "Git identity isn't set — commits use a default author. Set yours so teammates see your name."
     ],
     "nskygk": ["Choose agent"],
+    "nxlOpL": ["OpenKnowledge is using this GitHub account."],
+    "ny6vNn": [
+      "OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate OpenKnowledge credential to disconnect."
+    ],
     "nzHlj8": ["Close ", ["0"]],
     "nzaV6Q": ["Page thumbnails"],
     "o2yoFu": ["Reveal in Finder, No workspace"],
@@ -1636,6 +1646,9 @@
     "oXKEsy": ["Delete an adjacent wiki-link or tag chip."],
     "oYepHb": [
       "The terminal is turned off for this project. Turn it back on to run commands here."
+    ],
+    "of3tF-": [
+      "You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
     ],
     "ogAuyr": ["Back to document view"],
     "oh55a-": ["Cursor CLI"],
@@ -1672,7 +1685,6 @@
     "pmKdif": ["Failed: ", ["loadError"]],
     "pmUArF": ["Workspace"],
     "ppDgFi": ["Restart with this app's version"],
-    "prHfed": ["Each selected tool gets an Open Knowledge MCP entry."],
     "pzutoc": ["Italic"],
     "q2kXMG": ["Inline Math"],
     "q4YJl_": ["The terminal session ended (exit code ", ["0"], ")."],
@@ -1706,9 +1718,6 @@
     "qo4zCg": ["Path cannot contain backslashes"],
     "qpQwGC": ["Describe what you're working on and the agent sets it up for you."],
     "qvWGzP": ["Collapse all"],
-    "qvcK7S": [
-      "Open Knowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
-    ],
     "qyLmWw": ["Source editor search panel"],
     "r2huLx": ["Undo, redo, or undo selection changes through CodeMirror history."],
     "r4R7AZ": ["Network error during cleanup"],
@@ -1773,6 +1782,7 @@
     ],
     "saIASg": ["Second item"],
     "saYiIO": ["Path cannot contain null bytes"],
+    "seeS6l": ["Setup OpenKnowledge in this folder?"],
     "shNd9t": ["Slash command menu"],
     "skf5Ix": ["Indent or outdent source editor lines."],
     "snrVQ7": ["probe failed"],
@@ -1851,6 +1861,7 @@
     "vGeNNQ": ["Copy a prompt and paste it into your agent to set up your project."],
     "vIxrEk": ["Fit width"],
     "vLyv1R": ["Hide"],
+    "vM7XUh": ["Add OpenKnowledge to your AI tools"],
     "vPYaz3": ["Scaffold directly under this project."],
     "vQIVHc": ["Folder properties"],
     "vWc9a0": ["Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."],
@@ -1858,6 +1869,7 @@
     "vbK_ZG": ["Files sidebar"],
     "ve8vEM": ["Code expired — please try again"],
     "vfRlCI": ["Could not copy full path"],
+    "vfWA_g": ["You picked ~/Desktop. OpenKnowledge will index everything on your desktop."],
     "vhAnzJ": ["Turn on semantic search?"],
     "viwC-K": ["Failed to remove project."],
     "vv7kpg": ["Cancelled"],
@@ -1867,6 +1879,7 @@
     "w4hMYl": [
       "Could not read branch state for this project. Close this dialog and open the share link again."
     ],
+    "w7SsvI": ["That folder isn't an OpenKnowledge project yet. Initialize it and open?"],
     "w7nm4K": ["Indented blockquote for citations."],
     "wJijgU": ["Location"],
     "wJo9oS": ["Close find"],
@@ -1958,9 +1971,6 @@
       ["typeLabel"],
       " (inherited from folder properties; not editable here)"
     ],
-    "ygbd_U": [
-      "Open Knowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
-    ],
     "yjExfe": ["Branch <0>", ["shareBranch"], "</0> is checked out in:"],
     "ylXj1N": ["Selected"],
     "ynIa4S": ["Visual editor list item"],
@@ -1981,21 +1991,11 @@
       "Saves the file to <0>~/Downloads/openknowledge.skill</0> and opens the Claude Desktop App. Requires Node.js or Bun on your PATH."
     ],
     "zAsDLY": ["Graph visualization of document links"],
-    "zEfRFN": [
-      "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside Open Knowledge)."
-    ],
     "zL0LPh": ["Global outside text fields"],
     "zLGXna": ["No starter packs available."],
     "zLak8b": ["Activate new tab"],
     "zQBg2C": ["Move the current block up or down one position."],
     "zUhPuR": ["Open containing folder, ", ["hint"]],
-    "zXZ0sB": [
-      "Open Knowledge initializes at <0>",
-      ["projectDir"],
-      "</0> — the parent of <1>",
-      ["pickedRelative"],
-      "</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
-    ],
     "zXj1rA": ["Search by meaning"],
     "zZ_I5K": ["Open project menu"],
     "zaXlhf": [

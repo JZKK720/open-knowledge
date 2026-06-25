@@ -353,7 +353,7 @@ export interface RequestChannels {
     result: undefined;
   };
   /** Persisted last-used parent directory, or a platform-sensible default
-   *  (`~/Documents/Open Knowledge/`) on first launch. */
+   *  (`~/Documents/OpenKnowledge/`) on first launch. */
   'ok:fs:default-projects-root': { args: []; result: string };
   /** Classify the candidate path: missing (`free`), present but empty,
    *  or present with entries. Stat errors fall through to `free`. */

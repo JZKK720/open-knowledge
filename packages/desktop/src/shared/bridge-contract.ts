@@ -585,7 +585,7 @@ export interface OkDesktopBridge {
 
   fs: {
     /** Persisted last-used parent directory, or a platform-sensible default
-     *  on first launch (`~/Documents/Open Knowledge/`). */
+     *  on first launch (`~/Documents/OpenKnowledge/`). */
     defaultProjectsRoot(): Promise<string>;
     /** Classify the candidate path: missing (`free`), present but empty,
      *  or present with entries. Stat errors fall through to `free`. */

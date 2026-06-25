@@ -70,11 +70,9 @@ describe('McpConsentDialog runtime behavior', () => {
   test('renders willReplace disclosure and preselects detected editors only', async () => {
     await renderDialog();
 
-    expect(
-      screen.getByRole('dialog', { name: 'Add Open Knowledge to your AI tools' }),
-    ).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Add OpenKnowledge to your AI tools' })).toBeTruthy();
     expect(screen.getByTestId('mcp-consent-status-claude').textContent).toBe(
-      'Will replace existing Open Knowledge entry',
+      'Will replace existing OpenKnowledge entry',
     );
     expect(screen.getByTestId('mcp-consent-status-cursor').textContent).toBe(
       'Detected on this machine',

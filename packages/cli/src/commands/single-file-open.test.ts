@@ -72,7 +72,7 @@ describe('runSingleFileOpen', () => {
   test('ephemeral mode with a desktop bundle deep-links the file to the app', async () => {
     const { deps, rec } = makeDeps({
       plan: ephemeralPlan,
-      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      detectBundlePath: () => '/Applications/OpenKnowledge.app',
     });
     const code = await runSingleFileOpen('/Users/me/notes/todo.md', deps);
     expect(code).toBe(0);

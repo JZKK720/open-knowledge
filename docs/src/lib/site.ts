@@ -1,3 +1,5 @@
+import { STABLE_DMG_URL } from './download-links';
+
 export const SITE_URL = 'https://openknowledge.ai';
 export const SITE_NAME = 'OpenKnowledge';
 export const TWITTER_HANDLE = '@OpenKnowledgeAI';
@@ -21,8 +23,7 @@ export function metaDescription(
   return `${cut.trimEnd()}…`;
 }
 
-export const DOWNLOAD_URL =
-  'https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg';
+export const DOWNLOAD_URL = STABLE_DMG_URL;
 
 export const EXAMPLE_KB_SHARE_URL =
   'https://openknowledge.ai/d/AWh0dHBzOi8vZ2l0aHViLmNvbS9pbmtlZXAvdGVjaC1pcG9zL2Jsb2IvbWFpbi9SRUFETUUubWQ';

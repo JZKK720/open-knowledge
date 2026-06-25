@@ -213,13 +213,13 @@ test.describe('Docked terminal — live Electron', () => {
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await expect(dialog).toContainText('Enable a terminal for this project?');
     await expect(dialog).toContainText(
-      'This runs a real terminal inside Open Knowledge — the same as opening Terminal on your Mac',
+      'This runs a real terminal inside OpenKnowledge — the same as opening Terminal on your Mac',
     );
     await expect(dialog).toContainText(
       'Commands you run have the full access of your macOS user account',
     );
     await expect(dialog).toContainText(
-      'Open Knowledge doesn’t limit or sandbox what the terminal can do.',
+      'OpenKnowledge doesn’t limit or sandbox what the terminal can do.',
     );
     await expect(dialog).toContainText('never included when you sync, clone, or share the project');
     await expect(page.getByRole('button', { name: 'Enable terminal' })).toBeVisible();
@@ -493,7 +493,7 @@ test.describe('Docked terminal — live Electron', () => {
 
     const banner = page.getByRole('status');
     await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toContainText('Open Knowledge tools aren’t connected');
+    await expect(banner).toContainText('OpenKnowledge tools aren’t connected');
     await expect(page.getByRole('button', { name: 'Connect tools' })).toBeVisible();
   });
 });

@@ -405,7 +405,7 @@ describe('safetyCheckpoint', () => {
     const actor = parseOkActor(body);
     expect(actor).not.toBeNull();
     expect(actor?.v).toBe(1);
-    expect(actor?.display_name).toBe('Open Knowledge (service)');
+    expect(actor?.display_name).toBe('OpenKnowledge (service)');
   });
 });
 
@@ -469,7 +469,7 @@ describe('parkBranch', () => {
     const actor = parseOkActor(body);
     expect(actor).not.toBeNull();
     expect(actor?.v).toBe(1);
-    expect(actor?.display_name).toBe('Open Knowledge (service)');
+    expect(actor?.display_name).toBe('OpenKnowledge (service)');
     expect(actor?.docs).toContain('intro');
   });
 
@@ -631,7 +631,7 @@ describe('saveVersion', () => {
     const actor = parseOkActor(body);
     expect(actor).not.toBeNull();
     expect(actor?.v).toBe(1);
-    expect(actor?.display_name).toBe('Open Knowledge (service)');
+    expect(actor?.display_name).toBe('OpenKnowledge (service)');
   });
 
   test('checkpoint falls back to latest checkpoint when no WIP activity', async () => {

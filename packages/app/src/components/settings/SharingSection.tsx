@@ -24,7 +24,7 @@ function SharingSectionUnsupported() {
         </h3>
         <p className="text-1sm text-muted-foreground">
           <Trans>
-            Available in the Open Knowledge desktop app. From a terminal, use
+            Available in the OpenKnowledge desktop app. From a terminal, use
             <code> ok config-sharing status</code> / <code>share</code> / <code>unshare</code>.
           </Trans>
         </p>
@@ -122,8 +122,8 @@ function SharingSectionBody() {
         </div>
         <p className="text-1sm text-muted-foreground">
           <Trans>
-            Choose whether this project's Open Knowledge setup, including its AI-tool connections,
-            is saved with the project so teammates get it too, or kept only on your computer.
+            Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is
+            saved with the project so teammates get it too, or kept only on your computer.
           </Trans>
         </p>
       </div>

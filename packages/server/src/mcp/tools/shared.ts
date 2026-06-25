@@ -19,7 +19,7 @@ export function agentIdentityFields(identity: AgentIdentity | undefined): Record
     : {};
 }
 export const ROUTED_CWD_DESCRIPTION =
-  'Absolute host path inside the target Open Knowledge project. Required when the MCP server is registered globally (e.g. `npx @inkeep/open-knowledge mcp` once at the host level, routing per call), unless the MCP client advertises exactly one root via the `roots` capability — that single root is then used as the implicit `cwd`. Optional when the server is anchored to a single project (the per-project HTTP MCP server defaults to its configured project root).';
+  'Absolute host path inside the target OpenKnowledge project. Required when the MCP server is registered globally (e.g. `npx @inkeep/open-knowledge mcp` once at the host level, routing per call), unless the MCP client advertises exactly one root via the `roots` capability — that single root is then used as the implicit `cwd`. Optional when the server is anchored to a single project (the per-project HTTP MCP server defaults to its configured project root).';
 
 const SUMMARY_TRANSPORT_CAP = 200;
 
@@ -161,7 +161,7 @@ const ROLE_AFTER: Record<WorkflowRole, string> = {
 function buildWorkflowFrame(role: WorkflowRole): string {
   return `## Where this fits
 
-Open Knowledge accretes a persistent wiki through three workflow tools, mapped to [Karpathy's three-layer knowledge-base pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
+OpenKnowledge accretes a persistent wiki through three workflow tools, mapped to [Karpathy's three-layer knowledge-base pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
 
 - **Raw sources** (immutable) — \`ingest\`
 - **Wiki, provisional** — \`research\`

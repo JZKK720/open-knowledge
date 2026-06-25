@@ -44,7 +44,7 @@ export interface BuildConfigYmlOptions {
 
 export function buildConfigYmlContent(_version: string, options?: BuildConfigYmlOptions): string {
   const template = `# yaml-language-server: $schema=https://unpkg.com/@inkeep/open-knowledge@latest/dist/schemas/${CONFIG_SCHEMA_MAJOR_PATH}/config.project.schema.json
-# Open Knowledge — project configuration
+# OpenKnowledge — project configuration
 #
 # This file overrides built-in defaults for this project. Every key below
 # is commented out and shows its current default value. Uncomment any key
@@ -157,7 +157,7 @@ sync-state.json
 last-spawn-error.log
 `;
 
-export const OK_OKIGNORE_TEMPLATE = `# .okignore — paths to exclude from the Open Knowledge document index.
+export const OK_OKIGNORE_TEMPLATE = `# .okignore — paths to exclude from the OpenKnowledge document index.
 # Uses gitignore syntax (parsed by the \`ignore\` npm library), evaluated
 # alongside .gitignore in a single ignore-lib instance.
 #
@@ -171,7 +171,7 @@ export const OK_OKIGNORE_TEMPLATE = `# .okignore — paths to exclude from the O
 #   !keep.md       # re-include a file .gitignore excluded
 `;
 
-export const ROOT_GITIGNORE_TEMPLATE = `# Seeded by Open Knowledge when this project was created. Edit freely.
+export const ROOT_GITIGNORE_TEMPLATE = `# Seeded by OpenKnowledge when this project was created. Edit freely.
 .DS_Store
 `;
 

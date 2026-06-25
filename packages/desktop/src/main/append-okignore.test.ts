@@ -70,7 +70,7 @@ describe('appendOkIgnoreSync', () => {
 
   test('seed-comment block re-supplied on top of a seeded file does not duplicate (exact-overlap → early return)', () => {
     const seed = [
-      '# .okignore — paths to exclude from the Open Knowledge document index.',
+      '# .okignore — paths to exclude from the OpenKnowledge document index.',
       '# Uses gitignore syntax (parsed by the `ignore` npm library), evaluated',
       '# alongside .gitignore in a single ignore-lib instance.',
       '#',
@@ -91,7 +91,7 @@ describe('appendOkIgnoreSync', () => {
 
   test('seed-comment block plus one genuinely new pattern: seed lines drop, separator+new pattern land (paste-then-type shape)', () => {
     const seed = [
-      '# .okignore — paths to exclude from the Open Knowledge document index.',
+      '# .okignore — paths to exclude from the OpenKnowledge document index.',
       '# Uses gitignore syntax (parsed by the `ignore` npm library), evaluated',
       '# alongside .gitignore in a single ignore-lib instance.',
       '#',

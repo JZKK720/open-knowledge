@@ -25,7 +25,7 @@ const links: Array<{
   { label: 'Discord', href: 'https://discord.com/invite/YujKpFN49', icon: DiscordIcon },
   { label: 'X', href: 'https://x.com/OpenKnowledgeAI', icon: XTwitterIcon },
   {
-    label: 'Open Knowledge',
+    label: 'OpenKnowledge',
     href: 'https://openknowledge.ai/',
     icon: OkIcon,
     iconClassName: 'scale-125 grayscale transition-[filter] group-hover:grayscale-0',

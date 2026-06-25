@@ -81,7 +81,7 @@ export function AccountSection({ authQueryTransport, authTransport }: AccountSec
         </h3>
         <p className="text-sm text-muted-foreground">
           <Trans>
-            Manage the GitHub account Open Knowledge uses to browse and sync your repositories.
+            Manage the GitHub account OpenKnowledge uses to browse and sync your repositories.
           </Trans>
         </p>
       </div>
@@ -158,7 +158,7 @@ function ConnectedRow({
             <Trans>Connected as @{login}</Trans>
           </div>
           <p className="text-muted-foreground text-1sm">
-            <Trans>Open Knowledge is using this GitHub account.</Trans>
+            <Trans>OpenKnowledge is using this GitHub account.</Trans>
           </p>
         </div>
         <Button
@@ -203,8 +203,8 @@ function GhCliRow({ login }: { login: string }) {
         </div>
         <p className="text-muted-foreground text-1sm">
           <Trans>
-            Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate
-            Open Knowledge credential to disconnect.
+            OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate
+            OpenKnowledge credential to disconnect.
           </Trans>
         </p>
       </div>

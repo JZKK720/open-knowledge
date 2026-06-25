@@ -134,7 +134,7 @@ export function startBundleReplaceWatcher(
         type: 'info',
         message: 'An update was installed.',
         detail:
-          `Open Knowledge ${state.onDiskVersion} is installed on disk, but this window is still ` +
+          `OpenKnowledge ${state.onDiskVersion} is installed on disk, but this window is still ` +
           `running ${state.currentVersion}. Restart to finish the upgrade.`,
         buttons: ['Restart now', 'Later'],
         defaultId: 0,

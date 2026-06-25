@@ -6,8 +6,8 @@ import {
 } from '@inkeep/open-knowledge-core/helper-bundle';
 import { maybeRedirectToHelperBundle, resolveSelfSpawn } from './self-spawn.ts';
 
-const PACKAGED_APP = '/Applications/Open Knowledge.app';
-const PACKAGED_EXEC = `${PACKAGED_APP}/Contents/MacOS/Open Knowledge`;
+const PACKAGED_APP = '/Applications/OpenKnowledge.app';
+const PACKAGED_EXEC = `${PACKAGED_APP}/Contents/MacOS/OpenKnowledge`;
 const PACKAGED_ENTRY = `${PACKAGED_APP}/Contents/Resources/app.asar.unpacked/dist/cli.mjs`;
 const HELPER_BINARY = `${PACKAGED_APP}/Contents/Frameworks/${HELPER_BUNDLE_NAME}/Contents/MacOS/${HELPER_EXECUTABLE_NAME}`;
 
@@ -36,8 +36,8 @@ describe('maybeRedirectToHelperBundle', () => {
   });
 
   test.each([
-    ['linux', '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge'],
-    ['win32', 'C:\\Program Files\\Open Knowledge\\Open Knowledge.exe'],
+    ['linux', '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge'],
+    ['win32', 'C:\\Program Files\\OpenKnowledge\\OpenKnowledge.exe'],
   ] as const)('non-darwin (%s) → null even if exists() would pass', (platform, execPath) => {
     expect(
       maybeRedirectToHelperBundle({
@@ -52,7 +52,7 @@ describe('maybeRedirectToHelperBundle', () => {
     '/usr/local/bin/node',
     '/opt/homebrew/bin/bun',
     '/usr/local/lib/node_modules/@inkeep/open-knowledge/dist/cli.mjs',
-    '/Applications/Open Knowledge.app/Contents/Resources/app/cli.mjs',
+    '/Applications/OpenKnowledge.app/Contents/Resources/app/cli.mjs',
     '/tmp/scratch.app.backup/cli',
   ])('darwin + non-bundle execPath (%s) → null', (execPath) => {
     expect(
@@ -119,7 +119,7 @@ describe('resolveSelfSpawn', () => {
 
   it.each([
     ['linux', PACKAGED_EXEC],
-    ['win32', 'C:\\Program Files\\Open Knowledge\\Open Knowledge.exe'],
+    ['win32', 'C:\\Program Files\\OpenKnowledge\\OpenKnowledge.exe'],
   ] as const)('non-darwin (%s) → command stays execPath (no LaunchServices)', (platform, execPath) => {
     const result = resolveSelfSpawn({
       execPath,

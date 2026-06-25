@@ -60,7 +60,7 @@ export function mcpCommand(getConfig: () => Config): Command {
               stderr: process.stderr,
               mode: 'fallback-absent',
               bundlePath: null,
-              reason: 'no installed Open Knowledge.app bundle found',
+              reason: 'no installed OpenKnowledge.app bundle found',
             });
           } else {
             try {

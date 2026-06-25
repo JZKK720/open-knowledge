@@ -59,7 +59,7 @@ export function presentPublishError(
       };
     case 'saml-sso':
       return {
-        banner: `GitHub denied the request. You may need to authorize Open Knowledge for ${owner} in your browser.`,
+        banner: `GitHub denied the request. You may need to authorize OpenKnowledge for ${owner} in your browser.`,
         next: { kind: 'authorize-org', authorizeUrl: buildSamlSsoAuthorizeUrl(owner) },
       };
     case 'push-failed':

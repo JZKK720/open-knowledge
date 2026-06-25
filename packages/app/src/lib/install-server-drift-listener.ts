@@ -9,15 +9,15 @@ import type {
 } from '@/lib/desktop-bridge-types';
 
 export function restartDisruptionWarning(): string {
-  return t`Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their Open Knowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect.`;
+  return t`Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect.`;
 }
 
 export function driftToastBody(info: OkServerVersionDriftInfo): string {
   if (info.serverRuntime === info.appRuntime) {
-    return t`This project is running a different, incompatible build of Open Knowledge than this app (v${info.appRuntime}).`;
+    return t`This project is running a different, incompatible build of OpenKnowledge than this app (v${info.appRuntime}).`;
   }
   return info.relation === 'older'
-    ? t`This project is running an older version of Open Knowledge (v${info.serverRuntime}) than this app (v${info.appRuntime}).`
+    ? t`This project is running an older version of OpenKnowledge (v${info.serverRuntime}) than this app (v${info.appRuntime}).`
     : t`This project's server (v${info.serverRuntime}) is newer than this app (v${info.appRuntime}).`;
 }
 
@@ -26,7 +26,7 @@ export function restartSuccessMessage(appRuntime: string): string {
 }
 
 export function reclaimNoticeMessage(appRuntime: string): string {
-  return t`Started a fresh Open Knowledge server (v${appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their Open Knowledge MCP connection; restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect.`;
+  return t`Started a fresh OpenKnowledge server (v${appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect.`;
 }
 
 export function restartFailureMessage(reason: 'eperm' | 'other'): string {

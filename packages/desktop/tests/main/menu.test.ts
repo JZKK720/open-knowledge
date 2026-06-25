@@ -20,7 +20,7 @@ type RecentRow = { path: string; name: string };
 
 function makeDeps(overrides: Partial<MenuDeps> = {}): MenuDeps {
   return {
-    appName: 'Open Knowledge',
+    appName: 'OpenKnowledge',
     showDevToolsMenu: true,
     dialog: {} as MenuDeps['dialog'],
     openNavigator: mock(() => {}),

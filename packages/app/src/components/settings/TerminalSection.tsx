@@ -31,7 +31,7 @@ export function TerminalSection() {
           {t`Terminal`}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {t`Run a real terminal docked inside Open Knowledge, starting in this project's folder.`}
+          {t`Run a real terminal docked inside OpenKnowledge, starting in this project's folder.`}
         </p>
       </div>
 

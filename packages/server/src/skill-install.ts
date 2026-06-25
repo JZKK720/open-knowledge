@@ -214,7 +214,7 @@ export async function installUserSkill(
     if (await centralSkillExists(home)) {
       logger.info?.(
         { event: 'skill-install.skip-current', version: currentVersion },
-        'Open Knowledge skill already installed at current version; skipping.',
+        'OpenKnowledge skill already installed at current version; skipping.',
       );
       await report('skip-current', currentVersion);
       return 'skip-current';
@@ -264,7 +264,7 @@ export async function installUserSkill(
     }
     logger.info?.(
       { event: 'skill-install.installed', version: currentVersion },
-      'Open Knowledge skill installed to detected agent hosts.',
+      'OpenKnowledge skill installed to detected agent hosts.',
     );
     await report('installed', currentVersion);
     return 'installed';
@@ -435,7 +435,7 @@ export async function buildAndOpenSkill(
             target: 'claude-cowork',
             version: currentVersion,
           },
-          'Open Knowledge skill already delivered at current version; skipping rebuild.',
+          'OpenKnowledge skill already delivered at current version; skipping rebuild.',
         );
         await report('skip-current', currentVersion);
         return {

@@ -192,7 +192,7 @@ export async function resolveMcpHttpUrl(opts: ResolveMcpHttpUrlOptions): Promise
 
   if (opts.envAutoStart === '0') {
     throw new AutoStartDisabledError(
-      'Open Knowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
+      'OpenKnowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
     );
   }
 

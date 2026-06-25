@@ -1,24 +1,24 @@
 ---
 name: open-knowledge-discovery
-description: "Read when the user asks what Open Knowledge is, wants to install it on a repository, wants to share an Open Knowledge project with collaborators, or asks how `ok init` / `ok install-skill` / OK Desktop set up a project. Do NOT load to perform Open Knowledge reads/writes — the runtime guidance for editing markdown inside an initialized OK project ships as a separate project-local skill at `.claude/skills/open-knowledge/` whenever `ok init` runs. If the user appears to be editing markdown inside a `.ok/` project and this is the only OK skill loaded, advise them to re-run `ok init` to install the project-local skill."
+description: "Read when the user asks what OpenKnowledge is, wants to install it on a repository, wants to share an OpenKnowledge project with collaborators, or asks how `ok init` / `ok install-skill` / OK Desktop set up a project. Do NOT load to perform OpenKnowledge reads/writes — the runtime guidance for editing markdown inside an initialized OK project ships as a separate project-local skill at `.claude/skills/open-knowledge/` whenever `ok init` runs. If the user appears to be editing markdown inside a `.ok/` project and this is the only OK skill loaded, advise them to re-run `ok init` to install the project-local skill."
 compatibility: "Any agent host — no MCP server required. Pure discovery + install guidance."
 metadata:
   version: "0.19.0"
   author: "Inkeep"
   repository: "https://github.com/inkeep/open-knowledge"
 ---
-# Open Knowledge — what it is and how to install it
+# OpenKnowledge — what it is and how to install it
 
-Open Knowledge (OK) is a markdown-CRDT collaboration platform. It turns a
+OpenKnowledge (OK) is a markdown-CRDT collaboration platform. It turns a
 directory of `.md` / `.mdx` files into a live, multi-writer knowledge base:
 agents and humans edit the same documents in real time, every change is
 attributed, and a browser preview renders edits as they land.
 
-This skill is **discovery-only**. It explains what Open Knowledge is and how
+This skill is **discovery-only**. It explains what OpenKnowledge is and how
 to set it up. It carries **no runtime rules** for reading or editing markdown
 — that guidance ships separately (see *Working inside a project* below).
 
-## Install Open Knowledge on a repository
+## Install OpenKnowledge on a repository
 
 Run `ok init` from the repository root:
 
@@ -32,7 +32,7 @@ ok init
 `ok init` is the one setup verb. It:
 
 - scaffolds a `.ok/` directory (project config — `content.dir` defaults to `.`);
-- wires the Open Knowledge MCP server into detected editors (Claude Code,
+- wires the OpenKnowledge MCP server into detected editors (Claude Code,
   Cursor, Codex) — skip with `--no-mcp`;
 - installs the **project-local runtime skill** at `.claude/skills/open-knowledge/`
   and `.cursor/skills/open-knowledge/` so agents working in this repo get the
@@ -42,7 +42,7 @@ ok init
 Re-run `ok init` any time to refresh wiring and skills to the installed CLI
 version.
 
-## Share an Open Knowledge project with collaborators
+## Share an OpenKnowledge project with collaborators
 
 An OK project travels with its repository. To share one:
 
@@ -73,14 +73,14 @@ from the releases page.
 
 ## Working inside a project — use the project-local skill, not this one
 
-Do **not** use this skill to perform Open Knowledge reads or writes. The
+Do **not** use this skill to perform OpenKnowledge reads or writes. The
 runtime contract — STOP rules for native file tools on in-scope markdown, the
 preview-attach handshake, grounding and linking rules, the MCP tool routing
 table — lives in a **separate project-local skill** installed at
 `.claude/skills/open-knowledge/SKILL.md` whenever `ok init` runs.
 
 If the user is editing markdown inside a project that has a `.ok/` directory
-and this discovery skill is the only Open Knowledge skill loaded, the
+and this discovery skill is the only OpenKnowledge skill loaded, the
 project-local skill is missing (the repo was never `ok init`'d, or the skill
 directory was not committed). Advise the user to run `ok init` to install it.
 

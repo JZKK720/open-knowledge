@@ -23,7 +23,7 @@ Docs for general usage: <https://openknowledge.ai/docs>.
 
 ## Install
 
-**macOS:** download the desktop app — open the DMG, drag **Open Knowledge** to **Applications**, and launch it. [Latest release](https://github.com/inkeep/open-knowledge/releases/latest).
+**macOS:** download the desktop app — open the DMG, drag **OpenKnowledge** to **Applications**, and launch it. [Latest release](https://github.com/inkeep/open-knowledge/releases/latest).
 
 **Linux, Windows, Intel Mac:** run the same editor as a local web app via the CLI ([Node.js 24+](https://nodejs.org) required):
 

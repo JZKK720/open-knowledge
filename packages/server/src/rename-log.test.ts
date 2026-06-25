@@ -230,7 +230,7 @@ describe('appendRenameLogEntry', () => {
   test('survives anonymous-actor entry (FR13 service-writer)', () => {
     const index = createEmptyIndex();
     const e = entry({
-      actor: { writerId: 'openknowledge-service', displayName: 'Open Knowledge (service)' },
+      actor: { writerId: 'openknowledge-service', displayName: 'OpenKnowledge (service)' },
     });
     appendRenameLogEntry(shadowDir, e, index);
     const reloaded = loadRenameLogIndex(shadowDir);

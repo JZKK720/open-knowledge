@@ -457,7 +457,7 @@ function ToolCallCard({
 }
 
 /* ---------------------------------------------------------------------------
- * Editor panel (right) — Open Knowledge editor
+ * Editor panel (right) — OpenKnowledge editor
  * --------------------------------------------------------------------------- */
 
 function EditorPanel({

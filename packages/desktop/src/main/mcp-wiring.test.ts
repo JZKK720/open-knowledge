@@ -38,7 +38,7 @@ function memoryFs(
   };
 }
 
-const PACKAGED_EXE = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+const PACKAGED_EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 
 function fakeTarget(id: McpWiringEditorId): EditorMcpTarget {
   return {

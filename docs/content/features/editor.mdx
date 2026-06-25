@@ -116,11 +116,11 @@ On very large trees the disk walk is capped per level, and the sidebar shows a n
 
 | Scope | Triggered from | Prompt template |
 | --- | --- | --- |
-| Project | Empty-space menu (no doc / folder active) | `Let's work on this project using Open Knowledge. Open the OK editor in web view.` |
-| Folder | Folder row menu (folder view active) | ``Let's work on the `<folder>` folder using Open Knowledge. Open the OK editor in web view.`` |
-| File | File row menu (doc active) | ``Let's work on `<path>` using Open Knowledge. Open the OK editor in web view.`` |
+| Project | Empty-space menu (no doc / folder active) | `Let's work on this project using OpenKnowledge. Open the OK editor in web view.` |
+| Folder | Folder row menu (folder view active) | ``Let's work on the `<folder>` folder using OpenKnowledge. Open the OK editor in web view.`` |
+| File | File row menu (doc active) | ``Let's work on `<path>` using OpenKnowledge. Open the OK editor in web view.`` |
 
-The trailing `Open the OK editor in web view.` directive is dropped when the [`appearance.preview.autoOpen`](/docs/reference/configuration) preference is off, so the receiving agent honors the same "leave my preview alone" choice on its first turn; only the `Let's work on … using Open Knowledge.` opener is sent.
+The trailing `Open the OK editor in web view.` directive is dropped when the [`appearance.preview.autoOpen`](/docs/reference/configuration) preference is off, so the receiving agent honors the same "leave my preview alone" choice on its first turn; only the `Let's work on … using OpenKnowledge.` opener is sent.
 
 To send your own freetext instruction along with the handoff, use the bottom [Ask AI](#ask-ai) composer (or the empty-state create composer on a fresh project) rather than these one-click submenus.
 

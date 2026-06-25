@@ -451,9 +451,7 @@ function ShareReceiveDialogInner({
               </p>
             ) : null}
             <p className="mt-3 text-sm text-muted-foreground">
-              <Trans>
-                That folder isn't an Open Knowledge project yet. Initialize it and open?
-              </Trans>
+              <Trans>That folder isn't an OpenKnowledge project yet. Initialize it and open?</Trans>
             </p>
             {consentState.phase === 'error' ? (
               <p

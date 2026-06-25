@@ -7,7 +7,7 @@ const TOAST_DURATION_MS = 4000;
 /** "Sticky" toast — large finite duration in lieu of `Infinity`. Used for
  *  failure outcomes that surface an action item the user must see, and for
  *  PATH/rc-file edit disclosures — the user must get a real chance to notice
- *  that Open Knowledge touched their shell config (and how to undo it).
+ *  that OpenKnowledge touched their shell config (and how to undo it).
  *  24h is long enough to span typical user idle windows; the close button
  *  on the Toaster gives an immediate-dismiss escape hatch. */
 const STICKY_TOAST_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -20,7 +20,7 @@ export function installOnboardingToastListener(opts: {
   if (!bridge.onboarding) return undefined;
   return bridge.onboarding.onToast((payload) => {
     if (payload.kind === 'ancestor-promote') {
-      sonnerToast.success(`Opened existing Open Knowledge project at ${payload.ancestorPath}`, {
+      sonnerToast.success(`Opened existing OpenKnowledge project at ${payload.ancestorPath}`, {
         duration: TOAST_DURATION_MS,
       });
       return;
@@ -38,7 +38,7 @@ export function installOnboardingToastListener(opts: {
       if (payload.path.status === 'installed') parts.push(payload.path.summary);
       if (payload.path.status === 'failed')
         parts.push(`PATH install failed: ${payload.path.summary}`);
-      const message = parts.length > 0 ? parts.join('; ') : 'Open Knowledge integrations checked.';
+      const message = parts.length > 0 ? parts.join('; ') : 'OpenKnowledge integrations checked.';
       const hasFailure = payload.mcp.status === 'failed' || payload.path.status === 'failed';
       const pathTouched = payload.path.status !== 'none';
       sonnerToast[hasFailure ? 'error' : 'success'](message, {
@@ -65,7 +65,7 @@ export function installOnboardingToastListener(opts: {
     }
     const subPath = relativeToProject(payload.gitRoot, payload.pickedPath) ?? payload.pickedPath;
     sonnerToast.success(
-      `Initialized Open Knowledge at ${payload.gitRoot} — opened parent of ${subPath} because it contains a .git folder`,
+      `Initialized OpenKnowledge at ${payload.gitRoot} — opened parent of ${subPath} because it contains a .git folder`,
       { duration: TOAST_DURATION_MS },
     );
   });

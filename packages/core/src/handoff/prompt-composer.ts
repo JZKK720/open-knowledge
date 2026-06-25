@@ -35,20 +35,20 @@ function sanitizePathForAtMention(path: string): string {
 }
 
 export const OK_PROJECT_SKILL_POINTER =
-  "This is an Open Knowledge project: load the `open-knowledge` skill and use the Open Knowledge MCP tools for all markdown — don't probe for `.ok/` or use native file tools on `.md` / `.mdx`.";
+  "This is an OpenKnowledge project: load the `open-knowledge` skill and use the OpenKnowledge MCP tools for all markdown — don't probe for `.ok/` or use native file tools on `.md` / `.mdx`.";
 
 export function withSkillPointer(directive: string): string {
   return `${OK_PROJECT_SKILL_POINTER} ${directive}`;
 }
 
 export const OK_TERMINAL_SURFACE_PREAMBLE =
-  "You're running in the terminal of the Open Knowledge desktop app.";
+  "You're running in the terminal of the OpenKnowledge desktop app.";
 
 export function composeTerminalBareLaunchPrompt(relativePath: string | null): string {
   const tail =
     relativePath === null
       ? 'Then stop.'
-      : `Read \`${sanitizePathForPrompt(relativePath)}\` via the Open Knowledge MCP server, then stop.`;
+      : `Read \`${sanitizePathForPrompt(relativePath)}\` via the OpenKnowledge MCP server, then stop.`;
   return `${OK_TERMINAL_SURFACE_PREAMBLE} ${OK_PROJECT_SKILL_POINTER} ${tail}`;
 }
 
@@ -58,7 +58,7 @@ export function composeFilePrompt(
   instruction?: string,
 ): string {
   const safe = sanitizePathForPrompt(relativePath);
-  const base = `Let's work on \`${safe}\` using Open Knowledge.`;
+  const base = `Let's work on \`${safe}\` using OpenKnowledge.`;
   const directive = autoOpen ? `${base} Open the OK editor in web view.` : base;
   return appendInstruction(directive, instruction);
 }
@@ -69,13 +69,13 @@ export function composeFolderPrompt(
   instruction?: string,
 ): string {
   const safe = sanitizePathForPrompt(relativeFolderPath);
-  const base = `Let's work on the \`${safe}\` folder using Open Knowledge.`;
+  const base = `Let's work on the \`${safe}\` folder using OpenKnowledge.`;
   const directive = autoOpen ? `${base} Open the OK editor in web view.` : base;
   return appendInstruction(directive, instruction);
 }
 
 export function composeEmptySpacePrompt(autoOpen: boolean, instruction?: string): string {
-  const base = `Let's work on this project using Open Knowledge.`;
+  const base = `Let's work on this project using OpenKnowledge.`;
   const directive = autoOpen ? `${base} Open the OK editor in web view.` : base;
   return appendInstruction(directive, instruction);
 }
@@ -101,9 +101,9 @@ export function composeCreatePrompt(
     if (scenario === 'existing-repo') {
       const briefPart =
         trimmed === ''
-          ? `Let's work on this project using Open Knowledge.`
+          ? `Let's work on this project using OpenKnowledge.`
           : [
-              "Here's what I'd like to do in this Open Knowledge project:",
+              "Here's what I'd like to do in this OpenKnowledge project:",
               '',
               blockquote(trimmed),
             ].join('\n');
@@ -112,14 +112,14 @@ export function composeCreatePrompt(
     }
 
     const scaffold =
-      'Scaffold the folders, templates, and AI-readable rules to match, using Open Knowledge.';
+      'Scaffold the folders, templates, and AI-readable rules to match, using OpenKnowledge.';
     const base =
       trimmed === ''
         ? mentionBlock === ''
-          ? `Let's set up a new Open Knowledge project. ${scaffold}`
-          : [`Let's set up a new Open Knowledge project. ${scaffold}`, '', mentionBlock].join('\n')
+          ? `Let's set up a new OpenKnowledge project. ${scaffold}`
+          : [`Let's set up a new OpenKnowledge project. ${scaffold}`, '', mentionBlock].join('\n')
         : [
-            "I'm setting up a new Open Knowledge project. Here's what I want to create:",
+            "I'm setting up a new OpenKnowledge project. Here's what I want to create:",
             '',
             blockquote(trimmed),
             ...(mentionBlock === '' ? [] : ['', mentionBlock]),
@@ -200,7 +200,7 @@ function encodedPromptLength(prompt: string, target: HandoffTarget): number {
 }
 
 function selectionLead(safePath: string): string {
-  return `Let's work on the selected passage in @${safePath} using Open Knowledge.`;
+  return `Let's work on the selected passage in @${safePath} using OpenKnowledge.`;
 }
 
 function instructionLines(instruction: string): readonly string[] {
@@ -282,7 +282,7 @@ function composeLocus(safePath: string, instruction: string, selectionMarkdown: 
     anchor,
     fence,
     '',
-    `Read the full passage from @${safePath} via the Open Knowledge MCP server before editing.`,
+    `Read the full passage from @${safePath} via the OpenKnowledge MCP server before editing.`,
   ].join('\n');
 }
 
@@ -307,7 +307,7 @@ export function composeSelectionPrompt(input: SelectionPromptInput): string {
 }
 
 function composeAskBody(safePath: string, instruction: string, autoOpen: boolean): string {
-  const lead = `Let's work on @${safePath} using Open Knowledge.`;
+  const lead = `Let's work on @${safePath} using OpenKnowledge.`;
   const trailer = autoOpen ? 'Open the OK editor in web view.' : '';
   const trimmed = instruction.trim();
   if (trimmed === '') {
@@ -411,13 +411,13 @@ function locusSelectionSegment(selectionMarkdown: string, safeDocPath: string): 
     anchor,
     fence,
     '',
-    `Read the full passage from @${safeDocPath} via the Open Knowledge MCP server before editing.`,
+    `Read the full passage from @${safeDocPath} via the OpenKnowledge MCP server before editing.`,
   ].join('\n');
 }
 
 function linesSelectionSegment(startLine: number, endLine: number, safeDocPath: string): string {
   const range = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
-  return `The selected passage is ${range} of @${safeDocPath}. Read it from @${safeDocPath} via the Open Knowledge MCP server before editing.`;
+  return `The selected passage is ${range} of @${safeDocPath}. Read it from @${safeDocPath} via the OpenKnowledge MCP server before editing.`;
 }
 
 function mentionsSegment(mentions: readonly string[]): string {
@@ -433,12 +433,12 @@ function mentionsSegment(mentions: readonly string[]): string {
  *  it as a real reference. */
 function scopeLead(input: AssembleHandoffPromptInput): string {
   if (input.scope === 'doc') {
-    return `Let's work on @${sanitizePathForAtMention(input.docRelativePath)} using Open Knowledge.`;
+    return `Let's work on @${sanitizePathForAtMention(input.docRelativePath)} using OpenKnowledge.`;
   }
   if (input.scope === 'folder') {
-    return `Let's work on the @${sanitizePathForAtMention(input.folderRelativePath)} folder using Open Knowledge.`;
+    return `Let's work on the @${sanitizePathForAtMention(input.folderRelativePath)} folder using OpenKnowledge.`;
   }
-  return `Let's work on this project using Open Knowledge.`;
+  return `Let's work on this project using OpenKnowledge.`;
 }
 
 function composeAssembledBlocks(
@@ -496,7 +496,7 @@ function assembleDocSelectionPrompt(
 ): string {
   const { target } = input;
   const safeDocPath = sanitizePathForAtMention(input.docRelativePath);
-  const lead = `Let's work on @${safeDocPath} using Open Knowledge.`;
+  const lead = `Let's work on @${safeDocPath} using OpenKnowledge.`;
   const selectionSegment = selectionSegmentFor(
     selection,
     lead,

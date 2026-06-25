@@ -247,8 +247,8 @@ msgstr "{displayName} CLI, {hint}"
 #. placeholder {0}: formatFileSize(size)
 #. placeholder {1}: formatFileSize(limit)
 #: src/components/LargeFileEditorState.tsx
-msgid "{docName} is {0}. Open Knowledge currently opens files up to {1}."
-msgstr "{docName} is {0}. Open Knowledge currently opens files up to {1}."
+msgid "{docName} is {0}. OpenKnowledge currently opens files up to {1}."
+msgstr "{docName} is {0}. OpenKnowledge currently opens files up to {1}."
 
 #: src/components/FileTree.tsx
 msgid "{failedCount, plural, one {1 file failed to upload} other {{failedCount} files failed to upload}}"
@@ -558,8 +558,8 @@ msgid "Add meaning-based ranking to search so conceptually-related pages surface
 msgstr "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
 
 #: src/components/McpConsentDialogBody.tsx
-msgid "Add Open Knowledge to your AI tools"
-msgstr "Add Open Knowledge to your AI tools"
+msgid "Add OpenKnowledge to your AI tools"
+msgstr "Add OpenKnowledge to your AI tools"
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "Add pattern"
@@ -591,8 +591,8 @@ msgid "Add the next matching source selection."
 msgstr "Add the next matching source selection."
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
-msgid "Adds the Open Knowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
-msgstr "Adds the Open Knowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
+msgid "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
+msgstr "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
 
 #: src/editor/components/PropPanel.tsx
 msgid "Advanced"
@@ -764,8 +764,8 @@ msgid "Available"
 msgstr "Available"
 
 #: src/components/settings/SharingSection.tsx
-msgid "Available in the Open Knowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
-msgstr "Available in the Open Knowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
+msgid "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
+msgstr "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
 
 #: src/components/SeedDialog.tsx
 msgid "Back"
@@ -914,8 +914,8 @@ msgid "By tag"
 msgstr "By tag"
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Can't nest projects. An Open Knowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
-msgstr "Can't nest projects. An Open Knowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
+msgid "Can't nest projects. An OpenKnowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
+msgstr "Can't nest projects. An OpenKnowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
 
 #: src/components/ActivityPanelFileRow.tsx
 #: src/components/AuthModal.tsx
@@ -992,8 +992,8 @@ msgid "Choose agent"
 msgstr "Choose agent"
 
 #: src/components/settings/SharingSection.tsx
-msgid "Choose whether this project's Open Knowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
-msgstr "Choose whether this project's Open Knowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
+msgid "Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
+msgstr "Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
 
 #: src/components/handoff/AgentSplitButton.tsx
 msgid "Claude"
@@ -1013,8 +1013,8 @@ msgid "Claude Code (claude) isn't installed or on your PATH."
 msgstr "Claude Code (claude) isn't installed or on your PATH."
 
 #: src/components/ClaudeReadinessBanner.tsx
-msgid "Claude Code is installed, but Open Knowledge tools aren't connected to it yet."
-msgstr "Claude Code is installed, but Open Knowledge tools aren't connected to it yet."
+msgid "Claude Code is installed, but OpenKnowledge tools aren't connected to it yet."
+msgstr "Claude Code is installed, but OpenKnowledge tools aren't connected to it yet."
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Claude Desktop"
@@ -1316,8 +1316,8 @@ msgid "Connect GitHub to continue."
 msgstr "Connect GitHub to continue."
 
 #: src/components/settings/SettingsDialogBody.tsx
-msgid "Connect Open Knowledge to other tools you use."
-msgstr "Connect Open Knowledge to other tools you use."
+msgid "Connect OpenKnowledge to other tools you use."
+msgstr "Connect OpenKnowledge to other tools you use."
 
 #: src/components/ConsentDialogBody.tsx
 #: src/components/CreateProjectDialog.tsx
@@ -1576,8 +1576,8 @@ msgid "Couldn't clear the key — please try again."
 msgstr "Couldn't clear the key — please try again."
 
 #: src/components/ClaudeReadinessBanner.tsx
-msgid "Couldn't connect Open Knowledge tools to Claude Code. Please try again."
-msgstr "Couldn't connect Open Knowledge tools to Claude Code. Please try again."
+msgid "Couldn't connect OpenKnowledge tools to Claude Code. Please try again."
+msgstr "Couldn't connect OpenKnowledge tools to Claude Code. Please try again."
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Couldn't construct the share URL. Try Done and re-share."
@@ -1715,8 +1715,8 @@ msgid "Create a new list item from the current list item."
 msgstr "Create a new list item from the current list item."
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Create a new Open Knowledge project in the folder of your choice."
-msgstr "Create a new Open Knowledge project in the folder of your choice."
+msgid "Create a new OpenKnowledge project in the folder of your choice."
+msgstr "Create a new OpenKnowledge project in the folder of your choice."
 
 #: src/components/BottomComposer.tsx
 msgid "Create a new spec file for my user story"
@@ -2100,8 +2100,8 @@ msgid "e.g. server.ts"
 msgstr "e.g. server.ts"
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Each selected tool gets an Open Knowledge MCP entry."
-msgstr "Each selected tool gets an Open Knowledge MCP entry."
+msgid "Each selected tool gets an OpenKnowledge MCP entry."
+msgstr "Each selected tool gets an OpenKnowledge MCP entry."
 
 #: src/components/TemplateForm.tsx
 #: src/components/TemplateRow.tsx
@@ -3084,7 +3084,7 @@ msgstr "Install {brand} →"
 msgid "Install an AI agent to create with AI"
 msgstr "Install an AI agent to create with AI"
 
-#. Dialog title — installing the Open Knowledge skill into the Claude Desktop App
+#. Dialog title — installing the OpenKnowledge skill into the Claude Desktop App
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Install for Claude Chat & Cowork"
 msgstr "Install for Claude Chat & Cowork"
@@ -3379,8 +3379,8 @@ msgid "Manage hidden files in Settings → Ignore patterns."
 msgstr "Manage hidden files in Settings → Ignore patterns."
 
 #: src/components/settings/AccountSection.tsx
-msgid "Manage the GitHub account Open Knowledge uses to browse and sync your repositories."
-msgstr "Manage the GitHub account Open Knowledge uses to browse and sync your repositories."
+msgid "Manage the GitHub account OpenKnowledge uses to browse and sync your repositories."
+msgstr "Manage the GitHub account OpenKnowledge uses to browse and sync your repositories."
 
 #: src/components/empty-state/use-create-suggestions.ts
 msgid "Map the architecture"
@@ -4082,34 +4082,6 @@ msgstr "Open in {shareBranch}"
 msgid "Open in current branch"
 msgstr "Open in current branch"
 
-#: src/components/ConsentDialogBody.tsx
-msgid "Open Knowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
-msgstr "Open Knowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
-
-#: src/components/settings/AccountSection.tsx
-msgid "Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate Open Knowledge credential to disconnect."
-msgstr "Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate Open Knowledge credential to disconnect."
-
-#: src/components/settings/AccountSection.tsx
-msgid "Open Knowledge is using this GitHub account."
-msgstr "Open Knowledge is using this GitHub account."
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Open Knowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-msgstr "Open Knowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-
-#: src/components/ConsentDialogBody.tsx
-msgid "Open Knowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
-msgstr "Open Knowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
-
-#: src/components/CreateProjectDialog.tsx
-msgid "Open Knowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
-msgstr "Open Knowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
-
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "Open Knowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
-msgstr "Open Knowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
-
 #: src/components/GraphPanel.tsx
 msgid "Open link"
 msgstr "Open link"
@@ -4218,6 +4190,34 @@ msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr "Opening..."
+
+#: src/components/ConsentDialogBody.tsx
+msgid "OpenKnowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
+msgstr "OpenKnowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
+
+#: src/components/settings/AccountSection.tsx
+msgid "OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate OpenKnowledge credential to disconnect."
+msgstr "OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate OpenKnowledge credential to disconnect."
+
+#: src/components/settings/AccountSection.tsx
+msgid "OpenKnowledge is using this GitHub account."
+msgstr "OpenKnowledge is using this GitHub account."
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
+msgstr "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
+
+#: src/components/ConsentDialogBody.tsx
+msgid "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
+msgstr "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
+
+#: src/components/CreateProjectDialog.tsx
+msgid "OpenKnowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
+msgstr "OpenKnowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "OpenKnowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
+msgstr "OpenKnowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
 
 #: src/components/CloneDialog.tsx
 msgid "Opens a folder picker to choose where to clone the repository."
@@ -4644,7 +4644,7 @@ msgstr "Reconnecting…"
 msgid "Reinstall"
 msgstr "Reinstall"
 
-#. Dialog title — installing the Open Knowledge skill into the Claude Desktop App
+#. Dialog title — installing the OpenKnowledge skill into the Claude Desktop App
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Reinstall for Claude Chat & Cowork"
 msgstr "Reinstall for Claude Chat & Cowork"
@@ -4869,8 +4869,8 @@ msgid "Restarted — now running v{appRuntime}."
 msgstr "Restarted — now running v{appRuntime}."
 
 #: src/lib/install-server-drift-listener.ts
-msgid "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their Open Knowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
-msgstr "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their Open Knowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
+msgid "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+msgstr "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
 
 #: src/lib/install-server-drift-listener.ts
 msgid "Restarting the server…"
@@ -4958,8 +4958,8 @@ msgid "root"
 msgstr "root"
 
 #: src/components/settings/TerminalSection.tsx
-msgid "Run a real terminal docked inside Open Knowledge, starting in this project's folder."
-msgstr "Run a real terminal docked inside Open Knowledge, starting in this project's folder."
+msgid "Run a real terminal docked inside OpenKnowledge, starting in this project's folder."
+msgstr "Run a real terminal docked inside OpenKnowledge, starting in this project's folder."
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Run this in your terminal"
@@ -5255,8 +5255,8 @@ msgid "Setup files include: <0>.ok/</0>, AI-tool MCP configs (<1>.mcp.json</1> a
 msgstr "Setup files include: <0>.ok/</0>, AI-tool MCP configs (<1>.mcp.json</1> and per-tool files), project skills, and <2>.claude/launch.json</2>.<3/><4>Shared</4> commits them to git, so anyone who clones the repo gets the same setup. <5/><6>Local only</6> keeps them out of git (via <7>.git/info/exclude</7>)."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "Setup Open Knowledge in this folder?"
-msgstr "Setup Open Knowledge in this folder?"
+msgid "Setup OpenKnowledge in this folder?"
+msgstr "Setup OpenKnowledge in this folder?"
 
 #: src/components/ShareButton.tsx
 msgid "Share"
@@ -5484,8 +5484,8 @@ msgid "Split list item"
 msgstr "Split list item"
 
 #: src/components/NavigatorApp.tsx
-msgid "Start a new Open Knowledge project."
-msgstr "Start a new Open Knowledge project."
+msgid "Start a new OpenKnowledge project."
+msgstr "Start a new OpenKnowledge project."
 
 #: src/components/NewItemDialog.tsx
 msgid "Start from"
@@ -5500,8 +5500,8 @@ msgid "Start writing to create this page"
 msgstr "Start writing to create this page"
 
 #: src/lib/install-server-drift-listener.ts
-msgid "Started a fresh Open Knowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their Open Knowledge MCP connection; restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
-msgstr "Started a fresh Open Knowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their Open Knowledge MCP connection; restart the agent, or toggle its Open Knowledge MCP server off and on, to reconnect."
+msgid "Started a fresh OpenKnowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+msgstr "Started a fresh OpenKnowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
 
 #: src/components/TemplateBody.tsx
 msgid "Starter content"
@@ -5772,8 +5772,8 @@ msgid "Text"
 msgstr "Text"
 
 #: src/components/ShareReceiveDialog.tsx
-msgid "That folder isn't an Open Knowledge project yet. Initialize it and open?"
-msgstr "That folder isn't an Open Knowledge project yet. Initialize it and open?"
+msgid "That folder isn't an OpenKnowledge project yet. Initialize it and open?"
+msgstr "That folder isn't an OpenKnowledge project yet. Initialize it and open?"
 
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "The {targetNoun} could not be opened — try navigating to it manually."
@@ -5914,8 +5914,8 @@ msgid "This page doesn't link to anything yet."
 msgstr "This page doesn't link to anything yet."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects."
-msgstr "This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects."
+msgid "This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects."
+msgstr "This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects."
 
 #: src/components/TemplateDeleteDialog.tsx
 msgid "This permanently removes {path}. Agents that reference this template by name will fail until it's recreated or replaced by one in a parent folder."
@@ -5931,22 +5931,22 @@ msgstr "This project has no git repository — sharing mode does not apply. Init
 
 #. placeholder {0}: info.appRuntime
 #: src/lib/install-server-drift-listener.ts
-msgid "This project is running a different, incompatible build of Open Knowledge than this app (v{0})."
-msgstr "This project is running a different, incompatible build of Open Knowledge than this app (v{0})."
+msgid "This project is running a different, incompatible build of OpenKnowledge than this app (v{0})."
+msgstr "This project is running a different, incompatible build of OpenKnowledge than this app (v{0})."
 
 #. placeholder {0}: info.serverRuntime
 #. placeholder {1}: info.appRuntime
 #: src/lib/install-server-drift-listener.ts
-msgid "This project is running an older version of Open Knowledge (v{0}) than this app (v{1})."
-msgstr "This project is running an older version of Open Knowledge (v{0}) than this app (v{1})."
+msgid "This project is running an older version of OpenKnowledge (v{0}) than this app (v{1})."
+msgstr "This project is running an older version of OpenKnowledge (v{0}) than this app (v{1})."
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "This project lives only on this computer. Connect it to GitHub to back it up and share it with other people."
 msgstr "This project lives only on this computer. Connect it to GitHub to back it up and share it with other people."
 
 #: src/components/DocumentErrorBoundary.tsx
-msgid "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
-msgstr "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
+msgid "This project's running server doesn't support live editing. Restart OpenKnowledge to fix."
+msgstr "This project's running server doesn't support live editing. Restart OpenKnowledge to fix."
 
 #. placeholder {0}: info.serverRuntime
 #. placeholder {1}: info.appRuntime
@@ -6280,8 +6280,8 @@ msgid "User"
 msgstr "User"
 
 #: src/components/settings/EmbeddingsKeySection.tsx
-msgid "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside Open Knowledge)."
-msgstr "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside Open Knowledge)."
+msgid "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside OpenKnowledge)."
+msgstr "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside OpenKnowledge)."
 
 #: src/components/FolderPropertiesCard.tsx
 #: src/components/PropertyPanel.tsx
@@ -6407,8 +6407,8 @@ msgid "Will be saved as <0>{sanitized}</0>."
 msgstr "Will be saved as <0>{sanitized}</0>."
 
 #: src/components/McpConsentDialogBody.tsx
-msgid "Will replace existing Open Knowledge entry"
-msgstr "Will replace existing Open Knowledge entry"
+msgid "Will replace existing OpenKnowledge entry"
+msgstr "Will replace existing OpenKnowledge entry"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Word wrap"
@@ -6479,12 +6479,12 @@ msgid "You modified <0>{filePath}</0> locally, but it was deleted upstream."
 msgstr "You modified <0>{filePath}</0> locally, but it was deleted upstream."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked ~/Desktop. Open Knowledge will index everything on your desktop."
-msgstr "You picked ~/Desktop. Open Knowledge will index everything on your desktop."
+msgid "You picked ~/Desktop. OpenKnowledge will index everything on your desktop."
+msgstr "You picked ~/Desktop. OpenKnowledge will index everything on your desktop."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
-msgstr "You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
+msgid "You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
+msgstr "You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "You picked ~/Downloads. Files there are usually transient — consider a stable folder instead."
@@ -6495,8 +6495,8 @@ msgid "You picked the filesystem root (/). Scaffolding here will scan every file
 msgstr "You picked the filesystem root (/). Scaffolding here will scan every file on this machine — make sure that's what you want."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files."
-msgstr "You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files."
+msgid "You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files."
+msgstr "You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files."
 
 #: src/components/settings/SettingsDialogBody.tsx
 #: src/components/SyncStatusBadge.tsx

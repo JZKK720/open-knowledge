@@ -1,7 +1,7 @@
 ---
 name: open-knowledge-bug-report
-description: "Use when the user reports a problem with Open Knowledge, asks for help debugging OK, or wants to file a bug report. This skill guides the agent to capture diagnostic information via the ok bug-report CLI command."
-compatibility: "Any MCP host (Claude Code, Cursor, Codex, Windsurf) with Open Knowledge MCP server registered."
+description: "Use when the user reports a problem with OpenKnowledge, asks for help debugging OK, or wants to file a bug report. This skill guides the agent to capture diagnostic information via the ok bug-report CLI command."
+compatibility: "Any MCP host (Claude Code, Cursor, Codex, Windsurf) with OpenKnowledge MCP server registered."
 metadata:
   version: "0.6.0"
   author: "Inkeep"
@@ -10,7 +10,7 @@ metadata:
 
 # Bug Report — agent guidance
 
-When a user reports a problem with Open Knowledge or asks for debugging help, use the `ok bug-report` command to capture a structured diagnostic bundle.
+When a user reports a problem with OpenKnowledge or asks for debugging help, use the `ok bug-report` command to capture a structured diagnostic bundle.
 
 ## Quick path
 

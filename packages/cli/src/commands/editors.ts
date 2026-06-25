@@ -20,15 +20,15 @@ const DEV_MCP_ENV = {
 export const CHAIN_VERSION_SENTINEL = '# ok-mcp-v1';
 
 export const CHAIN_V1 = `# ok-mcp-v1
-USER_BUNDLE="$HOME/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"
+USER_BUNDLE="$HOME/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"
 [ -f "$USER_BUNDLE" ] && [ -x "$USER_BUNDLE" ] && exec "$USER_BUNDLE" mcp
-BUNDLE="/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"
+BUNDLE="/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"
 [ -f "$BUNDLE" ] && [ -x "$BUNDLE" ] && exec "$BUNDLE" mcp
 command -v npx >/dev/null 2>&1 && exec npx -y @inkeep/open-knowledge@latest mcp
 for d in "$HOME/.nvm/versions/node"/*/bin "$HOME/.fnm/node-versions"/*/installation/bin "$HOME/.asdf/installs/nodejs"/*/bin /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.volta/bin"; do
   [ -f "$d/npx" ] && [ -x "$d/npx" ] && exec "$d/npx" -y @inkeep/open-knowledge@latest mcp
 done
-echo "Open Knowledge: install OK Desktop or Node.js 24+, then restart your editor" >&2
+echo "OpenKnowledge: install OK Desktop or Node.js 24+, then restart your editor" >&2
 exit 127`;
 
 type McpInstallMode = 'published' | 'dev';

@@ -1,6 +1,6 @@
-# Open Knowledge Agent Guide
+# OpenKnowledge Agent Guide
 
-This is the public mirror of Open Knowledge. Keep changes compatible with the internal source path `public/open-knowledge/` in `inkeep/agents-private`.
+This is the public mirror of OpenKnowledge. Keep changes compatible with the internal source path `public/open-knowledge/` in `inkeep/agents-private`.
 
 ## Start Here
 
@@ -8,7 +8,7 @@ This is the public mirror of Open Knowledge. Keep changes compatible with the in
 - Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public PR flow, dependencies, or exported docs.
 - Use Bun 1.3.13 or newer and Node.js 24 or newer.
 
-For maintainers working inside `inkeep/agents-private`, start Open Knowledge agent sessions from `public/open-knowledge/` when possible. If launched at the monorepo root, first read `public/open-knowledge/AGENTS.md`, then run Bun/build/test commands with cwd set to `public/open-knowledge`.
+For maintainers working inside `inkeep/agents-private`, start OpenKnowledge agent sessions from `public/open-knowledge/` when possible. If launched at the monorepo root, first read `public/open-knowledge/AGENTS.md`, then run Bun/build/test commands with cwd set to `public/open-knowledge`.
 
 ## Commands
 
@@ -59,7 +59,7 @@ bun run dev
 Every behavior-changing PR ships a `.changeset/<kebab-name>.md` file. The body becomes the user-facing entry on the next beta's GitHub Release and on the aggregated stable Release notes — that's how npm consumers and DMG auto-update users learn what changed. Write release-note copy, not a commit-message reprise.
 
 - Create one with `bun run changeset`, or hand-write a file named `.changeset/<descriptive-kebab-slug>.md`.
-- Front-matter: at minimum `'@inkeep/open-knowledge': patch`. Open Knowledge follows semver with a **pre-1.0 shift-down**: while we're below `1.0.0`, what semver would call a major (breaking API change) is encoded as `minor`, and what semver would call a minor (new feature) is encoded as `patch`. Most changesets are `patch`. `minor` is rare — reserve it for large API contract changes or large feature additions. **Never declare `major` pre-1.0** (see the `"//"` line in `.changeset/config.json`).
+- Front-matter: at minimum `'@inkeep/open-knowledge': patch`. OpenKnowledge follows semver with a **pre-1.0 shift-down**: while we're below `1.0.0`, what semver would call a major (breaking API change) is encoded as `minor`, and what semver would call a minor (new feature) is encoded as `patch`. Most changesets are `patch`. `minor` is rare — reserve it for large API contract changes or large feature additions. **Never declare `major` pre-1.0** (see the `"//"` line in `.changeset/config.json`).
 - Body should lead with the user-visible verb, name the affected command or surface in a code-span, and (if relevant) show before/after. Skip internal references like spec IDs or story numbers — those rot and aren't visible to readers of the public release notes.
 - Don't write inline references to sibling-package versions (e.g. `@inkeep/open-knowledge-core@0.5.0-beta.6`) — the fixed-group lock-step bumps are computed at release time and any number you'd write would be wrong.
 - Skip changesets for docs-only edits, test-only edits, or CI-only edits that don't change runtime behavior.

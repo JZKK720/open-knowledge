@@ -428,7 +428,7 @@ export const GIT_UPSTREAM_WRITER: WriterIdentity = {
 
 export const SERVICE_WRITER: WriterIdentity = {
   id: 'openknowledge-service',
-  name: 'Open Knowledge (service)',
+  name: 'OpenKnowledge (service)',
   email: 'service@openknowledge.local',
 };
 

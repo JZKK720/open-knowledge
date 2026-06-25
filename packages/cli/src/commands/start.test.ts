@@ -52,14 +52,14 @@ describe('resolveHost', () => {
 describe('formatShutdownNotice', () => {
   test('SIGINT includes the headline, the wait notice, and the force-quit hint', () => {
     const lines = formatShutdownNotice('SIGINT');
-    expect(lines[0]).toContain('Stopping Open Knowledge');
+    expect(lines[0]).toContain('Stopping OpenKnowledge');
     expect(lines.some((l) => l.includes('few seconds'))).toBe(true);
     expect(lines.some((l) => l.includes('force quit'))).toBe(true);
   });
 
   test('SIGTERM omits the force-quit hint (no interactive second-press path)', () => {
     const lines = formatShutdownNotice('SIGTERM');
-    expect(lines[0]).toContain('Stopping Open Knowledge');
+    expect(lines[0]).toContain('Stopping OpenKnowledge');
     expect(lines.some((l) => l.includes('few seconds'))).toBe(true);
     expect(lines.some((l) => l.includes('force quit'))).toBe(false);
   });

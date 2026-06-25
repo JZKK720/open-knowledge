@@ -254,7 +254,7 @@ describe('AccountSection', () => {
 
     const ghRow = await screen.findByTestId('settings-account-gh-cli');
     expect(within(ghRow).getByText('Connected as @octocat')).toBeDefined();
-    expect(ghRow.textContent).toContain('no separate Open Knowledge credential to disconnect');
+    expect(ghRow.textContent).toContain('no separate OpenKnowledge credential to disconnect');
     expect(screen.queryByTestId('settings-account-disconnect')).toBeNull();
   });
 

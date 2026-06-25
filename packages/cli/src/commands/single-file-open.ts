@@ -80,7 +80,7 @@ export async function runSingleFileOpen(
   if (bundlePath) {
     const deepLink = `openknowledge://open?file=${encodeURIComponent(plan.canonicalFilePath)}`;
     deps.openTarget(deepLink);
-    deps.log(`Opening ${plan.singleDocRelPath} in the Open Knowledge desktop app.`);
+    deps.log(`Opening ${plan.singleDocRelPath} in the OpenKnowledge desktop app.`);
     return 0;
   }
 
@@ -109,7 +109,7 @@ async function runSingleFileBrowserOpen(
   const reactShellDistDir = resolveReactShellDistDir();
   if (!reactShellDistDir) {
     process.stderr.write(
-      'Open Knowledge UI assets were not found. Reinstall @inkeep/open-knowledge, or build the app (`bun run build`) in a monorepo checkout.\n',
+      'OpenKnowledge UI assets were not found. Reinstall @inkeep/open-knowledge, or build the app (`bun run build`) in a monorepo checkout.\n',
     );
     process.exit(1);
   }

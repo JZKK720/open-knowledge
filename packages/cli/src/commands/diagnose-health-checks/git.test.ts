@@ -41,7 +41,7 @@ describe('git check', () => {
     expect(result.status).toBe('fail');
     expect(result.summary).toBe('git not found');
     expect(result.remediation).toContain('sudo apt install git');
-    expect(result.detail).toContain('Open Knowledge needs Git');
+    expect(result.detail).toContain('OpenKnowledge needs Git');
   });
 
   test('fails when assert throws GitTooOldError; surfaces detected + required', async () => {

@@ -429,7 +429,7 @@ export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjec
             <Trans>Create new project</Trans>
           </DialogTitle>
           <DialogDescription>
-            <Trans>Create a new Open Knowledge project in the folder of your choice.</Trans>
+            <Trans>Create a new OpenKnowledge project in the folder of your choice.</Trans>
           </DialogDescription>
         </DialogHeader>
 
@@ -577,7 +577,7 @@ export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjec
                     <Trans>Connect to AI tools</Trans>
                   </legend>
                   <p className="text-1sm text-muted-foreground">
-                    <Trans>Each selected tool gets an Open Knowledge MCP entry.</Trans>
+                    <Trans>Each selected tool gets an OpenKnowledge MCP entry.</Trans>
                   </p>
                   {ALL_EDITOR_IDS.map((id) => {
                     const inputId = `create-editor-${id}`;
@@ -669,7 +669,7 @@ function CascadeBanner({
       >
         <p className="mb-2">
           <Trans>
-            Can't nest projects. An Open Knowledge project already exists at{' '}
+            Can't nest projects. An OpenKnowledge project already exists at{' '}
             <code className="font-mono break-all">{rootPath}</code>. Choose a location outside it,
             or open that project instead.
           </Trans>
@@ -699,7 +699,7 @@ function CascadeBanner({
       >
         <p>
           <Trans>
-            Open Knowledge will be initialized at <code>{gitRoot}</code> — the parent of your new
+            OpenKnowledge will be initialized at <code>{gitRoot}</code> — the parent of your new
             folder, because it contains a <code>.git</code> folder (one project per git repo).
           </Trans>
         </p>

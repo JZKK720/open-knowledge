@@ -34,7 +34,7 @@ export function makeServerLockCheck(deps: ServerLockCheckDeps = {}): CheckDefini
             name: 'server-lock',
             status: 'fail',
             summary: `server lock held by pid ${state.lock.pid} on this host`,
-            remediation: 'Stop the other Open Knowledge process or run `ok stop`.',
+            remediation: 'Stop the other OpenKnowledge process or run `ok stop`.',
             detail: `lockPath: ${state.lockPath}; port: ${state.lock.port}; started: ${state.lock.startedAt}`,
           };
         case 'foreign-host':

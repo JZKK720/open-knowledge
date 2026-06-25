@@ -665,7 +665,7 @@ describe('registerProtocolHandler — second-instance argv parsing', () => {
     await flushPromises();
 
     env.app.fireSecondInstance([
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       'openknowledge://open?project=/tmp/si&doc=readme.md',
     ]);
     await flushPromises();
@@ -710,7 +710,7 @@ describe('registerProtocolHandler — cold-start process.argv scan', () => {
       getAnyReadyWindow: env.getAnyReadyWindow,
       setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
       getInitialArgv: () => [
-        '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         'openknowledge://open?project=/tmp/cs&doc=a.md',
       ],
     });
@@ -1556,7 +1556,7 @@ describe('registerProtocolHandler — resolved share routing (US-003)', () => {
     await flushPromises();
 
     env.app.fireSecondInstance([
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       makeShareUrl(sharedBlobUrl),
     ]);
     await flushPromises();
@@ -1580,7 +1580,7 @@ describe('registerProtocolHandler — resolved share routing (US-003)', () => {
       resolveShareTarget,
       setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
       getInitialArgv: () => [
-        '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         makeShareUrl(sharedBlobUrl),
       ],
     });

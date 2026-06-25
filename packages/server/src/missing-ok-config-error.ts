@@ -1,7 +1,7 @@
 export type MissingOkConfigKind = 'okdir' | 'config';
 
 export const MISSING_OK_CONFIG_MESSAGE =
-  'Open Knowledge config not found at .ok/config.yml. Run ok init to scaffold OK in this directory.';
+  'OpenKnowledge config not found at .ok/config.yml. Run ok init to scaffold OK in this directory.';
 
 export class MissingOkConfigError extends Error {
   readonly kind: MissingOkConfigKind;

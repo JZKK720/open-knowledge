@@ -40,7 +40,7 @@ export interface ResolveBundledSkillDirOptions {
   checkDesktop?: boolean;
 }
 
-const DESKTOP_SKILLS_REL = 'Open Knowledge.app/Contents/Resources/cli/dist/assets/skills';
+const DESKTOP_SKILLS_REL = 'OpenKnowledge.app/Contents/Resources/cli/dist/assets/skills';
 
 export function resolveBundledSkillDir(
   which: BundleId | (string & {}),

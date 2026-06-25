@@ -35,11 +35,11 @@ const PROBE_THROTTLE_MS = 750;
 
 const WARNING_COPY: Record<OkOnboardingWarningKind, MessageDescriptor> = {
   root: msg`You picked the filesystem root (/). Scaffolding here will scan every file on this machine — make sure that's what you want.`,
-  home: msg`You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files.`,
-  'home-documents': msg`You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope.`,
-  'home-desktop': msg`You picked ~/Desktop. Open Knowledge will index everything on your desktop.`,
+  home: msg`You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files.`,
+  'home-documents': msg`You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope.`,
+  'home-desktop': msg`You picked ~/Desktop. OpenKnowledge will index everything on your desktop.`,
   'home-downloads': msg`You picked ~/Downloads. Files there are usually transient — consider a stable folder instead.`,
-  'volumes-mount': msg`This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects.`,
+  'volumes-mount': msg`This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects.`,
   'drive-root': msg`This looks like a drive root (e.g., C:\\). Scaffolding here will scan an entire drive.`,
 };
 
@@ -197,11 +197,11 @@ function ConsentDialogForm({ payload, store, toast }: ConsentDialogFormProps) {
       >
         <DialogHeader>
           <DialogTitle>
-            <Trans>Setup Open Knowledge in this folder?</Trans>
+            <Trans>Setup OpenKnowledge in this folder?</Trans>
           </DialogTitle>
           <DialogDescription>
             <Trans>
-              Open Knowledge stores its configuration and internal files inside a newly created{' '}
+              OpenKnowledge stores its configuration and internal files inside a newly created{' '}
               <code>.ok</code> directory in your project root folder.
             </Trans>
           </DialogDescription>
@@ -211,7 +211,7 @@ function ConsentDialogForm({ payload, store, toast }: ConsentDialogFormProps) {
           {payload.gitRootPromoted ? (
             <p className="text-1sm text-muted-foreground">
               <Trans>
-                Open Knowledge initializes at <code>{projectDir}</code> — the parent of{' '}
+                OpenKnowledge initializes at <code>{projectDir}</code> — the parent of{' '}
                 <code>{pickedRelative}</code> because it contains a <code>.git</code> folder (one
                 .ok/ per git repo). <code>Content directory</code> defaults to <code>.</code> (the
                 whole repo); type a sub-folder to narrow it.

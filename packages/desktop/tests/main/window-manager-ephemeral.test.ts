@@ -184,7 +184,7 @@ describe('createEphemeralWindow', () => {
     });
 
     expect(ctx.port).toBe(52001);
-    expect(env.createWindowOpts[0]?.title).toBe('todo.md — Open Knowledge');
+    expect(env.createWindowOpts[0]?.title).toBe('todo.md — OpenKnowledge');
     expect(env.createWindowOpts[0]?.additionalArguments).toContain(
       '--ok-collab-url=ws://localhost:52001/collab',
     );

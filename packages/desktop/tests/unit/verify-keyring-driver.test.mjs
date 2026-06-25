@@ -10,8 +10,8 @@ import {
 
 describe('parseArgs', () => {
   test('accepts a single positional', () => {
-    const args = parseArgs(['node', 'script', '/Applications/Open Knowledge.app']);
-    expect(args.inputPath).toBe('/Applications/Open Knowledge.app');
+    const args = parseArgs(['node', 'script', '/Applications/OpenKnowledge.app']);
+    expect(args.inputPath).toBe('/Applications/OpenKnowledge.app');
   });
 
   test('rejects zero positionals', () => {
@@ -90,7 +90,7 @@ describe('runDriver (full orchestration)', () => {
       runCommand: mock(async () => {}),
       cp: mock(async () => {}),
       stat: mock(async () => ({})),
-      listAppsInMount: mock(async () => ['Open Knowledge.app']),
+      listAppsInMount: mock(async () => ['OpenKnowledge.app']),
       readFile: mock(() =>
         Promise.resolve('{"ok":true,"backend":"keyring","durationMs":5,"timestamp":"t"}'),
       ),
@@ -167,7 +167,7 @@ describe('runDriver (full orchestration)', () => {
     const deps = fakeDeps({
       runCommand,
       cp,
-      listAppsInMount: mock(async () => ['Open Knowledge.app']),
+      listAppsInMount: mock(async () => ['OpenKnowledge.app']),
     });
     const code = await runDriver(['node', 'script', '/tmp/foo.dmg'], deps);
     expect(code).toBe(0);

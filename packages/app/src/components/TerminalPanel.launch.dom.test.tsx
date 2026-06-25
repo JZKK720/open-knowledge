@@ -120,7 +120,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
 
   test("writes `claude --settings '<json>' '<escaped prompt>'` exactly once on running, after first output", async () => {
     const { bridge, terminal, pushData } = makeBridge(WIRED);
-    const prompt = "Let's work on `foo.md` using Open Knowledge.";
+    const prompt = "Let's work on `foo.md` using OpenKnowledge.";
     const { rerender } = render(
       <TerminalPanel bridge={bridge} launch={{ prompt, cli: 'claude', nonce: 1 }} />,
     );
@@ -131,7 +131,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
 
     await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
     expect(launchWrites(terminal.input)[0]).toBe(
-      `claude ${CLAUDE_PRE} 'Let'\\''s work on \`foo.md\` using Open Knowledge.'\r`,
+      `claude ${CLAUDE_PRE} 'Let'\\''s work on \`foo.md\` using OpenKnowledge.'\r`,
     );
 
     rerender(<TerminalPanel bridge={bridge} launch={{ prompt, cli: 'claude', nonce: 1 }} />);

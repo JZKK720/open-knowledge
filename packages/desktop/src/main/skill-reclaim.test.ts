@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reclaimProjectSkillsOnProjectOpen, reclaimUserSkillsOnLaunch } from './skill-reclaim.ts';
 
-const EXE = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+const EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 
 /** A `.mcp.json` body carrying the `# ok-mcp-v1` chain sentinel — the
  *  `createIfWired` signal the project sweep keys off. */

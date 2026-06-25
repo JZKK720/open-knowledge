@@ -160,7 +160,7 @@ describe('preview_url tool — no UI running', () => {
     expect(result.structuredContent?.url).toBeNull();
     expect(result.structuredContent?.baseUrl).toBeNull();
     expect(result.structuredContent?.autoOpen).toBe(true);
-    expect(result.content[0]?.text).toContain('No Open Knowledge server is running');
+    expect(result.content[0]?.text).toContain('No OpenKnowledge server is running');
     expect(result.content[0]?.text).toContain('`ok start`');
     expect(result.content[0]?.text).not.toContain('`ok ui`');
   });
@@ -230,7 +230,7 @@ describe('preview_url tool — backend demand-ensure', () => {
     const handler = captureRegistration(cwd, BASE_CONFIG, {
       serverUrl: async () => {
         throw new AutoStartDisabledError(
-          'Open Knowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
+          'OpenKnowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
         );
       },
     });

@@ -59,7 +59,7 @@ describe('LAUNCH_UI_CHAIN_V1 (published launch.json recipe shell chain)', () => 
     const binDir = join(
       home,
       'Applications',
-      'Open Knowledge.app',
+      'OpenKnowledge.app',
       'Contents',
       'Resources',
       'cli',
@@ -892,7 +892,7 @@ describe('runInit', () => {
         'Some pre-existing content the user wrote themselves.',
         '',
         '<!-- open-knowledge:begin -->',
-        '## Legacy Open Knowledge section',
+        '## Legacy OpenKnowledge section',
         'Pretend this was injected by an older ok init version.',
         '<!-- open-knowledge:end -->',
         '',

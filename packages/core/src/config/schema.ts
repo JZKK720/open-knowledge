@@ -28,7 +28,7 @@ export const ConfigSchema = z.looseObject({
           agentSettable: false,
           defaultScope: 'project',
           description:
-            'Folder Open Knowledge reads and writes documents under, relative to the project root (the folder that contains .ok/). Defaults to the project root. Exclude paths with .okignore.',
+            'Folder OpenKnowledge reads and writes documents under, relative to the project root (the folder that contains .ok/). Defaults to the project root. Exclude paths with .okignore.',
         })
         .default('.'),
     })

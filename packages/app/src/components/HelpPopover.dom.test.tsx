@@ -95,7 +95,7 @@ describe('HelpPopover runtime behavior', () => {
         hasIcon: true,
       },
       {
-        label: 'Open Knowledge',
+        label: 'OpenKnowledge',
         href: 'https://openknowledge.ai/',
         target: '_blank',
         rel: 'noopener noreferrer',

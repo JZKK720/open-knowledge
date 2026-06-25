@@ -158,7 +158,7 @@ describe('presentReceiveError', () => {
   test('unsupported-version payload returns the update prompt', () => {
     expect(presentReceiveError({ kind: 'unsupported-version' })).toEqual({
       kind: 'unsupported-version',
-      message: 'Update Open Knowledge to open this share.',
+      message: 'Update OpenKnowledge to open this share.',
     });
   });
 

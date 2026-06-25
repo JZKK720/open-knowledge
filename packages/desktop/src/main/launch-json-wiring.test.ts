@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { LAUNCH_UI_CHAIN_V1 } from '@inkeep/open-knowledge';
 import { checkAndRepairLaunchJsonOnProjectOpen } from './launch-json-wiring.ts';
 
-const EXE = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+const EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 const CANONICAL_UI = {
   runtimeExecutable: '/bin/sh',
   runtimeArgs: ['-l', '-c', LAUNCH_UI_CHAIN_V1],
@@ -124,8 +124,7 @@ describe('checkAndRepairLaunchJsonOnProjectOpen — force-write posture', () => 
             { name: 'other', runtimeExecutable: 'node' },
             {
               name: 'open-knowledge-ui',
-              runtimeExecutable:
-                '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh',
+              runtimeExecutable: '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh',
               runtimeArgs: ['ui'],
             },
           ],

@@ -548,7 +548,7 @@ export function resolveStartConsoleLevel(env: {
 
 export function formatShutdownNotice(signal: NodeJS.Signals): string[] {
   const lines = [
-    'Stopping Open Knowledge…',
+    'Stopping OpenKnowledge…',
     'Saving pending changes and releasing the server lock — this can take a few seconds.',
   ];
   if (signal === 'SIGINT') {
@@ -728,15 +728,15 @@ export function tryDescribeLockCollision(
     const lockDir = join(cwd, OK_DIR);
     const meta = serverModule.readServerLock(lockDir);
     if (!meta) {
-      return 'Open Knowledge server is already running on this project — check `ok status` or `ok stop`.';
+      return 'OpenKnowledge server is already running on this project — check `ok status` or `ok stop`.';
     }
     if (meta.kind === 'interactive') {
-      return 'Open Knowledge desktop is currently running on this project. Quit it or use --cwd to point elsewhere.';
+      return 'OpenKnowledge desktop is currently running on this project. Quit it or use --cwd to point elsewhere.';
     }
     if (meta.kind === 'mcp-spawned') {
       return 'An MCP-spawned server holds this lock; it should release on idle-shutdown (~30 min). Or run `ok stop`.';
     }
-    return 'Open Knowledge server is already running on this project — check `ok status` or `ok stop`.';
+    return 'OpenKnowledge server is already running on this project — check `ok status` or `ok stop`.';
   } catch {
     return null;
   }

@@ -29,7 +29,7 @@ const DEV_APP_UPDATE_YML = resolve(DESKTOP_ROOT, 'dev-app-update.yml');
 function buildMinimalZip() {
   const filename = 'payload.txt';
   const contents = Buffer.from(
-    `Open Knowledge M3 mock update payload\nversion=${VERSION}\ntimestamp=${new Date().toISOString()}\n`,
+    `OpenKnowledge M3 mock update payload\nversion=${VERSION}\ntimestamp=${new Date().toISOString()}\n`,
     'utf-8',
   );
   const compressed = deflateRawSync(contents);

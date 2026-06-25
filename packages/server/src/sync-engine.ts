@@ -1042,7 +1042,7 @@ export class SyncEngine {
           this.identityUnresolved = nextUnresolved;
           this.cc1Broadcaster?.signal('sync-status');
         }
-        const authorName = identity?.name ?? 'Open Knowledge';
+        const authorName = identity?.name ?? 'OpenKnowledge';
         const authorEmail = identity?.email ?? 'sync@open-knowledge.local';
 
         handle.git.env({
@@ -1196,7 +1196,7 @@ export class SyncEngine {
       }
 
       const identity = await resolveGitIdentity(this.projectDir);
-      const authorName = identity?.name ?? 'Open Knowledge';
+      const authorName = identity?.name ?? 'OpenKnowledge';
       const authorEmail = identity?.email ?? 'sync@open-knowledge.local';
       isoHandle.git.env({
         GIT_AUTHOR_NAME: authorName,

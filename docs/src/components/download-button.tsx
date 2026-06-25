@@ -1,12 +1,16 @@
 import { DownloadIcon } from 'lucide-react';
 import Link from 'next/link';
+import { STABLE_DMG_URL } from '@/lib/download-links';
 
 type DownloadButtonProps = {
-  href: string;
+  href?: string;
   label?: string;
 };
 
-export function DownloadButton({ href, label = 'Download for macOS' }: DownloadButtonProps) {
+export function DownloadButton({
+  href = STABLE_DMG_URL,
+  label = 'Download for macOS',
+}: DownloadButtonProps) {
   return (
     <Link
       href={href}

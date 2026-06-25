@@ -11,7 +11,7 @@ const { computeWrapperFolderName, extractMetadataVersion, toPosixZipPath } = __t
 function desktopSkillDir(appsRoot: string, which: 'discovery' | 'project'): string {
   return join(
     appsRoot,
-    'Open Knowledge.app',
+    'OpenKnowledge.app',
     'Contents',
     'Resources',
     'cli',
@@ -118,7 +118,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: true,
       });
-      expect(dir).toContain('Open Knowledge.app');
+      expect(dir).toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -133,7 +133,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: true,
       });
-      expect(dir).toContain('Open Knowledge.app');
+      expect(dir).toContain('OpenKnowledge.app');
       expect(dir.endsWith('project')).toBe(true);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -149,7 +149,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: false,
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -164,7 +164,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'linux',
         checkDesktop: true,
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -178,7 +178,7 @@ describe('resolveBundledSkillDir', () => {
         home,
         platform: 'darwin',
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

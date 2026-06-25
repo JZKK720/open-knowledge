@@ -68,13 +68,13 @@ export default async function afterPack(context) {
     `${appName}.app`,
     'Contents',
     'Frameworks',
-    'Open Knowledge Server.app',
+    'OpenKnowledge Server.app',
   );
   const serverHelperBinary = join(serverHelperBundleDir, 'Contents', 'MacOS', `${appName} Helper`);
   if (!existsSync(electronHelperStub)) {
     throw new Error(
       `[afterPack] Electron Helper stub not found at ${electronHelperStub}. ` +
-        `Cannot clone it into the Open Knowledge Server helper bundle.`,
+        `Cannot clone it into the OpenKnowledge Server helper bundle.`,
     );
   }
   const serverHelperMacOsDir = dirname(serverHelperBinary);
@@ -123,7 +123,7 @@ export default async function afterPack(context) {
     );
   }
   console.log(
-    `[afterPack] cloned Electron Helper stub into Open Knowledge Server.app MacOS slot at ${serverHelperBinary}`,
+    `[afterPack] cloned Electron Helper stub into OpenKnowledge Server.app MacOS slot at ${serverHelperBinary}`,
   );
 
   const resourcesDir = join(appOutDir, `${appName}.app`, 'Contents', 'Resources');

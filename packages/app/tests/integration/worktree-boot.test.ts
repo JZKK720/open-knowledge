@@ -237,7 +237,7 @@ describe('bootServer pre-listen check on main worktree (FR3)', () => {
     expect(e.name).toBe('MissingOkConfigError');
     expect(e.kind).toBe('okdir');
     expect(e.projectDir).toBe(contentDir);
-    expect(e.message).toContain('Open Knowledge config not found at .ok/config.yml');
+    expect(e.message).toContain('OpenKnowledge config not found at .ok/config.yml');
     expect(e.message).toContain('Run ok init');
     expect(existsSync(resolve(contentDir, '.git/ok'))).toBe(false);
   });
@@ -265,7 +265,7 @@ describe('bootServer pre-listen check on main worktree (FR3)', () => {
     const e = caught as Error & { name?: string; kind?: string };
     expect(e.name).toBe('MissingOkConfigError');
     expect(e.kind).toBe('config');
-    expect(e.message).toContain('Open Knowledge config not found at .ok/config.yml');
+    expect(e.message).toContain('OpenKnowledge config not found at .ok/config.yml');
     expect(existsSync(resolve(contentDir, '.git/ok'))).toBe(false);
   });
 });

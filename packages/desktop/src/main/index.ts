@@ -246,6 +246,7 @@ import {
   type ShareDeepLinkBranchSwitchPayload,
   type ShareNavigatorPayload,
 } from './url-scheme.ts';
+import { migrateLegacyUserDataDir } from './userdata-migration.ts';
 import { buildUtilityForkEnv } from './utility-fork-env.ts';
 import { mergeViewMenuState } from './view-menu-state.ts';
 import {
@@ -852,7 +853,7 @@ async function openProject(
       cancelId: 0,
       defaultId: 0,
       title: 'Open existing project?',
-      message: `Open Knowledge wants to open the existing project at ${discovery.projectDir} (because it contains an .ok/ config). The folder you picked, ${pickedName}, is inside that project. Open ${ancestorName}?`,
+      message: `OpenKnowledge wants to open the existing project at ${discovery.projectDir} (because it contains an .ok/ config). The folder you picked, ${pickedName}, is inside that project. Open ${ancestorName}?`,
     });
     if (response === 0) {
       recordOnboardingFlow({
@@ -1102,9 +1103,9 @@ async function openProjectOrFallbackToNavigator(
         `${projectPath}\n\n` +
         `Another process${typeof holderPid === 'number' ? ` (pid ${holderPid})` : ''} ` +
         `is holding the server lock and didn't release it after a SIGTERM. ` +
-        `Quit it manually and try again, or restart Open Knowledge.`;
+        `Quit it manually and try again, or restart OpenKnowledge.`;
     } else if (kind === 'lock-collision') {
-      dialogTitle = 'Open Knowledge is already running for this project';
+      dialogTitle = 'OpenKnowledge is already running for this project';
       dialogBody = `${projectPath}\n\n${errorMessage}`;
     }
     dialog.showErrorBox(dialogTitle, dialogBody);
@@ -1230,7 +1231,7 @@ async function runApplicationMenuRefresh(): Promise<void> {
               console.error('[main] reconfigureMcpWiring failed', { err: message });
               dialog.showErrorBox(
                 'Configure AI Tool Integrations failed',
-                `Open Knowledge couldn't re-arm the MCP consent dialog:\n\n${message}`,
+                `OpenKnowledge couldn't re-arm the MCP consent dialog:\n\n${message}`,
               );
             }
           }
@@ -2565,6 +2566,19 @@ function bootPrimaryInstance(): void {
   app
     .whenReady()
     .then(async () => {
+      const userDataMigrationLog = getLogger('userdata-migration');
+      const userDataMigration = await migrateLegacyUserDataDir({
+        userDataDir: app.getPath('userData'),
+        platform: process.platform,
+        logger: { event: (payload) => userDataMigrationLog.info(payload, payload.event) },
+      });
+      if (userDataMigration.status === 'failed') {
+        userDataMigrationLog.warn(
+          { status: userDataMigration.status, error: userDataMigration.error },
+          'userData migration failed; starting as first run',
+        );
+      }
+
       app.setAboutPanelOptions(buildAboutPanelOptions(app.getVersion()));
 
       const isTrueFirstRun = !existsSync(join(app.getPath('userData'), 'state.json'));
@@ -2807,8 +2821,8 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: 'Up to Date',
-              message: "You're on the latest version of Open Knowledge.",
-              detail: `Open Knowledge ${result.currentVersion} is the most current version available.`,
+              message: "You're on the latest version of OpenKnowledge.",
+              detail: `OpenKnowledge ${result.currentVersion} is the most current version available.`,
             });
           } else if (result.kind === 'available') {
             void dialog.showMessageBox(target, {
@@ -2816,7 +2830,7 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: 'Update Available',
-              message: `Open Knowledge ${result.latestVersion} is available.`,
+              message: `OpenKnowledge ${result.latestVersion} is available.`,
               detail: `It's downloading in the background. You'll be prompted to relaunch when the install is ready.`,
             });
           } else {
@@ -2825,7 +2839,7 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: "Couldn't Check for Updates",
-              message: "Open Knowledge couldn't check for updates right now.",
+              message: "OpenKnowledge couldn't check for updates right now.",
               detail: result.message,
             });
           }

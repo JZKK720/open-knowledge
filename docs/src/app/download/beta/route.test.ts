@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
   type BetaRedirect,
+  DMG_ASSET_NAME,
   FALLBACK_CACHE_CONTROL,
   RELEASES_PAGE_URL,
   SUCCESS_CACHE_CONTROL,
 } from '../../../lib/download-links.ts';
 
-const TEST_DMG_URL =
-  'https://github.com/inkeep/open-knowledge/releases/download/v0.1.0-beta.1/Open-Knowledge-arm64.dmg';
+const TEST_DMG_URL = `https://github.com/inkeep/open-knowledge/releases/download/v0.1.0-beta.1/${DMG_ASSET_NAME}`;
 
 let _redirect: BetaRedirect = { kind: 'fresh', url: TEST_DMG_URL };
 

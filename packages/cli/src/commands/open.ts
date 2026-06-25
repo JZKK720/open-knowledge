@@ -72,7 +72,7 @@ export function runOpen(name: string, options: OpenOptions, deps: OpenDeps): num
     const baseUrl = deps.resolveBaseUrl(projectDir);
     if (!baseUrl) {
       deps.error(
-        `No Open Knowledge UI is running for ${projectDir}. Folder preview requires a running UI — start one with \`ok ui\`, then retry.`,
+        `No OpenKnowledge UI is running for ${projectDir}. Folder preview requires a running UI — start one with \`ok ui\`, then retry.`,
       );
       return 1;
     }
@@ -88,7 +88,7 @@ export function runOpen(name: string, options: OpenOptions, deps: OpenDeps): num
       projectDir,
     )}&doc=${encodeURIComponent(cleanName)}`;
     deps.openTarget(deepLink);
-    deps.log(`Opening ${cleanName} in the Open Knowledge desktop app.`);
+    deps.log(`Opening ${cleanName} in the OpenKnowledge desktop app.`);
     return 0;
   }
 
@@ -101,7 +101,7 @@ export function runOpen(name: string, options: OpenOptions, deps: OpenDeps): num
   }
 
   deps.error(
-    'No Open Knowledge desktop app found and no UI is running. ' +
+    'No OpenKnowledge desktop app found and no UI is running. ' +
       'Install OK Desktop, or start a UI with `ok ui`, then retry.',
   );
   return 1;

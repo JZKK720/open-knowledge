@@ -24,7 +24,7 @@ function isValidLockPidLocal(value: unknown): value is number {
 }
 
 function formatEditorTitle(projectName: string): string {
-  return `${projectName} — Open Knowledge`;
+  return `${projectName} — OpenKnowledge`;
 }
 
 export interface BrowserWindowLike {
@@ -510,7 +510,7 @@ export class WindowManager {
           const raw = readFileSync(join(lockDir, SPAWN_ERROR_LOG), 'utf-8');
           stderrTail = raw.length > STDERR_TAIL_BYTES ? `…${raw.slice(-STDERR_TAIL_BYTES)}` : raw;
         } catch {}
-        const messageBase = `Open Knowledge server did not bind a port within ${POLL_DEADLINE_MS}ms after spawn (pid=${handle.pid}).`;
+        const messageBase = `OpenKnowledge server did not bind a port within ${POLL_DEADLINE_MS}ms after spawn (pid=${handle.pid}).`;
         const err = Object.assign(
           new Error(stderrTail ? `${messageBase}\n--- stderr ---\n${stderrTail}` : messageBase),
           {
@@ -812,7 +812,7 @@ export class WindowManager {
         const raw = readFileSync(join(lockDir, SPAWN_ERROR_LOG), 'utf-8');
         stderrTail = raw.length > STDERR_TAIL_BYTES ? `…${raw.slice(-STDERR_TAIL_BYTES)}` : raw;
       } catch {}
-      const messageBase = `Open Knowledge server did not bind a port within ${POLL_DEADLINE_MS}ms after ephemeral spawn (pid=${handle.pid}).`;
+      const messageBase = `OpenKnowledge server did not bind a port within ${POLL_DEADLINE_MS}ms after ephemeral spawn (pid=${handle.pid}).`;
       throw Object.assign(
         new Error(stderrTail ? `${messageBase}\n--- stderr ---\n${stderrTail}` : messageBase),
         {
@@ -1036,7 +1036,7 @@ export class WindowManager {
 
     this.deps.log?.info(
       { projectPath, holderPid: lock.pid, port, startedAt: lock.startedAt },
-      'attaching to existing Open Knowledge server',
+      'attaching to existing OpenKnowledge server',
     );
 
     const window = this.deps.createWindow({

@@ -1,5 +1,5 @@
 appId: com.inkeep.open-knowledge
-productName: Open Knowledge
+productName: OpenKnowledge
 copyright: Copyright © 2026 Inkeep
 
 # Pin the Electron version explicitly — bun's workspace hoisting puts
@@ -69,7 +69,7 @@ extraResources:
   # The project's own GPLv3 license text at the Resources root, alongside the
   # third-party notices, so the About panel and license reviewers can find it.
   # electron-builder places Electron's own LICENSE separately; that covers
-  # Electron + Chromium only, not Open Knowledge itself.
+  # Electron + Chromium only, not OpenKnowledge itself.
   - from: "../../LICENSE"
     to: "LICENSE"
   # The bundled CLI (`cli/dist/cli.mjs`) keeps `@napi-rs/keyring` EXTERNAL
@@ -225,14 +225,14 @@ mac:
   # re-exec into the parent's MacOS binary triggers LaunchServices to
   # pin a stuck "exec" Dock placeholder for the child's lifetime. The
   # MacOS binary slot at
-  # `Frameworks/Open Knowledge Server.app/Contents/MacOS/Open Knowledge Helper`
+  # `Frameworks/OpenKnowledge Server.app/Contents/MacOS/OpenKnowledge Helper`
   # is populated by `scripts/afterPack.mjs` (clones the Electron Helper
   # stub for its correct rpath). The executable basename MUST stay
-  # `Open Knowledge Helper` (Electron's canonical generic-helper name) —
+  # `OpenKnowledge Helper` (Electron's canonical generic-helper name) —
   # see `src/main/resolve-detached-spawn-args.ts` for the SIGTRAP cause.
   extraFiles:
     - from: build/helper-bundle/Info.plist
-      to: Frameworks/Open Knowledge Server.app/Contents/Info.plist
+      to: Frameworks/OpenKnowledge Server.app/Contents/Info.plist
 
 dmg:
   # `dmg.sign: true` is already the electron-builder default — kept explicit to
@@ -248,8 +248,8 @@ dmg:
   # Stable, version-less asset name so the share-splash `releases/latest/
   # download/...` URL resolves across releases. electron-builder's default
   # (`${productName}-${version}-${arch}.${ext}`) embeds the version in the
-  # filename, which makes `latest/download/Open-Knowledge.dmg` 404 — the
-  # actual asset is `Open-Knowledge-0.4.1-arm64.dmg`. The arch suffix stays
+  # filename, which makes `latest/download/OpenKnowledge.dmg` 404 — the
+  # actual asset is `OpenKnowledge-0.4.1-arm64.dmg`. The arch suffix stays
   # because we only ship arm64 today; an x64 / universal build would need
   # a parallel artifactName + a splash decision rule.
   # The docs site's /download/beta and /download/stable redirects also
@@ -285,7 +285,7 @@ afterPack: scripts/afterPack.mjs
 afterSign: scripts/afterSign.mjs
 
 protocols:
-  - name: Open Knowledge URL
+  - name: OpenKnowledge URL
     schemes: [openknowledge]
     role: Editor
 

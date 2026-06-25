@@ -2277,7 +2277,7 @@ describe('buildSyncCredentialArgs()', () => {
   };
 
   test('packaged macOS bundle path survives the shell as one intact token', () => {
-    const bundlePath = '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh';
+    const bundlePath = '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
     const args = buildSyncCredentialArgs([bundlePath]);
     expect(argvFromHelper(args)).toEqual([bundlePath, 'auth', 'git-credential']);
   });
@@ -2301,7 +2301,7 @@ describe('buildSyncCredentialArgs()', () => {
   });
 
   test('embedded single quote in the path round-trips safely', () => {
-    const argv = ["/Users/o'brien/Open Knowledge.app/cli.sh"];
+    const argv = ["/Users/o'brien/OpenKnowledge.app/cli.sh"];
     const args = buildSyncCredentialArgs(argv);
     expect(argvFromHelper(args)).toEqual([...argv, 'auth', 'git-credential']);
   });

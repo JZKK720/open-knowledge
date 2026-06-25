@@ -145,7 +145,7 @@ function envShim(home: string): string {
 }
 
 const MANAGED_HINT =
-  '# ! Contents within this block are managed by Open Knowledge. Do not edit.\n# ! Delete this whole block to opt out — Open Knowledge will not re-add it.';
+  '# ! Contents within this block are managed by OpenKnowledge. Do not edit.\n# ! Delete this whole block to opt out — OpenKnowledge will not re-add it.';
 
 function block(): string {
   return `${BEGIN}\n${MANAGED_HINT}\n[ -f "$HOME/.ok/env.sh" ] && . "$HOME/.ok/env.sh"\n${END}\n`;
@@ -412,7 +412,7 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
     fs.mkdirSync(dirname(shim), { recursive: true });
     fs.writeFileSync(
       shim,
-      '# Open Knowledge CLI environment — managed file, do not edit.\ncase ":$' +
+      '# OpenKnowledge CLI environment — managed file, do not edit.\ncase ":$' +
         '{PATH}:" in\n  *:"$' +
         '{HOME}/.ok/bin":*) ;;\n  *) export PATH="$' +
         '{HOME}/.ok/bin:$' +
@@ -476,7 +476,7 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
       );
     if (newOptOuts.length > 0)
       parts.push(
-        `You removed the Open Knowledge block from ${newOptOuts.map(tildify).join(', ')} — it won't be re-added.`,
+        `You removed the OpenKnowledge block from ${newOptOuts.map(tildify).join(', ')} — it won't be re-added.`,
       );
     if (cleanup.removedCount > 0)
       parts.push(

@@ -169,12 +169,12 @@ describe('WindowManager', () => {
     env = buildEnv();
   });
 
-  test('createProjectWindow sets BrowserWindow title to "<projectName> — Open Knowledge" (spawn path)', async () => {
+  test('createProjectWindow sets BrowserWindow title to "<projectName> — OpenKnowledge" (spawn path)', async () => {
     const wm = new WindowManager(env.deps);
     const promise = wm.createProjectWindow({ projectPath: '/tmp/dragon-wiki' });
     env.utilities[0]?.fire({ type: 'ready', port: 52010, apiOrigin: 'http://localhost:52010' });
     await promise;
-    expect(env.createWindowOpts[0]?.title).toBe('dragon-wiki — Open Knowledge');
+    expect(env.createWindowOpts[0]?.title).toBe('dragon-wiki — OpenKnowledge');
   });
 
   test('createProjectWindow forks utility, sends init, waits for ready, creates window', async () => {
@@ -215,7 +215,7 @@ describe('WindowManager', () => {
 
   test('createProjectWindow forwards localOpCliArgs into the utility init IPC payload', async () => {
     const wm = new WindowManager(env.deps);
-    const expectedCliArgs = ['/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh'];
+    const expectedCliArgs = ['/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh'];
     const promise = wm.createProjectWindow({
       projectPath: '/tmp/cli-args-plumbed',
       localOpCliArgs: expectedCliArgs,
@@ -586,7 +586,7 @@ describe('WindowManager', () => {
       expect(ctx.port).toBe(59534);
       expect(ctx.apiOrigin).toBe('http://localhost:59534');
       expect(env.windows.length).toBe(1);
-      expect(env.createWindowOpts[0]?.title).toBe('dragon — Open Knowledge');
+      expect(env.createWindowOpts[0]?.title).toBe('dragon — OpenKnowledge');
     });
 
     function driftSends(w: ReturnType<typeof makeWindow>): unknown[] {
@@ -1004,7 +1004,7 @@ describe('WindowManager', () => {
         expect(ctx.port).toBe(60111);
         expect(ctx.apiOrigin).toBe('http://localhost:60111');
         expect(env.windows.length).toBe(1);
-        expect(env.createWindowOpts[0]?.title).toBe('spawned-project — Open Knowledge');
+        expect(env.createWindowOpts[0]?.title).toBe('spawned-project — OpenKnowledge');
       });
 
       test('spawned pid is tracked for stopAllOwnedServers (US-008)', async () => {

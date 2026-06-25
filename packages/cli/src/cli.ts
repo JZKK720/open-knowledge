@@ -93,7 +93,7 @@ program
     if (anchorRoot !== null) {
       recordInvocationCwd(process.cwd());
       process.chdir(anchorRoot);
-      console.error(`[ok] Using Open Knowledge project at ${anchorRoot}`);
+      console.error(`[ok] Using OpenKnowledge project at ${anchorRoot}`);
     }
 
     const { config } = loadConfig(anchorRoot ?? cwd);

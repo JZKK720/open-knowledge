@@ -11,9 +11,9 @@ describe('terminal-launch-events', () => {
       target,
     );
 
-    requestTerminalLaunch("Let's work on `foo.md` using Open Knowledge.", 'codex', target);
+    requestTerminalLaunch("Let's work on `foo.md` using OpenKnowledge.", 'codex', target);
     expect(received).toEqual([
-      { prompt: "Let's work on `foo.md` using Open Knowledge.", cli: 'codex' },
+      { prompt: "Let's work on `foo.md` using OpenKnowledge.", cli: 'codex' },
     ]);
 
     unsub();

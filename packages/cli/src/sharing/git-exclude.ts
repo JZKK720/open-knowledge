@@ -199,7 +199,7 @@ export function probeTrackedOkPaths(
 
 export function formatTrackedRemediation(tracked: readonly string[]): string {
   const lines: string[] = [];
-  lines.push('Cannot switch Open Knowledge to local-only — these OK files are tracked upstream:');
+  lines.push('Cannot switch OpenKnowledge to local-only — these OK files are tracked upstream:');
   lines.push('');
   for (const p of tracked) lines.push(`  ${p}`);
   lines.push('');

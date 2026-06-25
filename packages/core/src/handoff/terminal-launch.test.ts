@@ -50,18 +50,18 @@ describe('shellSingleQuote', () => {
 
 describe('buildClaudeLaunchCommand', () => {
   it("defaults to a bare `claude '<prompt>'` — no MCP pre-approval unless opted in", () => {
-    expect(buildClaudeLaunchCommand("Let's work on `foo.md` using Open Knowledge.")).toBe(
-      "claude 'Let'\\''s work on `foo.md` using Open Knowledge.'\r",
+    expect(buildClaudeLaunchCommand("Let's work on `foo.md` using OpenKnowledge.")).toBe(
+      "claude 'Let'\\''s work on `foo.md` using OpenKnowledge.'\r",
     );
   });
 
   it("with mcpPreApprove, produces the `claude --settings '<json>' '<prompt>'` shape", () => {
     expect(
-      buildClaudeLaunchCommand("Let's work on `foo.md` using Open Knowledge.", {
+      buildClaudeLaunchCommand("Let's work on `foo.md` using OpenKnowledge.", {
         mcpPreApprove: true,
       }),
     ).toBe(
-      "claude --settings '{\"enabledMcpjsonServers\":[\"open-knowledge\"]}' 'Let'\\''s work on `foo.md` using Open Knowledge.'\r",
+      "claude --settings '{\"enabledMcpjsonServers\":[\"open-knowledge\"]}' 'Let'\\''s work on `foo.md` using OpenKnowledge.'\r",
     );
   });
 

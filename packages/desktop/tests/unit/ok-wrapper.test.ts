@@ -18,13 +18,11 @@ describe('ok.sh wrapper', () => {
     expect(result.status).toBe(69);
     const lines = result.stderr.trimEnd().split('\n');
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toBe(
-      'Open Knowledge has been removed. Reinstall from the Open Knowledge DMG.',
-    );
+    expect(lines[0]).toBe('OpenKnowledge has been removed. Reinstall from the OpenKnowledge DMG.');
     const parsed = JSON.parse(lines[1] ?? '');
     expect(parsed).toEqual({
       error: 'ok-bundle-missing',
-      hint: 'Open Knowledge app appears to have been removed. Reinstall from the DMG, or remove OK entries from your MCP config and rerun ok init.',
+      hint: 'OpenKnowledge app appears to have been removed. Reinstall from the DMG, or remove OK entries from your MCP config and rerun ok init.',
     });
   });
 
@@ -32,7 +30,7 @@ describe('ok.sh wrapper', () => {
     const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const fixture = mkdtempSync(join(tmpdir(), 'ok-wrapper-'));
-    const appRoot = join(fixture, 'Open Knowledge.app');
+    const appRoot = join(fixture, 'OpenKnowledge.app');
     mkdirSync(join(appRoot, 'Contents', 'Resources', 'cli', 'dist'), { recursive: true });
     writeFileSync(join(appRoot, 'Contents', 'Resources', 'cli', 'dist', 'cli.mjs'), '// stub');
 
@@ -60,7 +58,7 @@ describe('ok.sh wrapper', () => {
     const lines = result.stderr.trimEnd().split('\n');
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe(
-      'Open Knowledge CLI cannot find its app bundle. Reinstall from the Open Knowledge DMG.',
+      'OpenKnowledge CLI cannot find its app bundle. Reinstall from the OpenKnowledge DMG.',
     );
     const parsed = JSON.parse(lines[1] ?? '');
     expect(parsed.error).toBe('ok-wrapper-resolution-failed');

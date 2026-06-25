@@ -357,7 +357,7 @@ function hasChoco(): boolean {
 function buildMissingMessage(g: InstallGuidance): string {
   const lines: string[] = [];
   lines.push(
-    `Open Knowledge needs ${g.product} to track changes to your knowledge base, but it isn't installed (or isn't on PATH).`,
+    `OpenKnowledge needs ${g.product} to track changes to your knowledge base, but it isn't installed (or isn't on PATH).`,
   );
   lines.push('');
   if (g.options.length > 0) {
@@ -371,7 +371,7 @@ function buildMissingMessage(g: InstallGuidance): string {
   }
   lines.push(`Or download from: ${g.url}`);
   lines.push('');
-  lines.push('After installing, re-run Open Knowledge.');
+  lines.push('After installing, re-run OpenKnowledge.');
   lines.push('Run `ok diagnose health --check git` to verify your installation.');
   return lines.join('\n');
 }
@@ -384,7 +384,7 @@ function buildTooOldMessage(
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Open Knowledge requires ${g.product} ${required} or newer (detected ${detected} at ${resolvedPath}).`,
+    `OpenKnowledge requires ${g.product} ${required} or newer (detected ${detected} at ${resolvedPath}).`,
   );
   lines.push('');
   if (g.options.length > 0) {
@@ -398,7 +398,7 @@ function buildTooOldMessage(
   }
   lines.push(`Or download from: ${g.url}`);
   lines.push('');
-  lines.push('After updating, re-run Open Knowledge.');
+  lines.push('After updating, re-run OpenKnowledge.');
   lines.push('Run `ok diagnose health --check git` to verify your installation.');
   return lines.join('\n');
 }

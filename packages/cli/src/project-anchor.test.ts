@@ -160,7 +160,7 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
     const { exitCode, stdout, stderr } = spawnCli(['--cwd', sub, 'status', '--json']);
 
     expect(exitCode).toBe(0);
-    expect(stderr).toContain(`[ok] Using Open Knowledge project at ${realpathSync(root)}`);
+    expect(stderr).toContain(`[ok] Using OpenKnowledge project at ${realpathSync(root)}`);
     const report = JSON.parse(stdout);
     expect(report).toHaveProperty('server');
   }, 30_000);
@@ -176,7 +176,7 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
     const { exitCode, stdout, stderr } = spawnCli(['--cwd', sub, 'preview']);
 
     expect(exitCode).toBe(0);
-    expect(stderr).toContain(`[ok] Using Open Knowledge project at ${realpathSync(root)}`);
+    expect(stderr).toContain(`[ok] Using OpenKnowledge project at ${realpathSync(root)}`);
     expect(stdout).toContain('hello.md');
   }, 30_000);
 
@@ -187,7 +187,7 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
     const { exitCode, stderr } = spawnCli(['--cwd', root, 'status', '--json']);
 
     expect(exitCode).toBe(0);
-    expect(stderr).not.toContain('Using Open Knowledge project at');
+    expect(stderr).not.toContain('Using OpenKnowledge project at');
   }, 30_000);
 
   test('`ok stop <relative-dir>` resolves the target against the invocation cwd, not the anchored root', () => {
@@ -207,7 +207,7 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
       const { exitCode, stdout, stderr } = spawnCli(['--cwd', sub, 'stop', './target']);
 
       expect(exitCode).toBe(0);
-      expect(stderr).toContain(`[ok] Using Open Knowledge project at ${realpathSync(root)}`);
+      expect(stderr).toContain(`[ok] Using OpenKnowledge project at ${realpathSync(root)}`);
       expect(stdout).toContain(`Stopped: server (pid=${sleeper.pid}, port=4242)`);
     } finally {
       sleeper.kill();
@@ -223,7 +223,7 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
     const { exitCode, stdout, stderr } = spawnCli(['--cwd', sub, 'mcp']);
 
     expect(exitCode).toBe(0);
-    expect(stderr).toContain(`[ok] Using Open Knowledge project at ${realpathSync(root)}`);
+    expect(stderr).toContain(`[ok] Using OpenKnowledge project at ${realpathSync(root)}`);
     expect(stdout).toBe('');
   }, 30_000);
 
@@ -236,6 +236,6 @@ describe('CLI preAction project anchoring (cold spawn)', () => {
     const { exitCode, stderr } = spawnCli(['--cwd', sub, 'ps', '--json']);
 
     expect(exitCode).toBe(0);
-    expect(stderr).not.toContain('Using Open Knowledge project at');
+    expect(stderr).not.toContain('Using OpenKnowledge project at');
   }, 30_000);
 });

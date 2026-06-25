@@ -1013,7 +1013,7 @@ function IntegrationsSection() {
           <Trans>Integrations</Trans>
         </h3>
         <p className="text-sm text-muted-foreground">
-          <Trans>Connect Open Knowledge to other tools you use.</Trans>
+          <Trans>Connect OpenKnowledge to other tools you use.</Trans>
         </p>
       </div>
       <div className="rounded-md border p-3">

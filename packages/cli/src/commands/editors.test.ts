@@ -149,10 +149,10 @@ describe('CHAIN_V1', () => {
 
   it('probes user-local install before the system bundle path', () => {
     const userIdx = CHAIN_V1.indexOf(
-      'USER_BUNDLE="$HOME/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+      'USER_BUNDLE="$HOME/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
     );
     const sysIdx = CHAIN_V1.indexOf(
-      'BUNDLE="/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+      'BUNDLE="/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
     );
     expect(userIdx).toBeGreaterThanOrEqual(0);
     expect(sysIdx).toBeGreaterThan(userIdx);
@@ -180,7 +180,7 @@ describe('CHAIN_V1', () => {
 
   it('emits the documented stderr message and exit 127 on miss', () => {
     expect(CHAIN_V1).toContain(
-      '"Open Knowledge: install OK Desktop or Node.js 24+, then restart your editor"',
+      '"OpenKnowledge: install OK Desktop or Node.js 24+, then restart your editor"',
     );
     expect(CHAIN_V1).toContain('>&2');
     expect(CHAIN_V1.trimEnd().endsWith('exit 127')).toBe(true);
@@ -262,7 +262,7 @@ describe('isEntryUpToDate', () => {
   it('false for the bundle-direct shape', () => {
     expect(
       isEntryUpToDate({
-        command: '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh',
+        command: '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh',
         args: ['mcp'],
       }),
     ).toBe(false);

@@ -373,7 +373,7 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
             ] satisfies MenuItemConstructorOptions[])
           : []),
         {
-          label: 'Open Knowledge on GitHub',
+          label: 'OpenKnowledge on GitHub',
           click: () => deps.openExternalUrl('https://github.com/inkeep/open-knowledge'),
         },
         ...(deps.onCheckForUpdates
