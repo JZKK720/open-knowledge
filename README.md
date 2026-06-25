@@ -16,7 +16,7 @@ Available as [macOS app](https://github.com/inkeep/open-knowledge/releases/lates
 Key highlights:
 - Full **WYSIWYG** so that editing markdown files feels like editing a Google Doc or Notion page. 
 - Collaborative **AI-editing** with **Claude, Codex, and Cursor desktop apps**. Can be used with any harness/agent via MCP/CLI.
-- Out-of-the-box **MCP**, **skills**, and **agentic search** for LLM Wikis, second brains, and spec-driven development.
+- Out-of-the-box **MCP**, **skills**, and **agentic search** for LLM Wikis, agent second brains, and spec-driven development.
 - No-code **Team Sharing** and **Auto-sync** powered by git/GitHub under the hood.
 
 Docs for general usage: <https://openknowledge.ai/docs>.
