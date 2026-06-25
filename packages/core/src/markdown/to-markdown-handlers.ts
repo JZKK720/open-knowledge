@@ -567,11 +567,15 @@ export const toMarkdownHandlers = {
     const tracker = state.createTracker(info);
     const exit = state.enter('mark');
     let value = tracker.move('==');
-    value += state.containerPhrasing(node as Parents, {
-      before: value,
-      after: '==',
-      ...tracker.current(),
-    });
+    value += encodeAttentionBoundaries(
+      state.containerPhrasing(node as Parents, {
+        before: value,
+        after: '==',
+        ...tracker.current(),
+      }),
+      info,
+      '==',
+    );
     value += tracker.move('==');
     exit();
     return value;
@@ -786,6 +790,12 @@ function safeText(state: State, value: string, info: Info): string {
       return false;
     }
     if (u.character === '=' && u.atBreak === true) return false;
+    if (u.character === ' ' && u.inConstruct === 'phrasing' && u.after === '[\\r\\n]') {
+      return false;
+    }
+    if (u.character === '\t' && u.inConstruct === 'phrasing' && u.after === '[\\r\\n]') {
+      return false;
+    }
     return true;
   });
   let result: string;
@@ -873,14 +883,16 @@ function escapeActiveDelimiterRuns(value: string, info: Info): string {
 }
 
 function encodeAttentionBoundaries(between: string, info: Info, delim: string): string {
-  const marker = delim.startsWith('_') ? '_' : '*';
+  const marker: '*' | '_' = delim.startsWith('_') ? '_' : '*';
+  const before = info.before ?? '';
+  const after = info.after ?? '';
   let result = between;
   const head = result.charCodeAt(0);
-  if (shouldEncodeAttentionBoundary(info.before.charCodeAt(info.before.length - 1), head, marker)) {
+  if (shouldEncodeAttentionBoundary(before.charCodeAt(before.length - 1), head, marker)) {
     result = encodeCharacterReference(head) + result.slice(1);
   }
   const tail = result.charCodeAt(result.length - 1);
-  if (shouldEncodeAttentionBoundary(info.after.charCodeAt(0), tail, marker)) {
+  if (shouldEncodeAttentionBoundary(after.charCodeAt(0), tail, marker)) {
     result = result.slice(0, -1) + encodeCharacterReference(tail);
   }
   return result;
@@ -950,11 +962,15 @@ function serializeDelete(
   const tracker = state.createTracker(info);
   const exit = state.enter('strikethrough');
   let value = tracker.move(delim);
-  value += state.containerPhrasing(node, {
-    ...tracker.current(),
-    before: value,
-    after: '~',
-  });
+  value += encodeAttentionBoundaries(
+    state.containerPhrasing(node, {
+      ...tracker.current(),
+      before: value,
+      after: '~',
+    }),
+    info,
+    delim,
+  );
   value += tracker.move(delim);
   exit();
   return value;
