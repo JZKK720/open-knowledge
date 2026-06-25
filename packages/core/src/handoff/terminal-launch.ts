@@ -1,3 +1,4 @@
+import { MCP_SERVER_NAME } from '../constants/mcp.ts';
 import type { HandoffTarget } from './types.ts';
 
 export function shellSingleQuote(s: string): string {
@@ -7,9 +8,17 @@ export function shellSingleQuote(s: string): string {
 export type TerminalCli = 'claude' | 'codex' | 'cursor';
 
 export interface TerminalCliInfo {
-  /** PATH binary launched in the PTY. The ONLY value interpolated into the
-   *  fixed `<bin> '<prompt>'` shape — a fixed registry value, never user input. */
+  /** PATH binary launched in the PTY. Interpolated (alongside any opted-in
+   *  {@link mcpPreApproveArg}) into the fixed `<bin> [<fixed-args>…] '<prompt>'`
+   *  shape — fixed registry values, never user input. */
   readonly bin: string;
+  /** Claude's MCP pre-approval fragment, inserted verbatim between `<bin>` and
+   *  the prompt ONLY when the caller passes `mcpPreApprove: true` (see
+   *  {@link buildCliLaunchCommand}) — i.e. after the launch site has verified the
+   *  project's `open-knowledge` `.mcp.json` entry is OK's own. An already-shell-
+   *  safe fragment (NOT re-quoted); registry-fixed, never user input. Claude-only;
+   *  omit for CLIs with no pre-approval. */
+  readonly mcpPreApproveArg?: string;
   readonly displayName: string;
   readonly docsUrl: string;
   /** The handoff target this CLI maps to for prompt composition (shared with
@@ -18,12 +27,17 @@ export interface TerminalCliInfo {
   readonly handoffTarget: HandoffTarget;
 }
 
+const CLAUDE_MCP_PREAPPROVE_ARG = `--settings ${shellSingleQuote(
+  JSON.stringify({ enabledMcpjsonServers: [MCP_SERVER_NAME] }),
+)}`;
+
 export const TERMINAL_CLIS = {
   claude: {
     bin: 'claude',
     displayName: 'Claude',
     docsUrl: 'https://docs.claude.com/en/docs/claude-code',
     handoffTarget: 'claude-code',
+    mcpPreApproveArg: CLAUDE_MCP_PREAPPROVE_ARG,
   },
   codex: {
     bin: 'codex',
@@ -45,10 +59,21 @@ export const TERMINAL_CLI_IDS = [
   'cursor',
 ] as const satisfies readonly TerminalCli[];
 
-export function buildCliLaunchCommand(cli: TerminalCli, prompt: string): string {
-  return `${TERMINAL_CLIS[cli].bin} ${shellSingleQuote(prompt)}\r`;
+export interface BuildCliLaunchOptions {
+  readonly mcpPreApprove?: boolean;
 }
 
-export function buildClaudeLaunchCommand(prompt: string): string {
-  return buildCliLaunchCommand('claude', prompt);
+export function buildCliLaunchCommand(
+  cli: TerminalCli,
+  prompt: string,
+  opts: BuildCliLaunchOptions = {},
+): string {
+  const info: TerminalCliInfo = TERMINAL_CLIS[cli];
+  const preApprove =
+    opts.mcpPreApprove === true && info.mcpPreApproveArg ? `${info.mcpPreApproveArg} ` : '';
+  return `${info.bin} ${preApprove}${shellSingleQuote(prompt)}\r`;
+}
+
+export function buildClaudeLaunchCommand(prompt: string, opts: BuildCliLaunchOptions = {}): string {
+  return buildCliLaunchCommand('claude', prompt, opts);
 }

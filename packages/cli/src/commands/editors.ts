@@ -88,6 +88,18 @@ export function buildManagedServerEntry(options: McpInstallOptions = {}): Record
   };
 }
 
+export function isOwnManagedEntry(entry: unknown): boolean {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const e = entry as Record<string, unknown>;
+  if (Object.keys(e).length !== 2) return false;
+  const canonical = buildManagedServerEntry({ mode: 'published' });
+  const canonicalArgs = canonical.args;
+  if (e.command !== canonical.command) return false;
+  if (!Array.isArray(canonicalArgs) || !Array.isArray(e.args)) return false;
+  if (e.args.length !== canonicalArgs.length) return false;
+  return e.args.every((v, i) => v === canonicalArgs[i]);
+}
+
 interface AppSupportOptions {
   home?: string;
   platformName?: NodeJS.Platform;

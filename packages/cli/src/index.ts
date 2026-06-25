@@ -12,6 +12,7 @@ export {
   type EditorId,
   type EditorMcpTarget,
   isEntryUpToDate,
+  isOwnManagedEntry,
   type McpInstallOptions,
 } from './commands/editors.ts';
 export {

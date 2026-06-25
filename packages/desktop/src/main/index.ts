@@ -20,6 +20,7 @@ import {
   detectInstalledEditors,
   EDITOR_TARGETS,
   getOkArtifactPaths,
+  isOwnManagedEntry,
   type McpInstallOptions,
   type ProjectAiIntegrationsResult,
   previewContent,
@@ -1387,11 +1388,21 @@ function probeLoginShellOnPath(args?: readonly string[]): Promise<number | null>
   );
 }
 
-function resolveTerminalClaudeReadiness(): Promise<ClaudeReadiness> {
+function isProjectClaudeMcpOwn(projectRoot: string | undefined): boolean {
+  if (projectRoot === undefined) return false;
+  const target = EDITOR_TARGETS.claude;
+  const projectPath = target.projectConfigPath?.(projectRoot);
+  if (projectPath === undefined) return false;
+  const classified = classifyExistingMcpEntry(target, projectRoot, undefined, projectPath);
+  return classified.kind === 'present' && isOwnManagedEntry(classified.entry);
+}
+
+function resolveTerminalClaudeReadiness(projectRoot: string | undefined): Promise<ClaudeReadiness> {
   return resolveClaudeReadiness({
     probeClaude: () => probeLoginShellOnPath(),
     classifyMcpEntry: () =>
       createMcpWiringCliSurface().classifyExistingMcpEntry('claude', osHomedir()).kind,
+    isProjectMcpPreApprovable: () => isProjectClaudeMcpOwn(projectRoot),
   });
 }
 
@@ -1591,7 +1602,12 @@ function registerIpcHandlers() {
         getLogger('terminal').warn({ err: rewireError }, 'claude mcp rewire failed');
       }
     }
-    const readiness = await resolveTerminalClaudeReadiness();
+    const callerWin = BrowserWindow.fromWebContents(event.sender);
+    const projectRoot =
+      callerWin && wm
+        ? wm.getContextForBrowserWindow(callerWin as unknown as BrowserWindowLike)?.projectPath
+        : undefined;
+    const readiness = await resolveTerminalClaudeReadiness(projectRoot);
     return rewireError === undefined ? readiness : { ...readiness, rewireError };
   });
 

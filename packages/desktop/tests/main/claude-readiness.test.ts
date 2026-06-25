@@ -179,34 +179,47 @@ describe('runLoginShellProbe', () => {
 });
 
 describe('resolveClaudeReadiness', () => {
-  test('claude present + mcp wired', async () => {
+  test("claude present + mcp wired + project entry is OK's own → pre-approvable", async () => {
     const r = await resolveClaudeReadiness({
       probeClaude: () => Promise.resolve(0),
       classifyMcpEntry: () => 'present',
+      isProjectMcpPreApprovable: () => true,
     });
-    expect(r).toEqual({ claude: 'present', mcp: 'wired' });
+    expect(r).toEqual({ claude: 'present', mcp: 'wired', mcpPreApprovable: true });
   });
 
-  test('claude not-found + mcp missing → needs-rewire', async () => {
+  test('claude not-found + mcp missing → needs-rewire, not pre-approvable', async () => {
     const r = await resolveClaudeReadiness({
       probeClaude: () => Promise.resolve(1),
       classifyMcpEntry: () => 'no-entry',
+      isProjectMcpPreApprovable: () => false,
     });
-    expect(r).toEqual({ claude: 'not-found', mcp: 'needs-rewire' });
+    expect(r).toEqual({ claude: 'not-found', mcp: 'needs-rewire', mcpPreApprovable: false });
+  });
+
+  test('project pre-approval is independent of global wiring (foreign project entry → false)', async () => {
+    const r = await resolveClaudeReadiness({
+      probeClaude: () => Promise.resolve(0),
+      classifyMcpEntry: () => 'present',
+      isProjectMcpPreApprovable: () => false,
+    });
+    expect(r).toEqual({ claude: 'present', mcp: 'wired', mcpPreApprovable: false });
   });
 
   test('probe-null surfaces as claude unknown (mcp still resolves)', async () => {
     const r = await resolveClaudeReadiness({
       probeClaude: () => Promise.resolve(null),
       classifyMcpEntry: () => 'present',
+      isProjectMcpPreApprovable: () => true,
     });
-    expect(r).toEqual({ claude: 'unknown', mcp: 'wired' });
+    expect(r).toEqual({ claude: 'unknown', mcp: 'wired', mcpPreApprovable: true });
   });
 
   test('a rejected probe degrades to claude unknown, never crashes', async () => {
     const r = await resolveClaudeReadiness({
       probeClaude: () => Promise.reject(new Error('boom')),
       classifyMcpEntry: () => 'present',
+      isProjectMcpPreApprovable: () => false,
     });
     expect(r.claude).toBe('unknown');
   });
@@ -217,8 +230,20 @@ describe('resolveClaudeReadiness', () => {
       classifyMcpEntry: () => {
         throw new Error('claude.json read blew up');
       },
+      isProjectMcpPreApprovable: () => false,
     });
-    expect(r).toEqual({ claude: 'present', mcp: 'needs-rewire' });
+    expect(r).toEqual({ claude: 'present', mcp: 'needs-rewire', mcpPreApprovable: false });
+  });
+
+  test('a throwing isProjectMcpPreApprovable degrades to not pre-approvable, never crashes', async () => {
+    const r = await resolveClaudeReadiness({
+      probeClaude: () => Promise.resolve(0),
+      classifyMcpEntry: () => 'present',
+      isProjectMcpPreApprovable: () => {
+        throw new Error('project .mcp.json read blew up');
+      },
+    });
+    expect(r).toEqual({ claude: 'present', mcp: 'wired', mcpPreApprovable: false });
   });
 });
 

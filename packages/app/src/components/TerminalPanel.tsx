@@ -267,22 +267,47 @@ function TerminalSession({
     const ptyId = ptyIdRef.current;
     if (ptyId === null) return;
 
+    const nonce = launch.nonce;
+    let cancelled = false;
+
     if (launch.cli === 'claude') {
       if (!preflightDone) return;
-      lastLaunchedNonceRef.current = launch.nonce;
       setMissingCli(null);
-      if (readiness?.claude === 'not-found') return; // banner handles remediation
-      bridge.terminal.input(ptyId, buildCliLaunchCommand('claude', launch.prompt));
-      return;
+      if (readiness?.claude === 'not-found') {
+        lastLaunchedNonceRef.current = nonce; // banner handles remediation; consume
+        return;
+      }
+      const { prompt } = launch;
+      const writeClaude = (mcpPreApprove: boolean) => {
+        if (cancelled) return;
+        const livePtyId = ptyIdRef.current;
+        if (livePtyId === null) return;
+        bridge.terminal.input(
+          livePtyId,
+          buildCliLaunchCommand('claude', prompt, { mcpPreApprove }),
+        );
+        lastLaunchedNonceRef.current = nonce; // commit only after the write lands
+      };
+      void bridge.terminal
+        .claudePreflight()
+        .then((fresh) => writeClaude(fresh.mcpPreApprovable === true))
+        .catch((err) => {
+          console.warn('[terminal] claude pre-approval recheck failed', { err });
+          writeClaude(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    lastLaunchedNonceRef.current = launch.nonce;
     setMissingCli(null);
     const { cli, prompt } = launch;
-    let cancelled = false;
     const writeLaunch = () => {
+      if (cancelled) return;
       const livePtyId = ptyIdRef.current;
-      if (livePtyId !== null) bridge.terminal.input(livePtyId, buildCliLaunchCommand(cli, prompt));
+      if (livePtyId === null) return;
+      bridge.terminal.input(livePtyId, buildCliLaunchCommand(cli, prompt));
+      lastLaunchedNonceRef.current = nonce; // commit only after the write lands
     };
     void bridge.terminal
       .cliPreflight(cli)
@@ -290,6 +315,7 @@ function TerminalSession({
         if (cancelled) return;
         if (res.onPath === 'not-found') {
           setMissingCli(cli);
+          lastLaunchedNonceRef.current = nonce; // banner handles remediation; consume
           return;
         }
         writeLaunch();

@@ -214,7 +214,7 @@ export {
   DEFAULT_SIGTERM_POLL_MS,
   SPAWN_ERROR_LOG,
 } from './constants/lifecycle.ts';
-export { GREP_MAX_RESULTS, READ_DOCUMENT_HISTORY_DEPTH } from './constants/mcp.ts';
+export { GREP_MAX_RESULTS, MCP_SERVER_NAME, READ_DOCUMENT_HISTORY_DEPTH } from './constants/mcp.ts';
 export { MENU_LABELS, type MenuLabelKey } from './constants/menu-labels.ts';
 export { LOCAL_DIR, OK_DIR, OK_PROJECT_MARKER } from './constants/ok-dir.ts';
 export {

@@ -55,7 +55,17 @@ mock.module('@xterm/addon-web-links', () => ({ WebLinksAddon: MockWebLinksAddon 
 mock.module('@xterm/addon-unicode11', () => ({ Unicode11Addon: MockUnicode11Addon }));
 mock.module('@xterm/xterm/css/xterm.css', () => ({}));
 
-const WIRED: ClaudeReadiness = { claude: 'present', mcp: 'wired' };
+/** Fully ready: claude on PATH, OK tools wired, AND the project's own
+ *  `open-knowledge` entry verified as OK's canonical server (mcpPreApprovable),
+ *  so the launch pre-approves it. */
+const WIRED: ClaudeReadiness = { claude: 'present', mcp: 'wired', mcpPreApprovable: true };
+/** Claude ready, but the project's `open-knowledge` entry is NOT OK's own (a
+ *  foreign/tampered shared-project entry) — pre-approval must be withheld. */
+const WIRED_FOREIGN_PROJECT: ClaudeReadiness = {
+  claude: 'present',
+  mcp: 'wired',
+  mcpPreApprovable: false,
+};
 const ON_PATH: CliReadiness = { onPath: 'present' };
 
 function makeBridge(preflight: ClaudeReadiness = WIRED, cliReadiness: CliReadiness = ON_PATH) {
@@ -98,6 +108,8 @@ function launchWrites(inputMock: ReturnType<typeof mock>, bin = 'claude'): strin
     .filter((d) => typeof d === 'string' && d.startsWith(`${bin} `));
 }
 
+const CLAUDE_PRE = `--settings '{"enabledMcpjsonServers":["open-knowledge"]}'`;
+
 describe('TerminalPanel "Open in terminal" launch', () => {
   beforeEach(() => {
     (globalThis as { ResizeObserver: unknown }).ResizeObserver = MockResizeObserver;
@@ -106,7 +118,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     cleanup();
   });
 
-  test("writes `claude '<escaped prompt>'` exactly once on running, after first output", async () => {
+  test("writes `claude --settings '<json>' '<escaped prompt>'` exactly once on running, after first output", async () => {
     const { bridge, terminal, pushData } = makeBridge(WIRED);
     const prompt = "Let's work on `foo.md` using Open Knowledge.";
     const { rerender } = render(
@@ -115,11 +127,11 @@ describe('TerminalPanel "Open in terminal" launch', () => {
 
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
-    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalled());
 
     await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
     expect(launchWrites(terminal.input)[0]).toBe(
-      "claude 'Let'\\''s work on `foo.md` using Open Knowledge.'\r",
+      `claude ${CLAUDE_PRE} 'Let'\\''s work on \`foo.md\` using Open Knowledge.'\r`,
     );
 
     rerender(<TerminalPanel bridge={bridge} launch={{ prompt, cli: 'claude', nonce: 1 }} />);
@@ -164,7 +176,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
 
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
-    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalled());
     await act(async () => {
       await Promise.resolve();
     });
@@ -172,7 +184,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     expect(launchWrites(terminal.input).length).toBe(0);
   });
 
-  test('launches when claude is present even if OK tools need a rewire (claude still runs)', async () => {
+  test('launches when claude is present even if OK tools need a rewire (bare — no pre-approval)', async () => {
     const { bridge, terminal, pushData } = makeBridge({
       claude: 'present',
       mcp: 'needs-rewire',
@@ -181,10 +193,148 @@ describe('TerminalPanel "Open in terminal" launch', () => {
 
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
-    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalled());
 
     await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
     expect(launchWrites(terminal.input)[0]).toBe("claude 'hi'\r");
+  });
+
+  test("does NOT pre-approve when the project MCP entry is not OK's own (mcpPreApprovable false)", async () => {
+    const { bridge, terminal, pushData } = makeBridge(WIRED_FOREIGN_PROJECT);
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalled());
+
+    await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
+    expect(launchWrites(terminal.input)[0]).toBe("claude 'hi'\r");
+    expect(launchWrites(terminal.input)[0]).not.toContain('--settings');
+  });
+
+  test('re-verifies pre-approval at LAUNCH time, not mount time (TOCTOU)', async () => {
+    const dataSubs: Array<(m: OkPtyData) => void> = [];
+    let preflightCalls = 0;
+    const terminal = {
+      create: mock(async () => ({ ok: true as const, ptyId: 'pty-1' })),
+      input: mock((_id: string, _d: string) => {}),
+      resize: mock(() => {}),
+      kill: mock(async () => {}),
+      drain: mock(() => {}),
+      onData: mock((cb: (m: OkPtyData) => void) => {
+        dataSubs.push(cb);
+        return mock(() => {});
+      }),
+      onExit: mock(() => mock(() => {})),
+      claudePreflight: mock(async () => (preflightCalls++ === 0 ? WIRED : WIRED_FOREIGN_PROJECT)),
+      cliPreflight: mock(async () => ON_PATH),
+      rewireClaudeMcp: mock(async () => WIRED),
+    };
+    const bridge = {
+      terminal,
+      shell: { openExternal: mock(async () => {}) },
+    } as unknown as OkDesktopBridge;
+    const pushData = (m: OkPtyData) => {
+      for (const f of dataSubs) f(m);
+    };
+
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+
+    await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
+    expect(launchWrites(terminal.input)[0]).toBe("claude 'hi'\r");
+    expect(launchWrites(terminal.input)[0]).not.toContain('--settings');
+    expect(terminal.claudePreflight.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a launch-time preflight REJECTION falls back to a bare launch (security fail-safe)', async () => {
+    const dataSubs: Array<(m: OkPtyData) => void> = [];
+    let calls = 0;
+    const terminal = {
+      create: mock(async () => ({ ok: true as const, ptyId: 'pty-1' })),
+      input: mock((_id: string, _d: string) => {}),
+      resize: mock(() => {}),
+      kill: mock(async () => {}),
+      drain: mock(() => {}),
+      onData: mock((cb: (m: OkPtyData) => void) => {
+        dataSubs.push(cb);
+        return mock(() => {});
+      }),
+      onExit: mock(() => mock(() => {})),
+      claudePreflight: mock(async () => {
+        if (calls++ === 0) return WIRED;
+        throw new Error('ipc boom');
+      }),
+      cliPreflight: mock(async () => ON_PATH),
+      rewireClaudeMcp: mock(async () => WIRED),
+    };
+    const bridge = {
+      terminal,
+      shell: { openExternal: mock(async () => {}) },
+    } as unknown as OkDesktopBridge;
+    const pushData = (m: OkPtyData) => {
+      for (const f of dataSubs) f(m);
+    };
+
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+
+    await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
+    expect(launchWrites(terminal.input)[0]).toBe("claude 'hi'\r");
+    expect(launchWrites(terminal.input)[0]).not.toContain('--settings');
+  });
+
+  test('a same-nonce effect re-run during the launch preflight window does not drop the launch', async () => {
+    const dataSubs: Array<(m: OkPtyData) => void> = [];
+    let calls = 0;
+    const deferreds: Array<(r: ClaudeReadiness) => void> = [];
+    const terminal = {
+      create: mock(async () => ({ ok: true as const, ptyId: 'pty-1' })),
+      input: mock((_id: string, _d: string) => {}),
+      resize: mock(() => {}),
+      kill: mock(async () => {}),
+      drain: mock(() => {}),
+      onData: mock((cb: (m: OkPtyData) => void) => {
+        dataSubs.push(cb);
+        return mock(() => {});
+      }),
+      onExit: mock(() => mock(() => {})),
+      claudePreflight: mock(() =>
+        calls++ === 0
+          ? Promise.resolve(WIRED)
+          : new Promise<ClaudeReadiness>((resolve) => {
+              deferreds.push(resolve);
+            }),
+      ),
+      cliPreflight: mock(async () => ON_PATH),
+      rewireClaudeMcp: mock(async () => WIRED),
+    };
+    const bridge = {
+      terminal,
+      shell: { openExternal: mock(async () => {}) },
+    } as unknown as OkDesktopBridge;
+    const pushData = (m: OkPtyData) => {
+      for (const f of dataSubs) f(m);
+    };
+
+    const { rerender } = render(
+      <TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />,
+    );
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(deferreds.length).toBe(1));
+
+    rerender(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+    await waitFor(() => expect(deferreds.length).toBe(2));
+
+    act(() => {
+      for (const resolve of deferreds) resolve(WIRED);
+    });
+
+    await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
+    expect(launchWrites(terminal.input)[0]).toBe(`claude ${CLAUDE_PRE} 'hi'\r`);
   });
 
   test('a new nonce fires a second launch (repeat "Open in terminal" while running)', async () => {
@@ -201,7 +351,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
       <TerminalPanel bridge={bridge} launch={{ prompt: 'second', cli: 'claude', nonce: 2 }} />,
     );
     await waitFor(() => expect(launchWrites(terminal.input).length).toBe(2));
-    expect(launchWrites(terminal.input)[1]).toBe("claude 'second'\r");
+    expect(launchWrites(terminal.input)[1]).toBe(`claude ${CLAUDE_PRE} 'second'\r`);
   });
 
   test('codex launch probes cliPreflight and writes the codex command', async () => {

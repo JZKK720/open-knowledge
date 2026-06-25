@@ -76,6 +76,11 @@ export function mcpStatusFromClassification(kind: McpEntryKind): McpWiringStatus
 export interface ResolveClaudeReadinessDeps {
   probeClaude(): Promise<number | null>;
   classifyMcpEntry(): McpEntryKind;
+  /** Whether the project's OWN `open-knowledge` `.mcp.json` entry is OK's
+   *  canonical managed server (cli `isOwnManagedEntry`) — gates the docked
+   *  terminal's Claude MCP pre-approval. Project-scoped, distinct from the
+   *  user-global `classifyMcpEntry` read above. */
+  isProjectMcpPreApprovable(): boolean;
 }
 
 export async function resolveClaudeReadiness(
@@ -83,7 +88,7 @@ export async function resolveClaudeReadiness(
 ): Promise<ClaudeReadiness> {
   const code = await deps.probeClaude().catch((err) => {
     getLogger('claude-readiness').warn(
-      { err: err instanceof Error ? err.message : String(err) },
+      { err },
       'claude PATH probe rejected; treating claude presence as unknown',
     );
     return null;
@@ -93,12 +98,26 @@ export async function resolveClaudeReadiness(
     kind = deps.classifyMcpEntry();
   } catch (err) {
     getLogger('claude-readiness').warn(
-      { err: err instanceof Error ? err.message : String(err) },
+      { err },
       'classifyMcpEntry threw (never-throws contract violated); treating MCP as not-wired',
     );
     kind = 'absent';
   }
-  return { claude: interpretClaudeProbe(code), mcp: mcpStatusFromClassification(kind) };
+  let mcpPreApprovable: boolean;
+  try {
+    mcpPreApprovable = deps.isProjectMcpPreApprovable();
+  } catch (err) {
+    getLogger('claude-readiness').warn(
+      { err },
+      'isProjectMcpPreApprovable threw; treating project MCP as not pre-approvable',
+    );
+    mcpPreApprovable = false;
+  }
+  return {
+    claude: interpretClaudeProbe(code),
+    mcp: mcpStatusFromClassification(kind),
+    mcpPreApprovable,
+  };
 }
 
 export interface ResolveCliOnPathDeps {
@@ -110,7 +129,7 @@ export interface ResolveCliOnPathDeps {
 export async function resolveCliOnPath(deps: ResolveCliOnPathDeps): Promise<CliReadiness> {
   const code = await deps.probe().catch((err) => {
     getLogger('cli-readiness').warn(
-      { err: err instanceof Error ? err.message : String(err) },
+      { err },
       'cli PATH probe rejected; treating cli presence as unknown',
     );
     return null;

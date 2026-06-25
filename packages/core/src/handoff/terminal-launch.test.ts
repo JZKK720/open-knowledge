@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { MCP_SERVER_NAME } from '../constants/mcp.ts';
 import {
   buildClaudeLaunchCommand,
   buildCliLaunchCommand,
@@ -6,6 +7,8 @@ import {
   TERMINAL_CLI_IDS,
   TERMINAL_CLIS,
 } from './terminal-launch.ts';
+
+const CLAUDE_PREAPPROVE = `--settings '{"enabledMcpjsonServers":["${MCP_SERVER_NAME}"]}'`;
 
 describe('shellSingleQuote', () => {
   it('wraps a plain string in single quotes', () => {
@@ -46,36 +49,71 @@ describe('shellSingleQuote', () => {
 });
 
 describe('buildClaudeLaunchCommand', () => {
-  it("produces the fixed `claude '<prompt>'` shape with a trailing CR", () => {
+  it("defaults to a bare `claude '<prompt>'` — no MCP pre-approval unless opted in", () => {
     expect(buildClaudeLaunchCommand("Let's work on `foo.md` using Open Knowledge.")).toBe(
       "claude 'Let'\\''s work on `foo.md` using Open Knowledge.'\r",
     );
   });
 
-  it('keeps an injection payload inert and contained in the single arg', () => {
-    const cmd = buildClaudeLaunchCommand("'; rm -rf / #");
-    expect(cmd).toBe("claude ''\\''; rm -rf / #'\r");
-    expect(cmd.startsWith('claude ')).toBe(true);
-    expect(cmd.endsWith('\r')).toBe(true);
+  it("with mcpPreApprove, produces the `claude --settings '<json>' '<prompt>'` shape", () => {
+    expect(
+      buildClaudeLaunchCommand("Let's work on `foo.md` using Open Knowledge.", {
+        mcpPreApprove: true,
+      }),
+    ).toBe(
+      "claude --settings '{\"enabledMcpjsonServers\":[\"open-knowledge\"]}' 'Let'\\''s work on `foo.md` using Open Knowledge.'\r",
+    );
+  });
+
+  it('keeps an injection payload inert and contained in the prompt arg (pre-approved)', () => {
+    const cmd = buildClaudeLaunchCommand("'; rm -rf / #", { mcpPreApprove: true });
+    expect(cmd).toBe(`claude ${CLAUDE_PREAPPROVE} ''\\''; rm -rf / #'\r`);
+    expect(cmd.startsWith(`claude ${CLAUDE_PREAPPROVE} `)).toBe(true);
+    expect(cmd.endsWith("''\\''; rm -rf / #'\r")).toBe(true);
   });
 });
 
 describe('buildCliLaunchCommand', () => {
-  it('uses the registry binary per CLI, with a positional single-quoted prompt', () => {
+  it('defaults to a bare positional single-quoted prompt per CLI (no pre-approval)', () => {
     expect(buildCliLaunchCommand('claude', 'hi')).toBe("claude 'hi'\r");
     expect(buildCliLaunchCommand('codex', 'hi')).toBe("codex 'hi'\r");
     expect(buildCliLaunchCommand('cursor', 'hi')).toBe("cursor-agent 'hi'\r");
   });
 
-  it('escapes injection payloads identically for every CLI', () => {
+  it('escapes the prompt identically for every CLI regardless of fixed args', () => {
     for (const cli of TERMINAL_CLI_IDS) {
-      const cmd = buildCliLaunchCommand(cli, "'; rm -rf / #");
-      expect(cmd).toBe(`${TERMINAL_CLIS[cli].bin} ''\\''; rm -rf / #'\r`);
-      expect(cmd.endsWith('\r')).toBe(true);
+      const cmd = buildCliLaunchCommand(cli, "'; rm -rf / #", { mcpPreApprove: true });
+      expect(cmd.startsWith(`${TERMINAL_CLIS[cli].bin} `)).toBe(true);
+      expect(cmd.endsWith("''\\''; rm -rf / #'\r")).toBe(true);
     }
   });
 
-  it('buildClaudeLaunchCommand is the claude specialization', () => {
+  it('buildClaudeLaunchCommand is the claude specialization (opts forwarded)', () => {
     expect(buildClaudeLaunchCommand('hi')).toBe(buildCliLaunchCommand('claude', 'hi'));
+    expect(buildClaudeLaunchCommand('hi', { mcpPreApprove: true })).toBe(
+      buildCliLaunchCommand('claude', 'hi', { mcpPreApprove: true }),
+    );
+  });
+});
+
+describe('claude MCP pre-approval', () => {
+  it('is OFF by default and only added for claude when opted in', () => {
+    expect(buildCliLaunchCommand('claude', 'hi')).not.toContain('--settings');
+    expect(buildCliLaunchCommand('claude', 'hi', { mcpPreApprove: true })).toContain(
+      CLAUDE_PREAPPROVE,
+    );
+  });
+
+  it('never added for codex/cursor, even when opted in (claude-only flag)', () => {
+    expect(buildCliLaunchCommand('codex', 'hi', { mcpPreApprove: true })).toBe("codex 'hi'\r");
+    expect(buildCliLaunchCommand('cursor', 'hi', { mcpPreApprove: true })).toBe(
+      "cursor-agent 'hi'\r",
+    );
+  });
+
+  it('names the canonical MCP server, matching what editor wiring registers in .mcp.json', () => {
+    expect(buildCliLaunchCommand('claude', 'hi', { mcpPreApprove: true })).toContain(
+      `["${MCP_SERVER_NAME}"]`,
+    );
   });
 });

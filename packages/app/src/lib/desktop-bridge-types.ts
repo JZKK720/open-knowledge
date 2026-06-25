@@ -451,6 +451,14 @@ export interface OkPtyExit {
 export interface ClaudeReadiness {
   readonly claude: 'present' | 'not-found' | 'unknown';
   readonly mcp: 'wired' | 'needs-rewire';
+  /** True when the project's own `open-knowledge` `.mcp.json` entry is verified
+   *  to be OK's canonical managed server (cli `isOwnManagedEntry`), so the docked
+   *  terminal may pre-approve it on Claude launch instead of re-showing Claude's
+   *  trust prompt. False/absent for a foreign, tampered, or missing entry (the
+   *  supply-chain risk in a shared/cloned project) — launch bare and let Claude
+   *  prompt. Computed per-project by the desktop preflight; absent means false
+   *  (fail-safe). */
+  readonly mcpPreApprovable?: boolean;
   /** Set only on a `rewire`-action result when re-arming MCP wiring threw, so
    *  the renderer can surface the failure instead of the button silently no-op'ing. */
   readonly rewireError?: string;
