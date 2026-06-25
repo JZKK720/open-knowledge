@@ -42,6 +42,13 @@ describe('FileTree density configuration', () => {
     expect(px).toBeLessThanOrEqual(26);
   });
 
+  test('rendered --trees-item-height is derived from the virtualizer itemHeight (one source of truth, cannot drift)', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      const style = createFileTreeStyle(theme) as Record<string, string>;
+      expect(style['--trees-item-height']).toBe(`${FILE_TREE_DENSITY_OPTIONS.itemHeight}px`);
+    }
+  });
+
   test('preserves existing typography + padding overrides alongside density', () => {
     const style = createFileTreeStyle('light') as Record<string, string | number>;
     expect(style['--trees-font-size-override']).toBe('0.875rem');
