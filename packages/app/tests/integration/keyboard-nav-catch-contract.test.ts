@@ -43,7 +43,7 @@ describe('KeyboardNav catch-path structural contract (precedent #48)', () => {
   });
 
   test('L2 ArrowUp catch narrows RangeError + emits counter + structured warn with tier:L2', () => {
-    const body = extractCatchBody(source, '// L0 + L2: Arrow Up');
+    const body = extractCatchBody(source, '// L0 + L2c + L2d + L2: Arrow Up');
 
     expect(body).toContain('err instanceof RangeError');
     expect(body).toContain("incrementJsxArrowNodeSelectFailed('up')");
@@ -54,7 +54,7 @@ describe('KeyboardNav catch-path structural contract (precedent #48)', () => {
   });
 
   test('L2 ArrowDown catch narrows RangeError + emits counter + structured warn with tier:L2', () => {
-    const body = extractCatchBody(source, '// L0 + L2: Arrow Down');
+    const body = extractCatchBody(source, '// L0 + L2d + L2: Arrow Down');
 
     expect(body).toContain('err instanceof RangeError');
     expect(body).toContain("incrementJsxArrowNodeSelectFailed('down')");
@@ -75,10 +75,21 @@ describe('KeyboardNav catch-path structural contract (precedent #48)', () => {
     expect(body).toContain('reason:');
   });
 
+  test('L2d tryEnterCompoundJsx catch narrows RangeError + emits counter + structured warn with tier:L2d', () => {
+    const body = extractCatchBody(source, 'function tryEnterCompoundJsx');
+
+    expect(body).toContain('err instanceof RangeError');
+    expect(body).toContain('incrementJsxArrowNodeSelectFailed(dir)');
+    expect(body).toContain("'jsx-component-arrow-node-select-failed'");
+    expect(body).toContain('direction: dir,');
+    expect(body).toContain("tier: 'L2d',");
+    expect(body).toContain('reason:');
+  });
+
   test('every catch in keyboard-nav.ts narrows to RangeError (no bare catch widening)', () => {
     const catchPattern = /catch\s*(?:\(\s*\w+\s*\)\s*)?\{/g;
     const matches = [...source.matchAll(catchPattern)];
-    expect(matches.length).toBeGreaterThanOrEqual(4); // L0 + L2c + L2 up + L2 down
+    expect(matches.length).toBeGreaterThanOrEqual(5); // L0 + L2 up + L2 down + L2c + L2d
 
     for (const m of matches) {
       const window = source.slice(m.index ?? 0, (m.index ?? 0) + 1000);

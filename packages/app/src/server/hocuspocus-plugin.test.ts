@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as actualServerPkg from '@inkeep/open-knowledge-server';
 import { resolveContentConfig } from './hocuspocus-plugin.ts';
 
 const createdDirs: string[] = [];
@@ -66,6 +67,7 @@ describe('hocuspocusPlugin.configureServer middleware ordering', () => {
     const createAssetServeMiddlewareSpy = mock(() => innerAssetFn);
 
     mock.module('@inkeep/open-knowledge-server', () => ({
+      ...actualServerPkg,
       createAssetServeMiddleware: createAssetServeMiddlewareSpy,
       createServer: () => ({
         lockDir: testContentDir,

@@ -32,6 +32,7 @@ async function bootTestServer(): Promise<{ booted: BootedServer; contentDir: str
   writeFileSync(join(okDir, 'config.yml'), '', 'utf-8');
   writeFileSync(join(okDir, '.gitignore'), '', 'utf-8');
   const booted = await bootServer({
+    host: '127.0.0.1',
     contentDir,
     attachUiSibling: false,
     idleShutdownMs: null,
@@ -156,7 +157,7 @@ describe('keepalive WS upgrade → setPresence bootstrap', () => {
     expect(broadcaster.getPresenceMap()[presenceKey]).toBeUndefined();
 
     const ws = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive` +
+      `ws://127.0.0.1:${booted.port}/collab/keepalive` +
         `?pid=${process.pid}` +
         `&connectionId=${connectionId}` +
         `&displayName=${encodeURIComponent('Claude')}` +
@@ -197,7 +198,7 @@ describe('keepalive WS upgrade → setPresence bootstrap', () => {
     const presenceKey = toBroadcasterKey(connectionId);
 
     const ws = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
+      `ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());
@@ -217,7 +218,7 @@ describe('keepalive WS upgrade → setPresence bootstrap', () => {
     const presenceKey = toBroadcasterKey(connectionId);
 
     const ws = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive` +
+      `ws://127.0.0.1:${booted.port}/collab/keepalive` +
         `?pid=${process.pid}` +
         `&connectionId=${connectionId}` +
         `&displayName=${encodeURIComponent('Claude')}` +
@@ -246,7 +247,7 @@ describe('keepalive WS upgrade → setPresence bootstrap', () => {
       `&clientName=${encodeURIComponent('claude')}` +
       `&colorSeed=${encodeURIComponent('Claude')}`;
 
-    const ws1 = new WsClient(`ws://localhost:${booted.port}/collab/keepalive${baseQuery}`);
+    const ws1 = new WsClient(`ws://127.0.0.1:${booted.port}/collab/keepalive${baseQuery}`);
     await new Promise<void>((resolve, reject) => {
       ws1.once('open', () => resolve());
       ws1.once('error', (err) => reject(err));
@@ -261,7 +262,7 @@ describe('keepalive WS upgrade → setPresence bootstrap', () => {
     ws1.close();
 
     await wait(30);
-    const ws2 = new WsClient(`ws://localhost:${booted.port}/collab/keepalive${baseQuery}`);
+    const ws2 = new WsClient(`ws://127.0.0.1:${booted.port}/collab/keepalive${baseQuery}`);
     await new Promise<void>((resolve, reject) => {
       ws2.once('open', () => resolve());
       ws2.once('error', (err) => reject(err));

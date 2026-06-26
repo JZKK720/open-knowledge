@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { homedir } from 'node:os';
 import { ProblemDetailsSchema, StreamingProblemEventSchema } from '@inkeep/open-knowledge-core';
+import { HARNESS_BOOT_TIMEOUT_MS } from '../harness-boot-timeout';
 import { createTestServer, type TestServer } from '../test-harness';
 
 let server: TestServer;
@@ -9,7 +10,7 @@ beforeAll(async () => {
   server = await createTestServer({
     localOpCliArgs: ['/nonexistent-test-binary-do-not-create-this-file'],
   });
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

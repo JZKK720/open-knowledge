@@ -1,9 +1,9 @@
 ---
 title: Ignore patterns
-description: Hide files and folders from the editor, search, and your AI tools.
+description: Hide files and folders from the editor, search, and your AI agents.
 ---
 
-Open Knowledge indexes the markdown in your project so it can power the file tree, search, and the tools your AI agents call. When you don't want a file in that picture (drafts, scratch notes, vendor-pasted material), hide it with an ignore pattern. Hidden items don't appear in the file tree, don't show up in search, and don't reach AI tools through MCP. Nothing on disk is deleted.
+OpenKnowledge indexes the markdown in your project so it can power the file tree, search, and the tools your AI agents call. When you don't want a file in that picture (drafts, scratch notes, vendor-pasted material), hide it with an ignore pattern. Hidden items don't appear in the file tree, don't show up in search, and don't reach AI agents through MCP. Nothing on disk is deleted.
 
 ## Hide a file from the file tree
 
@@ -57,15 +57,15 @@ drafts/
 
 ## Where the patterns live
 
-Patterns are stored in a `.okignore` file at your project root, alongside `.gitignore`. It's checked into version control and shared with anyone who clones the repo. Hand-edit it directly in any editor; Open Knowledge picks up changes the same way it picks up Settings edits.
+Patterns are stored in a `.okignore` file at your project root, alongside `.gitignore`. It's checked into version control and shared with anyone who clones the repo. Hand-edit it directly in any editor; OpenKnowledge picks up changes the same way it picks up Settings edits.
 
-Open Knowledge scaffolds a starter `.okignore` with a commented header the first time it sets up a project, so the file is there from day one.
+OpenKnowledge scaffolds a starter `.okignore` with a commented header the first time it sets up a project, so the file is there from day one.
 
 ## Nested files
 
 Drop additional `.okignore` files at any folder depth. Each file scopes to its directory, the same way nested `.gitignore` files do. Nested files are honored at runtime but aren't currently editable from Settings; open them in your IDE.
 
-If Open Knowledge can't reload your ignore files (rare; usually a filesystem error), it surfaces a toast with the path that triggered the reload. The workspace keeps using the previous patterns until the next change.
+If OpenKnowledge can't reload your ignore files (rare; usually a filesystem error), it surfaces a toast with the path that triggered the reload. The workspace keeps using the previous patterns until the next change.
 
 ## Working with `.gitignore`
 
@@ -75,18 +75,17 @@ If Open Knowledge can't reload your ignore files (rare; usually a filesystem err
 !secret.md
 ```
 
-`.gitignore` itself is git's contract; Open Knowledge never edits it. If you want a file out of git but visible in Open Knowledge, that's where the negation goes.
+`.gitignore` itself is git's contract; OpenKnowledge never edits it. If you want a file out of git but visible in OpenKnowledge, that's where the negation goes.
 
-The negation is an Open Knowledge behavior; `git` itself only reads `.gitignore`, so an `!` line in `.okignore` does not change what git tracks.
+The negation is an OpenKnowledge behavior; `git` itself only reads `.gitignore`, so an `!` line in `.okignore` does not change what git tracks.
 
 ## Temporarily surfacing hidden files
 
-The sidebar's right-click menu and the macOS **View** menu carry two project-local visibility toggles for when you need to see hidden content without permanently editing `.okignore`:
+The sidebar always lists every file on disk under the content directory, including files excluded by `.gitignore` / `.okignore`. Dot-prefixed entries are the exception, so the sidebar's right-click menu and the macOS **View** menu carry a project-local **Show Hidden Files** toggle for when you need to see them without permanently editing `.okignore`:
 
-- **Show Hidden Files** stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Server-side `.gitignore` / `.okignore` filters still apply.
-- **Show all files** bypasses every filter (both client and server) and surfaces every file on disk under the content directory. Useful for one-off triage; flip it back off once you've found what you needed.
+- **Show Hidden Files** stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Tooling internals (`.git/`, `.ok/`, `node_modules/`) stay hidden in every mode.
 
-Both settings persist per-project per-machine. See [Editor → Show Hidden Files / Show all files](/docs/features/editor#show-hidden-files--show-all-files) for the full UX.
+The setting persists per-project per-machine. See [Editor → Show Hidden Files](/docs/features/editor#show-hidden-files) for the full UX.
 
 ## See also
 

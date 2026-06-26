@@ -51,10 +51,12 @@ import { ControllableWebSocket } from './network-control';
 export const mdManager = new MarkdownManager({ extensions: sharedExtensions });
 export const schema = getSchema(sharedExtensions);
 
+export const HARNESS_BOOT_TIMEOUT_MS = 30_000;
+
 async function getFreePort(): Promise<number> {
   return new Promise((resolve) => {
     const s = createNetServer();
-    s.listen(0, () => {
+    s.listen(0, '127.0.0.1', () => {
       const port = (s.address() as AddressInfo).port;
       s.close(() => resolve(port));
     });
@@ -63,6 +65,8 @@ async function getFreePort(): Promise<number> {
 
 export interface TestServer {
   port: number;
+  baseUrl: string;
+  wsUrl: string;
   contentDir: string;
   instance: ServerInstance;
   cleanup: () => Promise<void>;
@@ -85,46 +89,65 @@ export interface CreateTestServerOptions {
   gitEnabled?: boolean;
   commitDebounceMs?: number;
   localOpCliArgs?: string[];
+  ephemeral?: boolean;
+  projectDir?: string;
+  singleDocRelPath?: string;
+  mdManager?: MarkdownManager;
 }
 
 export async function createTestServer(options: CreateTestServerOptions = {}): Promise<TestServer> {
+  const ephemeral = options.ephemeral ?? false;
+
   const contentDir =
     options.contentDir !== undefined
       ? realpathSync(options.contentDir)
       : realpathSync(mkdtempSync(join(tmpdir(), 'ok-test-')));
-  if (options.contentDir === undefined) {
-    writeFileSync(join(contentDir, 'test-doc.md'), '', 'utf-8');
-  }
 
-  if (options.contentDir === undefined) {
-    mkdirSync(join(contentDir, '.ok'), { recursive: true });
-    writeFileSync(join(contentDir, '.ok', 'config.yml'), '', 'utf-8');
-  }
+  const createdProjectDir = ephemeral && options.projectDir === undefined;
+  const projectDir = ephemeral
+    ? realpathSync(options.projectDir ?? mkdtempSync(join(tmpdir(), 'ok-ephemeral-test-')))
+    : contentDir;
 
-  await ensureProjectGit(contentDir);
+  if (!ephemeral) {
+    if (options.contentDir === undefined) {
+      writeFileSync(join(contentDir, 'test-doc.md'), '', 'utf-8');
+    }
+
+    if (options.contentDir === undefined) {
+      mkdirSync(join(contentDir, '.ok'), { recursive: true });
+      writeFileSync(join(contentDir, '.ok', 'config.yml'), '', 'utf-8');
+    }
+
+    await ensureProjectGit(contentDir);
+  }
 
   const port = await getFreePort();
   const srv = createServer({
     contentDir,
+    projectDir,
     quiet: true,
     debounce: options.debounce ?? 200,
     maxDebounce: options.maxDebounce ?? 1000,
-    gitEnabled: options.gitEnabled ?? false,
+    gitEnabled: ephemeral ? false : (options.gitEnabled ?? false),
     commitDebounceMs: options.commitDebounceMs ?? 200,
     contentRoot: options.gitEnabled === true ? '.' : undefined,
     enableTestRoutes: true,
     localOpCliArgs: options.localOpCliArgs,
+    mdManager: options.mdManager,
+    ...(ephemeral ? { ephemeral: true, singleDocRelPath: options.singleDocRelPath } : {}),
     skipStateManifestCheck: true,
   });
 
   await srv.ready;
 
-  const mcpHttpHandler = createMcpHttpHandler({
-    contentDir,
-    projectDir: contentDir,
-    config: ConfigSchema.parse({}),
-    getServerUrl: () => `http://localhost:${port}`,
-  });
+  const mcpHttpHandler = ephemeral
+    ? undefined
+    : createMcpHttpHandler({
+        contentDir,
+        projectDir: contentDir,
+        config: ConfigSchema.parse({}),
+        getServerUrl: () => `http://127.0.0.1:${port}`,
+      });
 
   const httpServer = createHttpServer();
   const mount = mountMcpAndApi({
@@ -138,20 +161,33 @@ export async function createTestServer(options: CreateTestServerOptions = {}): P
     keepaliveGraceMs: options.keepaliveGraceMs,
   });
 
-  await new Promise<void>((resolve) => {
-    httpServer.listen(port, () => resolve());
+  await new Promise<void>((resolve, reject) => {
+    const onErr = (err: Error): void => {
+      httpServer.off('error', onErr);
+      reject(err);
+    };
+    httpServer.once('error', onErr);
+    httpServer.listen(port, '127.0.0.1', () => {
+      httpServer.off('error', onErr);
+      resolve();
+    });
   });
 
   return {
     port,
+    baseUrl: `http://127.0.0.1:${port}`,
+    wsUrl: `ws://127.0.0.1:${port}`,
     contentDir,
     instance: srv,
     cleanup: async () => {
       await mount.shutdown();
-      await mcpHttpHandler.close();
+      await mcpHttpHandler?.close();
       await srv.destroy();
       mount.wss.close();
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      if (createdProjectDir) {
+        rmSync(projectDir, { recursive: true, force: true });
+      }
       if (!options.keepContentDir) {
         rmSync(contentDir, { recursive: true, force: true });
       }
@@ -190,7 +226,7 @@ export async function createTestClient(
 
   let controllableWs: ControllableWebSocket | undefined;
   const providerOpts: Record<string, unknown> = {
-    url: `ws://localhost:${port}/collab`,
+    url: `ws://127.0.0.1:${port}/collab`,
     name: resolvedDocName,
     document: doc,
     connect: true,
@@ -406,6 +442,34 @@ export function assertBridgeInvariant(ytext: Y.Text, fragment: Y.XmlFragment): v
   }
 }
 
+export type FinalStateOutcome =
+  | { outcome: 'converged-late' }
+  | { outcome: 'stalled'; detail: string };
+
+export function classifyFinalState(
+  clients: ReadonlyArray<Pick<TestClient, 'ytext' | 'fragment'>>,
+): FinalStateOutcome {
+  const finalYtexts = clients.map((c) => c.ytext.toString());
+  const finalFragMds = clients.map((c) => serializeFragment(c.fragment));
+  const peersIdentical =
+    finalYtexts.every((t) => t === finalYtexts[0]) &&
+    finalFragMds.every((m) => m === finalFragMds[0]);
+  if (!peersIdentical) {
+    return { outcome: 'stalled', detail: 'peers diverged at budget exhaustion' };
+  }
+  for (const c of clients) {
+    try {
+      assertBridgeInvariant(c.ytext, c.fragment);
+    } catch (err) {
+      return {
+        outcome: 'stalled',
+        detail: `bridge invariant beyond tolerance at budget exhaustion: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`,
+      };
+    }
+  }
+  return { outcome: 'converged-late' };
+}
+
 export function readTestDoc(contentDir: string, docName = 'test-doc'): string {
   try {
     return readFileSync(join(contentDir, `${docName}.md`), 'utf-8');
@@ -429,7 +493,7 @@ export async function agentWriteMd(
     colorSeed?: string;
   },
 ): Promise<void> {
-  const res = await fetch(`http://localhost:${port}/api/agent-write-md`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/agent-write-md`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -442,7 +506,11 @@ export async function agentWriteMd(
       colorSeed: opts?.colorSeed,
     }),
   });
-  if (!res.ok) throw new Error(`agent-write-md failed: ${res.status}`);
+  if (!res.ok) {
+    const err: Error & { status?: number } = new Error(`agent-write-md failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
 }
 
 /** POST to agent-patch endpoint (find-and-replace).
@@ -459,7 +527,7 @@ export async function agentPatch(
   replace: string,
   docName?: string,
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const res = await fetch(`http://localhost:${port}/api/agent-patch`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/agent-patch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ find, replace, docName }),
@@ -475,7 +543,7 @@ export async function agentUndo(
   port: number,
   opts: { docName?: string; connectionId: string; scope?: 'last' | 'session' },
 ): Promise<void> {
-  const res = await fetch(`http://localhost:${port}/api/agent-undo`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/agent-undo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -489,8 +557,8 @@ export async function agentUndo(
 
 export async function testReset(port: number, docName?: string): Promise<void> {
   const url = docName
-    ? `http://localhost:${port}/api/test-reset?docName=${encodeURIComponent(docName)}`
-    : `http://localhost:${port}/api/test-reset`;
+    ? `http://127.0.0.1:${port}/api/test-reset?docName=${encodeURIComponent(docName)}`
+    : `http://127.0.0.1:${port}/api/test-reset`;
   const res = await fetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`test-reset failed: ${res.status}`);
 }
@@ -519,7 +587,7 @@ export async function awaitFileWatcherIndexed(
   let lastBodyPreview = '';
   let rescueTriggered = false;
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`http://localhost:${server.port}/api/documents`).catch((err) => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/documents`).catch((err) => {
       lastStatus = -1;
       lastBodyPreview = `fetch error: ${String(err).slice(0, 80)}`;
       return null;
@@ -537,7 +605,7 @@ export async function awaitFileWatcherIndexed(
     }
     if (!rescueTriggered && Date.now() - start >= rescueAfterMs) {
       rescueTriggered = true;
-      await fetch(`http://localhost:${server.port}/api/test-rescan-files`, {
+      await fetch(`http://127.0.0.1:${server.port}/api/test-rescan-files`, {
         method: 'POST',
       }).catch(() => null);
     }
@@ -560,7 +628,7 @@ export async function awaitBacklinkIndexed(
   let rescueTriggered = false;
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(
-      `http://localhost:${server.port}/api/backlinks?docName=${encodeURIComponent(targetDocName)}`,
+      `http://127.0.0.1:${server.port}/api/backlinks?docName=${encodeURIComponent(targetDocName)}`,
     ).catch(() => null);
     if (res?.ok) {
       lastStatus = res.status;
@@ -573,7 +641,7 @@ export async function awaitBacklinkIndexed(
     }
     if (!rescueTriggered && Date.now() - start >= rescueAfterMs) {
       rescueTriggered = true;
-      await fetch(`http://localhost:${server.port}/api/test-rescan-backlinks`, {
+      await fetch(`http://127.0.0.1:${server.port}/api/test-rescan-backlinks`, {
         method: 'POST',
       }).catch(() => null);
     }
@@ -581,6 +649,49 @@ export async function awaitBacklinkIndexed(
   }
   throw new Error(
     `awaitBacklinkIndexed: ${sourceDocName} → ${targetDocName} not indexed within ${timeoutMs}ms (last status=${lastStatus}, rescueTriggered=${rescueTriggered})`,
+  );
+}
+
+export async function awaitWipCommits(
+  server: TestServer,
+  docName: string,
+  count: number,
+  timeoutMs = 20_000,
+): Promise<string[]> {
+  const intervals = [100, 250, 500, 1000];
+  let attempt = 0;
+  let lastShas: string[] = [];
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const flushRes = await fetch(`http://127.0.0.1:${server.port}/api/test-flush-git`, {
+      method: 'POST',
+    }).catch((err: unknown) => {
+      console.warn(
+        `[awaitWipCommits] test-flush-git fetch threw: ${String(err)} - continuing poll`,
+      );
+      return null;
+    });
+    if (flushRes !== null && !flushRes.ok) {
+      console.warn(
+        `[awaitWipCommits] test-flush-git returned ${flushRes.status} - continuing poll`,
+      );
+    }
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/api/history?docName=${encodeURIComponent(docName)}`,
+    ).catch(() => null);
+    if (r?.ok) {
+      const body = (await r.json().catch(() => ({}))) as {
+        entries?: Array<{ sha?: string; type?: string }>;
+      };
+      lastShas = (body.entries ?? [])
+        .filter((e) => e.type === 'wip' && /^[0-9a-f]{40}$/i.test(e.sha ?? ''))
+        .map((e) => e.sha as string);
+      if (lastShas.length >= count) return lastShas;
+    }
+    await wait(intervals[Math.min(attempt++, intervals.length - 1)]);
+  }
+  throw new Error(
+    `awaitWipCommits: doc ${docName} reached ${lastShas.length}/${count} WIP commits within ${timeoutMs}ms`,
   );
 }
 
@@ -840,7 +951,7 @@ export async function waitForPortFree(port: number, timeoutMs = 2500): Promise<v
         lastErr = err;
         resolve(false);
       });
-      probe.listen(port, () => {
+      probe.listen(port, '127.0.0.1', () => {
         probe.close(() => resolve(true));
       });
     });
@@ -914,7 +1025,7 @@ export async function createRestartableServer(
             reject(err);
           };
           httpServer.once('error', onErr);
-          httpServer.listen(port, () => {
+          httpServer.listen(port, '127.0.0.1', () => {
             httpServer.off('error', onErr);
             resolve();
           });
@@ -1009,8 +1120,8 @@ export function attachSystemDocSubscriber(
   pool: ProviderPool,
   port: number,
 ): SystemDocSubscriberHandle {
-  const url = `ws://localhost:${port}/collab`;
-  const baseUrl = `http://localhost:${port}`;
+  const url = `ws://127.0.0.1:${port}/collab`;
+  const baseUrl = `http://127.0.0.1:${port}`;
   const doc = new Y.Doc();
   const provider = new HocuspocusProvider({
     url,
@@ -1119,7 +1230,7 @@ export async function createMultiClientContext(opts: {
   recycleDebounceMs?: number;
 }): Promise<MultiClientContext> {
   const { ProviderPool } = await import('../../src/editor/provider-pool');
-  const wsUrl = `ws://localhost:${opts.server.port}/collab`;
+  const wsUrl = `ws://127.0.0.1:${opts.server.port}/collab`;
   const pools: InstanceType<ProviderPoolCtor>[] = [];
   for (let i = 0; i < opts.clientCount; i++) {
     const pool = new ProviderPool(3, wsUrl, { recycleDebounceMs: opts.recycleDebounceMs });
@@ -1154,7 +1265,7 @@ export async function seedPoolServerInstanceId(
     setExpectedServerInstanceId: (id: string | null) => void;
   },
 ): Promise<string> {
-  const res = await fetch(`http://localhost:${server.port}/api/server-info`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/server-info`);
   if (!res.ok) {
     throw new Error(`seedPoolServerInstanceId: /api/server-info returned ${res.status}`);
   }

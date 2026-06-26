@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ContextMenuItem, FileTreeDropTarget } from '@pierre/trees';
+import { OK_SIDEBAR_DRAG_MIME } from '@/lib/sidebar-drag';
 import {
   collectTreeFolderPathsFromDocuments,
   computeTreeAncestorPaths,
@@ -8,13 +9,19 @@ import {
   createTreePlaceholder,
   docNameToTreePath,
   documentsToTreePaths,
+  fileEntryFromUploadedPath,
   fileEntryToTreePath,
+  filesFromExternalDrop,
   folderPathToTreeDirectoryPath,
+  isExternalFileDrag,
+  parentFolderPathForTreeItemDropTarget,
   relativePathForTreeItem,
   treeDirectoryPathToFolderPath,
   treeFilePathToDocName,
   treeItemToTarget,
   treePathToAppPath,
+  uploadedPathForSidebarDrop,
+  uploadParentDocNameForFolderDrop,
 } from './file-tree-adapter';
 import { buildTrashAbsPath } from './file-tree-operations';
 import type { DocEntry, FileEntry } from './file-tree-utils';
@@ -113,6 +120,79 @@ describe('file-tree-adapter', () => {
         dropTarget({ kind: 'directory', directoryPath: 'archive/', hoveredPath: 'archive/' }),
       ),
     ).toBe('archive/docs/');
+  });
+
+  test('promotes nested entries to root and treats already-root entries as no-ops', () => {
+    const root = dropTarget({ kind: 'root', directoryPath: null });
+    expect(computeTreeDropDestinationPath('docs/archive/', root)).toBe('archive/');
+    expect(computeTreeDropDestinationPath('a/b/c/', root)).toBe('c/');
+    expect(computeTreeDropDestinationPath('guide.md', root)).toBe('guide.md');
+    expect(computeTreeDropDestinationPath('archive/', root)).toBe('archive/');
+  });
+
+  test('resolves external file drop targets to upload parent doc names', () => {
+    expect(parentFolderPathForTreeItemDropTarget('docs/', true)).toBe('docs');
+    expect(parentFolderPathForTreeItemDropTarget('docs/guide.md', false)).toBe('docs');
+    expect(parentFolderPathForTreeItemDropTarget('assets/cat.png', false)).toBe('assets');
+    expect(parentFolderPathForTreeItemDropTarget('README.md', false)).toBe('');
+
+    expect(uploadParentDocNameForFolderDrop('docs', 'clip.pdf')).toBe('docs/clip.pdf');
+    expect(uploadParentDocNameForFolderDrop('docs/', 'clip.pdf')).toBe('docs/clip.pdf');
+    expect(uploadParentDocNameForFolderDrop('', 'clip.pdf')).toBe('clip.pdf');
+
+    expect(uploadedPathForSidebarDrop('docs', { src: 'clip.pdf' })).toBe('docs/clip.pdf');
+    expect(
+      uploadedPathForSidebarDrop('docs', { src: 'ignored.pdf', path: '/assets/clip.pdf' }),
+    ).toBe('assets/clip.pdf');
+    expect(uploadedPathForSidebarDrop('', { src: 'clip.pdf', deduped: true })).toBe('clip.pdf');
+  });
+
+  test('classifies uploaded sidebar files for optimistic entries', () => {
+    const md = fileEntryFromUploadedPath('docs/notes.md', new File(['hello'], 'notes.md'));
+    expect(md).toMatchObject({
+      kind: 'document',
+      docName: 'docs/notes',
+      docExt: '.md',
+      size: 5,
+    });
+
+    const mdx = fileEntryFromUploadedPath('docs/card.mdx', new File(['x'], 'card.mdx'));
+    expect(mdx).toMatchObject({
+      kind: 'document',
+      docName: 'docs/card',
+      docExt: '.mdx',
+      size: 1,
+    });
+
+    const asset = fileEntryFromUploadedPath('img/photo.png', new File(['image'], 'photo.png'));
+    expect(asset).toMatchObject({
+      kind: 'asset',
+      path: 'img/photo.png',
+      assetExt: 'png',
+      mediaKind: 'image',
+      size: 5,
+    });
+
+    expect(fileEntryFromUploadedPath('Makefile', new File(['build'], 'Makefile'))).toBeNull();
+  });
+
+  test('detects external file drags without swallowing sidebar drags', () => {
+    expect(isExternalFileDrag({ dataTransfer: { types: ['Files'] } })).toBe(true);
+    expect(isExternalFileDrag({ dataTransfer: { types: ['Files', OK_SIDEBAR_DRAG_MIME] } })).toBe(
+      false,
+    );
+    expect(isExternalFileDrag({ dataTransfer: { types: [OK_SIDEBAR_DRAG_MIME] } })).toBe(false);
+    expect(isExternalFileDrag({ dataTransfer: null })).toBe(false);
+  });
+
+  test('filters ghost file entries from external drops', () => {
+    const namedEmpty = new File([], 'empty.txt');
+    const namelessContent = { name: '', size: 10 } as File;
+    const ghost = { name: '', size: 0 } as File;
+
+    expect(
+      filesFromExternalDrop({ dataTransfer: { files: [ghost, namedEmpty, namelessContent] } }),
+    ).toEqual([namedEmpty, namelessContent]);
   });
 
   test('converts context menu items to sidebar targets and relative paths', () => {

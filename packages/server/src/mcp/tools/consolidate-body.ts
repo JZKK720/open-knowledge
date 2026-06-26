@@ -58,6 +58,8 @@ You already confirmed the decision at the STOP gate at the top of this workflow.
 
 ### 3. Write the canonical article
 
+**Persist as you go (MUST).** For a large consolidation drawing on several research docs, create the article skeleton — frontmatter + the headings below — first, then \`edit\` each section in as you finish it; don't hold the whole synthesis in context for one final write. A rate limit or crash mid-synthesis then costs you one section, not the entire article. (The OK skill's §Writing carries this rule for all long-running work: the knowledge base is your checkpoint.)
+
 Save inside the content directory (\`${contentDir}\`). Path convention depends on the project:
 
 - If the project uses the three-tier lifecycle (external-sources → research → articles), save under an \`articles/\` folder relative to the content dir, grouped by topic subfolder when the area is broad (e.g., \`articles/editor/crdt-architecture.md\`)

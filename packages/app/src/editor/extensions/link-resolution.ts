@@ -25,10 +25,13 @@ export function isResolvedAssetHref(
   href: string,
   sourceDocName: string,
   assetPaths: ReadonlySet<string> | undefined,
+  filePaths?: ReadonlySet<string> | undefined,
 ): boolean {
-  if (!assetPaths) return false;
   const projectRelPath = resolveAssetProjectPath(href, sourceDocName);
-  return projectRelPath !== null && setHasPathCaseInsensitive(assetPaths, projectRelPath);
+  if (projectRelPath === null) return false;
+  if (assetPaths && setHasPathCaseInsensitive(assetPaths, projectRelPath)) return true;
+  if (filePaths && setHasPathCaseInsensitive(filePaths, projectRelPath)) return true;
+  return false;
 }
 
 export function computeLinkResolutionState(
@@ -44,8 +47,8 @@ export function computeLinkResolutionState(
   if (cache === null) return 'loading';
 
   if (target.kind === 'asset') {
-    if (cache.assetPaths === undefined) return 'asset';
-    return isResolvedAssetHref(target.url, sourceDocName, cache.assetPaths)
+    if (cache.assetPaths === undefined && cache.filePaths === undefined) return 'asset';
+    return isResolvedAssetHref(target.url, sourceDocName, cache.assetPaths, cache.filePaths)
       ? 'asset'
       : 'unresolved';
   }

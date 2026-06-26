@@ -1,4 +1,9 @@
+import {
+  mediaKindForSidebarAssetExtension,
+  type UploadAssetSuccess,
+} from '@inkeep/open-knowledge-core';
 import type { ContextMenuItem, FileTreeDropTarget } from '@pierre/trees';
+import { getFileExtension } from '@/components/file-tree-rename-validation';
 import {
   type DocumentEntry,
   type FileEntry,
@@ -6,6 +11,7 @@ import {
   isDocumentEntry,
   isFolderEntry,
 } from '@/components/file-tree-utils';
+import { OK_SIDEBAR_DRAG_MIME } from '@/lib/sidebar-drag';
 
 const DEFAULT_TREE_EXTENSION = '.md';
 const TREE_EXTENSION_PATTERN = /\.(md|mdx)$/i;
@@ -232,6 +238,85 @@ export function computeTreeDropDestinationPath(
 ): string {
   if (target.kind === 'root' || target.directoryPath == null) return getTreeBasename(sourcePath);
   return `${target.directoryPath}${getTreeBasename(sourcePath)}`;
+}
+
+export function parentFolderPathForTreeItemDropTarget(treePath: string, isFolder: boolean): string {
+  if (isFolder) {
+    return treeDirectoryPathToFolderPath(folderPathToTreeDirectoryPath(treePath));
+  }
+  const appPath = treeFilePathToDocName(treePath);
+  const slash = appPath.lastIndexOf('/');
+  return slash === -1 ? '' : appPath.slice(0, slash);
+}
+
+export function uploadParentDocNameForFolderDrop(
+  parentFolderPath: string,
+  fileName: string,
+): string {
+  const parent = treeDirectoryPathToFolderPath(folderPathToTreeDirectoryPath(parentFolderPath));
+  return parent ? `${parent}/${fileName}` : fileName;
+}
+
+export function uploadedPathForSidebarDrop(
+  parentFolderPath: string,
+  success: UploadAssetSuccess,
+): string {
+  return (success.path ?? uploadParentDocNameForFolderDrop(parentFolderPath, success.src)).replace(
+    /^\/+/,
+    '',
+  );
+}
+
+interface ExternalFileDragLike {
+  dataTransfer?: {
+    types?: Iterable<string> | ArrayLike<string>;
+  } | null;
+}
+
+interface ExternalFileDropLike {
+  dataTransfer?: {
+    files?: Iterable<File> | ArrayLike<File>;
+  } | null;
+}
+
+export function isExternalFileDrag(event: ExternalFileDragLike): boolean {
+  const types = event.dataTransfer?.types;
+  if (!types) return false;
+  const list = Array.from(types);
+  return list.includes('Files') && !list.includes(OK_SIDEBAR_DRAG_MIME);
+}
+
+export function filesFromExternalDrop(event: ExternalFileDropLike): File[] {
+  return Array.from(event.dataTransfer?.files ?? []).filter(
+    (file) => file.name.length > 0 || file.size > 0,
+  );
+}
+
+export function fileEntryFromUploadedPath(
+  path: string,
+  file: Pick<File, 'size'>,
+): FileEntry | null {
+  const ext = getFileExtension(path).toLowerCase();
+  if (ext === '') return null;
+  const modified = new Date().toISOString();
+  if (ext === '.md' || ext === '.mdx') {
+    return {
+      kind: 'document',
+      docName: treeFilePathToDocName(path),
+      docExt: ext,
+      modified,
+      size: file.size,
+    };
+  }
+  const assetExt = ext.startsWith('.') ? ext.slice(1) : ext;
+  return {
+    kind: 'asset',
+    path,
+    assetExt,
+    mediaKind: mediaKindForSidebarAssetExtension(assetExt),
+    modified,
+    size: file.size,
+  };
 }
 
 function getTreeBasename(path: string): string {

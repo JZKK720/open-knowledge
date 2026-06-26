@@ -4,11 +4,12 @@ import { readdir, readFile as readFileAsync } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
+import { LINKABLE_ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
 import ignore, { type Ignore } from 'ignore';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import { isSupportedDocFile, stripDocExtension } from './doc-extensions.ts';
 import { getLogger } from './logger.ts';
+import { toPosix } from './path-utils.ts';
 import { withSpan } from './telemetry.ts';
 
 const execFileAsync = promisify(execFileCb);
@@ -89,6 +90,51 @@ function pathHasAlwaysSkipSegment(relativePath: string): boolean {
     if (ALWAYS_SKIP_DIRS.has(segment)) return true;
   }
   return false;
+}
+
+const BUILTIN_SKIP_FILES = new Set<string>(['.DS_Store', '.localized']);
+
+function isAlwaysSkipFile(relativePath: string): boolean {
+  return BUILTIN_SKIP_FILES.has(relativePath.slice(relativePath.lastIndexOf('/') + 1));
+}
+
+const SECRET_BEARING_DIRS = new Set(['.ssh', '.aws', '.gnupg', '.kube', '.docker']);
+
+function pathHasSecretBearingDirSegment(relativePath: string): boolean {
+  for (const segment of relativePath.split('/')) {
+    if (SECRET_BEARING_DIRS.has(segment.toLowerCase())) return true;
+  }
+  return false;
+}
+
+const SECRET_CREDENTIAL_BASENAMES = new Set([
+  'credentials',
+  '.netrc',
+  '.npmrc',
+  '.pgpass',
+  '.git-credentials',
+]);
+const SECRET_KEY_SUFFIXES = ['.pem', '.key', '.p12', '.pfx', '.keystore', '.jks', '.ppk'] as const;
+function isSecretBearingFile(relativePath: string): boolean {
+  const lower = relativePath.slice(relativePath.lastIndexOf('/') + 1).toLowerCase();
+  if (lower === '.env' || lower.startsWith('.env.')) return true;
+  if (SECRET_CREDENTIAL_BASENAMES.has(lower)) return true;
+  if (
+    lower.startsWith('id_rsa') ||
+    lower.startsWith('id_ed25519') ||
+    lower.startsWith('id_ecdsa') ||
+    lower.startsWith('id_dsa')
+  ) {
+    return true;
+  }
+  for (const suffix of SECRET_KEY_SUFFIXES) {
+    if (lower.endsWith(suffix)) return true;
+  }
+  return false;
+}
+
+function isSingleDocAncestorDir(relativeDir: string, singleDocRelPath: string): boolean {
+  return singleDocRelPath === relativeDir || singleDocRelPath.startsWith(`${relativeDir}/`);
 }
 
 const IGNORE_FILE_NAMES = ['.gitignore', '.okignore'] as const;
@@ -227,6 +273,7 @@ async function appendExcludeFileIfExistsAsync(
 export interface ContentFilterOptions {
   projectDir: string;
   contentDir: string;
+  singleDocRelPath?: string;
   onAfterRebuild?: () => void;
 }
 
@@ -259,9 +306,9 @@ export interface ContentFilter {
 }
 
 export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
-  const { projectDir, contentDir, onAfterRebuild } = opts;
+  const { projectDir, contentDir, onAfterRebuild, singleDocRelPath } = opts;
 
-  const contentRelPrefix = relative(projectDir, contentDir);
+  const contentRelPrefix = toPosix(relative(projectDir, contentDir));
   const contentOutsideProject = contentRelPrefix.startsWith('..');
 
   let ig: Ignore;
@@ -354,7 +401,12 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
     return ig.ignores(projectRelPath);
   }
 
-  populateDirCount(contentDir, '', isIgnored, dirCount);
+  const refreshDirCount = (): void => {
+    if (singleDocRelPath !== undefined) return;
+    populateDirCount(contentDir, '', isIgnored, dirCount);
+  };
+
+  refreshDirCount();
 
   function isReservedDocName(relativePath: string): boolean {
     const docName = stripDocExtension(relativePath);
@@ -376,6 +428,13 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
 
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
 
+      if (isAlwaysSkipFile(relativePath)) return true;
+
+      if (isSecretBearingFile(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
+
+      if (singleDocRelPath !== undefined) return relativePath !== singleDocRelPath;
+
       if (opts?.bypassFilters) return false;
 
       if (isRejectedByConfigurableRules(relativePath)) return true;
@@ -383,7 +442,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
       if (isSupportedDocFile(relativePath)) return false;
 
       const ext = extname(relativePath).slice(1).toLowerCase();
-      if (ASSET_EXTENSIONS.has(ext)) {
+      if (LINKABLE_ASSET_EXTENSIONS.has(ext)) {
         const dir = dirname(relativePath);
         const normalizedDir = dir === '.' ? '' : dir;
         if ((dirCount.get(normalizedDir) ?? 0) > 0) return false;
@@ -394,6 +453,10 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
 
     isDirExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) {
+        return !isSingleDocAncestorDir(relativePath, singleDocRelPath);
+      }
       if (opts?.bypassFilters) return false;
       for (const segment of relativePath.split('/')) {
         if (BUILTIN_SKIP_DIRS.has(segment)) return true;
@@ -408,6 +471,9 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
     isPathIgnored(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (isReservedDocName(relativePath)) return true;
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (isAlwaysSkipFile(relativePath)) return true;
+      if (isSecretBearingFile(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
       if (opts?.bypassFilters) return false;
       return isRejectedByConfigurableRules(relativePath);
     },
@@ -435,7 +501,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
       const prev = new Map(dirCount);
       dirCount.clear();
       try {
-        populateDirCount(contentDir, '', isIgnored, dirCount);
+        refreshDirCount();
       } catch (err) {
         for (const [k, v] of prev) dirCount.set(k, v);
         getLogger('content-filter').warn(
@@ -461,7 +527,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
         try {
           const counts = buildPatternState();
           dirCount.clear();
-          populateDirCount(contentDir, '', isIgnored, dirCount);
+          refreshDirCount();
 
           const durationMs = Date.now() - startedAt;
           span.setAttributes({
@@ -506,7 +572,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
           lastBytes = prevBytes;
           dirCount.clear();
           try {
-            populateDirCount(contentDir, '', isIgnored, dirCount);
+            refreshDirCount();
           } catch (rollbackErr) {
             log.warn(
               {
@@ -561,8 +627,13 @@ function parseIgnorePatterns(content: string): string[] {
 }
 
 function prefixPattern(pattern: string, relPrefix: string): string {
-  if (pattern.startsWith('!')) return `!${relPrefix}/${pattern.slice(1)}`;
-  return `${relPrefix}/${pattern}`;
+  const negated = pattern.startsWith('!');
+  const body = negated ? pattern.slice(1) : pattern;
+  const core = body.startsWith('/') ? body.slice(1) : body;
+  const withoutTrailingSlash = core.endsWith('/') ? core.slice(0, -1) : core;
+  const anchored = body.startsWith('/') || withoutTrailingSlash.includes('/');
+  const reanchored = anchored ? `${relPrefix}/${core}` : `${relPrefix}/**/${core}`;
+  return negated ? `!${reanchored}` : reanchored;
 }
 
 function loadNestedIgnoreFiles(
@@ -587,7 +658,7 @@ function loadNestedIgnoreFiles(
     if (BUILTIN_SKIP_DIRS.has(entry.name)) continue;
 
     const dirPath = join(dir, entry.name);
-    const relToProject = relative(projectDir, dirPath);
+    const relToProject = toPosix(relative(projectDir, dirPath));
 
     if (relToProject.startsWith('..')) continue;
 
@@ -640,7 +711,7 @@ async function initContentDirStateAsync(
       const dirPath = join(dir, entry.name);
 
       if (!contentOutsideProject) {
-        const relToProject = relative(projectDir, dirPath);
+        const relToProject = toPosix(relative(projectDir, dirPath));
         if (relToProject.startsWith('..')) continue;
         if (ig.ignores(relToProject) || ig.ignores(`${relToProject}/`)) continue;
 
@@ -676,15 +747,20 @@ async function initContentDirStateAsync(
 }
 
 export async function createContentFilterAsync(opts: ContentFilterOptions): Promise<ContentFilter> {
-  const { projectDir, contentDir, onAfterRebuild } = opts;
+  const { projectDir, contentDir, onAfterRebuild, singleDocRelPath } = opts;
 
-  const contentRelPrefix = relative(projectDir, contentDir);
+  const contentRelPrefix = toPosix(relative(projectDir, contentDir));
   const contentOutsideProject = contentRelPrefix.startsWith('..');
 
   let ig = ignore();
   let watcherIgnoreGlobs: string[] = [];
 
   const dirCount = new Map<string, number>();
+
+  const refreshDirCount = (): void => {
+    if (singleDocRelPath !== undefined) return;
+    populateDirCount(contentDir, '', isIgnored, dirCount);
+  };
 
   function isIgnored(relativePath: string): boolean {
     if (contentOutsideProject) return false;
@@ -742,15 +818,17 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
     }
 
     const newDirCount = new Map<string, number>();
-    await initContentDirStateAsync(
-      contentDir,
-      '',
-      projectDir,
-      newIg,
-      contentRelPrefix,
-      contentOutsideProject,
-      newDirCount,
-    );
+    if (singleDocRelPath === undefined) {
+      await initContentDirStateAsync(
+        contentDir,
+        '',
+        projectDir,
+        newIg,
+        contentRelPrefix,
+        contentOutsideProject,
+        newDirCount,
+      );
+    }
 
     ig = newIg;
     watcherIgnoreGlobs = newRootPatterns.filter(
@@ -766,11 +844,15 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
     isExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (isReservedDocName(relativePath)) return true;
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (isAlwaysSkipFile(relativePath)) return true;
+      if (isSecretBearingFile(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) return relativePath !== singleDocRelPath;
       if (opts?.bypassFilters) return false;
       if (isRejectedByConfigurableRules(relativePath)) return true;
       if (isSupportedDocFile(relativePath)) return false;
       const ext = extname(relativePath).slice(1).toLowerCase();
-      if (ASSET_EXTENSIONS.has(ext)) {
+      if (LINKABLE_ASSET_EXTENSIONS.has(ext)) {
         const dir = dirname(relativePath);
         const normalizedDir = dir === '.' ? '' : dir;
         if ((dirCount.get(normalizedDir) ?? 0) > 0) return false;
@@ -780,6 +862,10 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
 
     isDirExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) {
+        return !isSingleDocAncestorDir(relativePath, singleDocRelPath);
+      }
       if (opts?.bypassFilters) return false;
       for (const segment of relativePath.split('/')) {
         if (BUILTIN_SKIP_DIRS.has(segment)) return true;
@@ -794,6 +880,9 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
     isPathIgnored(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (isReservedDocName(relativePath)) return true;
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (isAlwaysSkipFile(relativePath)) return true;
+      if (isSecretBearingFile(relativePath)) return true;
+      if (pathHasSecretBearingDirSegment(relativePath)) return true;
       if (opts?.bypassFilters) return false;
       return isRejectedByConfigurableRules(relativePath);
     },
@@ -821,7 +910,7 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
       const prev = new Map(dirCount);
       dirCount.clear();
       try {
-        populateDirCount(contentDir, '', isIgnored, dirCount);
+        refreshDirCount();
       } catch (err) {
         for (const [k, v] of prev) dirCount.set(k, v);
         getLogger('content-filter').warn(

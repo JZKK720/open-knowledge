@@ -81,7 +81,7 @@ describe('tag endpoints', () => {
       writeFileSync(join(dir, 'alpha.md'), '#proj/team #standalone\n', 'utf-8');
       writeFileSync(join(dir, 'beta.md'), '#proj\n', 'utf-8');
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
 
       const result = await callRoute(dir, '/api/tags', new Map(), idx);
       expect(result.status).toBe(200);
@@ -109,7 +109,7 @@ describe('tag endpoints', () => {
       writeFileSync(join(dir, 'gamma.md'), '#unrelated\n', 'utf-8');
 
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
 
       const result = await callRoute(dir, '/api/tags/proj', new Map(), idx);
       expect(result.status).toBe(200);
@@ -138,7 +138,7 @@ describe('tag endpoints', () => {
     try {
       writeFileSync(join(dir, 'alpha.md'), '#proj/team/2026\n', 'utf-8');
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
 
       const result = await callRoute(dir, '/api/tags/proj%2Fteam', new Map(), idx);
       expect(result.status).toBe(200);
@@ -154,7 +154,7 @@ describe('tag endpoints', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ok-tags-unknown-'));
     try {
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
 
       const result = await callRoute(dir, '/api/tags/nope', new Map(), idx);
       expect(result.status).toBe(200);
@@ -179,7 +179,7 @@ describe('tag endpoints', () => {
         'utf-8',
       );
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
 
       const result = await callRoute(dir, '/api/tags/showcase', new Map(), idx);
       const body = JSON.parse(result.body) as { docs: Array<{ docName: string }> };
@@ -212,7 +212,7 @@ describe('tag endpoint independence from fileIndex content', () => {
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'alpha.md'), '#x\n', 'utf-8');
       const idx = new TagIndex({ contentDir: dir });
-      idx.init();
+      await idx.init();
       const result = await callRoute(dir, '/api/tags/x', new Map(), idx);
       expect(result.status).toBe(200);
       const body = JSON.parse(result.body) as { docs: Array<{ docName: string }> };

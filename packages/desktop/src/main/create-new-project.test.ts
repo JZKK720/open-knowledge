@@ -112,9 +112,9 @@ describe('CreateNewProjectError — IPC-parseable message format', () => {
 });
 
 describe('resolveDefaultProjectsRoot', () => {
-  test('falls back to <documents>/Open Knowledge on first call', () => {
+  test('falls back to <documents>/OpenKnowledge on first call', () => {
     const got = resolveDefaultProjectsRoot(null, '/Users/alice/Documents');
-    expect(got).toBe('/Users/alice/Documents/Open Knowledge');
+    expect(got).toBe('/Users/alice/Documents/OpenKnowledge');
   });
 
   test('returns the persisted parent when it still exists', () => {
@@ -126,7 +126,7 @@ describe('resolveDefaultProjectsRoot', () => {
   test('falls back when the persisted parent no longer exists', () => {
     const persisted = join(tmpRoot, 'deleted');
     expect(resolveDefaultProjectsRoot(persisted, '/Users/alice/Documents')).toBe(
-      '/Users/alice/Documents/Open Knowledge',
+      '/Users/alice/Documents/OpenKnowledge',
     );
   });
 
@@ -135,7 +135,7 @@ describe('resolveDefaultProjectsRoot', () => {
     const got = resolveDefaultProjectsRoot(persisted, '/Users/alice/Documents', () => {
       throw new Error('boom');
     });
-    expect(got).toBe('/Users/alice/Documents/Open Knowledge');
+    expect(got).toBe('/Users/alice/Documents/OpenKnowledge');
   });
 });
 

@@ -4,7 +4,11 @@ import { computeSelectionStats, type DocumentStats } from '@/lib/document-stats'
 
 export const SELECTION_STATS_DEBOUNCE_MS = 120;
 
-export type EditorSurface = 'wysiwyg' | 'source';
+/** The edit surfaces that can hold a selection for a given doc. `wysiwyg` and
+ *  `source` are the two body editors; `frontmatter` is the property panel, which
+ *  publishes a selection-context snapshot (not stats) when the user highlights
+ *  property text so the composer treats it like a body selection. */
+export type EditorSurface = 'wysiwyg' | 'source' | 'frontmatter';
 
 const statsByDocSurface = new Map<string, DocumentStats>();
 const listeners = new Set<() => void>();

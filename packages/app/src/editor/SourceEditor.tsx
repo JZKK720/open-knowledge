@@ -1,4 +1,5 @@
 import { indentWithTab } from '@codemirror/commands';
+import { search } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState } from '@codemirror/state';
 import { placeholder as cmPlaceholder, EditorView, keymap } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
@@ -9,7 +10,7 @@ import { useTheme } from 'next-themes';
 import { useEffect, useRef, useState } from 'react';
 import { yCollab } from 'y-codemirror.next';
 import type * as Y from 'yjs';
-import { useOpenInAgentMenuRequest } from '@/components/handoff/OpenInAgentMenuRequestContext';
+import { emitOpenAskAiComposer } from '@/components/ask-ai-composer-events';
 import { OUTLINE_NAV_EVENT, type OutlineNavDetail } from '@/components/OutlinePanel';
 import {
   createNestedCMExtensions,
@@ -23,6 +24,7 @@ import { createSourceClipboardExtension } from './clipboard/index.ts';
 import { type CmCacheEntry, mountCmEditor, parkCmEditor } from './editor-cache';
 import { getMountId } from './mount-id-registry';
 import { markUserTyping } from './observers';
+import { publishSelectionContext, selectionSnapshotFromSource } from './selection-context';
 import {
   publishSelectionStats,
   SELECTION_STATS_DEBOUNCE_MS,
@@ -33,6 +35,7 @@ import {
   consumePendingSourceNavigation,
 } from './source-editor-navigation';
 import { createSourcePolishExtension } from './source-polish';
+import { FM_FENCE_LINE_RE } from './source-polish/view-plugin';
 import { attachTypingBurstDetector } from './typing-burst-detector';
 
 const TOOLBAR_OVERLAP_PX = 56;
@@ -48,9 +51,9 @@ interface SourceEditorProps {
 function applyOutlineNavigation(view: EditorView, detail: OutlineNavDetail): void {
   const doc = view.state.doc;
   let startLine = 1;
-  if (doc.lines >= 1 && doc.line(1).text === '---') {
+  if (doc.lines >= 1 && FM_FENCE_LINE_RE.test(doc.line(1).text)) {
     for (let i = 2; i <= doc.lines; i++) {
-      if (doc.line(i).text === '---') {
+      if (FM_FENCE_LINE_RE.test(doc.line(i).text)) {
         startLine = i + 1;
         break;
       }
@@ -88,12 +91,6 @@ function applyRawMdxNavigation(view: EditorView, detail: RawMdxNavDetail): void 
   });
 }
 
-function serializeSourceSelection(view: EditorView): string {
-  const range = view.state.selection.main;
-  if (range.empty) return '';
-  return view.state.sliceDoc(range.from, range.to);
-}
-
 export function SourceEditor({
   docName,
   ytext,
@@ -103,21 +100,12 @@ export function SourceEditor({
 }: SourceEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const themeCompartmentRef = useRef(new Compartment());
-  const placeholderCompartmentRef = useRef(new Compartment());
-  const wordWrapCompartmentRef = useRef(new Compartment());
   const [mountError, setMountError] = useState<Error | null>(null);
   if (mountError) throw mountError;
   const { resolvedTheme } = useTheme();
   const { merged } = useConfigContext();
-  const { openSelection } = useOpenInAgentMenuRequest();
-  const openSelectionRef = useRef(openSelection);
   const sourceModeActiveRef = useRef(isSourceModeActive);
   const wordWrap = merged?.editor?.wordWrap ?? true;
-
-  useEffect(() => {
-    openSelectionRef.current = openSelection;
-  }, [openSelection]);
 
   useEffect(() => {
     sourceModeActiveRef.current = isSourceModeActive;
@@ -147,18 +135,25 @@ export function SourceEditor({
             ydoc: provider.document,
             ytext,
           });
+          const themeCompartment = new Compartment();
+          const wordWrapCompartment = new Compartment();
+          const placeholderCompartment = new Compartment();
           const state = EditorState.create({
             doc: ytext.toString(),
             extensions: [
               basicSetup,
+              search({
+                scrollToMatch: (range) => EditorView.scrollIntoView(range, { y: 'start' }),
+              }),
               keymap.of([indentWithTab]),
               yCollab(ytext, provider.awareness),
               ...createNestedCMExtensions({
-                themeCompartment: themeCompartmentRef.current,
+                themeCompartment,
                 resolvedTheme,
                 ydoc: provider.document,
-                wordWrapCompartment: wordWrapCompartmentRef.current,
+                wordWrapCompartment,
                 wordWrap,
+                currentDocName: resolvedDocName,
               }),
               createSourcePolishExtension(),
               sourceClipboard,
@@ -172,25 +167,26 @@ export function SourceEditor({
                     'source',
                     selectionStatsFromSource(update.view),
                   );
+                  publishSelectionContext(
+                    resolvedDocName,
+                    'source',
+                    selectionSnapshotFromSource(update.view, resolvedDocName),
+                  );
                 }, SELECTION_STATS_DEBOUNCE_MS);
               }),
               EditorView.domEventHandlers({
-                keydown: (event, view) => {
+                keydown: (event, _view) => {
                   if (!sourceModeActiveRef.current) return false;
                   if (!isMacOS()) return false;
                   if (!matchesKeyboardShortcut(event, 'edit-with-ai')) return false;
                   event.preventDefault();
                   event.stopPropagation();
                   event.stopImmediatePropagation();
-                  openSelectionRef.current({
-                    docName: resolvedDocName,
-                    instruction: '',
-                    selectionMarkdown: serializeSourceSelection(view),
-                  });
+                  emitOpenAskAiComposer();
                   return true;
                 },
               }),
-              placeholderCompartmentRef.current.of(cmPlaceholder(placeholder ?? '')),
+              placeholderCompartment.of(cmPlaceholder(placeholder ?? '')),
               EditorView.theme({
                 '&': {
                   height: '100%',
@@ -201,6 +197,11 @@ export function SourceEditor({
           });
           const view = new EditorView({ state, parent: el });
           publishSelectionStats(resolvedDocName, 'source', selectionStatsFromSource(view));
+          publishSelectionContext(
+            resolvedDocName,
+            'source',
+            selectionSnapshotFromSource(view, resolvedDocName),
+          );
           const dom = view.contentDOM;
           dom.addEventListener('keydown', mark);
           dom.addEventListener('paste', mark);
@@ -211,6 +212,9 @@ export function SourceEditor({
             ydoc: provider.document,
             ytext,
             provider,
+            themeCompartment,
+            wordWrapCompartment,
+            placeholderCompartment,
           };
         },
       });
@@ -263,25 +267,28 @@ export function SourceEditor({
   }, [docName]);
 
   useEffect(() => {
-    if (!viewRef.current) return;
-    viewRef.current.dispatch({
-      effects: themeCompartmentRef.current.reconfigure(
+    const entry = cmEntryRef.current;
+    if (!entry) return;
+    entry.view.dispatch({
+      effects: entry.themeCompartment.reconfigure(
         resolvedTheme === 'dark' ? darkTheme : lightTheme,
       ),
     });
   }, [resolvedTheme]);
 
   useEffect(() => {
-    if (!viewRef.current) return;
-    viewRef.current.dispatch({
-      effects: wordWrapCompartmentRef.current.reconfigure(wordWrap ? EditorView.lineWrapping : []),
+    const entry = cmEntryRef.current;
+    if (!entry) return;
+    entry.view.dispatch({
+      effects: entry.wordWrapCompartment.reconfigure(wordWrap ? EditorView.lineWrapping : []),
     });
   }, [wordWrap]);
 
   useEffect(() => {
-    if (!viewRef.current) return;
-    viewRef.current.dispatch({
-      effects: placeholderCompartmentRef.current.reconfigure(cmPlaceholder(placeholder ?? '')),
+    const entry = cmEntryRef.current;
+    if (!entry) return;
+    entry.view.dispatch({
+      effects: entry.placeholderCompartment.reconfigure(cmPlaceholder(placeholder ?? '')),
     });
   }, [placeholder]);
 

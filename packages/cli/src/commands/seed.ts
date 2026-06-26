@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline/promises';
 import {
   applySeed,
   DEFAULT_PACK_ID,
+  formatPackRationale,
   type PackId,
   planSeed,
   type ScaffoldPlan,
@@ -74,9 +75,10 @@ export async function runSeed(opts: SeedCommandOptions = {}): Promise<SeedComman
   }
 
   if (opts.dryRun) {
+    const rationale = formatPackRationale(STARTER_PACKS[packId]);
     return {
       status: 'dry-run',
-      message: `${accent('Plan (dry-run — no changes made):')}\n\n${formatPlanBody(plan, cwd)}`,
+      message: `${accent('Reference this pack for inspiration (dry-run — no changes made):')}\n\n${rationale}\n\n${accent('Plan:')}\n\n${formatPlanBody(plan, cwd)}`,
       plan,
       exitCode: 0,
     };

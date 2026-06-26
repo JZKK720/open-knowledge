@@ -158,16 +158,21 @@ export const SearchRequestSchema = z
   .object({
     query: z.string().optional(),
     intent: z.enum(['autocomplete', 'full_text', 'omnibar']).optional(),
-    scopes: z.array(z.enum(['page', 'folder', 'content'])).optional(),
+    ranking: z.enum(['navigation', 'relevance']).optional(),
+    scopes: z.array(z.enum(['page', 'folder', 'content', 'file'])).optional(),
     scope: z.string().optional(),
     limit: z.number().int().nonnegative().optional(),
+    semantic: z.boolean().optional(),
+    source: z.enum(['omnibar', 'mcp', 'http']).optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
 
+export type SearchSource = NonNullable<SearchRequest['source']>;
+
 export const SearchResultEntrySchema = z
   .object({
-    kind: z.enum(['page', 'folder', 'content']),
+    kind: z.enum(['page', 'folder', 'content', 'file']),
     path: z.string().min(1),
     title: z.string(),
     score: z.number(),
@@ -177,12 +182,41 @@ export const SearchResultEntrySchema = z
   .loose() satisfies StandardSchemaV1;
 export type SearchResultEntry = z.infer<typeof SearchResultEntrySchema>;
 
+export const SearchSemanticStatusSchema = z
+  .object({
+    capable: z.boolean(),
+    applied: z.boolean(),
+    coverage: z.object({
+      embedded: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    }),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type SearchSemanticStatus = z.infer<typeof SearchSemanticStatusSchema>;
+
+export const SemanticIndexStatusSchema = z
+  .object({
+    enabled: z.boolean(),
+    keyPresent: z.boolean(),
+    keySource: z.enum(['file', 'env']).nullable(),
+    keyHint: z.string().nullable(),
+    ready: z.boolean(),
+    capable: z.boolean(),
+    embedded: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type SemanticIndexStatus = z.infer<typeof SemanticIndexStatusSchema>;
+
 export const SearchSuccessSchema = z
   .object({
     query: z.string(),
     intent: z.enum(['autocomplete', 'full_text', 'omnibar']),
     results: z.array(SearchResultEntrySchema),
     elapsedMs: z.number().nonnegative(),
+    semantic: SearchSemanticStatusSchema.optional(),
+    truncated: z.boolean().optional(),
+    ready: z.boolean().optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type SearchSuccess = z.infer<typeof SearchSuccessSchema>;

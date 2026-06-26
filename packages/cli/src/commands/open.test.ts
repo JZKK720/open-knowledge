@@ -24,7 +24,7 @@ function makeDeps(overrides: Partial<OpenDeps> = {}): {
 describe('runOpen', () => {
   test('doc with a desktop bundle → openknowledge:// deep link, exit 0', () => {
     const { deps, opened } = makeDeps({
-      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      detectBundlePath: () => '/Applications/OpenKnowledge.app',
     });
     const code = runOpen('bim-brain/log', { project: '/abs/proj' }, deps);
     expect(code).toBe(0);
@@ -51,7 +51,7 @@ describe('runOpen', () => {
 
   test('folder takes the browser route even when a desktop bundle is present', () => {
     const { deps, opened } = makeDeps({
-      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      detectBundlePath: () => '/Applications/OpenKnowledge.app',
       resolveBaseUrl: () => 'http://localhost:5173',
     });
     const code = runOpen('specs/foo', { folder: true, project: '/p' }, deps);
@@ -87,7 +87,7 @@ describe('runOpen', () => {
     ['backslash', 'a\\b'],
   ])('rejects names the desktop parser would drop (%s) instead of false success', (_label, name) => {
     const { deps, opened, errors } = makeDeps({
-      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      detectBundlePath: () => '/Applications/OpenKnowledge.app',
     });
     const code = runOpen(name, { project: '/p' }, deps);
     expect(code).toBe(1);
@@ -105,7 +105,7 @@ describe('runOpen', () => {
 
   test('doc deep link encodes the whole name including the slash (%2F)', () => {
     const { deps, opened } = makeDeps({
-      detectBundlePath: () => '/Applications/Open Knowledge.app',
+      detectBundlePath: () => '/Applications/OpenKnowledge.app',
     });
     const code = runOpen('notes/My Doc#1', { project: '/p' }, deps);
     expect(code).toBe(0);
@@ -130,18 +130,18 @@ describe('createRealOpenDeps wiring', () => {
     const deps = createRealOpenDeps(() => ({
       available: true,
       reason: 'available',
-      bundlePath: '/Applications/Open Knowledge.app',
+      bundlePath: '/Applications/OpenKnowledge.app',
     }));
-    expect(deps.detectBundlePath()).toBe('/Applications/Open Knowledge.app');
+    expect(deps.detectBundlePath()).toBe('/Applications/OpenKnowledge.app');
   });
 
   test('detectBundlePath returns the bundle path when available:false but bundlePath is set', () => {
     const deps = createRealOpenDeps(() => ({
       available: false,
       reason: 'headless',
-      bundlePath: '/Applications/Open Knowledge.app',
+      bundlePath: '/Applications/OpenKnowledge.app',
     }));
-    expect(deps.detectBundlePath()).toBe('/Applications/Open Knowledge.app');
+    expect(deps.detectBundlePath()).toBe('/Applications/OpenKnowledge.app');
   });
 });
 

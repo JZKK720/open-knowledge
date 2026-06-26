@@ -30,6 +30,7 @@ interface SrcAutocompleteProps {
   ariaDescribedBy?: string;
   dataPropAutofocus?: string;
   className?: string;
+  onSubmit?: () => void;
 }
 
 interface AssetItem {
@@ -99,6 +100,7 @@ export function SrcAutocomplete({
   ariaDescribedBy,
   dataPropAutofocus,
   className,
+  onSubmit,
 }: SrcAutocompleteProps): ReactNode {
   const pageList = useOptionalPageList();
   const assetPaths: ReadonlySet<string> = pageList?.assetPaths ?? EMPTY_ASSET_SET;
@@ -175,11 +177,18 @@ export function SrcAutocomplete({
               return;
             }
             if (e.key === 'Enter') {
-              if (!wantOpen) return;
-              const item = suggestions[highlight];
-              if (!item) return;
-              e.preventDefault();
-              selectSuggestion(item);
+              if (wantOpen) {
+                const item = suggestions[highlight];
+                if (item) {
+                  e.preventDefault();
+                  selectSuggestion(item);
+                  return;
+                }
+              }
+              if (onSubmit) {
+                e.preventDefault();
+                onSubmit();
+              }
               return;
             }
             if (e.key === 'Escape') {
@@ -198,7 +207,7 @@ export function SrcAutocomplete({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="z-70 w-[--radix-popover-trigger-width] p-1"
+        className="z-70 w-(--radix-popover-trigger-width) p-1"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
         }}
@@ -212,39 +221,54 @@ export function SrcAutocomplete({
           }
         }}
       >
-        <ul id={listboxId} aria-label="Asset suggestions" className="flex flex-col gap-px">
+        {/* Container is a `<div role="listbox">` rather than `<ul>` —
+            the WAI-ARIA combobox pattern requires the popup referenced
+            by the input's `aria-controls` to carry `role="listbox"` so
+            assistive tech can resolve the combobox↔listbox ownership
+            and the `aria-activedescendant` target; mirrors the
+            companion `WikiLinkSuggestionMenu` + `link-path-suggestions`
+            sites, which made the same `<ul>` → `<div role="listbox">`
+            choice to satisfy biome's `noNoninteractiveElementToInteractiveRole`
+            rule without suppression. The `<button role="option">`
+            children stay — buttons accept the listbox-option role
+            cleanly. */}
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label="Asset suggestions"
+          className="flex flex-col gap-px"
+        >
           {suggestions.map((item, idx) => {
             const optionId = `${listboxId}-opt-${idx}`;
             const isHighlighted = idx === highlight;
             return (
-              <li key={item.path}>
-                <button
-                  id={optionId}
-                  type="button"
-                  role="option"
-                  aria-selected={isHighlighted}
-                  data-testid="src-autocomplete-option"
-                  data-highlighted={isHighlighted ? '' : undefined}
-                  className={cn(
-                    'flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1 text-left text-xs',
-                    'transition-colors',
-                    isHighlighted ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
-                  )}
-                  onMouseEnter={() => setHighlight(idx)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    selectSuggestion(item);
-                  }}
-                >
-                  <span className="font-medium">{item.basename}</span>
-                  {item.basename !== item.path && (
-                    <span className="text-muted-foreground/70">{item.path}</span>
-                  )}
-                </button>
-              </li>
+              <button
+                key={item.path}
+                id={optionId}
+                type="button"
+                role="option"
+                aria-selected={isHighlighted}
+                data-testid="src-autocomplete-option"
+                data-highlighted={isHighlighted ? '' : undefined}
+                className={cn(
+                  'flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1 text-left text-xs',
+                  'transition-colors',
+                  isHighlighted ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+                )}
+                onMouseEnter={() => setHighlight(idx)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectSuggestion(item);
+                }}
+              >
+                <span className="font-medium">{item.basename}</span>
+                {item.basename !== item.path && (
+                  <span className="text-muted-foreground/70">{item.path}</span>
+                )}
+              </button>
             );
           })}
-        </ul>
+        </div>
       </PopoverContent>
     </Popover>
   );

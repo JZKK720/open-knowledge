@@ -79,6 +79,20 @@ describe('runSeed — --dry-run', () => {
     }
     expect(existsSync(join(testDir, 'log.md'))).toBe(false);
   });
+
+  test('surfaces the pack rationale (per-folder why) + anti-clone note for inspiration', async () => {
+    scaffoldOkDir(testDir);
+    const result = await runSeed({ cwd: testDir, pack: 'worldbuilding', dryRun: true });
+    expect(result.status).toBe('dry-run');
+    const pack = STARTER_PACKS.worldbuilding;
+    for (const folder of pack.folders) {
+      expect(result.message).toContain(folder.description);
+    }
+    expect(result.message.toLowerCase()).toContain('adapt'); // anti-clone framing
+    for (const folder of pack.folders) {
+      expect(existsSync(join(testDir, folder.path))).toBe(false);
+    }
+  });
 });
 
 describe('runSeed — no-op', () => {

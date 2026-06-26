@@ -47,9 +47,9 @@ async function selectFirstParagraph(page: Page): Promise<void> {
 
 async function openSelectionAskAiMenu(page: Page) {
   await page.getByTestId('edit-with-ai-bubble-button').click();
-  const menu = page.getByTestId('open-in-agent-menu');
-  await expect(menu).toBeVisible();
-  return menu;
+  const popover = page.getByTestId('edit-with-ai-popover');
+  await expect(popover).toBeVisible();
+  return popover;
 }
 
 async function openSourceSelectionAskAiMenu(page: Page, shortcut: string) {
@@ -65,6 +65,10 @@ async function openSourceSelectionAskAiMenu(page: Page, shortcut: string) {
 }
 
 async function pickAskAiTarget(page: Page, target: 'claude-code' | 'codex' | 'cursor') {
+  await page.getByTestId(`edit-with-ai-target-${target}`).click();
+}
+
+async function pickSourceAskAiTarget(page: Page, target: 'claude-code' | 'codex' | 'cursor') {
   await page.getByTestId(`open-in-agent-item-${target}`).click();
 }
 
@@ -129,7 +133,7 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await seedAndOpenWysiwyg(page, api, 'qa-ewai-source-shortcut', `# Heading\n\n${PROSE}`);
 
     await openSourceSelectionAskAiMenu(page, 'Meta+Shift+I');
-    await pickAskAiTarget(page, 'claude-code');
+    await pickSourceAskAiTarget(page, 'claude-code');
 
     await expect
       .poll(async () => (await readCapturedHandoff(page)).handoffApiCalls.length, {
@@ -144,7 +148,7 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     expect(q).toContain('quick brown fox');
   });
 
-  test('WYSIWYG Cmd+Shift+I opens the shared Ask AI menu for the selected passage', async ({
+  test('WYSIWYG Cmd+Shift+I opens the selection popover for the selected passage', async ({
     page,
     api,
     workerServer,
@@ -154,7 +158,7 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await selectFirstParagraph(page);
 
     await page.keyboard.press('ControlOrMeta+Shift+I');
-    await expect(page.getByTestId('open-in-agent-menu')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-popover')).toBeVisible();
     await pickAskAiTarget(page, 'claude-code');
 
     await expect
@@ -247,7 +251,7 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await expect(page.getByTestId('edit-with-ai-bubble-button')).toHaveCount(0);
   });
 
-  test('QA-012: shared Ask AI menu shows installed agents and no claude.ai/web fallback row', async ({
+  test('QA-012: selection popover shows installed agents and no claude.ai/web fallback row', async ({
     page,
     api,
     workerServer,
@@ -255,18 +259,43 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await installHandoffMocks(page, webCfg(workerServer));
     await seedAndOpenWysiwyg(page, api, 'qa-ewai-agents', `# H\n\n${PROSE}`);
     await selectFirstParagraph(page);
-    const menu = await openSelectionAskAiMenu(page);
+    const popover = await openSelectionAskAiMenu(page);
 
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-codex')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-cursor')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-claude-cowork')).toHaveCount(0);
-    await expect(page.getByTestId('open-in-agent-claude-web-fallback')).toHaveCount(0);
-    const bodyText = await menu.innerText();
+    await expect(page.getByTestId('edit-with-ai-target-claude-code')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-target-codex')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-target-cursor')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-target-claude-cowork')).toHaveCount(0);
+    const bodyText = await popover.innerText();
     expect(bodyText.toLowerCase()).not.toContain('claude.ai');
   });
 
-  test('QA-013: dispatch allowed with empty instruction (no instruction text in prompt)', async ({
+  test('QA-013: typed instruction appears in the dispatched prompt', async ({
+    page,
+    api,
+    workerServer,
+  }) => {
+    await installHandoffMocks(page, webCfg(workerServer));
+    await seedAndOpenWysiwyg(page, api, 'qa-ewai-instr', `# H\n\n${PROSE}`);
+    await selectFirstParagraph(page);
+    await openSelectionAskAiMenu(page);
+    await page.getByTestId('edit-with-ai-instruction').fill('tighten the prose');
+    await pickAskAiTarget(page, 'codex');
+
+    await expect
+      .poll(async () => (await readCapturedHandoff(page)).handoffApiCalls.length, {
+        timeout: 5_000,
+      })
+      .toBe(1);
+    const call = (await readCapturedHandoff(page)).handoffApiCalls[0];
+    expect(call?.target).toBe('codex');
+    const prompt = new URL(call?.url ?? '').searchParams.get('prompt') ?? '';
+    expect(prompt).toContain('@qa-ewai-instr.md');
+    expect(prompt).toContain('quick brown fox');
+    expect(prompt).toContain('Instruction:');
+    expect(prompt).toContain('tighten the prose');
+  });
+
+  test('QA-013b: dispatch allowed with empty instruction (no instruction text in prompt)', async ({
     page,
     api,
     workerServer,
@@ -288,9 +317,10 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     expect(prompt).toContain('@qa-ewai-noinstr.md');
     expect(prompt).toContain('quick brown fox');
     expect(prompt).toContain('Here is the passage:');
+    expect(prompt).not.toContain('Instruction:');
   });
 
-  test('QA-024: shared Ask AI menu shows pending then empty-install copy when no agents installed', async ({
+  test('QA-024: selection popover shows pending then empty-install copy when no agents installed', async ({
     page,
     api,
     workerServer,
@@ -305,14 +335,14 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await seedAndOpenWysiwyg(page, api, 'qa-ewai-empty', `# H\n\n${PROSE}`);
     await selectFirstParagraph(page);
     await openSelectionAskAiMenu(page);
-    const empty = page.getByTestId('open-in-agent-selection-empty');
+    const empty = page.getByTestId('edit-with-ai-empty');
     await expect(empty).toBeVisible();
     const txt = await empty.innerText();
     expect(/Checking for installed agents|No installed agents found/.test(txt)).toBe(true);
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toHaveCount(0);
+    await expect(page.getByTestId('edit-with-ai-target-claude-code')).toHaveCount(0);
   });
 
-  test('QA-027: shared Ask AI menu opens from keyboard activation', async ({
+  test('QA-027: selection popover opens from keyboard activation', async ({
     page,
     api,
     workerServer,
@@ -324,11 +354,11 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await expect(btn).toBeVisible({ timeout: 10_000 });
     await btn.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByTestId('open-in-agent-menu')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-popover')).toBeVisible();
+    await expect(page.getByTestId('edit-with-ai-target-claude-code')).toBeVisible();
   });
 
-  test('QA-028: Escape closes the shared Ask AI menu without dispatching and with no error toast', async ({
+  test('QA-028: Escape closes the selection popover without dispatching and with no error toast', async ({
     page,
     api,
     workerServer,
@@ -338,7 +368,7 @@ test.describe('Edit with AI — affordance + deep-link dispatch (live app)', () 
     await selectFirstParagraph(page);
     await openSelectionAskAiMenu(page);
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('open-in-agent-menu')).toHaveCount(0);
+    await expect(page.getByTestId('edit-with-ai-popover')).toHaveCount(0);
     const captured = await readCapturedHandoff(page);
     expect(captured.handoffApiCalls).toEqual([]);
     await expect(page.getByText(/Couldn't reach/)).toHaveCount(0);

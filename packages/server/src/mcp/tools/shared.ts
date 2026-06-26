@@ -1,4 +1,5 @@
-import { validateDocName, WriteWarningSchema } from '@inkeep/open-knowledge-core';
+import { resolve } from 'node:path';
+import { AdvisoryWarningSchema, validateDocName } from '@inkeep/open-knowledge-core';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.ts';
@@ -18,7 +19,7 @@ export function agentIdentityFields(identity: AgentIdentity | undefined): Record
     : {};
 }
 export const ROUTED_CWD_DESCRIPTION =
-  'Absolute host path inside the target Open Knowledge project. Required when the MCP server is registered globally (e.g. `npx @inkeep/open-knowledge mcp` once at the host level, routing per call), unless the MCP client advertises exactly one root via the `roots` capability — that single root is then used as the implicit `cwd`. Optional when the server is anchored to a single project (the per-project HTTP MCP server defaults to its configured project root).';
+  'Absolute host path inside the target OpenKnowledge project. Required when the MCP server is registered globally (e.g. `npx @inkeep/open-knowledge mcp` once at the host level, routing per call), unless the MCP client advertises exactly one root via the `roots` capability — that single root is then used as the implicit `cwd`. Optional when the server is anchored to a single project (the per-project HTTP MCP server defaults to its configured project root).';
 
 const SUMMARY_TRANSPORT_CAP = 200;
 
@@ -71,9 +72,13 @@ export const previewAttachWarningField = z
 
 export const documentResultBaseShape = {
   summary: summaryOutputSchema.optional(),
-  contentDivergence: WriteWarningSchema.optional().describe(
-    "Present when the converged Y.Text didn't byte-match the bytes you composed, or when an out-of-band disk edit was reconciled in before your write landed.",
-  ),
+  warnings: z
+    .array(AdvisoryWarningSchema)
+    .min(1)
+    .optional()
+    .describe(
+      "Advisory entries discriminated by `kind`. Write-integrity kinds — `content-divergence` (converged Y.Text didn't byte-match what you composed) and `disk-edit-reconciled` (an out-of-band disk edit was folded in before your write) — mean re-read the doc. The renderability kind `mermaid-parse-error` means the write landed but that fence will not render — fix it and re-edit.",
+    ),
 } as const;
 
 export function nestDocResult(
@@ -156,7 +161,7 @@ const ROLE_AFTER: Record<WorkflowRole, string> = {
 function buildWorkflowFrame(role: WorkflowRole): string {
   return `## Where this fits
 
-Open Knowledge accretes a persistent wiki through three workflow tools, mapped to [Karpathy's three-layer knowledge-base pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
+OpenKnowledge accretes a persistent wiki through three workflow tools, mapped to [Karpathy's three-layer knowledge-base pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
 
 - **Raw sources** (immutable) — \`ingest\`
 - **Wiki, provisional** — \`research\`
@@ -201,7 +206,10 @@ export type ServerUrlOrResolver =
   | undefined
   | ((cwd?: string) => Promise<string | undefined>);
 
-async function resolveServerUrl(x: ServerUrlOrResolver, cwd?: string): Promise<string | undefined> {
+export async function resolveServerUrl(
+  x: ServerUrlOrResolver,
+  cwd?: string,
+): Promise<string | undefined> {
   return typeof x === 'function' ? await x(cwd) : x;
 }
 
@@ -213,16 +221,19 @@ export async function resolveProjectConfigContext(
   resolveCwd: (explicit?: string) => Promise<string>,
   config: ConfigOrResolver,
   explicitCwd?: string,
-): Promise<{ ok: true; cwd: string; config: Config } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; cwd: string; executionCwd: string; config: Config } | { ok: false; error: string }
+> {
   let cwd: string;
   try {
     cwd = await resolveCwd(explicitCwd);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+  const executionCwd = explicitCwd !== undefined ? resolve(explicitCwd) : cwd;
   try {
     const resolvedConfig = await resolveConfig(config, cwd);
-    return { ok: true, cwd, config: resolvedConfig };
+    return { ok: true, cwd, executionCwd, config: resolvedConfig };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -234,16 +245,17 @@ export async function resolveProjectServerContext(
   serverUrl: ServerUrlOrResolver,
   explicitCwd?: string,
 ): Promise<
-  { ok: true; cwd: string; config: Config; url: string | undefined } | { ok: false; error: string }
+  | { ok: true; cwd: string; executionCwd: string; config: Config; url: string | undefined }
+  | { ok: false; error: string }
 > {
   const configContext = await resolveProjectConfigContext(resolveCwd, config, explicitCwd);
   if (!configContext.ok) {
     return configContext;
   }
-  const { cwd, config: resolvedConfig } = configContext;
+  const { cwd, executionCwd, config: resolvedConfig } = configContext;
   try {
     const url = await resolveServerUrl(serverUrl, cwd);
-    return { ok: true, cwd, config: resolvedConfig, url };
+    return { ok: true, cwd, executionCwd, config: resolvedConfig, url };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -22,6 +22,17 @@ function shouldColorize(): boolean {
   return process.stdout.isTTY ?? false;
 }
 
+const VALID_LOG_LEVELS = new Set(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
+
+function logLevelRank(level: string): number {
+  if (level === 'silent') return Number.POSITIVE_INFINITY;
+  return pino.levels.values[level] ?? pino.levels.values.info;
+}
+
+function mostVerboseLevel(a: string, b: string): string {
+  return logLevelRank(a) <= logLevelRank(b) ? a : b;
+}
+
 export interface PinoLoggerConfig {
   options?: LoggerOptions;
   transportConfigs?: TransportSingleOptions[];
@@ -69,8 +80,21 @@ export class PinoLogger {
     this.pinoInstance = this.buildInstance();
   }
 
+  private resolveStreamLevels(): {
+    fileLevel: string;
+    consoleLevel: string;
+    instanceLevel: string;
+  } {
+    const fileLevel = (this.options.level as string | undefined) ?? 'info';
+    const envConsole = process.env.OK_CONSOLE_LEVEL?.toLowerCase();
+    const consoleLevel = envConsole && VALID_LOG_LEVELS.has(envConsole) ? envConsole : fileLevel;
+    return { fileLevel, consoleLevel, instanceLevel: mostVerboseLevel(fileLevel, consoleLevel) };
+  }
+
   private buildInstance(): PinoLoggerInstance {
     this.activeFileSink = undefined;
+
+    const { fileLevel, consoleLevel, instanceLevel } = this.resolveStreamLevels();
 
     if (this.transportConfigs.length > 0) {
       return pino(this.options, pino.transport({ targets: this.transportConfigs }));
@@ -88,17 +112,26 @@ export class PinoLogger {
       if (this.fileSinkOpts) {
         const fileSink = new PinoFileSink(this.fileSinkOpts);
         this.activeFileSink = fileSink;
-        return pino(this.options, pino.multistream([{ stream: fileSink }]));
+        return pino(
+          { ...this.options, level: instanceLevel },
+          pino.multistream([{ stream: fileSink, level: fileLevel }]),
+        );
       }
-      return pino(this.options);
+      return pino({ ...this.options, level: consoleLevel });
     }
 
     if (this.fileSinkOpts) {
       const fileSink = new PinoFileSink(this.fileSinkOpts);
       this.activeFileSink = fileSink;
-      return pino(this.options, pino.multistream([{ stream: prettyStream }, { stream: fileSink }]));
+      return pino(
+        { ...this.options, level: instanceLevel },
+        pino.multistream([
+          { stream: prettyStream, level: consoleLevel },
+          { stream: fileSink, level: fileLevel },
+        ]),
+      );
     }
-    return pino(this.options, prettyStream);
+    return pino({ ...this.options, level: consoleLevel }, prettyStream);
   }
 
   private recreateInstance(): void {
@@ -126,6 +159,26 @@ export class PinoLogger {
 
   updateOptions(options: Partial<LoggerOptions>): void {
     this.options = { ...this.options, ...options };
+    this.recreateInstance();
+  }
+
+  reconfigure(config: PinoLoggerConfig): void {
+    if (config.options) {
+      this.options = { ...this.options, ...config.options };
+    }
+    if (config.transportConfigs) {
+      this.transportConfigs = config.transportConfigs;
+    }
+    if (config.fileSink) {
+      this.fileSinkOpts = config.fileSink;
+    }
+    if (config.redactPaths && config.redactPaths.length > 0) {
+      this.redactPaths = config.redactPaths;
+      this.options = {
+        ...this.options,
+        redact: { paths: [...config.redactPaths], censor: '[REDACTED]' },
+      };
+    }
     this.recreateInstance();
   }
 
@@ -168,6 +221,12 @@ class LoggerFactory {
 
   configure(config: LoggerFactoryConfig): void {
     this.config = config;
+    if (config.pinoConfig && !config.defaultLogger && !config.loggerFactory) {
+      for (const logger of this.loggers.values()) {
+        logger.reconfigure(config.pinoConfig);
+      }
+      return;
+    }
     this.loggers.clear();
   }
 

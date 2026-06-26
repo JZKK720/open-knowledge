@@ -10,7 +10,7 @@ import {
   type ProjectMcpReclaimCliSurface,
 } from './project-mcp-reclaim.ts';
 
-const EXE = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+const EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 const CHAIN_ENTRY = buildManagedServerEntry({ mode: 'published' });
 
 function fakeTarget(id: McpWiringEditorId, projectConfigPath?: string): EditorMcpTarget {

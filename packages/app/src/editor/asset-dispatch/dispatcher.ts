@@ -30,6 +30,16 @@ export async function dispatchAssetClick(
   if (desktopBridge) {
     const result = await desktopBridge.shell.openAsset(ctx.projectRelPath);
     if (!result.ok) {
+      if (result.reason === 'extension-blocked') {
+        const revealed = await desktopBridge.shell.revealAsset(ctx.projectRelPath);
+        if (!revealed.ok) {
+          console.warn('[asset-dispatch] revealAsset failed:', revealed.reason, {
+            projectRelPath: ctx.projectRelPath,
+            ext: ctx.ext,
+          });
+        }
+        return;
+      }
       console.warn('[asset-dispatch] openAsset refused:', result.reason, {
         projectRelPath: ctx.projectRelPath,
         ext: ctx.ext,

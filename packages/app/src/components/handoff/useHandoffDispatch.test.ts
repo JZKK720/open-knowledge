@@ -1,6 +1,11 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { setTimeout as wait } from 'node:timers/promises';
 import type { HandoffOutcome, HandoffPayload, HandoffTarget } from '@inkeep/open-knowledge-core';
+import {
+  composeTerminalBareLaunchPrompt,
+  OK_TERMINAL_SURFACE_PREAMBLE,
+  withSkillPointer,
+} from '@inkeep/open-knowledge-core';
 import type {
   HandoffDispatchDeps,
   HandoffDispatchInput,
@@ -187,7 +192,9 @@ describe('runHandoffDispatch — success path', () => {
       '/tmp/demo-project/specs/2026-04-21-open-in-agent-desktop/SPEC.md',
     );
     expect(payload.prompt).toBe(
-      "Let's work on `specs/2026-04-21-open-in-agent-desktop/SPEC.md` using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on `specs/2026-04-21-open-in-agent-desktop/SPEC.md` using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 
@@ -225,9 +232,11 @@ describe('runHandoffDispatch — success path', () => {
     expect(payload.target).toBe('codex');
     expect(payload.projectDir).toBe('/Users/sarah/proj');
     expect(payload.docPath).toBe('');
-    expect(payload.prompt).toBe(composeEmptySpacePrompt(true));
+    expect(payload.prompt).toBe(withSkillPointer(composeEmptySpacePrompt(true)));
     expect(payload.prompt).toBe(
-      "Let's work on this project using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on this project using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 
@@ -251,10 +260,12 @@ describe('runHandoffDispatch — success path', () => {
     expect(payload.projectDir).toBe('/Users/sarah/proj');
     expect(payload.docPath).toBe('');
     expect(payload.prompt).toBe(
-      composeFolderPrompt('specs/2026-05-16-sidebar-context-menus', true),
+      withSkillPointer(composeFolderPrompt('specs/2026-05-16-sidebar-context-menus', true)),
     );
     expect(payload.prompt).toBe(
-      "Let's work on the `specs/2026-05-16-sidebar-context-menus` folder using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on the `specs/2026-05-16-sidebar-context-menus` folder using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 });
@@ -267,7 +278,9 @@ describe('runHandoffDispatch — autoOpen=false honors the user preference', () 
     const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
       HandoffPayload,
     ];
-    expect(payload.prompt).toBe("Let's work on `specs/foo/SPEC.md` using Open Knowledge.");
+    expect(payload.prompt).toBe(
+      withSkillPointer("Let's work on `specs/foo/SPEC.md` using OpenKnowledge."),
+    );
     expect(payload.prompt).not.toContain('Open the OK editor');
   });
 
@@ -284,7 +297,9 @@ describe('runHandoffDispatch — autoOpen=false honors the user preference', () 
     const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
       HandoffPayload,
     ];
-    expect(payload.prompt).toBe("Let's work on the `specs/notes` folder using Open Knowledge.");
+    expect(payload.prompt).toBe(
+      withSkillPointer("Let's work on the `specs/notes` folder using OpenKnowledge."),
+    );
     expect(payload.prompt).not.toContain('Open the OK editor');
   });
 
@@ -300,7 +315,9 @@ describe('runHandoffDispatch — autoOpen=false honors the user preference', () 
     const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
       HandoffPayload,
     ];
-    expect(payload.prompt).toBe("Let's work on this project using Open Knowledge.");
+    expect(payload.prompt).toBe(
+      withSkillPointer("Let's work on this project using OpenKnowledge."),
+    );
     expect(payload.prompt).not.toContain('Open the OK editor');
   });
 });
@@ -467,7 +484,7 @@ describe('runHandoffDispatch — Cowork install gate', () => {
     expect(deps.dispatchHandoff).not.toHaveBeenCalled();
     expect(deps.recordHandoff).not.toHaveBeenCalled();
     expect(deps.toast.successCalls).toEqual([
-      'Open Knowledge skill saved. Upload it in Claude Desktop, then click Cowork again.',
+      'OpenKnowledge skill saved. Upload it in Claude Desktop, then click Cowork again.',
     ]);
   });
 
@@ -493,7 +510,7 @@ describe('runHandoffDispatch — Cowork install gate', () => {
     }
     expect(deps.dispatchHandoff).not.toHaveBeenCalled();
     expect(deps.toast.errorCalls[0]?.message).toBe(
-      "Couldn't install Open Knowledge skill — Claude Desktop not found",
+      "Couldn't install OpenKnowledge skill — Claude Desktop not found",
     );
   });
 
@@ -561,7 +578,7 @@ describe('runHandoffDispatch — Cowork install gate', () => {
     }
     expect(deps.dispatchHandoff).not.toHaveBeenCalled();
     expect(deps.toast.errorCalls[0]?.message).toBe(
-      "Couldn't install Open Knowledge skill — IPC channel closed",
+      "Couldn't install OpenKnowledge skill — IPC channel closed",
     );
   });
 });
@@ -643,6 +660,61 @@ describe('buildProjectScopedHandoffInput — empty-state cards helper', () => {
     expect(input?.projectDir).toBe('C:\\Users\\sarah\\proj');
     expect(input?.docPath).toBe('');
     expect(input?.docContext).toBeNull();
+  });
+});
+
+describe('buildCreateHandoffInput — empty-state create-composer helper', () => {
+  test('null workspace returns null (composer dispatches disabled while resolving)', async () => {
+    const { buildCreateHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildCreateHandoffInput({
+        workspace: null,
+        description: 'a wiki',
+        scenario: 'new-project',
+        mentions: [],
+      }),
+    ).toBeNull();
+  });
+
+  test('empty workspace.contentDir returns null (same falsy guard as siblings)', async () => {
+    const { buildCreateHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildCreateHandoffInput({
+        workspace: { contentDir: '', pathSeparator: '/' },
+        description: 'a wiki',
+        scenario: 'new-project',
+        mentions: [],
+      }),
+    ).toBeNull();
+  });
+
+  test('carries the brief + scenario + mentions on the create-scope shape (docContext null, empty docPath)', async () => {
+    const { buildCreateHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildCreateHandoffInput({
+      workspace: { contentDir: '/Users/sarah/proj', pathSeparator: '/' },
+      description: 'a research knowledge base',
+      scenario: 'existing-repo',
+      mentions: ['notes/a.md', 'glossary.md'],
+    });
+    expect(input).toEqual({
+      docContext: null,
+      createDescription: 'a research knowledge base',
+      createScenario: 'existing-repo',
+      createMentions: ['notes/a.md', 'glossary.md'],
+      projectDir: '/Users/sarah/proj',
+      docPath: '',
+    });
+  });
+
+  test('empty description is preserved verbatim (composer degrades it, not the builder)', async () => {
+    const { buildCreateHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildCreateHandoffInput({
+      workspace: { contentDir: '/Users/sarah/proj', pathSeparator: '/' },
+      description: '',
+      scenario: 'new-project',
+      mentions: [],
+    });
+    expect(input?.createDescription).toBe('');
   });
 });
 
@@ -737,9 +809,11 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       true,
     );
-    expect(out).toBe(composeFilePrompt('notes/today.md', true));
+    expect(out).toBe(withSkillPointer(composeFilePrompt('notes/today.md', true)));
     expect(out).toBe(
-      "Let's work on `notes/today.md` using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on `notes/today.md` using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 
@@ -754,7 +828,7 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       false,
     );
-    expect(out).toBe("Let's work on `notes/today.md` using Open Knowledge.");
+    expect(out).toBe(withSkillPointer("Let's work on `notes/today.md` using OpenKnowledge."));
   });
 
   test('folder scope (docContext null + folderRelativePath set) returns composeFolderPrompt with autoOpen=true trailer', async () => {
@@ -770,9 +844,11 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       true,
     );
-    expect(out).toBe(composeFolderPrompt('notes', true));
+    expect(out).toBe(withSkillPointer(composeFolderPrompt('notes', true)));
     expect(out).toBe(
-      "Let's work on the `notes` folder using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on the `notes` folder using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 
@@ -788,7 +864,7 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       false,
     );
-    expect(out).toBe("Let's work on the `notes` folder using Open Knowledge.");
+    expect(out).toBe(withSkillPointer("Let's work on the `notes` folder using OpenKnowledge."));
   });
 
   test('empty-space scope (both null/absent) returns composeEmptySpacePrompt(autoOpen=true)', async () => {
@@ -803,9 +879,11 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       true,
     );
-    expect(out).toBe(composeEmptySpacePrompt(true));
+    expect(out).toBe(withSkillPointer(composeEmptySpacePrompt(true)));
     expect(out).toBe(
-      "Let's work on this project using Open Knowledge. Open the OK editor in web view.",
+      withSkillPointer(
+        "Let's work on this project using OpenKnowledge. Open the OK editor in web view.",
+      ),
     );
   });
 
@@ -820,7 +898,209 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       false,
     );
-    expect(out).toBe("Let's work on this project using Open Knowledge.");
+    expect(out).toBe(withSkillPointer("Let's work on this project using OpenKnowledge."));
+  });
+
+  test('file scope threads the toolbar instruction into the directive prompt', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeFilePrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: { relativePath: 'notes/today.md' },
+        instruction: 'Tighten the intro',
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(
+      withSkillPointer(composeFilePrompt('notes/today.md', true, 'Tighten the intro')),
+    );
+    expect(out).toContain('Instruction:\n\n> Tighten the intro');
+  });
+
+  test('folder scope threads the toolbar instruction', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        folderRelativePath: 'notes',
+        instruction: 'Review the structure',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toContain("Let's work on the `notes` folder using OpenKnowledge.");
+    expect(out).toContain('> Review the structure');
+  });
+
+  test('empty-space scope threads the toolbar instruction', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        instruction: 'Scaffold the wiki',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toContain("Let's work on this project using OpenKnowledge.");
+    expect(out).toContain('> Scaffold the wiki');
+  });
+
+  test('selection scope ignores the top-level instruction — selection.instruction wins', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        instruction: 'top-level directive instruction',
+        selection: {
+          relativePath: 'notes/today.md',
+          instruction: 'selection instruction',
+          selectionMarkdown: 'the passage',
+        },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toContain('> selection instruction');
+    expect(out).not.toContain('top-level directive instruction');
+  });
+
+  test('create scope ignores the top-level instruction — createDescription is the only free-text', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        instruction: 'top-level directive instruction',
+        createDescription: 'a worldbuilding wiki',
+        createScenario: 'new-project',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toContain('> a worldbuilding wiki');
+    expect(out).not.toContain('top-level directive instruction');
+  });
+
+  test('file scope threads the instruction even when autoOpen=false (trailer dropped, instruction kept)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: { relativePath: 'notes/today.md' },
+        instruction: 'Fix the intro',
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      false,
+    );
+    expect(out).toContain('> Fix the intro');
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('create scope (createDescription set) returns composeCreatePrompt with the scenario', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeCreatePrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        createDescription: 'a worldbuilding wiki',
+        createScenario: 'new-project',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(
+      withSkillPointer(composeCreatePrompt('a worldbuilding wiki', true, 'new-project', [])),
+    );
+    expect(out).toContain('> a worldbuilding wiki');
+    expect(out).toContain('Open the OK editor in web view.');
+  });
+
+  test('create scope threads createMentions into composeCreatePrompt', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeCreatePrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        createDescription: 'a worldbuilding wiki',
+        createScenario: 'new-project',
+        createMentions: ['notes/lore.md', 'maps/world.md'],
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      false,
+    );
+    expect(out).toBe(
+      withSkillPointer(
+        composeCreatePrompt('a worldbuilding wiki', false, 'new-project', [
+          'notes/lore.md',
+          'maps/world.md',
+        ]),
+      ),
+    );
+    expect(out).toContain('Also reference:\n\n@notes/lore.md\n@maps/world.md');
+  });
+
+  test('create scope threads existing-repo — no "new project" framing', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        createDescription: 'draft a spec for this codebase',
+        createScenario: 'existing-repo',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).not.toContain('new OpenKnowledge project');
+    expect(out).toContain('> draft a spec for this codebase');
+  });
+
+  test('create scope defaults to new-project when createScenario is absent', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeCreatePrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      { docContext: null, createDescription: 'a wiki', projectDir: '/proj', docPath: '' },
+      'claude-code',
+      false,
+    );
+    expect(out).toBe(withSkillPointer(composeCreatePrompt('a wiki', false, 'new-project', [])));
+  });
+
+  test('create scope with empty createDescription routes to the create composer, NOT empty-space', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeCreatePrompt, composeEmptySpacePrompt } = await import(
+      '@inkeep/open-knowledge-core'
+    );
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        createDescription: '',
+        createScenario: 'new-project',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(withSkillPointer(composeCreatePrompt('', true, 'new-project', [])));
+    expect(out).not.toBe(withSkillPointer(composeEmptySpacePrompt(true)));
   });
 
   test('precedence: docContext beats folderRelativePath when both are set (defensive ordering)', async () => {
@@ -836,7 +1116,7 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       'claude-code',
       true,
     );
-    expect(out).toBe(composeFilePrompt('a.md', true));
+    expect(out).toBe(withSkillPointer(composeFilePrompt('a.md', true)));
   });
 
   test('selection scope (selection set) returns composeSelectionPrompt for the target', async () => {
@@ -858,6 +1138,43 @@ describe('selectScopedPrompt — template selection across autoOpen modes', () =
       true,
     );
     expect(out).toBe(composeSelectionPrompt({ ...selection, target: 'cursor' }));
+  });
+
+  test('the standing skill pointer rides every directive scope but NOT selection', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { OK_PROJECT_SKILL_POINTER } = await import('@inkeep/open-knowledge-core');
+    const base = { projectDir: '/proj', docPath: '' } as const;
+
+    const file = selectScopedPrompt(
+      { ...base, docContext: { relativePath: 'a.md' }, docPath: '/proj/a.md' },
+      'claude-code',
+      true,
+    );
+    const folder = selectScopedPrompt(
+      { ...base, docContext: null, folderRelativePath: 'specs' },
+      'claude-code',
+      true,
+    );
+    const empty = selectScopedPrompt({ ...base, docContext: null }, 'claude-code', true);
+    const create = selectScopedPrompt(
+      { ...base, docContext: null, createDescription: 'a wiki' },
+      'claude-code',
+      true,
+    );
+    const selection = selectScopedPrompt(
+      {
+        ...base,
+        docContext: null,
+        selection: { relativePath: 'a.md', instruction: 'x', selectionMarkdown: 'y' },
+      },
+      'claude-code',
+      true,
+    );
+
+    for (const prompt of [file, folder, empty, create]) {
+      expect(prompt.startsWith(OK_PROJECT_SKILL_POINTER)).toBe(true);
+    }
+    expect(selection).not.toContain(OK_PROJECT_SKILL_POINTER);
   });
 
   test('precedence: selection beats docContext when both are set (defensive ordering)', async () => {
@@ -965,6 +1282,54 @@ describe('buildSelectionHandoffInput — selection-scoped helper', () => {
   });
 });
 
+describe('buildSelectionOrDocHandoffInput — selection/file fallback helper', () => {
+  test('prefers selection scope when the serialized selection is non-empty', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildSelectionOrDocHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'rewrite',
+      selectionMarkdown: 'selected passage',
+    });
+
+    expect(input?.docContext).toBeNull();
+    expect(input?.selection).toEqual({
+      relativePath: 'specs/foo/SPEC.md',
+      instruction: 'rewrite',
+      selectionMarkdown: 'selected passage',
+    });
+    expect(input?.docPath).toBe('/repo/specs/foo/SPEC.md');
+  });
+
+  test('falls back to file scope when the serialized selection is empty', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildSelectionOrDocHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'rewrite',
+      selectionMarkdown: '',
+    });
+
+    expect(input).toEqual({
+      docContext: { relativePath: 'specs/foo/SPEC.md' },
+      projectDir: '/repo',
+      docPath: '/repo/specs/foo/SPEC.md',
+    });
+  });
+
+  test('returns null when neither selection nor file scope can be built', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildSelectionOrDocHandoffInput({
+        docName: null,
+        workspace: { contentDir: '/repo', pathSeparator: '/' },
+        instruction: 'rewrite',
+        selectionMarkdown: '',
+      }),
+    ).toBeNull();
+  });
+});
+
 describe('runHandoffDispatch — selection scope', () => {
   function selectionInput(): HandoffDispatchInput {
     return {
@@ -1032,5 +1397,870 @@ describe('runHandoffDispatch — selection scope', () => {
       ts: '2026-04-22T03:00:00.000Z',
       scope: 'selection',
     });
+  });
+});
+
+describe('composeTerminalLaunchPrompt — docked-terminal bare launch is load + read + stop', () => {
+  test('file scope reads the open file via OK MCP, then stops', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt(
+      {
+        docContext: { relativePath: 'notes/today.md' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude',
+    );
+    expect(out).toBe(composeTerminalBareLaunchPrompt('notes/today.md'));
+    expect(out).toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+    expect(out).toContain('Read `notes/today.md` via the OpenKnowledge MCP server, then stop.');
+    expect(out).not.toContain("Let's work on");
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('folder scope has no file to read — just load and stop', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt(
+      {
+        docContext: null,
+        folderRelativePath: 'specs/foo',
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude',
+    );
+    expect(out).toBe(composeTerminalBareLaunchPrompt(null));
+    expect(out).toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+    expect(out.endsWith('Then stop.')).toBe(true);
+    expect(out).not.toContain('Read `');
+    expect(out).not.toContain("Let's work on");
+  });
+
+  test('project / empty-space scope — just load and stop', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt(
+      {
+        docContext: null,
+        projectDir: '/proj',
+        docPath: '',
+      },
+      'claude',
+    );
+    expect(out).toBe(composeTerminalBareLaunchPrompt(null));
+    expect(out.endsWith('Then stop.')).toBe(true);
+    expect(out).not.toContain("Let's work on");
+  });
+
+  test('bare launch is CLI-agnostic — codex / cursor compose the same prompt as claude', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const input = {
+      docContext: { relativePath: 'notes/today.md' },
+      projectDir: '/proj',
+      docPath: '/proj/notes/today.md',
+    };
+    const claudeOut = composeTerminalLaunchPrompt(input, 'claude');
+    expect(claudeOut).toBe(composeTerminalBareLaunchPrompt('notes/today.md'));
+    expect(composeTerminalLaunchPrompt(input, 'codex')).toBe(claudeOut);
+    expect(composeTerminalLaunchPrompt(input, 'cursor')).toBe(claudeOut);
+  });
+
+  test('typed instruction is preserved per CLI (keeps the directive composer, no "stop")', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: { relativePath: 'notes/today.md' },
+      projectDir: '/proj',
+      docPath: '/proj/notes/today.md',
+      instruction: 'summarize the open questions',
+    };
+    expect(composeTerminalLaunchPrompt(input, 'claude')).toBe(
+      selectScopedPrompt(input, 'claude-code', false),
+    );
+    expect(composeTerminalLaunchPrompt(input, 'codex')).toBe(
+      selectScopedPrompt(input, 'codex', false),
+    );
+    expect(composeTerminalLaunchPrompt(input, 'cursor')).toBe(
+      selectScopedPrompt(input, 'cursor', false),
+    );
+    const claudeOut = composeTerminalLaunchPrompt(input, 'claude');
+    expect(claudeOut).toContain('summarize the open questions');
+    expect(claudeOut).not.toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+  });
+
+  test('composer (compose scope) threads the typed instruction — NOT a bare launch', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: null,
+      compose: {
+        scope: 'doc' as const,
+        docRelativePath: 'notes/work-log.md',
+        instruction: 'What does this file do?',
+        mentions: [],
+      },
+      projectDir: '/proj',
+      docPath: '/proj/notes/work-log.md',
+    };
+    expect(composeTerminalLaunchPrompt(input, 'claude')).toBe(
+      selectScopedPrompt(input, 'claude-code', false),
+    );
+    expect(composeTerminalLaunchPrompt(input, 'codex')).toBe(
+      selectScopedPrompt(input, 'codex', false),
+    );
+    expect(composeTerminalLaunchPrompt(input, 'cursor')).toBe(
+      selectScopedPrompt(input, 'cursor', false),
+    );
+    const claudeOut = composeTerminalLaunchPrompt(input, 'claude');
+    expect(claudeOut).toContain('What does this file do?');
+    expect(claudeOut).not.toBe(composeTerminalBareLaunchPrompt('notes/work-log.md'));
+    expect(claudeOut).not.toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+  });
+
+  test('whitespace-only instruction is treated as a bare launch', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt(
+      {
+        docContext: { relativePath: 'notes/today.md' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+        instruction: '   ',
+      },
+      'claude',
+    );
+    expect(out).toBe(composeTerminalBareLaunchPrompt('notes/today.md'));
+    expect(out).toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+    expect(out).not.toContain('Instruction:');
+    expect(out).not.toContain("Let's work on");
+  });
+
+  test('create brief is preserved (keeps the directive composer)', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: null,
+      createDescription: 'a fishing log',
+      createScenario: 'new-project' as const,
+      projectDir: '/proj',
+      docPath: '',
+    };
+    const out = composeTerminalLaunchPrompt(input, 'claude');
+    expect(out).toBe(selectScopedPrompt(input, 'claude-code', false));
+    expect(out).toContain('a fishing log');
+    expect(out).not.toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+  });
+
+  test('empty create brief still routes to the directive composer (createDescription !== undefined)', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: null,
+      createDescription: '',
+      createScenario: 'new-project' as const,
+      projectDir: '/proj',
+      docPath: '',
+    };
+    const out = composeTerminalLaunchPrompt(input, 'claude');
+    expect(out).toBe(selectScopedPrompt(input, 'claude-code', false));
+    expect(out).not.toBe(composeTerminalBareLaunchPrompt(null));
+    expect(out).not.toContain(OK_TERMINAL_SURFACE_PREAMBLE);
+  });
+
+  test('bare terminal launch never carries the web-view preview trailer', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: { relativePath: 'notes/today.md' },
+      projectDir: '/proj',
+      docPath: '/proj/notes/today.md',
+    };
+    expect(composeTerminalLaunchPrompt(input, 'claude')).not.toContain('Open the OK editor');
+    expect(selectScopedPrompt(input, 'claude-code', true)).toContain(
+      'Open the OK editor in web view.',
+    );
+  });
+});
+
+describe('buildAskHandoffInput — ask-scoped helper', () => {
+  test('null docName returns null', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildAskHandoffInput({
+        docName: null,
+        workspace: { contentDir: '/repo', pathSeparator: '/' },
+        instruction: 'condense this doc',
+      }),
+    ).toBeNull();
+  });
+
+  test('null workspace returns null', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildAskHandoffInput({
+        docName: 'notes/today',
+        workspace: null,
+        instruction: 'condense this doc',
+      }),
+    ).toBeNull();
+  });
+
+  test('empty-string docName is treated as no active doc (null return)', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildAskHandoffInput({
+        docName: '',
+        workspace: { contentDir: '/repo', pathSeparator: '/' },
+        instruction: 'condense this doc',
+      }),
+    ).toBeNull();
+  });
+
+  test('POSIX: composes the ask payload + projectDir + absolute docPath', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildAskHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/Users/andrew/repo', pathSeparator: '/' },
+      instruction: 'condense this doc',
+    });
+    expect(input).toEqual({
+      docContext: null,
+      ask: {
+        relativePath: 'specs/foo/SPEC.md',
+        instruction: 'condense this doc',
+      },
+      projectDir: '/Users/andrew/repo',
+      docPath: '/Users/andrew/repo/specs/foo/SPEC.md',
+    });
+  });
+
+  test('Windows: docPath uses backslashes; ask.relativePath stays POSIX', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildAskHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: 'C:\\repo', pathSeparator: '\\' },
+      instruction: '',
+    });
+    expect(input?.ask?.relativePath).toBe('specs/foo/SPEC.md');
+    expect(input?.projectDir).toBe('C:\\repo');
+    expect(input?.docPath).toBe('C:\\repo\\specs\\foo\\SPEC.md');
+  });
+
+  test('empty instruction is allowed — passes through, not a null trigger', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildAskHandoffInput({
+      docName: 'd',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: '',
+    });
+    expect(input).not.toBeNull();
+    expect(input?.ask?.instruction).toBe('');
+    expect(input?.docContext).toBeNull();
+  });
+
+  test('sets docContext null and carries the instruction on `ask` (no file-scope leak)', async () => {
+    const { buildAskHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildAskHandoffInput({
+      docName: 'notes/today',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'do the thing',
+    });
+    expect(input?.docContext).toBeNull();
+    expect(input?.ask).toEqual({ relativePath: 'notes/today.md', instruction: 'do the thing' });
+  });
+});
+
+describe('selectScopedPrompt — ask scope', () => {
+  test('ask set returns composeAskPrompt(relativePath, instruction, autoOpen, target)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        ask: { relativePath: 'notes/today.md', instruction: 'condense this doc' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(composeAskPrompt('notes/today.md', 'condense this doc', true, 'claude-code'));
+    expect(out).toContain('> condense this doc');
+    expect(out).toContain('@notes/today.md');
+  });
+
+  test('ask scope drops the preview trailer when autoOpen=false but keeps the instruction', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        ask: { relativePath: 'notes/today.md', instruction: 'condense this doc' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      false,
+    );
+    expect(out).toContain('> condense this doc');
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('R10 regression guard: an ask input does NOT fall through to composeFilePrompt', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeFilePrompt, composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        ask: { relativePath: 'notes/today.md', instruction: 'condense this doc' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toContain('condense this doc');
+    expect(out).not.toBe(composeFilePrompt('notes/today.md', true));
+    expect(out).toBe(composeAskPrompt('notes/today.md', 'condense this doc', true, 'claude-code'));
+  });
+
+  test('precedence: ask beats docContext when both are set (defensive ordering)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: { relativePath: 'notes/today.md' },
+        ask: { relativePath: 'notes/today.md', instruction: 'condense this doc' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(composeAskPrompt('notes/today.md', 'condense this doc', true, 'claude-code'));
+  });
+
+  test('precedence: selection beats ask when both are set (defensive ordering)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeSelectionPrompt } = await import('@inkeep/open-knowledge-core');
+    const selection = {
+      relativePath: 'notes/today.md',
+      instruction: 'edit the passage',
+      selectionMarkdown: 'a passage',
+    };
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        selection,
+        ask: { relativePath: 'notes/today.md', instruction: 'condense this doc' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(composeSelectionPrompt({ ...selection, target: 'claude-code' }));
+  });
+
+  test('empty instruction degrades to the bare doc directive (no dangling blockquote)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const out = selectScopedPrompt(
+      {
+        docContext: null,
+        ask: { relativePath: 'notes/today.md', instruction: '' },
+        projectDir: '/proj',
+        docPath: '/proj/notes/today.md',
+      },
+      'claude-code',
+      true,
+    );
+    expect(out).toBe(composeAskPrompt('notes/today.md', '', true, 'claude-code'));
+    expect(out).not.toContain('>');
+  });
+});
+
+describe('runHandoffDispatch — ask scope', () => {
+  function askInput(instruction = 'condense this doc'): HandoffDispatchInput {
+    return {
+      docContext: null,
+      ask: { relativePath: 'guides/style.md', instruction },
+      projectDir: '/tmp/proj',
+      docPath: '/tmp/proj/guides/style.md',
+    };
+  }
+
+  test('composes the ask prompt and dispatches it to the picked target', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const { composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const deps = buildDeps();
+
+    await runHandoffDispatch('claude-code', askInput(), deps);
+
+    expect(deps.dispatchHandoff).toHaveBeenCalledTimes(1);
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.target).toBe('claude-code');
+    expect(payload.projectDir).toBe('/tmp/proj');
+    expect(payload.docPath).toBe('/tmp/proj/guides/style.md');
+    expect(payload.prompt).toBe(
+      composeAskPrompt('guides/style.md', 'condense this doc', true, 'claude-code'),
+    );
+  });
+
+  test('R10: the typed instruction is present in the dispatched prompt (no composeFilePrompt drop)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const { composeFilePrompt } = await import('@inkeep/open-knowledge-core');
+    const deps = buildDeps();
+
+    await runHandoffDispatch(
+      'codex',
+      askInput('research the extinction of flightless birds'),
+      deps,
+    );
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.prompt).toContain('research the extinction of flightless birds');
+    expect(payload.prompt).not.toBe(composeFilePrompt('guides/style.md', true));
+  });
+
+  test('ask dispatch records NO telemetry scope tag (untagged, like the directive scopes)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const deps = buildDeps();
+
+    await runHandoffDispatch('codex', askInput(), deps);
+
+    expect(deps.recordHandoff).toHaveBeenCalledTimes(1);
+    expect(deps.recordHandoff).toHaveBeenCalledWith({
+      target: 'codex',
+      host: 'electron',
+      outcome: 'ok',
+      ts: '2026-04-22T03:00:00.000Z',
+    });
+  });
+
+  test('autoOpen=false drops the preview trailer but keeps the instruction', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const deps = buildDeps({ autoOpen: false });
+
+    await runHandoffDispatch('codex', askInput(), deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.prompt).toContain('> condense this doc');
+    expect(payload.prompt).not.toContain('Open the OK editor');
+  });
+
+  test('end-to-end: buildAskHandoffInput → dispatch carries the instruction', async () => {
+    const { runHandoffDispatch, buildAskHandoffInput } = await import('./useHandoffDispatch');
+    const { composeAskPrompt } = await import('@inkeep/open-knowledge-core');
+    const deps = buildDeps();
+    const input = buildAskHandoffInput({
+      docName: 'guides/style',
+      workspace: { contentDir: '/tmp/proj', pathSeparator: '/' },
+      instruction: 'make a spec from this user story',
+    });
+    expect(input).not.toBeNull();
+    if (!input) throw new Error('unreachable'); // narrow for TS
+
+    await runHandoffDispatch('cursor', input, deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.prompt).toBe(
+      composeAskPrompt('guides/style.md', 'make a spec from this user story', true, 'cursor'),
+    );
+    expect(payload.prompt).toContain('make a spec from this user story');
+  });
+});
+
+describe('buildComposerHandoffInput — compose-scoped helper (US-002)', () => {
+  test('null workspace returns null', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildComposerHandoffInput({
+        docName: 'notes/today',
+        workspace: null,
+        instruction: 'summarize',
+        mentions: [],
+      }),
+    ).toBeNull();
+  });
+
+  test('null docName builds a project-scope compose input (no doc lead, empty docPath)', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildComposerHandoffInput({
+      docName: null,
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'plan the migration',
+      mentions: ['AGENTS.md'],
+    });
+    expect(input?.compose).toEqual({
+      scope: 'project',
+      instruction: 'plan the migration',
+      mentions: ['AGENTS.md'],
+    });
+    expect(input?.docContext).toBeNull();
+    expect(input?.projectDir).toBe('/repo');
+    expect(input?.docPath).toBe('');
+  });
+
+  test('non-null docName builds a doc-scope compose input with the .md relative path + absolute docPath', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildComposerHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'tighten the intro',
+      mentions: ['guides/style.md'],
+    });
+    expect(input?.compose).toEqual({
+      scope: 'doc',
+      docRelativePath: 'specs/foo/SPEC.md',
+      instruction: 'tighten the intro',
+      mentions: ['guides/style.md'],
+    });
+    expect(input?.docPath).toBe('/repo/specs/foo/SPEC.md');
+  });
+
+  test('folderRelativePath with null docName builds a folder-scope compose input (folder lead, empty docPath)', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildComposerHandoffInput({
+      docName: null,
+      folderRelativePath: 'specs/foo',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'audit this folder',
+      mentions: ['AGENTS.md'],
+    });
+    expect(input?.compose).toEqual({
+      scope: 'folder',
+      folderRelativePath: 'specs/foo',
+      instruction: 'audit this folder',
+      mentions: ['AGENTS.md'],
+    });
+    expect(input?.docContext).toBeNull();
+    expect(input?.projectDir).toBe('/repo');
+    expect(input?.docPath).toBe('');
+  });
+
+  test('docName takes precedence over folderRelativePath (doc scope wins)', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildComposerHandoffInput({
+      docName: 'notes/today',
+      folderRelativePath: 'specs/foo',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'tidy',
+      mentions: [],
+    });
+    expect(input?.compose?.scope).toBe('doc');
+  });
+
+  test('doc scope carries a provided selection; an omitted selection is absent', async () => {
+    const { buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const withSel = buildComposerHandoffInput({
+      docName: 'notes/today',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: '',
+      mentions: [],
+      selection: { kind: 'inline', markdown: 'A wordy sentence.' },
+    });
+    expect(withSel?.compose).toEqual({
+      scope: 'doc',
+      docRelativePath: 'notes/today.md',
+      instruction: '',
+      mentions: [],
+      selection: { kind: 'inline', markdown: 'A wordy sentence.' },
+    });
+
+    const noSel = buildComposerHandoffInput({
+      docName: 'notes/today',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: '',
+      mentions: [],
+    });
+    expect(noSel?.compose).not.toHaveProperty('selection');
+  });
+});
+
+describe('selectScopedPrompt — compose scope (US-002)', () => {
+  test('doc scope routes through assembleHandoffPrompt for the target (doc lead + mentions present)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: {
+        scope: 'doc',
+        docRelativePath: 'specs/foo/SPEC.md',
+        instruction: 'tighten the intro',
+        mentions: ['guides/style.md', 'AGENTS.md'],
+      },
+      projectDir: '/repo',
+      docPath: '/repo/specs/foo/SPEC.md',
+    };
+    const out = selectScopedPrompt(input, 'cursor', true);
+    expect(out).toBe(
+      assembleHandoffPrompt({
+        scope: 'doc',
+        docRelativePath: 'specs/foo/SPEC.md',
+        instruction: 'tighten the intro',
+        mentions: ['guides/style.md', 'AGENTS.md'],
+        autoOpen: true,
+        target: 'cursor',
+      }),
+    );
+    expect(out).toContain('@specs/foo/SPEC.md');
+    expect(out).toContain('@guides/style.md');
+    expect(out).toContain('@AGENTS.md');
+    expect(out).toContain('> tighten the intro');
+  });
+
+  test('folder scope routes through assembleHandoffPrompt with the folder @-mention lead + mentions', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: {
+        scope: 'folder',
+        folderRelativePath: 'specs/foo',
+        instruction: 'audit this folder',
+        mentions: ['AGENTS.md'],
+      },
+      projectDir: '/repo',
+      docPath: '',
+    };
+    const out = selectScopedPrompt(input, 'cursor', true);
+    expect(out).toBe(
+      assembleHandoffPrompt({
+        scope: 'folder',
+        folderRelativePath: 'specs/foo',
+        instruction: 'audit this folder',
+        mentions: ['AGENTS.md'],
+        autoOpen: true,
+        target: 'cursor',
+      }),
+    );
+    expect(out).toContain('@specs/foo folder');
+    expect(out).toContain('@AGENTS.md');
+    expect(out).toContain('> audit this folder');
+  });
+
+  test('project scope routes through assembleHandoffPrompt with no doc @-mention', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: { scope: 'project', instruction: 'plan the migration', mentions: [] },
+      projectDir: '/repo',
+      docPath: '',
+    };
+    const out = selectScopedPrompt(input, 'codex', true);
+    expect(out).toBe(
+      assembleHandoffPrompt({
+        scope: 'project',
+        instruction: 'plan the migration',
+        mentions: [],
+        autoOpen: true,
+        target: 'codex',
+      }),
+    );
+    expect(out).toContain('plan the migration');
+    expect(out).not.toContain('@');
+  });
+
+  test('doc scope with a selection threads the passage to the assembler', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: {
+        scope: 'doc',
+        docRelativePath: 'notes/today.md',
+        instruction: 'make concise',
+        mentions: [],
+        selection: { kind: 'inline', markdown: 'This sentence is wordy.' },
+      },
+      projectDir: '/repo',
+      docPath: '/repo/notes/today.md',
+    };
+    const out = selectScopedPrompt(input, 'claude-code', true);
+    expect(out).toBe(
+      assembleHandoffPrompt({
+        scope: 'doc',
+        docRelativePath: 'notes/today.md',
+        instruction: 'make concise',
+        mentions: [],
+        selection: { kind: 'inline', markdown: 'This sentence is wordy.' },
+        autoOpen: true,
+        target: 'claude-code',
+      }),
+    );
+    expect(out).toContain('This sentence is wordy.');
+  });
+
+  test('precedence: compose beats selection + docContext when several are set (defensive ordering)', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const input: HandoffDispatchInput = {
+      docContext: { relativePath: 'a.md' },
+      selection: { relativePath: 'a.md', instruction: 'x', selectionMarkdown: 'p' },
+      compose: { scope: 'project', instruction: 'unified path wins', mentions: [] },
+      projectDir: '/repo',
+      docPath: '/repo/a.md',
+    };
+    const out = selectScopedPrompt(input, 'claude-code', true);
+    expect(out).toBe(
+      assembleHandoffPrompt({
+        scope: 'project',
+        instruction: 'unified path wins',
+        mentions: [],
+        autoOpen: true,
+        target: 'claude-code',
+      }),
+    );
+  });
+
+  test('autoOpen=false drops the "Open the OK editor" trailer via the assembler', async () => {
+    const { selectScopedPrompt } = await import('./useHandoffDispatch');
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: { scope: 'project', instruction: 'plan', mentions: [] },
+      projectDir: '/repo',
+      docPath: '',
+    };
+    const out = selectScopedPrompt(input, 'codex', false);
+    expect(out).not.toContain('Open the OK editor');
+  });
+});
+
+describe('runHandoffDispatch — compose scope (US-002)', () => {
+  function composeProjectInput(): HandoffDispatchInput {
+    return {
+      docContext: null,
+      compose: { scope: 'project', instruction: 'plan the migration', mentions: [] },
+      projectDir: '/tmp/proj',
+      docPath: '',
+    };
+  }
+
+  test('project scope: composes via the assembler, prompt has the instruction + no doc mention, empty docPath dispatched (R1 dispatch half)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const { assembleHandoffPrompt } = await import('@inkeep/open-knowledge-core');
+    const deps = buildDeps();
+
+    await runHandoffDispatch('codex', composeProjectInput(), deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.docPath).toBe('');
+    expect(payload.prompt).toBe(
+      assembleHandoffPrompt({
+        scope: 'project',
+        instruction: 'plan the migration',
+        mentions: [],
+        autoOpen: true,
+        target: 'codex',
+      }),
+    );
+    expect(payload.prompt).toContain('plan the migration');
+    expect(payload.prompt).not.toContain('@');
+  });
+
+  test('multi-mention doc scope: every sanitized @path appears in the dispatched prompt (R4 dispatch half)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const deps = buildDeps();
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: {
+        scope: 'doc',
+        docRelativePath: 'specs/foo/SPEC.md',
+        instruction: 'compare these',
+        mentions: ['guides/style.md', 'AGENTS.md'],
+      },
+      projectDir: '/tmp/proj',
+      docPath: '/tmp/proj/specs/foo/SPEC.md',
+    };
+
+    await runHandoffDispatch('claude-code', input, deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.prompt).toContain('@specs/foo/SPEC.md');
+    expect(payload.prompt).toContain('@guides/style.md');
+    expect(payload.prompt).toContain('@AGENTS.md');
+  });
+
+  test('selection passage embedded + telemetry scope tagged selection (R5 dispatch half)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const deps = buildDeps();
+    const input: HandoffDispatchInput = {
+      docContext: null,
+      compose: {
+        scope: 'doc',
+        docRelativePath: 'notes/today.md',
+        instruction: 'make concise',
+        mentions: [],
+        selection: { kind: 'inline', markdown: 'This sentence is wordy.' },
+      },
+      projectDir: '/tmp/proj',
+      docPath: '/tmp/proj/notes/today.md',
+    };
+
+    await runHandoffDispatch('codex', input, deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.prompt).toContain('This sentence is wordy.');
+    expect(deps.recordHandoff).toHaveBeenCalledWith({
+      target: 'codex',
+      host: 'electron',
+      outcome: 'ok',
+      ts: '2026-04-22T03:00:00.000Z',
+      scope: 'selection',
+    });
+  });
+
+  test('compose with no passage stays untagged (no scope field on the telemetry line)', async () => {
+    const { runHandoffDispatch } = await import('./useHandoffDispatch');
+    const deps = buildDeps();
+
+    await runHandoffDispatch('codex', composeProjectInput(), deps);
+
+    expect(deps.recordHandoff).toHaveBeenCalledWith({
+      target: 'codex',
+      host: 'electron',
+      outcome: 'ok',
+      ts: '2026-04-22T03:00:00.000Z',
+    });
+  });
+
+  test('end-to-end: buildComposerHandoffInput (no doc) → dispatch carries the instruction, no doc mention', async () => {
+    const { runHandoffDispatch, buildComposerHandoffInput } = await import('./useHandoffDispatch');
+    const deps = buildDeps();
+    const input = buildComposerHandoffInput({
+      docName: null,
+      workspace: { contentDir: '/tmp/proj', pathSeparator: '/' },
+      instruction: 'set up CI',
+      mentions: [],
+    });
+    expect(input).not.toBeNull();
+    if (!input) throw new Error('unreachable'); // narrow for TS
+
+    await runHandoffDispatch('cursor', input, deps);
+
+    const [payload] = (deps.dispatchHandoff as ReturnType<typeof mock>).mock.calls[0] as [
+      HandoffPayload,
+    ];
+    expect(payload.docPath).toBe('');
+    expect(payload.prompt).toContain('set up CI');
+    expect(payload.prompt).not.toContain('@');
   });
 });

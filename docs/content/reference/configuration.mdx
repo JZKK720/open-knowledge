@@ -3,7 +3,7 @@ title: Configuration
 description: The .ok/config.yml schema and environment variables.
 ---
 
-Open Knowledge reads YAML config from three places:
+OpenKnowledge reads YAML config from three places:
 
 - **Project**: `./.ok/config.yml` (this project, committed to git)
 - **User**: `~/.ok/global.yml` (every project on your machine)
@@ -27,16 +27,18 @@ The **Scope** column says which file a setting belongs in: **project** → `.ok/
 | --- | --- | --- | --- | --- |
 | `content.dir` | string | `"."` | project | Content directory, relative to project root. Defaults to `.` (the project root) even when `.ok/` is scaffolded at the git working-tree root from a sub-folder, so opened folder and content scope align by default. To narrow scope to a sub-folder, uncomment `content.dir` in `.ok/config.yml` post-init. Excluded paths live in `.okignore`; see [Ignore patterns](/docs/features/ignore-patterns). |
 | `appearance.theme` | `"light" \| "dark" \| "system"` | (unset) | user | Editor theme. |
-| `appearance.sidebar.showHiddenFiles` | boolean | `false` | project-local | Show files whose path segments start with `.`. Server-side `.gitignore` / `.okignore` filters still apply. Toggled from the sidebar's right-click menu or the macOS **View → Show Hidden Files** item. |
-| `appearance.sidebar.showAllFiles` | boolean | `false` | project-local | Bypass every ignore filter, including both the client dot-segment drop and the server's `.gitignore` / `.okignore` / built-in exclusions. Surfaces every file on disk under the content directory (synthetic system docs stay hidden). Toggled from the sidebar's right-click menu or the macOS **View → Show All Files** item. |
+| `appearance.sidebar.showHiddenFiles` | boolean | `false` | project-local | Show files whose path segments start with `.`. The sidebar otherwise lists every file on disk under the content directory; tooling internals (`.git/`, `.ok/`, `node_modules/`) stay hidden regardless. Toggled from the sidebar's right-click menu or the macOS **View → Show Hidden Files** item. |
 | `autoSync.enabled` | `boolean \| null` | `null` | project-local | Per-machine git auto-sync toggle. `null` means "unanswered"; the editor's onboarding modal triggers on first remote-detected open. |
 | `editor.wordWrap` | boolean | `true` | user | Soft-wrap long lines in the source-mode CodeMirror editor. A personal preference, not project-shared. Toggle from the Settings pane. |
-| `appearance.preview.autoOpen` | boolean | `true` | user | Whether the agent should open or refresh the Open Knowledge preview when it edits a doc through the MCP. Default `true` lets the agent route the preview by host capability: the host's in-app browser (Cursor preview pane, Codex's built-in browser, Claude Code Desktop) when one exists, the system browser otherwise. Set `false` to keep the agent's hands off your preview window. This is useful when you're already viewing the doc in OK Desktop, a browser tab on a second display, a non-default browser, or any flow where your extensions / accessibility tooling only work in your own browser. The agent then surfaces the URL on request but does not navigate. The change takes effect on the next preview-related tool call. Toggle from **Settings → Preferences → "Open preview when agent edits"**. |
-| `preview.scriptSrc` | `"cdn-allowlist" \| "inline-only"` | `"cdn-allowlist"` | project | Content Security Policy `script-src` for the code-block HTML preview iframe. `cdn-allowlist` lets preview embeds load library `<script src>` tags from a fixed set of trusted static CDNs (cdnjs, jsDelivr, unpkg, esm.sh), so interactive embeds like chart.js render. The allowlist is fixed: only `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, `unpkg.com`, and `esm.sh` are permitted and custom origins can't be added. If a script from another origin is blocked (a `script-src` CSP error in the browser console), inline the library directly in the code block or load a copy one of these CDNs hosts. `inline-only` is the strict policy a cloud / multi-tenant deployment opts into: inline scripts only, no external script origins. Shared across collaborators so everyone gets one policy, and AI agents can't change it. Every other preview-iframe protection (`connect-src 'none'`, sandboxed null-origin frame, etc.) holds under both values. |
+| `appearance.preview.autoOpen` | boolean | `true` | user | Whether the agent should open or refresh the OpenKnowledge preview when it edits a doc through the MCP. Default `true` lets the agent route the preview by host capability: the host's in-app browser (Cursor preview pane, Codex's built-in browser, Claude Code Desktop) when one exists, the system browser otherwise. Set `false` to keep the agent's hands off your preview window. This is useful when you're already viewing the doc in OK Desktop, a browser tab on a second display, a non-default browser, or any flow where your extensions / accessibility tooling only work in your own browser. The agent then surfaces the URL on request but does not navigate. The change takes effect on the next preview-related tool call. Toggle from **Settings → Preferences → "Open preview when agent edits"**. |
 | `telemetry.localSink.enabled` | boolean | `true` | project | Write local diagnostic spans + logs under `.ok/local/` for `ok diagnose bundle` to collect. Local-only: nothing leaves the machine until you run `bundle`. Set `false` for sensitive workspaces. |
 | `telemetry.localSink.spans.maxBytes` | number | `52428800` (~50 MB) | project | Max size of the local diagnostic spans file before it rotates. |
 | `telemetry.localSink.logs.maxBytes` | number | `26214400` (~25 MB) | project | Max size of the local diagnostic logs file before it rotates. |
 | `telemetry.localSink.attributeDenylist` | `string[]` | 8 credential keys | project | Attribute keys whose values are redacted (`[REDACTED]`) before any local span/log is written. Extends the built-in denylist (`authorization`, `password`, `cookie`, etc.). |
+| `search.semantic.enabled` | boolean | `false` | project-local | Add embeddings-based semantic ranking to the MCP `search` tool. Default off. **When on and a key is set, the search query and matching page content are sent to the configured embeddings provider** (content egress). See [Semantic search](#semantic-search) below. |
+| `search.semantic.baseUrl` | string | `"https://api.openai.com/v1"` | project-local | Base URL of the OpenAI-compatible embeddings API. Override for Azure / self-hosted / other providers. The API key is **not** stored here — set it with `ok embeddings set-key`. |
+| `search.semantic.model` | string | `"text-embedding-3-small"` | project-local | Embeddings model id. Must be served by the provider at `baseUrl`. Changing it re-embeds the corpus. |
+| `search.semantic.dimensions` | number | (native) | project-local | Optional output vector size. Omit for the model's native size (1536 for `text-embedding-3-small`). Set a smaller value to shrink the on-disk cache, trading a little quality. |
 
 ## Folder properties
 
@@ -68,8 +70,26 @@ Most users never set these — the schema settings above cover the common cases.
 | Variable | Sets |
 | --- | --- |
 | `OPEN_KNOWLEDGE_GITHUB_CLIENT_ID` | Override the GitHub OAuth App client ID |
-| `OK_SHOWALL_MAX_ENTRIES` | Max entries the **Show all files** disk walk returns before it stops and marks the list truncated (default `50000`) |
+| `OK_SHOWALL_MAX_ENTRIES` | Max entries the sidebar's disk-walk listing returns per level before it stops and marks the list truncated (default `50000`) |
+| `OK_BRIDGE_TOLERANCE_TELEMETRY` | Set to `1` to record each bridge-tolerance-class fire as a JSONL line in `<project>/.ok/local/tolerance-telemetry.jsonl` (opt-in, local-only, off by default; unstable diagnostic for triaging markdown-fidelity incidents). **Records doc paths in cleartext** — independent of `telemetry.localSink`'s `attributeDenylist`, which redacts span/log attributes, not this file. Deliberately outside the `.ok/local/telemetry/` subtree `ok diagnose bundle` harvests, so the unredacted paths never ship in a bug bundle. |
 | `OTEL_SDK_DISABLED` | OpenTelemetry OTLP push gate. Inverted sense: set to `false` to **enable** push (it is off by default). |
+| `OK_EMBEDDINGS_API_KEY` | Fallback embeddings provider API key for [semantic search](#semantic-search), used when none is stored on disk. Prefer `ok embeddings set-key` (writes `~/.ok/secrets.yml`) for normal use; the env var is convenient for CI / scripted runs. |
+
+## Semantic search
+
+The MCP `search` tool can fuse an **embeddings-based semantic signal** into its ranking, so an agent's query surfaces conceptually-related pages even when they share no keywords (a query about "auth retries" can surface a page titled "Session Token Refresh"). It is **off by default** and additive — with it off, search is byte-for-byte today's lexical ranking, and the cmd-K omnibar stays purely lexical and instant either way (semantic applies only to the agent-facing MCP tool).
+
+<Callout type="warn">
+  **Content egress.** When semantic search is enabled **and** a key is set, the search query and the matching page content are sent to the configured embeddings provider (OpenAI by default). Only content that is already in your corpus is embedded — anything excluded by `.okignore` / `.gitignore` is never sent — and embedding is lazy: nothing leaves the machine until an agent actually runs a semantic search. The key lives only in a 0600 `~/.ok/secrets.yml` file (never in `config.yml`, logs, or telemetry).
+</Callout>
+
+To turn it on (per machine):
+
+1. Store the provider key in `~/.ok/secrets.yml` (0600, this machine only): `ok embeddings set-key` (reads the key from a hidden prompt or stdin). Check it with `ok embeddings status`.
+2. Set `search.semantic.enabled: true` in project-local config (`<project>/.ok/local/config.yml`).
+3. (Optional) point at a non-OpenAI provider via `search.semantic.baseUrl` / `model` / `dimensions`.
+
+The first semantic search kicks off a background embed of the corpus (cents for a whole vault with `text-embedding-3-small`); vectors are cached incrementally under `.ok/local/` and only changed docs re-embed. If the key is missing, the provider errors, or you're offline, search silently degrades to lexical — it never blocks or errors. Each MCP `search` response reports embedding coverage so an agent knows when vectors are still filling in.
 
 ## Verifying changes
 

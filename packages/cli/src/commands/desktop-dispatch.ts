@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 export const DESKTOP_BUNDLE_ID = 'com.inkeep.open-knowledge';
 
-const DESKTOP_BUNDLE_NAME = 'Open Knowledge.app';
+const DESKTOP_BUNDLE_NAME = 'OpenKnowledge.app';
 
 const APPLICATIONS_BUNDLE_PATH = `/Applications/${DESKTOP_BUNDLE_NAME}`;
 
@@ -59,11 +59,11 @@ export function createRealDetectDeps(): DetectDeps {
  *   (a) Bundled-CLI introspection — when `ELECTRON_RUN_AS_NODE === '1'`
  *       AND `execPath` matches `/.app/Contents/MacOS/`, walk up to the
  *       `.app` ancestor.
- *   (b) `/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge`
- *   (c) `~/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge`
+ *   (b) `/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge`
+ *   (c) `~/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge`
  *
  * Note: We probe the executable file inside the bundle, not just the
- * `.app` directory — a directory named `Open Knowledge.app` could exist
+ * `.app` directory — a directory named `OpenKnowledge.app` could exist
  * without a real bundle. Verifying the executable rules out false
  * positives.
  */
@@ -90,7 +90,7 @@ function resolveBundlePath(deps: DetectDeps): string | null {
 
 function probeBundle(deps: DetectDeps, bundlePath: string): boolean {
   try {
-    const exec = join(bundlePath, 'Contents', 'MacOS', 'Open Knowledge');
+    const exec = join(bundlePath, 'Contents', 'MacOS', 'OpenKnowledge');
     const meta = deps.statSync(exec);
     if (!meta) return false;
     return typeof meta.isFile === 'function' ? meta.isFile() : false;
@@ -138,7 +138,7 @@ interface LaunchDeps {
 export function launchDesktop(deps: LaunchDeps): void {
   const log = deps.log ?? ((m) => console.error(m));
   log(
-    'Launching Open Knowledge desktop (use `ok start` for the browser server, or `OK_FORCE_BROWSER=1` to always skip)',
+    'Launching OpenKnowledge desktop (use `ok start` for the browser server, or `OK_FORCE_BROWSER=1` to always skip)',
   );
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;

@@ -12,9 +12,12 @@ const TYPE_PICKER_LABEL: Record<FrontmatterType, string> = {
   boolean: 'Checkbox',
   date: 'Date',
   list: 'List',
+  object: 'Object',
 };
 
-const ALL_TYPE_PICKS = Object.entries(TYPE_PICKER_LABEL) as Array<[FrontmatterType, string]>;
+const ALL_TYPE_PICKS = (
+  Object.entries(TYPE_PICKER_LABEL) as Array<[FrontmatterType, string]>
+).filter(([type]) => type !== 'object');
 
 function PropertyPanelHarness({
   initialType = 'text' as FrontmatterType,
@@ -192,6 +195,131 @@ describe('AddPropertyRow — value-channel ADD gates on non-empty name AND value
     render(<Harness />);
     const btn = screen.getByTestId('add-property-commit') as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
+  });
+
+  test('Enter in the VALUE field commits the property (text) — no mouse needed', async () => {
+    const commits: Array<string | number | boolean | null | undefined> = [];
+    function Harness() {
+      const [draft, setDraft] = useState<AddDraft>({
+        name: 'status',
+        type: 'text',
+        value: '',
+        error: null,
+      });
+      return (
+        <AddPropertyRow
+          draft={draft}
+          onChangeName={(name) => setDraft((p) => ({ ...p, name }))}
+          onChangeType={() => {}}
+          onChangeValue={(value) => setDraft((p) => ({ ...p, value }))}
+          onCommit={(valueOverride) => {
+            commits.push(valueOverride as string);
+          }}
+          onCancel={() => {}}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    const valueInput = screen.getByTestId('text-widget') as HTMLTextAreaElement;
+    await user.click(valueInput);
+    await user.keyboard('active{Enter}');
+    expect(commits).toEqual(['active']);
+  });
+
+  test('Enter in the VALUE field commits the property (number) with the typed value', async () => {
+    const commits: Array<string | number | boolean | null | undefined> = [];
+    function Harness() {
+      const [draft, setDraft] = useState<AddDraft>({
+        name: 'count',
+        type: 'number',
+        value: 0,
+        error: null,
+      });
+      return (
+        <AddPropertyRow
+          draft={draft}
+          onChangeName={(name) => setDraft((p) => ({ ...p, name }))}
+          onChangeType={() => {}}
+          onChangeValue={(value) => setDraft((p) => ({ ...p, value }))}
+          onCommit={(valueOverride) => {
+            commits.push(valueOverride as number);
+          }}
+          onCancel={() => {}}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    const valueInput = screen.getByTestId('number-widget') as HTMLInputElement;
+    await user.click(valueInput);
+    await user.clear(valueInput);
+    await user.keyboard('42{Enter}');
+    expect(commits).toEqual([42]);
+  });
+
+  test('Enter in the VALUE field commits the property (date) with a valid parsed date', async () => {
+    const commits: Array<string | number | boolean | null | undefined> = [];
+    function Harness() {
+      const [draft, setDraft] = useState<AddDraft>({
+        name: 'due',
+        type: 'date',
+        value: '2026-01-15',
+        error: null,
+      });
+      return (
+        <AddPropertyRow
+          draft={draft}
+          onChangeName={(name) => setDraft((p) => ({ ...p, name }))}
+          onChangeType={() => {}}
+          onChangeValue={(value) => setDraft((p) => ({ ...p, value }))}
+          onCommit={(valueOverride) => {
+            commits.push(valueOverride as string);
+          }}
+          onCancel={() => {}}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    const dateInput = screen.getByTestId('date-widget').querySelector('input');
+    if (!dateInput) throw new Error('date input not found');
+    await user.click(dateInput);
+    await user.clear(dateInput);
+    await user.keyboard('Jan 20, 2026{Enter}');
+    expect(commits).toEqual(['2026-01-20']);
+  });
+
+  test('Enter in the VALUE field with an INVALID date does not commit (no silent onSubmit(undefined))', async () => {
+    const commits: Array<string | number | boolean | null | undefined> = [];
+    function Harness() {
+      const [draft, setDraft] = useState<AddDraft>({
+        name: 'due',
+        type: 'date',
+        value: '2026-01-15',
+        error: null,
+      });
+      return (
+        <AddPropertyRow
+          draft={draft}
+          onChangeName={(name) => setDraft((p) => ({ ...p, name }))}
+          onChangeType={() => {}}
+          onChangeValue={(value) => setDraft((p) => ({ ...p, value }))}
+          onCommit={(valueOverride) => {
+            commits.push(valueOverride as string);
+          }}
+          onCancel={() => {}}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    const dateInput = screen.getByTestId('date-widget').querySelector('input');
+    if (!dateInput) throw new Error('date input not found');
+    await user.click(dateInput);
+    await user.clear(dateInput);
+    await user.keyboard('not-a-date{Enter}');
+    expect(commits).toEqual([]);
   });
 
   test('Enter-key path bypasses the button gate — consumer must hold the line', async () => {

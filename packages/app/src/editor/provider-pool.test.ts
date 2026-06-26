@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
+import { Compartment } from '@codemirror/state';
 import { PROTOCOL_VERSION } from '@inkeep/open-knowledge-core';
 import { parseHocuspocusAuthToken } from '@inkeep/open-knowledge-server';
 import * as Y from 'yjs';
+import { buildAuthToken } from '../lib/auth-token';
 import { __resetCardinalityWarnings, getCollector } from '../lib/perf/collector';
 import type { ClientPersistenceProvider } from './client-persistence';
-import { buildAuthToken, ProviderPool } from './provider-pool';
+import { ProviderPool } from './provider-pool';
 import {
   __resetSyncPromiseCache,
   __syncPromiseCacheSize,
@@ -26,6 +28,15 @@ async function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<boo
     await wait(10);
   }
   return predicate();
+}
+
+async function awaitAttachedPersistence(entry: {
+  persistence: ClientPersistenceProvider | null;
+}): Promise<ClientPersistenceProvider> {
+  await waitFor(() => entry.persistence !== null, 2_000);
+  const persistence = entry.persistence;
+  if (persistence === null) throw new Error('expected persistence to attach');
+  return persistence;
 }
 
 const DUMMY_WS = 'ws://localhost:1/collab';
@@ -698,6 +709,21 @@ describe('buildAuthToken (MECHANISM-ONLY — CRDT restart recovery + client vers
       parseHocuspocusAuthToken(buildAuthToken(tabId, 'sid-x', ''))?.expectedBranch,
     ).toBeUndefined();
   });
+
+  test('includes expectedDocLineageEpoch when supplied', () => {
+    const parsed = parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, 'epoch-1'));
+    if (!parsed) throw new Error('expected valid token');
+    expect(parsed.expectedDocLineageEpoch).toBe('epoch-1');
+  });
+
+  test('omits expectedDocLineageEpoch when null or empty', () => {
+    expect(
+      parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, null))?.expectedDocLineageEpoch,
+    ).toBeUndefined();
+    expect(
+      parseHocuspocusAuthToken(buildAuthToken(null, 'sid-x', null, ''))?.expectedDocLineageEpoch,
+    ).toBeUndefined();
+  });
 });
 
 describe('ProviderPool server-instance-ID claim (US-001)', () => {
@@ -977,6 +1003,625 @@ describe('ProviderPool server-instance-ID claim (US-001)', () => {
   });
 });
 
+describe('ProviderPool doc-lineage epoch records', () => {
+  const ENVELOPE_KEY = 'ok-doc-lineage-epochs';
+
+  function makeStubStorage(): {
+    stub: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+    store: Map<string, string>;
+  } {
+    const store = new Map<string, string>();
+    const stub = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+    return { stub, store };
+  }
+
+  function makePersistenceStub(): ClientPersistenceProvider {
+    return {
+      whenSynced: Promise.resolve(undefined as never),
+      synced: true,
+      destroy: async () => {},
+      clearData: async () => {},
+      flushFullState: async () => {},
+    } as unknown as ClientPersistenceProvider;
+  }
+
+  function makeEnvelope(
+    serverInstanceId: string,
+    epochs: Record<string, string>,
+    branch = '_unknown_',
+  ): string {
+    return JSON.stringify({ branch, serverInstanceId, epochs });
+  }
+
+  function tokenOf(entry: { provider: { configuration: { token: unknown } } }) {
+    const parsed = parseHocuspocusAuthToken(entry.provider.configuration.token as string);
+    if (!parsed) throw new Error('expected valid token');
+    return parsed;
+  }
+
+  test('open() claims the epoch recorded in a valid storage envelope', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBe('epoch-1');
+  });
+
+  test('claim is omitted while the server instance id is unknown', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('envelope from a different server instance is ignored', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope('dead-instance', { doc1: 'epoch-1' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('envelope from a different branch scope is ignored', () => {
+    const { stub, store } = makeStubStorage();
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { doc1: 'epoch-1' }, 'feature'));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open('doc1');
+    if (!entry) throw new Error('expected entry');
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBeUndefined();
+  });
+
+  test('synced lifecycle epoch is recorded and round-trips into a fresh pool', () => {
+    const { stub, store } = makeStubStorage();
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const docName = uniqueDocName('pp-lineage-record');
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+    entry.provider.emit('synced', { state: true });
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope written to storage');
+    const envelope = JSON.parse(raw) as {
+      branch: string;
+      serverInstanceId: string;
+      epochs: Record<string, string>;
+    };
+    expect(envelope.serverInstanceId).toBe(TEST_SERVER_INSTANCE_ID);
+    expect(envelope.epochs[docName]).toBe('epoch-live');
+
+    const pool2 = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    try {
+      pool2.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const entry2 = pool2.open(docName);
+      if (!entry2) throw new Error('expected entry2');
+      expect(tokenOf(entry2).expectedDocLineageEpoch).toBe('epoch-live');
+    } finally {
+      pool2.dispose();
+    }
+  });
+
+  test('doc-lineage-mismatch rejection drops the record and reopens claim-less', async () => {
+    const { stub, store } = makeStubStorage();
+    const docName = uniqueDocName('pp-lineage-reject');
+    store.set(ENVELOPE_KEY, makeEnvelope(TEST_SERVER_INSTANCE_ID, { [docName]: 'epoch-dead' }));
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    pool.setActive(docName);
+    expect(tokenOf(entry).expectedDocLineageEpoch).toBe('epoch-dead');
+
+    const warnSpy = mock(() => {});
+    const origWarn = console.warn;
+    console.warn = warnSpy;
+    entry.provider.emit('authenticationFailed', { reason: 'doc-lineage-mismatch' });
+    console.warn = origWarn;
+
+    const reopened = pool.peek(docName);
+    if (!reopened) throw new Error('expected reopened entry');
+    expect(reopened).not.toBe(entry);
+    expect(pool.getActiveDocName()).toBe(docName);
+    expect(tokenOf(reopened).expectedDocLineageEpoch).toBeUndefined();
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope still present');
+    const envelope = JSON.parse(raw) as { epochs: Record<string, string> };
+    expect(envelope.epochs[docName]).toBeUndefined();
+
+    const emitted = warnSpy.mock.calls
+      .map((call) => call[0] as string)
+      .filter((line) => typeof line === 'string' && line.includes('ok-doc-lineage-mismatch'));
+    expect(emitted.length).toBe(1);
+    const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+    expect(event.via).toBe('auth-rejection');
+    expect(event.staleEpoch).toBe('epoch-dead');
+
+    await wait(10);
+  });
+
+  test('deferred-attach guard replaces a stale-lineage entry instead of hydrating it', async () => {
+    const { stub } = makeStubStorage();
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    const docName = uniqueDocName('pp-lineage-deferred');
+
+    const first = pool.open(docName);
+    if (!first) throw new Error('expected first entry');
+    first.provider.document.getMap('lifecycle').set('epoch', 'epoch-dead');
+    first.provider.emit('synced', { state: true });
+    pool.close(docName);
+
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    expect(entry.persistence).toBeNull();
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+    entry.provider.emit('synced', { state: true });
+
+    const warnSpy = mock(() => {});
+    const origWarn = console.warn;
+    console.warn = warnSpy;
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    console.warn = origWarn;
+
+    const reopened = pool.peek(docName);
+    if (!reopened) throw new Error('expected reopened entry');
+    expect(reopened).not.toBe(entry);
+    expect(tokenOf(reopened).expectedDocLineageEpoch).toBe('epoch-live');
+    expect(reopened.lineageEpochRecordAtOpen).toBe('epoch-live');
+
+    const emitted = warnSpy.mock.calls
+      .map((call) => call[0] as string)
+      .filter((line) => typeof line === 'string' && line.includes('ok-doc-lineage-mismatch'));
+    expect(emitted.length).toBe(1);
+    const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+    expect(event.via).toBe('deferred-attach');
+    expect(event.staleEpoch).toBe('epoch-dead');
+    expect(event.liveEpoch).toBe('epoch-live');
+
+    await wait(10);
+  });
+
+  test('rename-redirect and doc-deleted rejections prune the lineage record', () => {
+    const { stub, store } = makeStubStorage();
+    const renamedDoc = uniqueDocName('pp-lineage-renamed');
+    const deletedDoc = uniqueDocName('pp-lineage-deleted');
+    store.set(
+      ENVELOPE_KEY,
+      makeEnvelope(TEST_SERVER_INSTANCE_ID, {
+        [renamedDoc]: 'epoch-a',
+        [deletedDoc]: 'epoch-b',
+      }),
+    );
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: stub,
+      persistenceFactory: mock(makePersistenceStub),
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const renamedEntry = pool.open(renamedDoc);
+    const deletedEntry = pool.open(deletedDoc);
+    if (!renamedEntry || !deletedEntry) throw new Error('expected entries');
+
+    renamedEntry.provider.emit('authenticationFailed', {
+      reason: `rename-redirect:${renamedDoc}-new`,
+    });
+    deletedEntry.provider.emit('authenticationFailed', { reason: 'doc-deleted' });
+
+    const raw = store.get(ENVELOPE_KEY);
+    if (raw === undefined) throw new Error('expected envelope still present');
+    const envelope = JSON.parse(raw) as { epochs: Record<string, string> };
+    expect(envelope.epochs[renamedDoc]).toBeUndefined();
+    expect(envelope.epochs[deletedDoc]).toBeUndefined();
+  });
+});
+
+describe('ProviderPool stored-state validation spine', () => {
+  function makePersistenceStub(): ClientPersistenceProvider {
+    return {
+      whenSynced: Promise.resolve(undefined as never),
+      synced: true,
+      destroy: async () => {},
+      clearData: async () => {},
+      flushFullState: async () => {},
+    } as unknown as ClientPersistenceProvider;
+  }
+
+  function captureWarns(): {
+    lines: () => string[];
+    restore: () => void;
+    spy: ReturnType<typeof spyOn>;
+  } {
+    const spy = spyOn(console, 'warn').mockImplementation(() => undefined);
+    return {
+      lines: () =>
+        spy.mock.calls
+          .map((call) => call[0])
+          .filter((first): first is string => typeof first === 'string'),
+      restore: () => spy.mockRestore(),
+      spy,
+    };
+  }
+
+  test('refuses stored rows whose in-band epoch differs from the live lineage', async () => {
+    const warns = captureWarns();
+    try {
+      const peek = mock(async () => 'epoch-dead');
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory: mock(makePersistenceStub),
+        peekStoredLineageEpoch: peek,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-refuse');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+      pool.setActive(docName);
+      expect(entry.persistence).toBeNull();
+
+      entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+      entry.provider.emit('synced', { state: true });
+
+      const replaced = await waitFor(
+        () => pool.peek(docName) !== null && pool.peek(docName) !== entry,
+        2_000,
+      );
+      expect(replaced).toBe(true);
+      expect(pool.getActiveDocName()).toBe(docName);
+
+      const emitted = warns.lines().filter((line) => line.includes('ok-doc-lineage-mismatch'));
+      expect(emitted.length).toBe(1);
+      const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+      expect(event.via).toBe('stored-state-validation');
+      expect(event.staleEpoch).toBe('epoch-dead');
+      expect(event.liveEpoch).toBe('epoch-live');
+      expect(event.docName).toBe(docName);
+
+      await wait(10);
+    } finally {
+      warns.restore();
+    }
+  });
+
+  test('refuses stored epoch-bearing rows when the live doc carries no epoch post-sync', async () => {
+    const warns = captureWarns();
+    try {
+      const peek = mock(async () => 'epoch-dead');
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory: mock(makePersistenceStub),
+        peekStoredLineageEpoch: peek,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-live-absent');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+
+      entry.provider.emit('synced', { state: true });
+
+      const replaced = await waitFor(
+        () => pool.peek(docName) !== null && pool.peek(docName) !== entry,
+        2_000,
+      );
+      expect(replaced).toBe(true);
+
+      const emitted = warns.lines().filter((line) => line.includes('ok-doc-lineage-mismatch'));
+      expect(emitted.length).toBe(1);
+      const event = JSON.parse(emitted[0] ?? '{}') as Record<string, string>;
+      expect(event.via).toBe('stored-state-validation');
+      expect(event.staleEpoch).toBe('epoch-dead');
+      expect(event.liveEpoch).toBe('<absent>');
+
+      await wait(10);
+    } finally {
+      warns.restore();
+    }
+  });
+
+  test('attaches when the stored epoch matches the live lineage, then backfills the cache', async () => {
+    const flushSpy = mock(async () => {});
+    const persistenceFactory = mock(
+      () =>
+        ({
+          whenSynced: Promise.resolve(undefined as never),
+          synced: true,
+          destroy: async () => {},
+          clearData: async () => {},
+          flushFullState: flushSpy,
+        }) as unknown as ClientPersistenceProvider,
+    );
+    const peek = mock(async () => 'epoch-live');
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: null,
+      persistenceFactory,
+      peekStoredLineageEpoch: peek,
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const docName = uniqueDocName('pp-spine-match');
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+    entry.provider.emit('synced', { state: true });
+
+    await awaitAttachedPersistence(entry);
+    expect(persistenceFactory).toHaveBeenCalledTimes(1);
+    const flushed = await waitFor(() => flushSpy.mock.calls.length === 1, 2_000);
+    expect(flushed).toBe(true);
+  });
+
+  test('attaches immediately when the stored rows carry nothing to validate (null peek)', async () => {
+    const persistenceFactory = mock(makePersistenceStub);
+    const peek = mock(async () => null);
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: null,
+      persistenceFactory,
+      peekStoredLineageEpoch: peek,
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const docName = uniqueDocName('pp-spine-null');
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+
+    await awaitAttachedPersistence(entry);
+    expect(entry.hasSynced).toBe(false);
+    expect(persistenceFactory).toHaveBeenCalledTimes(1);
+  });
+
+  test('record-present entry that has not synced waits for sync before validating', async () => {
+    const persistenceFactory = mock(makePersistenceStub);
+    const peek = mock(async () => 'epoch-x');
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: null,
+      persistenceFactory,
+      peekStoredLineageEpoch: peek,
+    });
+    const docName = uniqueDocName('pp-spine-wait');
+
+    const first = pool.open(docName);
+    if (!first) throw new Error('expected first entry');
+    first.provider.document.getMap('lifecycle').set('epoch', 'epoch-x');
+    first.provider.emit('synced', { state: true });
+    pool.close(docName);
+
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    expect(entry.lineageEpochRecordAtOpen).toBe('epoch-x');
+    expect(entry.hasSynced).toBe(false);
+
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+
+    await wait(50);
+    expect(entry.persistence).toBeNull();
+
+    entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-x');
+    entry.provider.emit('synced', { state: true });
+    await awaitAttachedPersistence(entry);
+    expect(persistenceFactory).toHaveBeenCalledTimes(1);
+  });
+
+  test('a re-dispatch onto an entry with an in-flight spine run is a no-op (attach ownership)', async () => {
+    let resolvePeek: (value: string | null) => void = () => {};
+    const peek = mock(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolvePeek = resolve;
+        }),
+    );
+    const persistenceFactory = mock(makePersistenceStub);
+    pool = new ProviderPool(3, DUMMY_WS, {
+      storage: null,
+      persistenceFactory,
+      peekStoredLineageEpoch: peek,
+    });
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    const docName = uniqueDocName('pp-spine-own');
+    const entry = pool.open(docName);
+    if (!entry) throw new Error('expected entry');
+    expect(peek).toHaveBeenCalledTimes(1);
+
+    pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+    expect(peek).toHaveBeenCalledTimes(1);
+
+    resolvePeek(null);
+    await awaitAttachedPersistence(entry);
+    expect(persistenceFactory).toHaveBeenCalledTimes(1);
+  });
+
+  test('a rejecting peek leaves the entry cacheless and emits the attach-failed arm', async () => {
+    const warns = captureWarns();
+    try {
+      const persistenceFactory = mock(makePersistenceStub);
+      const peek = mock(async (): Promise<string | null> => {
+        throw new Error('idb exploded');
+      });
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory,
+        peekStoredLineageEpoch: peek,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-peek-reject');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+
+      const emitted = await waitFor(
+        () => warns.lines().some((line) => line.includes('ok-client-persistence-attach-failed')),
+        2_000,
+      );
+      expect(emitted).toBe(true);
+      const lines = warns
+        .lines()
+        .filter((line) => line.includes('ok-client-persistence-attach-failed'));
+      expect(lines.length).toBe(1);
+      const event = JSON.parse(lines[0] ?? '{}') as Record<string, string>;
+      expect(event.docName).toBe(docName);
+      expect(event.phase).toBe('peek');
+      expect(event.errorMessage).toBe('idb exploded');
+      expect(entry.persistence).toBeNull();
+      expect(persistenceFactory).not.toHaveBeenCalled();
+    } finally {
+      warns.restore();
+    }
+  });
+
+  test('a wedged peek decays into the attach-failed arm after the timeout', async () => {
+    const warns = captureWarns();
+    try {
+      const persistenceFactory = mock(makePersistenceStub);
+      const peek = mock(() => new Promise<string | null>(() => {}));
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory,
+        peekStoredLineageEpoch: peek,
+        clearDataTimeoutMs: 20,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-peek-wedge');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+
+      const emitted = await waitFor(
+        () => warns.lines().some((line) => line.includes('ok-client-persistence-attach-failed')),
+        2_000,
+      );
+      expect(emitted).toBe(true);
+      const lines = warns
+        .lines()
+        .filter((line) => line.includes('ok-client-persistence-attach-failed'));
+      const event = JSON.parse(lines[0] ?? '{}') as Record<string, string>;
+      expect(event.docName).toBe(docName);
+      expect(event.phase).toBe('peek');
+      expect(event.errorName).toBe('StoredEpochPeekTimeoutError');
+      expect(entry.persistence).toBeNull();
+      expect(persistenceFactory).not.toHaveBeenCalled();
+    } finally {
+      warns.restore();
+    }
+  });
+
+  test('a throwing factory on the matched-epoch arm emits attach-failed and leaves the entry cacheless', async () => {
+    const warns = captureWarns();
+    try {
+      const peek = mock(async () => 'epoch-live');
+      const persistenceFactory = mock((): ClientPersistenceProvider => {
+        throw new Error('factory exploded');
+      });
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory,
+        peekStoredLineageEpoch: peek,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-factory-throw');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+      entry.provider.document.getMap('lifecycle').set('epoch', 'epoch-live');
+      entry.provider.emit('synced', { state: true });
+
+      const emitted = await waitFor(
+        () => warns.lines().some((line) => line.includes('ok-client-persistence-attach-failed')),
+        2_000,
+      );
+      expect(emitted).toBe(true);
+      const lines = warns
+        .lines()
+        .filter((line) => line.includes('ok-client-persistence-attach-failed'));
+      const event = JSON.parse(lines[0] ?? '{}') as Record<string, string>;
+      expect(event.docName).toBe(docName);
+      expect(event.phase).toBe('attach');
+      expect(event.errorMessage).toBe('factory exploded');
+      expect(entry.persistence).toBeNull();
+    } finally {
+      warns.restore();
+    }
+  });
+
+  test('a failing backfill emits the structured attach-failed event with phase backfill', async () => {
+    const warns = captureWarns();
+    try {
+      const persistenceFactory = mock(
+        () =>
+          ({
+            whenSynced: Promise.resolve(undefined as never),
+            synced: true,
+            destroy: async () => {},
+            clearData: async () => {},
+            flushFullState: async () => {
+              throw new Error('backfill exploded');
+            },
+          }) as unknown as ClientPersistenceProvider,
+      );
+      const peek = mock(async () => null);
+      pool = new ProviderPool(3, DUMMY_WS, {
+        storage: null,
+        persistenceFactory,
+        peekStoredLineageEpoch: peek,
+      });
+      pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
+      const docName = uniqueDocName('pp-spine-backfill-fail');
+      const entry = pool.open(docName);
+      if (!entry) throw new Error('expected entry');
+      await awaitAttachedPersistence(entry);
+      entry.provider.emit('synced', { state: true });
+
+      const emitted = await waitFor(
+        () => warns.lines().some((line) => line.includes('ok-client-persistence-attach-failed')),
+        2_000,
+      );
+      expect(emitted).toBe(true);
+      const lines = warns
+        .lines()
+        .filter((line) => line.includes('ok-client-persistence-attach-failed'));
+      const event = JSON.parse(lines[0] ?? '{}') as Record<string, string>;
+      expect(event.docName).toBe(docName);
+      expect(event.phase).toBe('backfill');
+      expect(event.errorMessage).toBe('backfill exploded');
+      expect(entry.persistence).not.toBeNull();
+    } finally {
+      warns.restore();
+    }
+  });
+});
+
 describe("ProviderPool authenticationFailed handling (US-002 / 'server-instance-mismatch')", () => {
   test("reason 'server-instance-mismatch' recycles every pool entry", async () => {
     pool = new ProviderPool(3, DUMMY_WS, { storage: null });
@@ -1096,11 +1741,12 @@ describe("ProviderPool authenticationFailed handling (US-002 / 'server-instance-
     pool = new ProviderPool(3, DUMMY_WS, { storage: null });
     pool.setExpectedServerInstanceId('server-old');
     const entry = pool.open('doc1');
-    if (!entry?.persistence) throw new Error('expected entry');
+    if (!entry) throw new Error('expected entry');
+    const persistence = await awaitAttachedPersistence(entry);
     pool.setActive('doc1');
 
     let resolveClear: () => void = () => {};
-    entry.persistence.clearData = mock(
+    persistence.clearData = mock(
       () =>
         new Promise<void>((resolve) => {
           resolveClear = resolve;
@@ -1144,10 +1790,11 @@ describe("ProviderPool authenticationFailed handling (US-002 / 'server-instance-
       pool.setExpectedServerInstanceId('server-old');
       pool.setObservedBranch('clear-fail-branch');
       const entry = pool.open('doc1');
-      if (!entry?.persistence) throw new Error('expected entry');
+      if (!entry) throw new Error('expected entry');
+      const persistence = await awaitAttachedPersistence(entry);
       pool.setActive('doc1');
       const originalProvider = entry.provider;
-      entry.persistence.clearData = mock(() => Promise.reject(new Error('idb blocked')));
+      persistence.clearData = mock(() => Promise.reject(new Error('idb blocked')));
 
       entry.provider.emit('authenticationFailed', { reason: 'server-instance-mismatch' });
       await wait(50);
@@ -1201,9 +1848,10 @@ describe("ProviderPool authenticationFailed handling (US-002 / 'server-instance-
       pool.setExpectedServerInstanceId('server-old');
       pool.setObservedBranch('timeout-branch');
       const entry = pool.open('doc1');
-      if (!entry?.persistence) throw new Error('expected entry');
+      if (!entry) throw new Error('expected entry');
+      const persistence = await awaitAttachedPersistence(entry);
       pool.setActive('doc1');
-      entry.persistence.clearData = mock(() => new Promise<void>(() => {}));
+      persistence.clearData = mock(() => new Promise<void>(() => {}));
 
       entry.provider.emit('authenticationFailed', { reason: 'server-instance-mismatch' });
       await wait(30);
@@ -1549,7 +2197,15 @@ describe('ProviderPool → V2 editor cache eviction coupling (Critical #2)', () 
     cacheModule.mountCmEditor({
       docName: 'doc-eviction-regression',
       container: makeFakeNode() as unknown as HTMLElement,
-      factory: () => ({ view: fakeView, ydoc: fakeYDoc, ytext: fakeYText, provider: makeProv() }),
+      factory: () => ({
+        view: fakeView,
+        ydoc: fakeYDoc,
+        ytext: fakeYText,
+        provider: makeProv(),
+        themeCompartment: new Compartment(),
+        wordWrapCompartment: new Compartment(),
+        placeholderCompartment: new Compartment(),
+      }),
     });
     expect(cacheModule.peekTiptap('doc-eviction-regression')).toBeDefined();
     expect(cacheModule.__peekCm('doc-eviction-regression')).toBeDefined();
@@ -1600,7 +2256,15 @@ describe('ProviderPool → V2 editor cache eviction coupling (Critical #2)', () 
     cacheModule.mountCmEditor({
       docName: 'doc-recycle-regression',
       container: makeFakeNode() as unknown as HTMLElement,
-      factory: () => ({ view: fakeView, ydoc: fakeYDoc, ytext: fakeYText, provider: makeProv() }),
+      factory: () => ({
+        view: fakeView,
+        ydoc: fakeYDoc,
+        ytext: fakeYText,
+        provider: makeProv(),
+        themeCompartment: new Compartment(),
+        wordWrapCompartment: new Compartment(),
+        placeholderCompartment: new Compartment(),
+      }),
     });
 
     pool = new ProviderPool(3, DUMMY_WS);
@@ -1670,18 +2334,17 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       synced: true,
       destroy: mock(async () => {}),
       clearData: mock(async () => {}),
+      flushFullState: async () => {},
     } as ClientPersistenceProvider;
   }
 
-  test('open() attaches a ClientPersistenceProvider to the pool entry', () => {
+  test('open() attaches a ClientPersistenceProvider to the pool entry', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName();
     const entry = pool.open(docName);
     if (!entry) throw new Error('expected entry');
-    expect(entry.persistence).not.toBeNull();
-    const persistence = entry.persistence;
-    if (!persistence) throw new Error('expected persistence');
+    const persistence = await awaitAttachedPersistence(entry);
     expect(typeof persistence.destroy).toBe('function');
     expect(typeof persistence.clearData).toBe('function');
   });
@@ -1694,7 +2357,7 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     expect(entry.persistence).toBeNull();
   });
 
-  test('deferred persistence attach continues after one entry throws', () => {
+  test('deferred persistence attach continues after one entry throws', async () => {
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       const badDoc = uniqueDocName('pp-deferred-throw');
@@ -1716,9 +2379,11 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
 
       expect(() => pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID)).not.toThrow();
 
-      expect(badEntry.persistence).toBeNull();
+      await awaitAttachedPersistence(goodEntry);
       expect(goodEntry.persistence).toBe(goodPersistence);
+      await waitFor(() => persistenceFactory.mock.calls.length === 2, 2_000);
       expect(persistenceFactory).toHaveBeenCalledTimes(2);
+      expect(badEntry.persistence).toBeNull();
       const events = warnSpy.mock.calls.map((call) => String(call[0] ?? ''));
       expect(
         events.some((event) => event.includes('"event":"ok-client-persistence-attach-failed"')),
@@ -1728,37 +2393,40 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     }
   });
 
-  test('re-opening the same docName reuses the existing persistence instance', () => {
+  test('re-opening the same docName reuses the existing persistence instance', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName();
     const entry1 = pool.open(docName);
-    const persistence1 = entry1?.persistence;
+    if (!entry1) throw new Error('expected entry1');
+    const persistence1 = await awaitAttachedPersistence(entry1);
     const entry2 = pool.open(docName);
     expect(entry2?.persistence).toBe(persistence1);
   });
 
-  test('prewarm() also attaches a persistence instance', () => {
+  test('prewarm() also attaches a persistence instance', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName('pp-prewarm');
     const entry = pool.prewarm(docName);
     if (!entry) throw new Error('expected prewarmed entry');
+    await awaitAttachedPersistence(entry);
     expect(entry.persistence).not.toBeNull();
   });
 
-  test('close() destroys the persistence before the provider', () => {
+  test('close() destroys the persistence before the provider', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName('pp-close');
     const entry = pool.open(docName);
-    if (!entry?.persistence) throw new Error('expected persistence');
+    if (!entry) throw new Error('expected entry');
+    const attached = await awaitAttachedPersistence(entry);
 
     const order: string[] = [];
     const persistenceSpy = mock(async () => {
       order.push('persistence');
     });
-    entry.persistence.destroy = persistenceSpy;
+    attached.destroy = persistenceSpy;
 
     const origProviderDestroy = entry.provider.destroy.bind(entry.provider);
     entry.provider.destroy = (() => {
@@ -1778,7 +2446,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName('pp-recycle');
     const entry = pool.open(docName);
-    if (!entry?.persistence) throw new Error('expected persistence');
+    if (!entry) throw new Error('expected entry');
+    const attached = await awaitAttachedPersistence(entry);
     pool.setActive(docName);
     entry.observerCleanup = () => {};
 
@@ -1786,7 +2455,7 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const persistenceSpy = mock(async () => {
       order.push('persistence');
     });
-    entry.persistence.destroy = persistenceSpy;
+    attached.destroy = persistenceSpy;
 
     const origProviderDestroy = entry.provider.destroy.bind(entry.provider);
     entry.provider.destroy = (() => {
@@ -1807,7 +2476,7 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     expect(order[1]).toBe('provider');
   });
 
-  test('evictLru destroys the persistence on the evicted entry', () => {
+  test('evictLru destroys the persistence on the evicted entry', async () => {
     pool = new ProviderPool(2, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const doc1 = uniqueDocName('pp-evict');
@@ -1816,10 +2485,11 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     pool.open(doc1);
     pool.setActive(doc1);
     const entry2 = pool.open(doc2);
-    if (!entry2?.persistence) throw new Error('expected persistence on doc2');
+    if (!entry2) throw new Error('expected entry on doc2');
+    const attached2 = await awaitAttachedPersistence(entry2);
 
     const destroySpy = mock(async () => {});
-    entry2.persistence.destroy = destroySpy;
+    attached2.destroy = destroySpy;
 
     pool.open(doc3);
 
@@ -1827,19 +2497,21 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
-  test('dispose() destroys every pool entry’s persistence', () => {
+  test('dispose() destroys every pool entry’s persistence', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const doc1 = uniqueDocName('pp-dispose');
     const doc2 = uniqueDocName('pp-dispose');
     const e1 = pool.open(doc1);
     const e2 = pool.open(doc2);
-    if (!e1?.persistence || !e2?.persistence) throw new Error('expected persistences');
+    if (!e1 || !e2) throw new Error('expected entries');
+    const p1 = await awaitAttachedPersistence(e1);
+    const p2 = await awaitAttachedPersistence(e2);
 
     const spy1 = mock(async () => {});
     const spy2 = mock(async () => {});
-    e1.persistence.destroy = spy1;
-    e2.persistence.destroy = spy2;
+    p1.destroy = spy1;
+    p2.destroy = spy2;
 
     pool.dispose();
 
@@ -1852,10 +2524,11 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
     const docName = uniqueDocName('pp-rename-clear');
     const entry = pool.open(docName);
-    if (!entry?.persistence) throw new Error('expected persistence');
+    if (!entry) throw new Error('expected entry');
+    const attached = await awaitAttachedPersistence(entry);
 
     const clearSpy = mock(async () => {});
-    entry.persistence.clearData = clearSpy;
+    attached.clearData = clearSpy;
 
     await pool.closeAndClearPersistence(docName);
 
@@ -1926,8 +2599,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const dbB = `ok-ydoc:main:server-roundtrip:${nameB}`;
 
     const entryA1 = pool.open(nameA);
-    if (!entryA1?.persistence) throw new Error('expected persistence');
-    await entryA1.persistence.whenSynced;
+    if (!entryA1) throw new Error('expected entry');
+    await (await awaitAttachedPersistence(entryA1)).whenSynced;
     let dbs = await indexedDB.databases();
     expect(dbs.find((d) => d.name === dbA)).toBeDefined();
 
@@ -1938,8 +2611,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     expect(dbs.find((d) => d.name === dbB)).toBeUndefined();
 
     const entryB = pool.open(nameB);
-    if (!entryB?.persistence) throw new Error('expected persistence');
-    await entryB.persistence.whenSynced;
+    if (!entryB) throw new Error('expected entry');
+    await (await awaitAttachedPersistence(entryB)).whenSynced;
     dbs = await indexedDB.databases();
     expect(dbs.find((d) => d.name === dbB)).toBeDefined();
 
@@ -1950,8 +2623,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     expect(dbs.find((d) => d.name === dbB)).toBeUndefined();
 
     const entryA2 = pool.open(nameA);
-    if (!entryA2?.persistence) throw new Error('expected persistence');
-    await entryA2.persistence.whenSynced;
+    if (!entryA2) throw new Error('expected entry');
+    await (await awaitAttachedPersistence(entryA2)).whenSynced;
     dbs = await indexedDB.databases();
     expect(dbs.find((d) => d.name === dbA)).toBeDefined();
   });
@@ -1963,14 +2636,16 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const doc2 = uniqueDocName('pp-mismatch');
     const e1 = pool.open(doc1);
     const e2 = pool.open(doc2);
-    if (!e1?.persistence || !e2?.persistence) throw new Error('expected persistences');
+    if (!e1 || !e2) throw new Error('expected entries');
+    const p1 = await awaitAttachedPersistence(e1);
+    const p2 = await awaitAttachedPersistence(e2);
     pool.setActive(doc1);
     e1.observerCleanup = () => {};
 
     const clearSpy1 = mock(async () => {});
     const clearSpy2 = mock(async () => {});
-    e1.persistence.clearData = clearSpy1;
-    e2.persistence.clearData = clearSpy2;
+    p1.clearData = clearSpy1;
+    p2.clearData = clearSpy2;
 
     e1.provider.emit('authenticationFailed', { reason: 'server-instance-mismatch' });
     await wait(50);
@@ -1990,9 +2665,12 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const e1 = pool.open(doc1);
     const e2 = pool.open(doc2);
     const e3 = pool.open(doc3);
-    if (!e1?.persistence || !e2?.persistence || !e3?.persistence) {
-      throw new Error('expected persistences');
+    if (!e1 || !e2 || !e3) {
+      throw new Error('expected entries');
     }
+    const p1 = await awaitAttachedPersistence(e1);
+    const p2 = await awaitAttachedPersistence(e2);
+    const p3 = await awaitAttachedPersistence(e3);
     pool.setActive(doc1);
     e1.observerCleanup = () => {};
     e2.observerCleanup = () => {};
@@ -2005,9 +2683,9 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const clearOk1 = mock(async () => {});
     const clearFail = mock(() => Promise.reject(new Error('idb-clear-blocked')));
     const clearOk2 = mock(async () => {});
-    e1.persistence.clearData = clearOk1;
-    e2.persistence.clearData = clearFail;
-    e3.persistence.clearData = clearOk2;
+    p1.clearData = clearOk1;
+    p2.clearData = clearFail;
+    p3.clearData = clearOk2;
 
     e1.provider.emit('authenticationFailed', { reason: 'server-instance-mismatch' });
     await wait(50);
@@ -2035,15 +2713,17 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
     const docHung = uniqueDocName('pp-partial-timeout-hung');
     const ea = pool.open(docActive);
     const eb = pool.open(docHung);
-    if (!ea?.persistence || !eb?.persistence) {
-      throw new Error('expected persistences');
+    if (!ea || !eb) {
+      throw new Error('expected entries');
     }
+    const pa = await awaitAttachedPersistence(ea);
+    const pb = await awaitAttachedPersistence(eb);
     pool.setActive(docActive);
     ea.observerCleanup = () => {};
     eb.observerCleanup = () => {};
 
-    ea.persistence.clearData = mock(async () => {});
-    eb.persistence.clearData = mock(() => new Promise<void>(() => {}));
+    pa.clearData = mock(async () => {});
+    pb.clearData = mock(() => new Promise<void>(() => {}));
 
     ea.provider.emit('authenticationFailed', { reason: 'server-instance-mismatch' });
     await wait(60);
@@ -2082,6 +2762,7 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
         synced: true,
         destroy: mock(async () => {}),
         clearData: clearSpy,
+        flushFullState: async () => {},
       } as unknown as ClientPersistenceProvider;
       return { stub, clearSpy };
     }
@@ -2102,7 +2783,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
       const docName = uniqueDocName('pp-pending-clears-dedup');
       const entry = pool.open(docName);
-      if (!entry?.persistence) throw new Error('expected persistence');
+      if (!entry) throw new Error('expected entry');
+      await awaitAttachedPersistence(entry);
 
       const deleteDbCallsBefore = deleteDbSpy.mock.calls.length;
       const call1 = pool.closeAndClearPersistence(docName);
@@ -2137,7 +2819,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       const docName = uniqueDocName('pp-pending-clears-defer-success');
 
       const entry1 = pool.open(docName);
-      if (!entry1?.persistence) throw new Error('expected initial persistence');
+      if (!entry1) throw new Error('expected entry1');
+      await awaitAttachedPersistence(entry1);
 
       const clearPromise = pool.closeAndClearPersistence(docName);
 
@@ -2147,7 +2830,7 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
 
       resolveClear();
       await clearPromise;
-      await wait(0);
+      await waitFor(() => entry2.persistence !== null, 2_000);
       expect(entry2.persistence).toBe(fresh.stub);
     });
 
@@ -2165,7 +2848,9 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
       const docName = uniqueDocName('pp-pending-clears-defer-fail');
 
-      pool.open(docName);
+      const entry1 = pool.open(docName);
+      if (!entry1) throw new Error('expected entry1');
+      await awaitAttachedPersistence(entry1);
       const clearPromise = pool.closeAndClearPersistence(docName);
 
       const entry2 = pool.open(docName);
@@ -2207,7 +2892,9 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       pool = new ProviderPool(3, DUMMY_WS, { persistenceFactory, clearDataTimeoutMs: 30_000 });
       pool.setExpectedServerInstanceId(TEST_SERVER_INSTANCE_ID);
       const docName = uniqueDocName('pp-pending-clears-dispose');
-      pool.open(docName);
+      const entry1 = pool.open(docName);
+      if (!entry1) throw new Error('expected entry1');
+      await awaitAttachedPersistence(entry1);
 
       const clearPromise = pool.closeAndClearPersistence(docName);
       const entry2 = pool.open(docName);
@@ -2242,7 +2929,11 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
         uniqueDocName('pp-swallow-fail'),
         uniqueDocName('pp-swallow-ok2'),
       ];
-      for (const d of docs) pool.open(d);
+      for (const d of docs) {
+        const entry = pool.open(d);
+        if (!entry) throw new Error('expected entry');
+        await awaitAttachedPersistence(entry);
+      }
 
       const warnSpy = spyOn(console, 'warn').mockImplementation(() => undefined);
       try {
@@ -2270,7 +2961,8 @@ describe('ProviderPool client-persistence attachment (US-003)', () => {
       const docName = uniqueDocName('pp-clearfail-retry');
 
       const entry1 = pool.open(docName);
-      if (!entry1?.persistence) throw new Error('expected initial persistence');
+      if (!entry1) throw new Error('expected entry1');
+      await awaitAttachedPersistence(entry1);
 
       const deleteDbSpy = spyOn(indexedDB, 'deleteDatabase');
       const warnSpy = spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -2635,6 +3327,7 @@ describe('ProviderPool structured mismatch telemetry', () => {
       const docName = uniqueDocName('replay-flush');
       const entry = pool.open(docName);
       if (!entry) throw new Error('expected entry');
+      await awaitAttachedPersistence(entry);
       pool.setActive(docName);
       entry.observerCleanup = () => {};
 
@@ -2821,6 +3514,8 @@ describe('ProviderPool provider-open gating', () => {
     if (entryA.kind !== 'active' || entryB.kind !== 'active') {
       throw new Error('expected entries to remain active');
     }
+    await awaitAttachedPersistence(entryA);
+    await awaitAttachedPersistence(entryB);
     expect(entryA.persistence).not.toBeNull();
     expect(entryB.persistence).not.toBeNull();
     expect(typeof entryA.persistence?.destroy).toBe('function');
@@ -2838,30 +3533,30 @@ describe('ProviderPool provider-open gating', () => {
     }
   });
 
-  test('setExpectedServerInstanceId is a no-op for entries that already have persistence attached', () => {
+  test('setExpectedServerInstanceId is a no-op for entries that already have persistence attached', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId('server-warm');
     const docName = uniqueDocName('pp-warm');
     const entry = pool.open(docName);
     if (!entry) throw new Error('expected entry');
-    const persistenceBefore = entry.persistence;
-    expect(persistenceBefore).not.toBeNull();
+    const persistenceBefore = await awaitAttachedPersistence(entry);
 
     pool.setExpectedServerInstanceId('server-warm-update');
+    await wait(20);
     if (entry.kind !== 'active') throw new Error('expected entry to remain active');
     expect(entry.persistence).toBe(persistenceBefore);
   });
 
-  test('setExpectedServerInstanceId(null) does not detach already-attached persistence', () => {
+  test('setExpectedServerInstanceId(null) does not detach already-attached persistence', async () => {
     pool = new ProviderPool(3, DUMMY_WS);
     pool.setExpectedServerInstanceId('server-warm');
     const docName = uniqueDocName('pp-no-detach');
     const entry = pool.open(docName);
     if (!entry) throw new Error('expected entry');
-    const persistenceBefore = entry.persistence;
-    expect(persistenceBefore).not.toBeNull();
+    const persistenceBefore = await awaitAttachedPersistence(entry);
 
     pool.setExpectedServerInstanceId(null);
+    await wait(20);
     if (entry.kind !== 'active') throw new Error('expected entry to remain active');
     expect(entry.persistence).toBe(persistenceBefore);
   });

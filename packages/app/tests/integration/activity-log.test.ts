@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import type { EffectValue } from '../../../../packages/server/src/activity-log.ts';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
   agentWriteMd,
   createTestClient,
@@ -14,7 +15,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer({ debounce: 50, maxDebounce: 200 });
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

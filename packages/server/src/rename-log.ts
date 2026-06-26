@@ -15,21 +15,17 @@ import { getMeter, withSpan } from './telemetry.ts';
 
 let _liveEntriesGauge: ReturnType<ReturnType<typeof getMeter>['createUpDownCounter']> | null = null;
 function liveEntriesGauge(): ReturnType<ReturnType<typeof getMeter>['createUpDownCounter']> {
-  if (!_liveEntriesGauge) {
-    _liveEntriesGauge = getMeter().createUpDownCounter('rename.log_entries_total', {
-      description: 'Live rename-log entry count after each append / GC pass',
-    });
-  }
+  _liveEntriesGauge ||= getMeter().createUpDownCounter('rename.log_entries_total', {
+    description: 'Live rename-log entry count after each append / GC pass',
+  });
   return _liveEntriesGauge;
 }
 
 let _gcDroppedCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null = null;
 function gcDroppedCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
-  if (!_gcDroppedCounter) {
-    _gcDroppedCounter = getMeter().createCounter('rename.log_gc_dropped_total', {
-      description: 'Cumulative count of rename-log entries dropped by reachability GC',
-    });
-  }
+  _gcDroppedCounter ||= getMeter().createCounter('rename.log_gc_dropped_total', {
+    description: 'Cumulative count of rename-log entries dropped by reachability GC',
+  });
   return _gcDroppedCounter;
 }
 

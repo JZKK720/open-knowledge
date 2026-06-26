@@ -33,6 +33,18 @@ describe('globals.css — prefers-reduced-transparency revert', () => {
       /@media\s*\(\s*prefers-reduced-transparency:\s*reduce\s*\)[\s\S]*?html\.electron-mode\s+\[data-slot="sidebar-inner"\]\s*\{[\s\S]*?background-color:\s*var\(--sidebar\)/,
     );
   });
+
+  test('strips backdrop-filter from dialog and sheet overlays', () => {
+    const block = CSS.match(
+      /@media \(prefers-reduced-transparency: reduce\) \{[^}]*\[data-slot="dialog-overlay"\][\s\S]*?\}\s*\}/,
+    );
+    expect(block).not.toBeNull();
+    const blockText = block?.[0] ?? '';
+    expect(blockText).toContain('[data-slot="dialog-overlay"]');
+    expect(blockText).toContain('[data-slot="sheet-overlay"]');
+    expect(blockText).toContain('backdrop-filter: none');
+    expect(blockText).toContain('-webkit-backdrop-filter: none');
+  });
 });
 
 describe('globals.css — STOP rule preserved (inner surfaces stay opaque)', () => {

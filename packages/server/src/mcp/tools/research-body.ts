@@ -1,7 +1,7 @@
 import { OK_DIR } from '@inkeep/open-knowledge-core';
 
 export function buildResearchBody(topic: string, contentDir: string): string {
-  return `Conduct **evidence-driven research** on this topic and produce a provisional research article in the Open Knowledge content directory. This workflow mirrors the discipline of the \`eng:research\` skill, scoped to Open Knowledge's wiki-provisional layer.
+  return `Conduct **evidence-driven research** on this topic and produce a provisional research article in the OpenKnowledge content directory. This workflow mirrors the discipline of the \`eng:research\` skill, scoped to OpenKnowledge's wiki-provisional layer.
 
 Topic: ${topic}
 Content directory: \`${contentDir}\` (from \`${OK_DIR}/config.yml\`)
@@ -49,6 +49,17 @@ Research articles default to **3P/external framing** — investigating third-par
 
 - **Default:** external sources (web, OSS repos, papers, official APIs).
 - **Exception:** if user asks "research how our X compares to Y" or "include our codebase," include it — but clearly separate 1P observations from 3P findings in the article so a reader can distinguish externally-verifiable facts from company-specific takes.
+
+---
+
+## Persist as you go — the article IS your checkpoint
+
+⛔ **PERSIST AS YOU GO — crash-safe checkpoint rule.** The single most expensive failure this workflow has produced is completed research lost to a mid-session rate limit or crash — analysis held in context, never written, discarded when the session died. The user paid for work that vanished. The knowledge base is the checkpoint; two rules make every step crash-safe:
+
+- **\`ingest\` each source the moment you fetch it (Step 3), one at a time** — never fetch all sources and ingest them in a trailing batch. An ingested source survives a crash; a fetched-but-unwritten one does not.
+- **Create the article skeleton early and fill it section-by-section as you read (Steps 4–5), not in one final write at the end.** After you analyze each source, \`edit\` its findings into the article before moving to the next. A crash after reading five of eight sources then leaves five sections safely in the KB; you resume by reading the partial article back, not by re-running the whole sweep.
+
+Structured notes that live only in your context are not persisted work. If a finding is worth keeping, it belongs in an ingested source or in the article — written, not held.
 
 ---
 
@@ -182,7 +193,7 @@ For each relevant URL, paper, or document in the confirmed rubric, invoke the \`
 Read each ingested source carefully. Also load:
 
 - **Existing canonical articles** on the topic — \`exec("cat <path>")\` (returns frontmatter + backlinks + shadow-repo activity).
-- **Prior research** on adjacent topics — same: \`exec("cat <path>")\` for Open Knowledge markdown.
+- **Prior research** on adjacent topics — same: \`exec("cat <path>")\` for OpenKnowledge markdown.
 - **Relevant source code** — ONLY if the user asked for 1P analysis. Use native \`Read\` for \`.ts\` / \`.js\` / etc.; \`exec\` for in-scope \`.md\` / \`.mdx\`.
 - **Project context** — \`specs/\`, \`reports/\`, or wherever the project keeps design material.
 
@@ -194,6 +205,8 @@ Take structured notes:
 - **Unknowns** and open questions — the boundary of what you know
 - **Relevance** to the specific decision at hand
 
+**Write these notes into the article as you take them, not after (MUST — see *Persist as you go* above).** Create the article skeleton — frontmatter + the Step 5 section headings — before you start reading, then \`edit\` each source's findings into the relevant section the moment you finish analyzing it. The "notes" ARE the article's Findings section in progress; don't hold them in context to transcribe in one pass at Step 5. A rate limit between here and Step 5 must not be able to discard analysis you've already done. By the time you reach Step 5 the article is mostly written, and Step 5 becomes finalize-and-polish.
+
 ### Grounding discipline
 
 Every factual claim in the article must cite its source inline. No unsourced speculation. If you don't have evidence: (a) run another search and cite it, (b) mark inline \`(TODO: needs source)\`, or (c) don't write the claim. Never fabricate.
@@ -201,6 +214,8 @@ Every factual claim in the article must cite its source inline. No unsourced spe
 ---
 
 ## Step 5: Write the research article (Path A only)
+
+If you followed *Persist as you go*, the article already exists and is substantially filled from Step 4 — this step **finalizes** it (fill any remaining sections, tighten the recommendation, run the structure + validation checks below) rather than writing from a blank doc. **If it does not exist or is thin, and you are resuming after an interruption: \`exec("cat <path>")\` the partial article back first and fill only the missing sections** — and note that any Step 4 analysis that was never written to the KB was lost when the session broke, so re-derive only what's actually missing. Creating the doc from scratch here means the incremental rule was skipped; that's the failure mode, not the happy path.
 
 Save a markdown document inside the content directory. Path convention:
 

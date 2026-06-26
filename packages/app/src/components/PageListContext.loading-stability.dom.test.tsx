@@ -1,14 +1,64 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+interface PageListCachePayload {
+  pages: Set<string>;
+  folderPaths: Set<string>;
+  pagesBySlug: ReadonlyMap<string, string>;
+  pagesByBasename: ReadonlyMap<string, string>;
+  assetPaths: Set<string>;
+  pageIcons: ReadonlyMap<string, string>;
+}
+
+const setPageListCacheMock = mock((_payload: PageListCachePayload) => {});
 
 mock.module('@/lib/documents-events', () => ({
   subscribeToDocumentsChanged: () => () => {},
 }));
 
+mock.module('@/editor/page-list-cache', () => ({
+  buildPageIconsIndex: (pageMeta: ReadonlyMap<string, { icon?: string }>) => {
+    const icons = new Map<string, string>();
+    for (const [docName, meta] of pageMeta) {
+      if (meta.icon) icons.set(docName, meta.icon);
+    }
+    return icons;
+  },
+  buildPagesBySlugIndex: (pages: ReadonlySet<string>, toSlug: (docName: string) => string) => {
+    const index = new Map<string, string>();
+    for (const docName of pages) {
+      const slug = toSlug(docName);
+      if (!index.has(slug)) index.set(slug, docName);
+    }
+    return index;
+  },
+  buildPagesByBasenameIndex: (pages: ReadonlySet<string>, toSlug: (docName: string) => string) => {
+    const index = new Map<string, string>();
+    for (const docName of [...pages].sort()) {
+      const basename = docName.split('/').pop() ?? docName;
+      const slug = toSlug(basename);
+      if (!index.has(slug)) index.set(slug, docName);
+    }
+    return index;
+  },
+  setPageListCache: setPageListCacheMock,
+}));
+
 import { PageListProvider, usePageList } from './PageListContext';
 
 interface PagesResponseBody {
-  pages: { docName: string; title: string; size: number; modified: string }[];
+  pages: {
+    docName: string;
+    title: string;
+    size: number;
+    modified: string;
+    docExt?: string;
+    icon?: string;
+  }[];
+}
+interface DocumentListEntry {
+  kind: 'document' | 'asset' | 'folder';
+  path?: string;
 }
 type ResponseResolver = (res: Response) => void;
 
@@ -20,31 +70,54 @@ function jsonRes(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function pagesBody(docNames: string[]): PagesResponseBody {
+function pagesBody(
+  entries: Array<
+    | string
+    | {
+        docName: string;
+        title?: string;
+        docExt?: string;
+        icon?: string;
+      }
+  >,
+): PagesResponseBody {
   return {
-    pages: docNames.map((docName) => ({
-      docName,
-      title: docName,
-      size: 1,
-      modified: '2026-01-01T00:00:00.000Z',
-    })),
+    pages: entries.map((entry) => {
+      const docName = typeof entry === 'string' ? entry : entry.docName;
+      return {
+        docName,
+        title: typeof entry === 'string' ? entry : (entry.title ?? entry.docName),
+        size: 1,
+        modified: '2026-01-01T00:00:00.000Z',
+        docExt: typeof entry === 'string' ? undefined : entry.docExt,
+        icon: typeof entry === 'string' ? undefined : entry.icon,
+      };
+    }),
   };
 }
 
-async function settleRound(docNames: string[]) {
+async function settleRound(
+  docNames: Parameters<typeof pagesBody>[0],
+  documents: DocumentListEntry[] = [],
+) {
   const pr = pageResolvers.shift();
   const dr = docResolvers.shift();
   if (!pr || !dr) throw new Error('settleRound: no in-flight fetch pair to resolve');
   await act(async () => {
     pr(jsonRes(pagesBody(docNames)));
-    dr(jsonRes({ documents: [] }));
+    dr(jsonRes({ documents }));
     await Promise.resolve();
   });
+}
+
+function latestCachePayload() {
+  return setPageListCacheMock.mock.calls.at(-1)?.[0] as PageListCachePayload | undefined;
 }
 
 beforeEach(() => {
   pageResolvers = [];
   docResolvers = [];
+  setPageListCacheMock.mockClear();
   originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL) => {
     const url = String(input);
@@ -71,6 +144,18 @@ function Probe() {
   const { loading, pages } = usePageList();
   if (loading) return <div data-testid="page-list-skeleton" />;
   return <div data-testid="page-list-content">{[...pages].sort().join(',')}</div>;
+}
+
+function AddPageProbe() {
+  const { addPage, pages } = usePageList();
+  return (
+    <div>
+      <button type="button" onClick={() => addPage('Draft')}>
+        Add draft
+      </button>
+      <span data-testid="page-list-content">{[...pages].sort().join(',')}</span>
+    </div>
+  );
 }
 
 describe('PageListContext loading stability', () => {
@@ -114,5 +199,44 @@ describe('PageListContext loading stability', () => {
     expect(afterNode).toBe(coldNode);
     expect(afterNode.getAttribute('data-marker')).toBe('cold');
     expect(screen.queryByTestId('page-list-skeleton')).toBeNull();
+  });
+
+  test('publishes runtime-derived pages, folders, slugs, assets, icons, and optimistic pages to the cache', async () => {
+    render(
+      <PageListProvider>
+        <AddPageProbe />
+      </PageListProvider>,
+    );
+
+    await settleRound(
+      [{ docName: 'Notes/Alpha', icon: '📘', docExt: '.mdx' }],
+      [
+        { kind: 'folder', path: 'Notes' },
+        { kind: 'asset', path: 'images/diagram.png' },
+      ],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('page-list-content').textContent).toBe('Notes/Alpha');
+    });
+
+    let payload = latestCachePayload();
+    expect([...(payload?.pages ?? [])]).toEqual(['Notes/Alpha']);
+    expect(payload?.pagesBySlug.get('notes-alpha')).toBe('Notes/Alpha');
+    expect(payload?.pagesByBasename.get('alpha')).toBe('Notes/Alpha');
+    expect([...(payload?.assetPaths ?? [])]).toEqual(['images/diagram.png']);
+    expect(payload?.folderPaths.has('Notes')).toBe(true);
+    expect(payload?.pageIcons.get('Notes/Alpha')).toBe('📘');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add draft' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('page-list-content').textContent).toBe('Draft,Notes/Alpha');
+    });
+
+    payload = latestCachePayload();
+    expect(payload?.pages.has('Draft')).toBe(true);
+    expect(payload?.pagesBySlug.get('draft')).toBe('Draft');
+    expect(payload?.pagesByBasename.get('draft')).toBe('Draft');
   });
 });

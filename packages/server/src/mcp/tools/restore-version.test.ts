@@ -65,6 +65,7 @@ let mockRollbackWarning: Record<string, unknown> | undefined;
 beforeAll(() => {
   testServer = Bun.serve({
     port: 0,
+    hostname: '127.0.0.1',
     async fetch(req) {
       const url = new URL(req.url);
       const body = req.method === 'POST' ? ((await req.json()) as Record<string, unknown>) : {};
@@ -76,13 +77,15 @@ beforeAll(() => {
       if (url.pathname === '/api/rollback' && req.method === 'POST') {
         return Response.json({
           ok: true,
-          ...(mockRollbackWarning !== undefined ? { warning: mockRollbackWarning } : {}),
+          ...(mockRollbackWarning !== undefined
+            ? { warning: mockRollbackWarning, warnings: [mockRollbackWarning] }
+            : {}),
         });
       }
       return new Response('Not found', { status: 404 });
     },
   });
-  baseUrl = `http://localhost:${testServer.port}`;
+  baseUrl = `http://127.0.0.1:${testServer.port}`;
 });
 afterAll(() => testServer.stop());
 beforeEach(async () => {
@@ -128,7 +131,9 @@ describe('restore_version — registration + behavior', () => {
     const { server, getTool } = createFakeServer();
     register(server, makeDeps(baseUrl, tmpDir));
     const result = await getTool().handler({ document: 'notes/x', version: SHA });
-    expect(result.structuredContent?.contentDivergence).toBeDefined();
+    const warnings = result.structuredContent?.warnings as Array<{ kind: string }> | undefined;
+    expect(warnings).toHaveLength(1);
+    expect(warnings?.[0]?.kind).toBe('content-divergence');
     expect(result.content[0]?.text).toContain('Content divergence');
   });
 

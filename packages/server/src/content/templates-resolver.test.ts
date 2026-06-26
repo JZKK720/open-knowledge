@@ -134,6 +134,41 @@ describe('resolveTemplatesAvailable', () => {
     expect(tpls[0]?.scope).toBe('local');
   });
 
+  test('frontmatter whose opening fence carries a trailing space still surfaces metadata', () => {
+    writeTemplate(
+      'meetings',
+      'prep-notes',
+      '--- \ntitle: Meeting Prep\ndescription: Use before a meeting.\n---\nbody\n',
+    );
+
+    const tpls = resolveTemplatesAvailable(projectDir, 'meetings');
+    expect(tpls).toHaveLength(1);
+    expect(tpls[0]?.title).toBe('Meeting Prep');
+    expect(tpls[0]?.description).toBe('Use before a meeting.');
+  });
+
+  test('frontmatter whose closing fence carries a trailing tab still surfaces metadata', () => {
+    writeTemplate(
+      'meetings',
+      'prep-notes',
+      '---\ntitle: Meeting Prep\ndescription: Use before a meeting.\n---\t\nbody\n',
+    );
+
+    const tpls = resolveTemplatesAvailable(projectDir, 'meetings');
+    expect(tpls).toHaveLength(1);
+    expect(tpls[0]?.title).toBe('Meeting Prep');
+    expect(tpls[0]?.description).toBe('Use before a meeting.');
+  });
+
+  test('an indented opening fence is not frontmatter (matches core recognition)', () => {
+    writeTemplate('meetings', 'prep-notes', ' ---\ntitle: Nope\n---\nbody\n');
+
+    const tpls = resolveTemplatesAvailable(projectDir, 'meetings');
+    expect(tpls).toHaveLength(1);
+    expect(tpls[0]?.title).toBeUndefined();
+    expect(tpls[0]?.description).toBeUndefined();
+  });
+
   test('non-md files in templates/ are ignored', () => {
     writeTemplate('meetings', 'good', withFm('Good', 'OK'));
     const dir = join(projectDir, 'meetings', '.ok', 'templates');

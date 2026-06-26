@@ -28,6 +28,9 @@ function makeRes(): { res: ServerResponse; captured: CapturedResponse } {
     setHeader(name: string, value: string) {
       captured.headers[name] = value;
     },
+    removeHeader(name: string) {
+      delete captured.headers[name];
+    },
     writeHead(status: number, headers?: Record<string, string>) {
       captured.status = status;
       captured.headersSent = true;
@@ -61,8 +64,8 @@ const admitAll: AssetServeFilter = { isPathIgnored: () => false };
 const excludeAll: AssetServeFilter = { isPathIgnored: () => true };
 
 const INLINE = new Set(['png', 'jpg', 'pdf', 'mp4', 'm4v', 'svg']);
-const ASSETS = new Set([...INLINE, 'docx', 'csv', 'json', 'txt', 'zip']);
-const BLOCKLIST = new Set(['exe', 'dmg', 'sh', 'html']);
+const ASSETS = new Set([...INLINE, 'docx', 'csv', 'json', 'txt', 'zip', 'html', 'htm']);
+const BLOCKLIST = new Set(['exe', 'dmg', 'sh', 'html', 'htm']);
 
 function buildMiddleware(sirv: SirvLikeMiddleware, filter: AssetServeFilter = admitAll) {
   return createAssetServeMiddleware({
@@ -140,6 +143,28 @@ describe('createAssetServeMiddleware', () => {
       );
       expect(captured.headers['X-Content-Type-Options']).toBe('nosniff');
     });
+
+    test('html gets `inline` + sandboxed CSP (opaque origin, no network, no plain inline)', () => {
+      const middleware = buildMiddleware(sirvServes);
+      const { res, captured } = makeRes();
+      middleware(makeReq('/trip-viewer.html'), res, () => {});
+      expect(captured.headers['Content-Disposition']).toBe('inline');
+      expect(captured.headers['Content-Security-Policy']).toBe(
+        "sandbox allow-scripts; connect-src 'none'",
+      );
+      expect(captured.headers['X-Content-Type-Options']).toBe('nosniff');
+      expect(captured.headers['Cache-Control']).toBe('no-store');
+    });
+
+    test('htm is handled identically to html', () => {
+      const middleware = buildMiddleware(sirvServes);
+      const { res, captured } = makeRes();
+      middleware(makeReq('/legacy.htm'), res, () => {});
+      expect(captured.headers['Content-Disposition']).toBe('inline');
+      expect(captured.headers['Content-Security-Policy']).toBe(
+        "sandbox allow-scripts; connect-src 'none'",
+      );
+    });
   });
 
   describe('.md / .mdx doc-ext bypass', () => {
@@ -177,6 +202,21 @@ describe('createAssetServeMiddleware', () => {
       expect(captured.status).toBe(404);
       expect(captured.ended).toBe(true);
       expect(nextCalled).toBe(false);
+    });
+
+    test('html MISS falls through clean (no 404, and sandbox CSP stripped) so the SPA shell serves', () => {
+      let nextCalled = false;
+      const middleware = buildMiddleware(sirvFallThrough);
+      const { res, captured } = makeRes();
+      middleware(makeReq('/index.html'), res, () => {
+        nextCalled = true;
+      });
+      expect(nextCalled).toBe(true);
+      expect(captured.status).not.toBe(404);
+      expect(captured.headers['Content-Security-Policy']).toBeUndefined();
+      expect(captured.headers['Content-Disposition']).toBeUndefined();
+      expect(captured.headers['X-Content-Type-Options']).toBeUndefined();
+      expect(captured.headers['Cache-Control']).toBeUndefined();
     });
 
     test('EXECUTABLE_BLOCKLIST extension (not also an asset extension) falls through to next() before sirv', () => {

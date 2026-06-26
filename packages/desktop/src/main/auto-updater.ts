@@ -45,8 +45,14 @@ export type DispatchKind =
   | 'error-classified'
   | 'error-unclassified'
   | 'relaunch-now'
+  | 'relaunching-broadcast'
+  | 'relaunch-failed-rearm'
+  | 'relaunch-error-event'
+  | 'relaunch-watchdog-fired'
   | 'skipped-dev-mode'
   | 'stale-pending-cleared'
+  | 'attempted-install-reconciled'
+  | 'install-failed-on-boot'
   | 'cross-channel-blocked';
 
 interface StartAutoUpdaterOpts {
@@ -105,6 +111,8 @@ const DEFAULT_LOGGER: Logger = {
 export const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 export const UPDATE_CHECK_JITTER_MS = 30 * 1000;
+
+export const RELAUNCH_WATCHDOG_MS = 15_000;
 
 export const STUCK_HINT_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -168,6 +176,39 @@ export function versionAtLeast(running: string, pending: string): boolean {
   if (r[0] !== p[0]) return r[0] > p[0];
   if (r[1] !== p[1]) return r[1] > p[1];
   return r[2] >= p[2];
+}
+
+export function installReached(running: string, attempted: string): boolean {
+  const parse = (v: string): { mmp: [number, number, number]; pre: string[] } | null => {
+    if (typeof v !== 'string') return null;
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(v);
+    if (!m) return null;
+    return {
+      mmp: [Number(m[1]), Number(m[2]), Number(m[3])],
+      pre: m[4] ? m[4].split('.') : [],
+    };
+  };
+  const r = parse(running);
+  const a = parse(attempted);
+  if (!r || !a) return true;
+  for (let i = 0; i < 3; i++) {
+    if (r.mmp[i] !== a.mmp[i]) return (r.mmp[i] as number) > (a.mmp[i] as number);
+  }
+  if (r.pre.length === 0 && a.pre.length === 0) return true;
+  if (r.pre.length === 0) return true; // running is stable, attempted is a prerelease
+  if (a.pre.length === 0) return false; // running is a prerelease, attempted is stable
+  const len = Math.min(r.pre.length, a.pre.length);
+  for (let i = 0; i < len; i++) {
+    const ri = r.pre[i] as string;
+    const ai = a.pre[i] as string;
+    if (ri === ai) continue;
+    const rNum = /^\d+$/.test(ri);
+    const aNum = /^\d+$/.test(ai);
+    if (rNum && aNum) return Number(ri) > Number(ai);
+    if (rNum !== aNum) return aNum; // numeric identifiers rank below non-numeric
+    return ri > ai; // both non-numeric — ASCII order
+  }
+  return r.pre.length >= a.pre.length;
 }
 
 export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHandle {
@@ -288,6 +329,39 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
 
   let menuCheckPending = false;
 
+  let relaunchInFlight: {
+    version: string;
+    watchdog: ReturnType<typeof setTimeout>;
+  } | null = null;
+
+  const failRelaunch = (
+    version: string,
+    message: string | undefined,
+    kind: DispatchKind,
+    /** Original error context (error-event trigger only) — correlates this
+     * recovery log line with the classified/unclassified onError entry. */
+    cause?: { code?: string; stack?: string },
+  ): void => {
+    if (relaunchInFlight) {
+      clock.clearTimeout(relaunchInFlight.watchdog);
+      relaunchInFlight = null;
+    }
+    if (
+      persistSafely({ ...readState(), versionPendingInstall: version }, 'relaunch-failed-restore')
+    ) {
+      broadcastToAllWindows('ok:update:downloaded', { version });
+    }
+    broadcastToAllWindows('ok:update:relaunch-failed', { version, message });
+    logger.warn('relaunch failed — restored pending install and re-armed windows', {
+      version,
+      kind,
+      message,
+      causeCode: cause?.code,
+      causeStack: cause?.stack,
+    });
+    onDispatch?.(kind);
+  };
+
   let activeWhatsNew: { version: string; releaseUrl: string; firedAt: number } | null = null;
 
   const runMenuDrivenCheck = (): Promise<unknown> => {
@@ -322,10 +396,6 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
 
   const onUpdateAvailable = (info: { version?: string }): void => {
     logger.info('update-available', { version: info.version });
-    try {
-      const { logger: fl } = require('./desktop-logger.ts');
-      fl.child('updater').info({ version: info.version ?? 'unknown' }, 'update available');
-    } catch {}
     const offerClass = classifyOffer(info.version);
     if (offerClass !== 'same-channel') {
       logger.warn('update-available vetoed', {
@@ -368,10 +438,6 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
 
   const onUpdateNotAvailable = (info: { version?: string }): void => {
     logger.info('update-not-available', { version: info.version });
-    try {
-      const { logger: fl } = require('./desktop-logger.ts');
-      fl.child('updater').info({ version: info.version ?? 'unknown' }, 'no update available');
-    } catch {}
     markCheckSucceeded();
     if (menuCheckPending) {
       menuCheckPending = false;
@@ -390,10 +456,7 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
   };
 
   const onUpdateDownloaded = (info: { version?: string }): void => {
-    try {
-      const { logger: fl } = require('./desktop-logger.ts');
-      fl.child('updater').info({ version: info.version ?? 'unknown' }, 'update downloaded');
-    } catch {}
+    logger.info('update-downloaded', { version: info.version });
     const version = typeof info.version === 'string' ? info.version : '';
     if (!version) {
       logger.warn('update-downloaded with empty version — skipping dispatch');
@@ -406,7 +469,13 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
       onDispatch?.('update-downloaded-deduped');
       return;
     }
-    if (!persistSafely({ ...state, versionPendingInstall: version }, 'update-downloaded')) return;
+    if (
+      !persistSafely(
+        { ...state, versionPendingInstall: version, attemptedInstall: version },
+        'update-downloaded',
+      )
+    )
+      return;
     const fireToastA = () => {
       broadcastToAllWindows('ok:update:downloaded', { version });
       logger.info('update-downloaded dispatched Toast A (all windows)', { version });
@@ -431,6 +500,14 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
         timestamp: now().toISOString(),
       });
       onDispatch?.('error-unclassified');
+    }
+    if (relaunchInFlight) {
+      failRelaunch(
+        relaunchInFlight.version,
+        err.message || 'update error during relaunch',
+        'relaunch-error-event',
+        { code: err.code, stack: err.stack },
+      );
     }
     if (menuCheckPending) {
       menuCheckPending = false;
@@ -457,6 +534,8 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     const pending = snapshot.versionPendingInstall;
     if (!persistSafely({ ...snapshot, versionPendingInstall: null }, 'relaunch-now'))
       return undefined;
+    broadcastToAllWindows('ok:update:relaunching', { version: pending });
+    onDispatch?.('relaunching-broadcast');
     if (opts.prepareForRelaunch) {
       try {
         await opts.prepareForRelaunch();
@@ -468,7 +547,22 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     }
     logger.info('relaunch-now invoked — calling autoUpdater.quitAndInstall', { pending });
     onDispatch?.('relaunch-now');
-    updater.quitAndInstall();
+    try {
+      updater.quitAndInstall();
+    } catch (err) {
+      failRelaunch(
+        pending,
+        err instanceof Error ? err.message : String(err),
+        'relaunch-failed-rearm',
+      );
+      throw err;
+    }
+    if (isPackaged) {
+      const watchdog = clock.setTimeout(() => {
+        failRelaunch(pending, 'the update timed out', 'relaunch-watchdog-fired');
+      }, RELAUNCH_WATCHDOG_MS);
+      relaunchInFlight = { version: pending, watchdog };
+    }
     return undefined;
   });
 
@@ -506,7 +600,42 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     }
   }
 
-  const shouldShowVersionNotice = state.lastSeenVersion !== currentVersion;
+  if (state.attemptedInstall) {
+    const attempted = state.attemptedInstall;
+    if (installReached(currentVersion, attempted)) {
+      const next = { ...state, attemptedInstall: null };
+      if (persistSafely(next, 'attempted-install-reconciled')) {
+        state = next;
+        onDispatch?.('attempted-install-reconciled');
+      } else {
+        logger.warn('failed to persist attempted-install-reconciled', {
+          attempted,
+          running: currentVersion,
+        });
+      }
+    } else {
+      const next = { ...state, versionPendingInstall: attempted };
+      if (persistSafely(next, 'install-failed-on-boot')) {
+        state = next;
+        logger.warn('attempted install did not take — surfacing failure notice', {
+          attempted,
+          running: currentVersion,
+        });
+        const fireInstallFailed = (): void => {
+          broadcastToAllWindows('ok:update:relaunch-failed', {
+            version: attempted,
+            downloadUrl: STUCK_HINT_DOWNLOAD_URL,
+          });
+        };
+        if (whenRendererReady) whenRendererReady(fireInstallFailed);
+        else fireInstallFailed();
+        onDispatch?.('install-failed-on-boot');
+      }
+    }
+  }
+
+  const shouldShowVersionNotice =
+    state.lastSeenVersion !== null && state.lastSeenVersion !== currentVersion;
   const needsStateAdvance = state.lastSeenVersion !== currentVersion;
 
   if (needsStateAdvance) {
@@ -592,6 +721,10 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
       if (timerHandle) {
         clock.clearTimeout(timerHandle);
         timerHandle = null;
+      }
+      if (relaunchInFlight) {
+        clock.clearTimeout(relaunchInFlight.watchdog);
+        relaunchInFlight = null;
       }
       const detach = (event: string, handler: (...args: unknown[]) => void): void => {
         try {

@@ -14,6 +14,7 @@ import {
   type OkignoreBinding,
   RenamePathSuccessSchema,
   TrashCleanupSuccessSchema,
+  UploadAssetSuccessSchema,
   WorkspaceSuccessSchema,
 } from '@inkeep/open-knowledge-core';
 import { plural, t } from '@lingui/core/macro';
@@ -25,7 +26,6 @@ import {
   type FileTreeDropResult,
   type FileTreeRenameEvent,
   type FileTree as PierreFileTreeModel,
-  themeToTreeStyles,
 } from '@pierre/trees';
 import { FileTree as PierreFileTree, useFileTree } from '@pierre/trees/react';
 import {
@@ -36,18 +36,21 @@ import {
   FolderOpen,
   FolderPlus,
   FoldVertical,
+  Info,
   Pencil,
+  RefreshCw,
   SquarePen,
-  Terminal,
   Trash2,
+  TriangleAlert,
   UnfoldVertical,
 } from 'lucide-react';
 import { __iconNode as botIcon } from 'lucide-react/dist/esm/icons/bot';
 import { __iconNode as link2Icon } from 'lucide-react/dist/esm/icons/link-2';
 import { useTheme } from 'next-themes';
 import {
-  type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type Ref,
   startTransition,
   useEffect,
@@ -67,16 +70,28 @@ import {
   docNameToTreePath,
   documentsToTreePaths,
   documentsTreePathSignature,
+  fileEntryFromUploadedPath,
   fileEntryToTreePath,
+  filesFromExternalDrop,
   folderPathToTreeDirectoryPath,
+  isExternalFileDrag,
   normalizeTreePathForKind,
+  parentFolderPathForTreeItemDropTarget,
   relativePathForTreeItem,
   treeDirectoryPathToFolderPath,
   treeFilePathToDocName,
   treeItemToTarget,
   treePathSignature,
   treePathToAppPath,
+  uploadedPathForSidebarDrop,
+  uploadParentDocNameForFolderDrop,
 } from '@/components/file-tree-adapter';
+import {
+  createFileTreeStyle,
+  FILE_TREE_DENSITY_OPTIONS,
+  FILE_TREE_INDENT_GUIDE_CSS,
+  FILE_TREE_STICKY_HEADER_CSS,
+} from '@/components/file-tree-density';
 import {
   applyExtensionBadges,
   FILE_TREE_EXT_BADGE_CSS,
@@ -91,13 +106,18 @@ import {
   type FileTreeTarget,
   planRenameCleanupCalls,
   type RenamedAssetMapping,
+  type RenamedDocExtensionMapping,
   type RenamedDocMapping,
   type RenamedFolderMapping,
   remapActiveDocName,
 } from '@/components/file-tree-operations';
-import { applyRenameChip, FILE_TREE_RENAME_CHIP_CSS } from '@/components/file-tree-rename-chip';
+import {
+  applyRenameInputAffordance,
+  FILE_TREE_RENAME_INPUT_CSS,
+} from '@/components/file-tree-rename-chip';
 import {
   getFileExtension,
+  hasSupportedDocumentExtension,
   validateAndCoerceRenameDestination,
 } from '@/components/file-tree-rename-validation';
 import { revealActiveRow } from '@/components/file-tree-reveal';
@@ -109,10 +129,12 @@ import { selectTrashConfirmCopy, trashTargetDisplayName } from '@/components/fil
 import {
   type DocumentEntry,
   type FileEntry,
+  type FolderEntry,
   filterVisibleEntries,
   isAssetEntry,
   isDocumentEntry,
   isFolderEntry,
+  toFileEntries,
 } from '@/components/file-tree-utils';
 import { NewItemDialog } from '@/components/NewItemDialog';
 import {
@@ -125,6 +147,7 @@ import {
   parseOkignoreDoc,
   serializeOkignoreDoc,
 } from '@/components/settings/okignore-doc';
+import { sidebarDragPayloadForTreePath } from '@/components/sidebar-drag-payload';
 import {
   coerceTrashFailureReason,
   type TrashFailedTarget,
@@ -146,13 +169,19 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { asDirectoryHandle, useSelectionMirror } from '@/components/use-selection-mirror';
+import { getEditorForDoc } from '@/editor/active-editor';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import { captureRenameSnapshots } from '@/editor/editor-cache';
 import { assetTabId, docTabId, folderTabId, remapPathForFolderRenames } from '@/editor/editor-tabs';
 import { useConflicts } from '@/hooks/use-conflicts';
+import { useFolderConfig } from '@/hooks/use-folder-config';
 import { useConfigContext } from '@/lib/config-provider';
-import { dispatchOpenInTerminal } from '@/lib/dispatch-open-in-terminal';
-import { hashFromAssetPath, hashFromDocName, hashFromFolderPath } from '@/lib/doc-hash';
+import {
+  hashFromAssetPath,
+  hashFromDocName,
+  hashFromFolderPath,
+  replaceHashWithoutNavigation,
+} from '@/lib/doc-hash';
 import { emitDocumentsChanged, subscribeToDocumentsChanged } from '@/lib/documents-events';
 import {
   subscribeToFileTreeMenuActionDelete,
@@ -161,13 +190,17 @@ import {
 } from '@/lib/file-tree-menu-action-events';
 import { parseServerResponse, parseSuccessOrWarn } from '@/lib/parse-server-response';
 import { createRefreshScheduler } from '@/lib/refresh-scheduler';
+import { getRelaunchInFlightSnapshot, useRelaunchInFlight } from '@/lib/relaunch-store';
 import {
   consumeShowAllStream,
   isNdjsonResponse,
   SHOW_ALL_NDJSON_ACCEPT,
+  ShowAllStreamError,
 } from '@/lib/show-all-stream';
+import { OK_SIDEBAR_DRAG_MIME, serializeSidebarDragPayload } from '@/lib/sidebar-drag';
+import { cn } from '@/lib/utils';
 import { joinWorkspacePath } from '@/lib/workspace-paths';
-import { mergeAndPruneRecentLocalAdds } from './file-tree-merge';
+import { spliceLazyFolderChildren } from './file-tree-merge';
 import { OpenInAgentContextSubmenu } from './handoff/OpenInAgentContextSubmenu';
 import {
   buildFolderHandoffInput,
@@ -181,12 +214,6 @@ import { useSidebar } from './ui/sidebar';
 
 const MARKDOWN_TREE_EXTENSION_PATTERN = /\.(md|mdx)$/i;
 
-function replaceHashWithoutNavigation(hash: string) {
-  if (window.location.hash === hash) return;
-  const { pathname, search } = window.location;
-  window.history.replaceState(null, '', `${pathname}${search}${hash}`);
-}
-
 function parseAlreadyExistsRenamePath(message: string): string | null {
   const match = message.match(/^"(.+)" already exists\.$/);
   return match ? match[1] : null;
@@ -195,6 +222,49 @@ function parseAlreadyExistsRenamePath(message: string): string | null {
 function markdownTreeExtension(path: string): string | null {
   const match = path.match(MARKDOWN_TREE_EXTENSION_PATTERN);
   return match ? match[0] : null;
+}
+
+function focusEditorAfterRename(docName: string): void {
+  window.requestAnimationFrame(() => {
+    const editor = getEditorForDoc(docName);
+    if (!editor || editor.isDestroyed) return;
+    try {
+      editor.commands.focus();
+    } catch {}
+  });
+}
+
+interface ExternalFileDropTarget {
+  parentDir: string;
+  row: HTMLElement | null;
+  root: HTMLElement | null;
+  busyPath: string;
+}
+
+interface ExternalFileDropAffordanceRef {
+  current: {
+    row: HTMLElement | null;
+    root: HTMLElement | null;
+  };
+}
+
+function clearExternalFileDropAffordance(ref: ExternalFileDropAffordanceRef) {
+  const current = ref.current;
+  current.row?.removeAttribute(FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR);
+  current.root?.removeAttribute(FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR);
+  ref.current = { row: null, root: null };
+}
+
+function setExternalFileDropAffordance(
+  ref: ExternalFileDropAffordanceRef,
+  target: ExternalFileDropTarget,
+) {
+  const current = ref.current;
+  if (current.row === target.row && current.root === target.root) return;
+  clearExternalFileDropAffordance(ref);
+  target.row?.setAttribute(FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR, 'true');
+  target.root?.setAttribute(FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR, 'true');
+  ref.current = { row: target.row, root: target.root };
 }
 
 async function copyToClipboard(text: string, kind: 'full' | 'relative'): Promise<void> {
@@ -213,8 +283,8 @@ const AGENT_FILE_NAMES = new Set(['agents', 'agent', 'claude', 'skill']);
 const LINK_DECORATION_ICON_ID = 'ok-file-tree-link-decoration';
 const AGENT_DECORATION_ICON_ID = 'ok-file-tree-agent-decoration';
 const MARKDOWN_FILE_ICON_ID = 'ok-file-tree-markdown';
-const MARKDOWN_FILE_ICON_VIEWBOX = '0 0 48 48';
-const MARKDOWN_FILE_ICON_SYMBOL = `<symbol id="${MARKDOWN_FILE_ICON_ID}" viewBox="${MARKDOWN_FILE_ICON_VIEWBOX}" fill="none" stroke="currentColor" stroke-width="4.62651" stroke-linecap="round" stroke-linejoin="round"><path d="M3.18066 33.4398V13.5603L12.4337 22.8133L21.6867 13.5603V33.4398"/><path d="M38 13.5L38 33"/><path d="M44.8195 26.5L37.8797 33.4398L30.9399 26.5"/></symbol>`;
+const MARKDOWN_FILE_ICON_VIEWBOX = '0 0 32 32';
+const MARKDOWN_FILE_ICON_SYMBOL = `<symbol id="${MARKDOWN_FILE_ICON_ID}" viewBox="${MARKDOWN_FILE_ICON_VIEWBOX}" fill="currentColor"><path d="M26.7075 10.2925L19.7075 3.2925C19.6146 3.19967 19.5042 3.12605 19.3829 3.07586C19.2615 3.02568 19.1314 2.9999 19 3H7C6.46957 3 5.96086 3.21071 5.58579 3.58579C5.21071 3.96086 5 4.46957 5 5V14C5 14.2652 5.10536 14.5196 5.29289 14.7071C5.48043 14.8946 5.73478 15 6 15C6.26522 15 6.51957 14.8946 6.70711 14.7071C6.89464 14.5196 7 14.2652 7 14V5H18V11C18 11.2652 18.1054 11.5196 18.2929 11.7071C18.4804 11.8946 18.7348 12 19 12H25V28C25 28.2652 25.1054 28.5196 25.2929 28.7071C25.4804 28.8946 25.7348 29 26 29C26.2652 29 26.5196 28.8946 26.7071 28.7071C26.8946 28.5196 27 28.2652 27 28V11C27.0001 10.8686 26.9743 10.7385 26.9241 10.6172C26.8739 10.4958 26.8003 10.3854 26.7075 10.2925ZM20 6.41375L23.5863 10H20V6.41375ZM18 18H16C15.7348 18 15.4804 18.1054 15.2929 18.2929C15.1054 18.4804 15 18.7348 15 19V26C15 26.2652 15.1054 26.5196 15.2929 26.7071C15.4804 26.8946 15.7348 27 16 27H18C19.1935 27 20.3381 26.5259 21.182 25.682C22.0259 24.8381 22.5 23.6935 22.5 22.5C22.5 21.3065 22.0259 20.1619 21.182 19.318C20.3381 18.4741 19.1935 18 18 18ZM18 25H17V20H18C18.663 20 19.2989 20.2634 19.7678 20.7322C20.2366 21.2011 20.5 21.837 20.5 22.5C20.5 23.163 20.2366 23.7989 19.7678 24.2678C19.2989 24.7366 18.663 25 18 25ZM13 19V26C13 26.2652 12.8946 26.5196 12.7071 26.7071C12.5196 26.8946 12.2652 27 12 27C11.7348 27 11.4804 26.8946 11.2929 26.7071C11.1054 26.5196 11 26.2652 11 26V22.1725L9.31875 24.5737C9.22652 24.7053 9.10396 24.8126 8.96144 24.8868C8.81892 24.9609 8.66064 24.9996 8.5 24.9996C8.33936 24.9996 8.18108 24.9609 8.03856 24.8868C7.89604 24.8126 7.77348 24.7053 7.68125 24.5737L6 22.1725V26C6 26.2652 5.89464 26.5196 5.70711 26.7071C5.51957 26.8946 5.26522 27 5 27C4.73478 27 4.48043 26.8946 4.29289 26.7071C4.10536 26.5196 4 26.2652 4 26V19C4.00009 18.7874 4.06791 18.5804 4.19363 18.409C4.31935 18.2376 4.49642 18.1107 4.69915 18.0467C4.90188 17.9828 5.11971 17.9851 5.32104 18.0533C5.52236 18.1216 5.6967 18.2522 5.81875 18.4263L8.5 22.2563L11.1812 18.4263C11.3033 18.2522 11.4776 18.1216 11.679 18.0533C11.8803 17.9851 12.0981 17.9828 12.3008 18.0467C12.5036 18.1107 12.6807 18.2376 12.8064 18.409C12.9321 18.5804 12.9999 18.7874 13 19Z"/></symbol>`;
 
 type IconNode = [string, Record<string, string>][];
 
@@ -240,36 +310,73 @@ const FILE_TREE_DECORATION_SPRITE_SHEET = `<svg data-icon-sprite aria-hidden="tr
   ${MARKDOWN_FILE_ICON_SYMBOL}
 </svg>`;
 
-const FILE_TREE_UNSAFE_CSS = `${FILE_TREE_EXT_BADGE_CSS}\n${FILE_TREE_RENAME_CHIP_CSS}`;
+const FILE_TREE_ROOT_DROP_CSS = `
+  [data-file-tree-virtualized-root][data-file-tree-root-drag-target="true"] {
+    position: relative;
+  }
+  [data-file-tree-virtualized-root][data-file-tree-root-drag-target="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-radius: 0.375rem;
+    box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--color-primary) 80%, transparent);
+    background: color-mix(in oklab, var(--color-primary) 6%, transparent);
+    pointer-events: none;
+  }
+  /* Forced-colors (Windows High Contrast) suppresses box-shadow and overrides
+     color-mix backgrounds, so the ring above would vanish. Borders survive
+     forced-colors — fall back to a system Highlight border (mirrors the JSX
+     in-range halo fallback in globals.css). */
+  @media (forced-colors: active) {
+    [data-file-tree-virtualized-root][data-file-tree-root-drag-target="true"]::after {
+      border: 2px solid Highlight;
+    }
+  }
+`;
 
-function createFileTreeStyle(resolvedTheme: string | undefined): CSSProperties {
-  return {
-    ...themeToTreeStyles({
-      type: resolvedTheme === 'dark' ? 'dark' : 'light',
-      colors: {
-        'sideBar.background': 'var(--sidebar)',
-        'sideBar.foreground': 'var(--sidebar-foreground)',
-        'sideBar.border': 'var(--sidebar-border)',
-        'list.activeSelectionBackground': 'var(--sidebar-accent)',
-        'list.activeSelectionForeground': 'var(--sidebar-accent-foreground)',
-        'list.hoverBackground': 'var(--sidebar-hover)',
-        focusBorder: 'var(--color-primary)',
-        'input.background': 'var(--input)',
-        'input.border': 'var(--border)',
-      },
-    }),
-    '--trees-font-family-override': 'var(--font-sans)',
-    '--trees-font-size-override': '0.875rem',
-    '--trees-item-padding-x-override': '0.5rem',
-    '--trees-padding-inline-override': '0.5rem',
-    '--trees-border-radius-override': '0.375rem',
-    '--trees-selected-fg': 'var(--color-primary)',
-    '--truncate-marker-fade-in-duration': '0s', // render ellipsis without delay
-    '--trees-file-icon-color-markdown': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-    '--trees-file-icon-color-image': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-    '--trees-fg-muted': 'light-dark(var(--color-gray-400), var(--color-gray-500))',
-  } as CSSProperties;
-}
+const FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR = 'data-ok-external-file-drop-target';
+const FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR = 'data-ok-external-file-drop-root-target';
+const FILE_TREE_EXTERNAL_FILE_DROP_BUSY_PATH = '__external-file-drop__';
+
+const CONNECTIVITY_RECONNECT_RETRY_MS = 2000;
+const FILE_TREE_EXTERNAL_FILE_DROP_CSS = `
+  [data-type="item"][${FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR}="true"] {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 72%, transparent);
+  }
+  [data-file-tree-virtualized-root][${FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR}="true"] {
+    position: relative;
+  }
+  [data-file-tree-virtualized-root][${FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR}="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-radius: 0.375rem;
+    box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--color-primary) 80%, transparent);
+    background: color-mix(in oklab, var(--color-primary) 6%, transparent);
+    pointer-events: none;
+  }
+  @media (forced-colors: active) {
+    [data-type="item"][${FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR}="true"] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    [data-file-tree-virtualized-root][${FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR}="true"]::after {
+      border: 2px solid Highlight;
+    }
+  }
+`;
+
+const FILE_TREE_CREATION_CLEARED_ATTR = 'data-ok-creation-cleared';
+const FILE_TREE_CREATION_CLEARED_CSS = `
+  :host([${FILE_TREE_CREATION_CLEARED_ATTR}]) [data-item-focused="true"] {
+    --trees-focus-ring-color: transparent;
+  }
+`;
+
+const FILE_TREE_UNSAFE_CSS = `${FILE_TREE_EXT_BADGE_CSS}\n${FILE_TREE_RENAME_INPUT_CSS}\n${FILE_TREE_ROOT_DROP_CSS}\n${FILE_TREE_EXTERNAL_FILE_DROP_CSS}\n${FILE_TREE_CREATION_CLEARED_CSS}\n${FILE_TREE_INDENT_GUIDE_CSS}\n${FILE_TREE_STICKY_HEADER_CSS}`;
 
 function isAgentTreePath(treePath: string): boolean {
   const name = treePath.split('/').pop()?.replace(/\.md$/i, '').toLowerCase();
@@ -306,7 +413,7 @@ interface WorkspaceInfo {
 function revealInFileManagerLabel(platform: 'darwin' | 'win32' | 'linux'): string {
   if (platform === 'darwin') return t`Reveal in Finder`;
   if (platform === 'win32') return t`Reveal in File Explorer`;
-  return t`Open Containing Folder`;
+  return t`Open containing folder`;
 }
 
 function RevealInFileManagerMenuItem({
@@ -334,8 +441,8 @@ function RevealInFileManagerMenuItem({
           ? t`Reveal in File Explorer, ${hint}`
           : t`Reveal in File Explorer`
         : hint
-          ? t`Open Containing Folder, ${hint}`
-          : t`Open Containing Folder`;
+          ? t`Open containing folder, ${hint}`
+          : t`Open containing folder`;
   return (
     <DropdownMenuItem
       disabled={!workspace}
@@ -362,40 +469,6 @@ function RevealInFileManagerMenuItem({
   );
 }
 
-function OpenInTerminalMenuItem({
-  dirAbsPath,
-  onClose,
-}: {
-  dirAbsPath: string | null;
-  onClose: () => void;
-}) {
-  const { t } = useLingui();
-  const bridge = typeof window !== 'undefined' ? window.okDesktop : undefined;
-  if (!bridge) return null;
-  const hint = dirAbsPath === null ? t`No workspace` : null;
-  return (
-    <DropdownMenuItem
-      disabled={dirAbsPath === null}
-      onSelect={() => {
-        if (dirAbsPath === null) return;
-        onClose();
-        void dispatchOpenInTerminal(bridge, dirAbsPath);
-      }}
-      aria-label={hint ? t`Open in Terminal, ${hint}` : t`Open in Terminal`}
-    >
-      <Terminal aria-hidden="true" />
-      <span className="flex-1">
-        <Trans>Open in Terminal</Trans>
-      </span>
-      {hint ? (
-        <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-          {hint}
-        </span>
-      ) : null}
-    </DropdownMenuItem>
-  );
-}
-
 interface FileTreeMenuProps {
   item: ContextMenuItem;
   context: ContextMenuOpenContext;
@@ -411,12 +484,12 @@ interface FileTreeMenuProps {
   };
   model: PierreFileTreeModel;
   okignoreBinding: OkignoreBinding | null;
-  /** Project-local config binding for the `Show Hidden Files` / `Show all files`
-   *  folder-menu toggles. Patched directly here (mirrors the okignore Hide
-   *  flow); `null` during cold-start disables the toggle items. */
+  /** Project-local config binding for the `Show hidden files` folder-menu
+   *  toggle. Patched directly here (mirrors the okignore Hide flow); `null`
+   *  during cold-start disables the toggle item. */
   projectLocalBinding: ConfigBinding | null;
-  /** Layered config view, source for the two toggle check-states
-   *  (`appearance.sidebar.{showHiddenFiles,showAllFiles}`). */
+  /** Layered config view, source for the toggle check-state
+   *  (`appearance.sidebar.showHiddenFiles`). */
   mergedConfig: Config | null;
   onStartCreating: (kind: 'file' | 'folder', parentDir: string) => void;
   /** Inline create-from-template for the given parent dir + template name —
@@ -430,7 +503,7 @@ interface FileTreeMenuProps {
   folderTreePaths: readonly string[];
   isAsset: boolean;
   /** Authoritative document list — sourced for `docExt` when Pierre's tree
-   *  path has lost its extension (post-rename-strip). See `treeItemToTarget`. */
+   *  path has lost its extension after a basename-only commit. See `treeItemToTarget`. */
   documents: readonly FileEntry[];
 }
 
@@ -552,30 +625,19 @@ function FileTreeMenu({
   const canHide = okignoreTarget !== null && okignoreBinding !== null;
   const hideLabel = isFolder ? t`Hide folder` : t`Hide this file`;
   const showHiddenFiles = mergedConfig?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = mergedConfig?.appearance?.sidebar?.showAllFiles ?? false;
   const canToggleVisibility = projectLocalBinding !== null;
+  const folderConfig = useFolderConfig(isFolder ? treeDirectoryPathToFolderPath(item.path) : null);
+  const folderHasTemplates =
+    folderConfig.state.status === 'ready'
+      ? (folderConfig.state.data.folder.templates_available?.length ?? 0) > 0
+      : true;
   const selectedTreePaths = model.getSelectedPaths();
   const selectedDeleteTargets = selectedTreePaths.includes(target.treePath)
     ? selectedTreePathsToDeleteTargets(selectedTreePaths, documents)
     : [];
   const deleteTargets = selectedDeleteTargets.length > 1 ? selectedDeleteTargets : [target];
   const deleteCount = deleteTargets.length;
-  const deleteLabel = plural(deleteCount, { one: 'Delete', other: 'Delete # Items' });
-  const folderAbsPath =
-    isFolder && workspace
-      ? joinWorkspacePath(
-          workspace.contentDir,
-          relativePathForTreeItem(item),
-          workspace.pathSeparator,
-        )
-      : null;
-  const parentDirAbsPath: string | null = (() => {
-    if (!workspace || isFolder) return null;
-    const rel = relativePathForTreeItem(item);
-    const lastSep = rel.lastIndexOf('/');
-    if (lastSep === -1) return workspace.contentDir;
-    return joinWorkspacePath(workspace.contentDir, rel.slice(0, lastSep), workspace.pathSeparator);
-  })();
+  const deleteLabel = plural(deleteCount, { one: 'Delete', other: 'Delete # items' });
   const handoffInput: HandoffDispatchInput | null = isAsset
     ? null
     : isFolder
@@ -603,19 +665,6 @@ function FileTreeMenu({
       });
     }
   };
-  const handleShowAllFilesToggle = (checked: boolean) => {
-    if (projectLocalBinding === null) return;
-    const result = projectLocalBinding.patch({
-      appearance: { sidebar: { showAllFiles: checked } },
-    });
-    if (!result.ok) {
-      console.warn('[FileTree] showAllFiles toggle rejected:', humanFormat(result.error));
-      toast.error(t`Could not update sidebar settings`, {
-        description: humanFormat(result.error),
-      });
-    }
-  };
-
   let subtreeFolderCount = 0;
   let subtreeExpandedCount = 0;
   if (isFolder) {
@@ -663,24 +712,26 @@ function FileTreeMenu({
               }}
             >
               <SquarePen aria-hidden="true" />
-              <Trans>New File</Trans>
+              <Trans>New file</Trans>
             </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={anyActionBusy}>
-                <FilePlus aria-hidden="true" />
-                <Trans>New from template</Trans>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <TemplateMenuRows
-                  parentDir={treeDirectoryPathToFolderPath(item.path)}
-                  onSelectTemplate={(templateName) => {
-                    closeForInlineSurface();
-                    onCreateFromTemplate(treeDirectoryPathToFolderPath(item.path), templateName);
-                  }}
-                  ItemComponent={DropdownMenuItem}
-                />
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            {folderHasTemplates ? (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={anyActionBusy}>
+                  <FilePlus aria-hidden="true" />
+                  <Trans>New from template</Trans>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <TemplateMenuRows
+                    parentDir={treeDirectoryPathToFolderPath(item.path)}
+                    onSelectTemplate={(templateName) => {
+                      closeForInlineSurface();
+                      onCreateFromTemplate(treeDirectoryPathToFolderPath(item.path), templateName);
+                    }}
+                    ItemComponent={DropdownMenuItem}
+                  />
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            ) : null}
             <DropdownMenuItem
               disabled={anyActionBusy}
               onSelect={() => {
@@ -689,7 +740,7 @@ function FileTreeMenu({
               }}
             >
               <FolderPlus aria-hidden="true" />
-              <Trans>New Folder</Trans>
+              <Trans>New folder</Trans>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <RevealInFileManagerMenuItem item={item} workspace={workspace} onClose={close} />
@@ -698,13 +749,11 @@ function FileTreeMenu({
               installStates={handoff.installStates}
               isElectronHost={handoff.isElectronHost}
               dispatch={handoff.dispatch}
-              webFallbackVisible={false}
             />
-            <OpenInTerminalMenuItem dirAbsPath={folderAbsPath} onClose={close} />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />
-                <Trans>Copy Path</Trans>
+                <Trans>Copy path</Trans>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem
@@ -720,7 +769,7 @@ function FileTreeMenu({
                     void copyToClipboard(full, 'full');
                   }}
                 >
-                  <Trans>Full Path</Trans>
+                  <Trans>Full path</Trans>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => {
@@ -728,29 +777,20 @@ function FileTreeMenu({
                     void copyToClipboard(relativePathForTreeItem(item), 'relative');
                   }}
                 >
-                  <Trans>Relative Path</Trans>
+                  <Trans>Relative path</Trans>
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
-            {/* These toggles only flip the persisted config; the filter
-                pipeline (client dot-segment bypass / server showAll) reads it
-                from a separate seam. */}
+            {/* Flips the persisted `showHiddenFiles` config; the client-side
+                dot-segment filter reads it from a separate seam. */}
             <DropdownMenuCheckboxItem
               checked={showHiddenFiles}
               onCheckedChange={handleShowHiddenFilesToggle}
               disabled={!canToggleVisibility}
               data-testid="file-tree-menu-show-hidden-files"
             >
-              <Trans>Show Hidden Files</Trans>
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={showAllFiles}
-              onCheckedChange={handleShowAllFilesToggle}
-              disabled={!canToggleVisibility}
-              data-testid="file-tree-menu-show-all-files"
-            >
-              <Trans>Show all files</Trans>
+              <Trans>Show hidden files</Trans>
             </DropdownMenuCheckboxItem>
             {/* Subtree-scoped Expand/Collapse, smart-hidden. The divider only
                 renders when the section is non-empty so a fully-expanded or
@@ -765,7 +805,7 @@ function FileTreeMenu({
                 }}
               >
                 <UnfoldVertical aria-hidden="true" />
-                <Trans>Expand All</Trans>
+                <Trans>Expand all</Trans>
               </DropdownMenuItem>
             ) : null}
             {showSubtreeCollapseAll ? (
@@ -776,7 +816,7 @@ function FileTreeMenu({
                 }}
               >
                 <FoldVertical aria-hidden="true" />
-                <Trans>Collapse All</Trans>
+                <Trans>Collapse all</Trans>
               </DropdownMenuItem>
             ) : null}
             {/* Destructive section. Rename sits with Hide/Delete here (not at
@@ -847,14 +887,12 @@ function FileTreeMenu({
                 installStates={handoff.installStates}
                 isElectronHost={handoff.isElectronHost}
                 dispatch={handoff.dispatch}
-                webFallbackVisible={true}
               />
             )}
-            <OpenInTerminalMenuItem dirAbsPath={parentDirAbsPath} onClose={close} />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />
-                <Trans>Copy Path</Trans>
+                <Trans>Copy path</Trans>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem
@@ -870,7 +908,7 @@ function FileTreeMenu({
                     void copyToClipboard(full, 'full');
                   }}
                 >
-                  <Trans>Full Path</Trans>
+                  <Trans>Full path</Trans>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => {
@@ -878,7 +916,7 @@ function FileTreeMenu({
                     void copyToClipboard(relativePathForTreeItem(item), 'relative');
                   }}
                 >
-                  <Trans>Relative Path</Trans>
+                  <Trans>Relative path</Trans>
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -960,11 +998,53 @@ export interface FileTreeHandle {
   expandAll(): void;
   collapseAll(): void;
   getFolderState(): { folderCount: number; expandedCount: number };
+  isCreationTargetCleared(): boolean;
   subscribe(listener: () => void): () => void;
 }
 
+type ShowAllDepth1ListingResult =
+  | { kind: 'entries'; entries: FileEntry[]; truncated: boolean }
+  | { kind: 'http-error'; title: string }
+  | { kind: 'network-error'; cause: unknown };
+
+async function fetchShowAllDepth1Listing(
+  dir: string,
+  signal: AbortSignal,
+  fallbackErrorTitle: string,
+  schemaMismatchTitle: string,
+): Promise<ShowAllDepth1ListingResult> {
+  try {
+    const res = await fetch(`/api/documents?showAll=true&dir=${encodeURIComponent(dir)}&depth=1`, {
+      signal,
+      headers: SHOW_ALL_NDJSON_ACCEPT,
+    });
+    if (isNdjsonResponse(res)) {
+      const consumed = await consumeShowAllStream(res);
+      return {
+        kind: 'entries',
+        entries: toFileEntries(consumed.entries),
+        truncated: consumed.truncated,
+      };
+    }
+    const parsed = await parseServerResponse(res, fallbackErrorTitle);
+    if (!parsed.ok) return { kind: 'http-error', title: parsed.title };
+    const success = DocumentListSuccessSchema.safeParse(parsed.body);
+    if (!success.success) return { kind: 'http-error', title: schemaMismatchTitle };
+    return {
+      kind: 'entries',
+      entries: toFileEntries(success.data.documents),
+      truncated: success.data.truncated === true,
+    };
+  } catch (cause) {
+    if (cause instanceof ShowAllStreamError) {
+      return { kind: 'http-error', title: cause.message };
+    }
+    return { kind: 'network-error', cause };
+  }
+}
+
 export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const {
     activeDocName,
     activeTarget,
@@ -1010,6 +1090,9 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const [documents, setDocuments] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const relaunchInFlight = useRelaunchInFlight();
+  const connectivityRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [truncatedShownCount, setTruncatedShownCount] = useState<number | null>(null);
   const [busyPath, setBusyPath] = useState<string | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<FileTreeDeleteRequest | null>(null);
@@ -1017,8 +1100,12 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const { conflicts: activeConflicts } = useConflicts();
   const [newItemRequest, setNewItemRequest] = useState<{ parentDir: string } | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
+  const [creationDirCleared, setCreationDirCleared] = useState(false);
+  const creationDirClearedRef = useRef(creationDirCleared);
+  const handleListenersRef = useRef<Set<() => void>>(new Set());
 
   const documentsRef = useRef(documents);
+  const pageMetaRef = useRef(pageMeta);
   function activateTreePath(treePath: string, entries: readonly FileEntry[] = documents) {
     const action = resolveFileTreeSelectionAction(treePath, entries);
     if (action.kind === 'none') {
@@ -1051,8 +1138,9 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     );
     navigateToWithPulse(action.path, docEntry?.size);
   }
-  function navigateToAssetWithPulse(assetPath: string) {
-    const entry = documentsRef.current.find(
+  function navigateToAssetWithPulse(assetPath: string, entries?: readonly FileEntry[]) {
+    const currentEntries = entries ?? documentsRef.current;
+    const entry = currentEntries.find(
       (item): item is Extract<FileEntry, { kind: 'asset' }> =>
         isAssetEntry(item) && item.path === assetPath,
     );
@@ -1081,10 +1169,24 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const skipNextResetSignatureRef = useRef<string | null>(null);
   const hoveredPrewarmDocRef = useRef<string | null>(null);
   const suppressSelectionRef = useRef(false);
+  const sidebarDragInProgressRef = useRef(false);
+  const sidebarDragClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const externalFileDropTargetRef = useRef<{ row: HTMLElement | null; root: HTMLElement | null }>({
+    row: null,
+    root: null,
+  });
+  const uploadExternalFilesRef = useRef<
+    (files: readonly File[], parentDir: string, busyPath: string) => void
+  >(() => {});
   const busyPathRef = useRef<string | null>(null);
   const recentLocalAddsRef = useRef<Map<string, number>>(new Map());
+  const lazyLoadedDirTreePathsRef = useRef<Set<string>>(new Set());
+  const lazyChildFetchControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const lazyChildFetchGenerationRef = useRef(0);
+  const prevExpandedFolderTreePathsRef = useRef<ReadonlySet<string>>(new Set());
+  const detectLazyFolderExpansionsRef = useRef<() => void>(() => {});
+  const revalidateExpandedLazyDirsRef = useRef<() => void>(() => {});
   const showHiddenFilesRef = useRef<boolean>(false);
-  const showAllFilesRef = useRef<boolean>(false);
   const refreshDocsScheduleRef = useRef<(() => void) | null>(null);
   const fileTreeHostRef = useRef<HTMLDivElement | null>(null);
   const handleSelectionChangeRef = useRef<(selectedPaths: readonly string[]) => void>(() => {});
@@ -1092,13 +1194,156 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const handleRenameErrorRef = useRef<(message: string) => void>((message) => toast.error(message));
   const handleDropCompleteRef = useRef<(event: FileTreeDropResult) => void>(() => {});
   const activeTargetRef = useRef(activeTarget);
+  const [emptyExternalFileDropActive, setEmptyExternalFileDropActive] = useState(false);
+
+  function clearConnectivityRetry() {
+    if (connectivityRetryTimerRef.current !== null) {
+      clearTimeout(connectivityRetryTimerRef.current);
+      connectivityRetryTimerRef.current = null;
+    }
+  }
+  function noteConnectivityRecovered() {
+    clearConnectivityRetry();
+    setReconnecting(false);
+  }
+  function reportServerReachableError(title: string) {
+    noteConnectivityRecovered();
+    setError(title);
+  }
+  function reportConnectivityFailure() {
+    clearConnectivityRetry();
+    if (getRelaunchInFlightSnapshot()) {
+      setError(null);
+      setReconnecting(true);
+      connectivityRetryTimerRef.current = setTimeout(() => {
+        connectivityRetryTimerRef.current = null;
+        refreshDocsScheduleRef.current?.();
+      }, CONNECTIVITY_RECONNECT_RETRY_MS);
+      return;
+    }
+    setReconnecting(false);
+    setError(t`Could not reach server`);
+  }
+
+  const isFirstRelaunchEffectRunRef = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relaunchInFlight is a transition trigger, not a read — the body calls the hoisted scheduler ref only. Sibling pattern at the showHiddenFiles flip effect below.
+  useEffect(() => {
+    if (isFirstRelaunchEffectRunRef.current) {
+      isFirstRelaunchEffectRunRef.current = false;
+      return;
+    }
+    refreshDocsScheduleRef.current?.();
+  }, [relaunchInFlight]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount/unmount-only; see comment above.
+  useEffect(() => clearConnectivityRetry, []);
+
+  useEffect(() => {
+    if (loading || documents.length === 0) return;
+    const shadow = fileTreeHostRef.current?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot;
+    if (!shadow) return;
+    const shadowRoot = shadow;
+
+    function clearSidebarDragInProgressSoon() {
+      if (sidebarDragClearTimerRef.current !== null) {
+        clearTimeout(sidebarDragClearTimerRef.current);
+      }
+      sidebarDragClearTimerRef.current = setTimeout(() => {
+        sidebarDragInProgressRef.current = false;
+        sidebarDragClearTimerRef.current = null;
+      }, 0);
+    }
+
+    function handleDragStart(event: Event) {
+      if (!(event instanceof DragEvent)) return;
+      const item = findTreeItemElement(event);
+      const rawPath = item?.dataset.itemPath;
+      if (!rawPath) return;
+
+      const treePath =
+        item.dataset.itemType === 'folder' ? folderPathToTreeDirectoryPath(rawPath) : rawPath;
+      const payload = sidebarDragPayloadForTreePath(
+        treePath,
+        documentsRef.current,
+        pageMetaRef.current,
+      );
+      if (!payload) return;
+
+      if (sidebarDragClearTimerRef.current !== null) {
+        clearTimeout(sidebarDragClearTimerRef.current);
+        sidebarDragClearTimerRef.current = null;
+      }
+      sidebarDragInProgressRef.current = true;
+      event.dataTransfer?.setData(OK_SIDEBAR_DRAG_MIME, serializeSidebarDragPayload(payload));
+    }
+
+    function handleExternalFileDragOver(event: Event) {
+      if (!(event instanceof DragEvent)) return;
+      if (!isExternalFileDrag(event)) return;
+      const target = resolveExternalFileDropTarget(event);
+      if (!target) {
+        clearExternalFileDropAffordance(externalFileDropTargetRef);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setExternalFileDropAffordance(externalFileDropTargetRef, target);
+    }
+
+    function handleExternalFileDragLeave(event: Event) {
+      if (!(event instanceof DragEvent)) return;
+      if (!isExternalFileDrag(event)) return;
+      const related = event.relatedTarget;
+      if (related instanceof Node && shadowRoot.contains(related)) return;
+      clearExternalFileDropAffordance(externalFileDropTargetRef);
+    }
+
+    function handleExternalFileDrop(event: Event) {
+      if (!(event instanceof DragEvent)) return;
+      if (!isExternalFileDrag(event)) return;
+      const target = resolveExternalFileDropTarget(event);
+      const files = filesFromExternalDrop(event);
+      if (!target || files.length === 0) {
+        clearExternalFileDropAffordance(externalFileDropTargetRef);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      clearExternalFileDropAffordance(externalFileDropTargetRef);
+      uploadExternalFilesRef.current(files, target.parentDir, target.busyPath);
+    }
+
+    shadow.addEventListener('dragstart', handleDragStart, { capture: true });
+    shadow.addEventListener('dragover', handleExternalFileDragOver, { capture: true });
+    shadow.addEventListener('dragleave', handleExternalFileDragLeave, { capture: true });
+    shadow.addEventListener('drop', handleExternalFileDrop, { capture: true });
+    shadow.addEventListener('dragend', clearSidebarDragInProgressSoon, { capture: true });
+    window.addEventListener('drop', clearSidebarDragInProgressSoon, true);
+    window.addEventListener('dragend', clearSidebarDragInProgressSoon, true);
+    return () => {
+      shadow.removeEventListener('dragstart', handleDragStart, { capture: true });
+      shadow.removeEventListener('dragover', handleExternalFileDragOver, { capture: true });
+      shadow.removeEventListener('dragleave', handleExternalFileDragLeave, { capture: true });
+      shadow.removeEventListener('drop', handleExternalFileDrop, { capture: true });
+      shadow.removeEventListener('dragend', clearSidebarDragInProgressSoon, { capture: true });
+      window.removeEventListener('drop', clearSidebarDragInProgressSoon, true);
+      window.removeEventListener('dragend', clearSidebarDragInProgressSoon, true);
+      clearExternalFileDropAffordance(externalFileDropTargetRef);
+      if (sidebarDragClearTimerRef.current !== null) {
+        clearTimeout(sidebarDragClearTimerRef.current);
+        sidebarDragClearTimerRef.current = null;
+      }
+      sidebarDragInProgressRef.current = false;
+    };
+  }, [documents.length, loading]);
 
   const {
     selectedFilePath,
     selectedFolderPath,
     navigationPath: activeNavigationPath,
   } = resolveFileTreeSelection(activeTarget, isNewTabActive ? null : activeDocName);
-  const activeTreePath = selectedFilePath
+  const baseActiveTreePath = selectedFilePath
     ? docNameToTreePath(
         selectedFilePath,
         documents.find(
@@ -1110,6 +1355,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       : activeTarget?.kind === 'asset'
         ? activeTarget.assetPath
         : null;
+  const activeTreePath = creationDirCleared ? null : baseActiveTreePath;
 
   const handoffInstallStates = useInstalledAgents().states;
   const { dispatch: dispatchHandoff } = useHandoffDispatch();
@@ -1120,17 +1366,16 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   };
   const { okignoreBinding, projectLocalBinding, merged } = useConfigContext();
   const showHiddenFiles = merged?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? false;
 
   const isAvailable = () => busyPathRef.current === null;
 
   const { model } = useFileTree({
     paths: [],
-    flattenEmptyDirectories: false,
     initialExpansion: 'closed',
     fileTreeSearchMode: 'hide-non-matches',
     initialVisibleRowCount: 18,
     stickyFolders: true,
+    ...FILE_TREE_DENSITY_OPTIONS,
     icons: {
       set: 'complete',
       spriteSheet: FILE_TREE_DECORATION_SPRITE_SHEET,
@@ -1162,22 +1407,36 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     },
     onSelectionChange: (selectedPaths) => handleSelectionChangeRef.current(selectedPaths),
     renderRowDecoration: ({ item }) => {
-      if (item.kind !== 'file') return null;
-      const doc = documentsRef.current.find(
-        (entry): entry is DocumentEntry =>
-          isDocumentEntry(entry) && docNameToTreePath(entry.docName, entry.docExt) === item.path,
+      if (item.kind === 'file') {
+        const doc = documentsRef.current.find(
+          (entry): entry is DocumentEntry =>
+            isDocumentEntry(entry) && docNameToTreePath(entry.docName, entry.docExt) === item.path,
+        );
+        if (doc?.isSymlink) {
+          const targetPath = doc.targetPath;
+          return {
+            icon: LINK_DECORATION_ICON_ID,
+            title: targetPath ? t`Symlink to ${targetPath}` : t`Symlink`,
+          };
+        }
+        if (isAgentTreePath(item.path)) {
+          return {
+            icon: AGENT_DECORATION_ICON_ID,
+            title: t`Agent configuration file`,
+          };
+        }
+        return null;
+      }
+      const folder = documentsRef.current.find(
+        (entry): entry is FolderEntry =>
+          isFolderEntry(entry) &&
+          folderPathToTreeDirectoryPath(entry.path) === folderPathToTreeDirectoryPath(item.path),
       );
-      if (doc?.isSymlink) {
-        const targetPath = doc.targetPath;
+      if (folder?.isSymlink) {
+        const targetPath = folder.targetPath;
         return {
           icon: LINK_DECORATION_ICON_ID,
           title: targetPath ? t`Symlink to ${targetPath}` : t`Symlink`,
-        };
-      }
-      if (isAgentTreePath(item.path)) {
-        return {
-          icon: AGENT_DECORATION_ICON_ID,
-          title: t`Agent configuration file`,
         };
       }
       return null;
@@ -1232,7 +1491,68 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     });
   };
 
-  const reconcileModelAfterChipRename = (
+  async function fetchLazyFolderChildren(folderTreePath: string) {
+    const generation = lazyChildFetchGenerationRef.current;
+    const controller = new AbortController();
+    lazyChildFetchControllersRef.current.set(folderTreePath, controller);
+    const result = await fetchShowAllDepth1Listing(
+      treeDirectoryPathToFolderPath(folderTreePath),
+      controller.signal,
+      t`Failed to load documents`,
+      t`Documents response did not match expected shape.`,
+    );
+    if (lazyChildFetchControllersRef.current.get(folderTreePath) === controller) {
+      lazyChildFetchControllersRef.current.delete(folderTreePath);
+    }
+    if (controller.signal.aborted || generation !== lazyChildFetchGenerationRef.current) return;
+    if (result.kind === 'network-error') {
+      reportConnectivityFailure();
+      console.warn('[FileTree] lazy folder children fetch failed:', folderTreePath, result.cause);
+      return;
+    }
+    if (result.kind === 'http-error') {
+      console.warn('[FileTree] lazy folder children http error:', folderTreePath, result.title);
+      reportServerReachableError(result.title);
+      return;
+    }
+    const bypassClientDotDrop = showHiddenFilesRef.current;
+    const children = filterVisibleEntries(result.entries, bypassClientDotDrop);
+    lazyLoadedDirTreePathsRef.current.add(folderTreePath);
+    setDocuments((prev) =>
+      spliceLazyFolderChildren(prev, folderTreePath, children, recentLocalAddsRef.current),
+    );
+    setError(null);
+    noteConnectivityRecovered();
+    if (result.truncated) setTruncatedShownCount(result.entries.length);
+  }
+
+  const detectLazyFolderExpansions = () => {
+    const expanded = collectExpandedFolderTreePaths();
+    const previous = prevExpandedFolderTreePathsRef.current;
+    prevExpandedFolderTreePathsRef.current = expanded;
+    for (const folderTreePath of expanded) {
+      if (previous.has(folderTreePath)) continue;
+      if (lazyLoadedDirTreePathsRef.current.has(folderTreePath)) continue;
+      if (lazyChildFetchControllersRef.current.has(folderTreePath)) continue;
+      const folderPath = treeDirectoryPathToFolderPath(folderTreePath);
+      const entry = documentsRef.current.find(
+        (candidate): candidate is Extract<FileEntry, { kind: 'folder' }> =>
+          isFolderEntry(candidate) && candidate.path === folderPath,
+      );
+      if (entry?.hasChildren === false) continue;
+      void fetchLazyFolderChildren(folderTreePath);
+    }
+  };
+
+  const revalidateExpandedLazyDirs = () => {
+    for (const folderTreePath of collectExpandedFolderTreePaths()) {
+      if (lazyLoadedDirTreePathsRef.current.has(folderTreePath)) continue;
+      if (lazyChildFetchControllersRef.current.has(folderTreePath)) continue;
+      void fetchLazyFolderChildren(folderTreePath);
+    }
+  };
+
+  const reconcileModelAfterExtensionlessRename = (
     current: readonly FileEntry[],
     next: readonly FileEntry[],
     renamed: readonly RenamedDocMapping[],
@@ -1246,7 +1566,10 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       );
       if (source == null) continue;
       if (model.getItem(toDocName) == null) continue;
-      const canonicalTreePath = docNameToTreePath(toDocName, source.docExt);
+      const destination = next.find(
+        (entry): entry is DocumentEntry => isDocumentEntry(entry) && entry.docName === toDocName,
+      );
+      const canonicalTreePath = docNameToTreePath(toDocName, destination?.docExt ?? source.docExt);
       model.move(toDocName, canonicalTreePath);
       lastCanonical = canonicalTreePath;
       reconciledCount += 1;
@@ -1476,6 +1799,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: this is a once-per-`t` mount-lifecycle setup (it wires the refresh scheduler + listeners). The connectivity helpers it calls (reportConnectivityFailure / noteConnectivityRecovered) only touch refs + stable setters and close over the same `t` already in deps, so listing them would re-create the scheduler every render for no behavioral gain.
   useEffect(() => {
     let active = true;
     let refreshController: AbortController | null = null;
@@ -1484,62 +1808,67 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       refreshController?.abort();
       const controller = new AbortController();
       refreshController = controller;
+      lazyChildFetchGenerationRef.current += 1;
+      for (const childController of lazyChildFetchControllersRef.current.values()) {
+        childController.abort();
+      }
+      lazyChildFetchControllersRef.current.clear();
+      lazyLoadedDirTreePathsRef.current.clear();
       try {
-        const showAll = showAllFilesRef.current;
-        const url = showAll ? '/api/documents?showAll=true' : '/api/documents';
-        const res = await fetch(url, {
+        const res = await fetch('/api/documents?showAll=true&dir=&depth=1', {
           signal: controller.signal,
-          headers: showAll ? SHOW_ALL_NDJSON_ACCEPT : undefined,
+          headers: SHOW_ALL_NDJSON_ACCEPT,
         });
-        if (showAll && isNdjsonResponse(res)) {
+        if (isNdjsonResponse(res)) {
           const { entries, truncated } = await consumeShowAllStream(res);
           if (!active) return;
-          const bypassClientDotDrop = showHiddenFilesRef.current || showAll;
-          const serverEntries = filterVisibleEntries(
-            entries as unknown as FileEntry[],
-            bypassClientDotDrop,
+          const bypassClientDotDrop = showHiddenFilesRef.current;
+          const serverEntries = filterVisibleEntries(toFileEntries(entries), bypassClientDotDrop);
+          setDocuments((prev) =>
+            spliceLazyFolderChildren(prev, '', serverEntries, recentLocalAddsRef.current),
           );
-          const merged = mergeAndPruneRecentLocalAdds(
-            serverEntries,
-            documentsRef.current,
-            recentLocalAddsRef.current,
-          );
-          setDocuments(merged);
           setError(null);
+          noteConnectivityRecovered();
           setTruncatedShownCount(truncated ? entries.length : null);
+          revalidateExpandedLazyDirsRef.current();
         } else {
           const parsed = await parseServerResponse(res, t`Failed to load documents`);
           if (!active) return;
           if (!parsed.ok) {
-            setError(parsed.title);
+            reportServerReachableError(parsed.title);
             setTruncatedShownCount(null);
           } else {
             const success = DocumentListSuccessSchema.safeParse(parsed.body);
             if (!success.success) {
-              setError(t`Documents response did not match expected shape.`);
+              reportServerReachableError(t`Documents response did not match expected shape.`);
               setTruncatedShownCount(null);
             } else {
-              const bypassClientDotDrop = showHiddenFilesRef.current || showAll;
+              const bypassClientDotDrop = showHiddenFilesRef.current;
               const serverEntries = filterVisibleEntries(
-                success.data.documents as unknown as FileEntry[],
+                toFileEntries(success.data.documents),
                 bypassClientDotDrop,
               );
-              const merged = mergeAndPruneRecentLocalAdds(
-                serverEntries,
-                documentsRef.current,
-                recentLocalAddsRef.current,
+              setDocuments((prev) =>
+                spliceLazyFolderChildren(prev, '', serverEntries, recentLocalAddsRef.current),
               );
-              setDocuments(merged);
               setError(null);
+              noteConnectivityRecovered();
               setTruncatedShownCount(
-                showAll && success.data.truncated === true ? success.data.documents.length : null,
+                success.data.truncated === true ? success.data.documents.length : null,
               );
+              revalidateExpandedLazyDirsRef.current();
             }
           }
         }
       } catch (err) {
         if (controller.signal.aborted) return;
-        if (active) setError(t`Could not reach server`);
+        if (active) {
+          if (err instanceof ShowAllStreamError) {
+            reportServerReachableError(err.message);
+          } else {
+            reportConnectivityFailure();
+          }
+        }
         console.warn('[FileTree] fetch failed:', err);
       }
       if (active) setLoading(false);
@@ -1564,6 +1893,10 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       active = false;
       refreshDocsScheduleRef.current = null;
       scheduler.dispose();
+      for (const childController of lazyChildFetchControllersRef.current.values()) {
+        childController.abort();
+      }
+      lazyChildFetchControllersRef.current.clear();
       window.removeEventListener('focus', handleResume);
       window.removeEventListener('visibilitychange', handleResume);
       unsubscribe();
@@ -1579,16 +1912,6 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     }
     refreshDocsScheduleRef.current?.();
   }, [showHiddenFiles]);
-
-  const isFirstShowAllFilesEffectRunRef = useRef(true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: showAllFiles is a flip-detection trigger, not a read — the effect body reads refs only. Sibling pattern at the treePathsSignature reset effect above.
-  useEffect(() => {
-    if (isFirstShowAllFilesEffectRunRef.current) {
-      isFirstShowAllFilesEffectRunRef.current = false;
-      return;
-    }
-    refreshDocsScheduleRef.current?.();
-  }, [showAllFiles]);
 
   useEffect(() => {
     let active = true;
@@ -1631,10 +1954,20 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     treePathsSignature,
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setCreationDirCleared is a stable state setter; baseActiveTreePath is the sole trigger.
+  useEffect(() => {
+    setCreationDirCleared(false);
+  }, [baseActiveTreePath]);
+
+  useEffect(() => {
+    creationDirClearedRef.current = creationDirCleared;
+    for (const listener of handleListenersRef.current) listener();
+  }, [creationDirCleared]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeAncestorTreePathsSignature + treePathsSignature are re-run triggers — the row's visible index shifts when ancestors expand or the tree repopulates.
   useEffect(() => {
     if (loading || !activeTreePath) return;
-    revealActiveRow(fileTreeHostRef.current, model);
+    revealActiveRow(model);
   }, [activeTreePath, activeAncestorTreePathsSignature, treePathsSignature, loading, model]);
 
   useEffect(() => {
@@ -1647,6 +1980,10 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
         }
       }
     });
+  }, [model]);
+
+  useEffect(() => {
+    return model.subscribe(() => detectLazyFolderExpansionsRef.current());
   }, [model]);
 
   useEffect(() => {
@@ -1666,9 +2003,32 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       folderPath: string | null;
       assetPath: string | null;
     },
+    renamedDocExtensions: RenamedDocExtensionMapping[] = [],
   ) => {
     const currentActiveDocName = activeBeforeRename?.docName ?? activeDocNameRef.current;
-    const nextActiveDocName = remapActiveDocName(currentActiveDocName, renamed);
+    const docToAssetRenames = new Map<string, string>();
+    const assetToDocRenames = new Map<string, string>();
+    for (const entry of documentsRef.current) {
+      if (isDocumentEntry(entry)) {
+        const assetPath = renamedAssets.find(
+          (renamedAsset) =>
+            renamedAsset.fromPath === docNameToTreePath(entry.docName, entry.docExt),
+        )?.toPath;
+        if (assetPath) docToAssetRenames.set(entry.docName, assetPath);
+        continue;
+      }
+      if (isAssetEntry(entry)) {
+        const docPath = renamedAssets.find(
+          (renamedAsset) => renamedAsset.fromPath === entry.path,
+        )?.toPath;
+        if (docPath && hasSupportedDocumentExtension(docPath)) {
+          assetToDocRenames.set(entry.path, treeFilePathToDocName(docPath));
+        }
+      }
+    }
+    const activeDocToAssetPath = currentActiveDocName
+      ? (docToAssetRenames.get(currentActiveDocName) ?? null)
+      : null;
     const currentActiveFolderPath =
       activeBeforeRename?.folderPath ??
       (activeTargetRef.current?.kind === 'folder' ? activeTargetRef.current.folderPath : null);
@@ -1678,22 +2038,46 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     const currentActiveAssetPath =
       activeBeforeRename?.assetPath ??
       (activeTargetRef.current?.kind === 'asset' ? activeTargetRef.current.assetPath : null);
-    const nextActiveAssetPath = currentActiveAssetPath
-      ? (renamedAssets.find((entry) => entry.fromPath === currentActiveAssetPath)?.toPath ??
-        remapPathForFolderRenames(currentActiveAssetPath, renamedFolders))
+    const activeAssetToDoc = currentActiveAssetPath
+      ? (assetToDocRenames.get(currentActiveAssetPath) ?? null)
       : null;
+    const nextActiveDocName = activeDocToAssetPath
+      ? null
+      : (activeAssetToDoc ?? remapActiveDocName(currentActiveDocName, renamed));
+    const nextActiveAssetPath =
+      activeDocToAssetPath ??
+      (currentActiveAssetPath
+        ? activeAssetToDoc
+          ? null
+          : (renamedAssets.find((entry) => entry.fromPath === currentActiveAssetPath)?.toPath ??
+            remapPathForFolderRenames(currentActiveAssetPath, renamedFolders))
+        : null);
 
     captureRenameSnapshots(renamed);
-    const cleanupDocNames = planRenameCleanupCalls(renamed, getPoolActiveDocName(), poolHas);
+    const cleanupDocNames = [
+      ...planRenameCleanupCalls(renamed, getPoolActiveDocName(), poolHas),
+      ...docToAssetRenames.keys(),
+    ];
     await Promise.all(cleanupDocNames.map((docName) => closeAndClearForRename(docName)));
     for (const entry of renamed) {
       addPage(entry.toDocName);
     }
+    for (const entry of assetToDocRenames.values()) {
+      addPage(entry);
+    }
     remapTabsForRename(renamed, renamedFolders, renamedAssets);
 
+    let nextDocumentsForRename: FileEntry[] | null = null;
     setDocuments((current) => {
-      const next = applyRenameToDocuments(current, renamed, renamedFolders, renamedAssets);
-      reconcileModelAfterChipRename(current, next, renamed, renamedAssets);
+      const next = applyRenameToDocuments(
+        current,
+        renamed,
+        renamedFolders,
+        renamedAssets,
+        renamedDocExtensions,
+      );
+      nextDocumentsForRename = next;
+      reconcileModelAfterExtensionlessRename(current, next, renamed, renamedAssets);
       markNextDocumentsAsApplied(next);
       return next;
     });
@@ -1705,13 +2089,13 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     ) {
       navigateToFolderWithPulse(nextActiveFolderPath);
     } else if (nextActiveDocName && nextActiveDocName !== currentActiveDocName) {
-      window.location.hash = hashFromDocName(nextActiveDocName);
+      navigateToWithPulse(nextActiveDocName);
+      focusEditorAfterRename(nextActiveDocName);
     } else if (
-      currentActiveAssetPath &&
       nextActiveAssetPath &&
-      nextActiveAssetPath !== currentActiveAssetPath
+      (activeDocToAssetPath || nextActiveAssetPath !== currentActiveAssetPath)
     ) {
-      navigateToAssetWithPulse(nextActiveAssetPath);
+      navigateToAssetWithPulse(nextActiveAssetPath, nextDocumentsForRename ?? documentsRef.current);
     }
     emitDocumentsChanged(['files', 'backlinks', 'graph']);
   };
@@ -1730,22 +2114,15 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
         event.sourcePath,
         event.destinationPath,
         event.isFolder,
-        sourceIsAsset,
       );
-      if (validation.kind === 'block') {
-        toast.error(
-          t`File extensions are managed automatically - please rename without changing the extension`,
-        );
-        queueMicrotask(() => {
-          resetModelToDocuments();
-        });
-        clearPendingCreate();
-        setBusyPath(null);
-        return;
-      }
-      const destinationTreePath = sourceIsAsset
-        ? validation.destinationPath
-        : normalizeTreePathForKind(validation.destinationPath, event.isFolder);
+      const documentBecomesFile =
+        !event.isFolder &&
+        !sourceIsAsset &&
+        !hasSupportedDocumentExtension(validation.destinationPath);
+      const destinationTreePath =
+        sourceIsAsset || documentBecomesFile
+          ? validation.destinationPath
+          : normalizeTreePathForKind(validation.destinationPath, event.isFolder);
 
       const payload = event.isFolder
         ? {
@@ -1753,7 +2130,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
             fromPath: treeDirectoryPathToFolderPath(sourceTreePath),
             toPath: treeDirectoryPathToFolderPath(destinationTreePath),
           }
-        : sourceIsAsset
+        : sourceIsAsset || documentBecomesFile
           ? {
               kind: 'asset' as const,
               fromPath: sourceTreePath,
@@ -1762,7 +2139,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
           : {
               kind: 'file' as const,
               fromPath: treeFilePathToDocName(sourceTreePath),
-              toPath: treeFilePathToDocName(destinationTreePath),
+              toPath: destinationTreePath,
             };
       const activeBeforeRename = {
         docName: activeDocNameRef.current,
@@ -1809,6 +2186,12 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
             : [],
           success.renamedAssets,
           activeBeforeRename,
+          !event.isFolder && !sourceIsAsset && !documentBecomesFile
+            ? success.renamed.flatMap((entry): RenamedDocExtensionMapping[] => {
+                const docExt = getFileExtension(destinationTreePath);
+                return docExt ? [{ toDocName: entry.toDocName, docExt }] : [];
+              })
+            : [],
         );
       } catch (reconcileErr) {
         console.warn('[FileTree] post-rename reconciliation failed', {
@@ -1928,6 +2311,130 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       toast.error(t`Network error — please try again`);
       resetModelToDocuments();
       setBusyPath(null);
+    }
+  }
+
+  async function uploadExternalFilesToTarget(
+    files: readonly File[],
+    parentDir: string,
+    uploadBusyPath: string,
+  ) {
+    if (files.length === 0 || busyPathRef.current !== null) return;
+
+    const clearBusyState = () => {
+      busyPathRef.current = null;
+      setBusyPath(null);
+    };
+    busyPathRef.current = uploadBusyPath;
+    setBusyPath(uploadBusyPath);
+    setError(null);
+
+    const uploadedEntries: FileEntry[] = [];
+    let uploadedCount = 0;
+    let failedCount = 0;
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append(
+        'parentDocName',
+        uploadParentDocNameForFolderDrop(parentDir, file.name || 'upload'),
+      );
+
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const parsed = await parseServerResponse(res, t`Failed to upload file`);
+        if (!parsed.ok) {
+          failedCount += 1;
+          toast.error(parsed.title, { description: file.name });
+          continue;
+        }
+
+        const success = parseSuccessOrWarn(
+          UploadAssetSuccessSchema,
+          parsed.body,
+          'upload:drop',
+          null,
+        );
+        if (success === null) {
+          failedCount += 1;
+          toast.error(t`Failed to upload file`, { description: file.name });
+          continue;
+        }
+        const uploadedPath = uploadedPathForSidebarDrop(parentDir, success);
+        if (success.deduped === true) {
+          failedCount += 1;
+          toast.error(t`File already exists`, { description: uploadedPath });
+          continue;
+        }
+        uploadedCount += 1;
+        const entry = fileEntryFromUploadedPath(uploadedPath, file);
+        if (entry) uploadedEntries.push(entry);
+      } catch (err) {
+        failedCount += 1;
+        console.warn('[FileTree] external file upload failed:', err);
+        toast.error(
+          err instanceof TypeError ? t`Network error — please try again` : t`Failed to upload file`,
+          {
+            description: file.name,
+          },
+        );
+      }
+    }
+
+    try {
+      if (uploadedEntries.length > 0) {
+        for (const entry of uploadedEntries) {
+          if (isDocumentEntry(entry)) addPage(entry.docName);
+        }
+        setDocuments((current) => {
+          const existing = new Set(current.map(fileEntryToTreePath));
+          let changed = false;
+          const next = [...current];
+          for (const entry of uploadedEntries) {
+            const treePath = fileEntryToTreePath(entry);
+            recentLocalAddsRef.current.set(treePath, Date.now());
+            if (existing.has(treePath)) continue;
+            existing.add(treePath);
+            next.push(entry);
+            changed = true;
+          }
+          if (!changed) return current;
+          resetModelToDocuments(next);
+          markNextDocumentsAsApplied(next);
+          return next;
+        });
+      }
+
+      if (uploadedCount > 0) {
+        emitDocumentsChanged(['files', 'backlinks', 'graph']);
+        refreshDocsScheduleRef.current?.();
+        toast.success(
+          plural(uploadedCount, {
+            one: 'Uploaded one file',
+            other: `Uploaded ${uploadedCount} files`,
+          }),
+          { description: parentDir || t`Project root` },
+        );
+      }
+
+      if (failedCount > 0) {
+        setError(
+          uploadedCount > 0
+            ? plural(failedCount, {
+                one: '1 file failed to upload',
+                other: `${failedCount} files failed to upload`,
+              })
+            : t`Failed to upload file`,
+        );
+      }
+      clearBusyState();
+    } catch (err) {
+      const message = t`Upload may have succeeded but the sidebar is out of date — refresh to resync`;
+      console.warn('[FileTree] upload post-upload reconciliation failed:', err);
+      toast.error(message);
+      setError(message);
+      clearBusyState();
     }
   }
 
@@ -2116,21 +2623,29 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
 
   useLayoutEffect(() => {
     documentsRef.current = documents;
+    pageMetaRef.current = pageMeta;
     activeDocNameRef.current = activeDocName;
     activeTargetRef.current = activeTarget;
     assetTreePathsRef.current = assetTreePaths;
     busyPathRef.current = busyPath;
     showHiddenFilesRef.current = showHiddenFiles;
-    showAllFilesRef.current = showAllFiles;
     treePathsRef.current = treePaths;
     folderTreePathsRef.current = folderTreePaths;
     activeAncestorTreePathsRef.current = activeAncestorTreePaths;
+    detectLazyFolderExpansionsRef.current = detectLazyFolderExpansions;
+    revalidateExpandedLazyDirsRef.current = revalidateExpandedLazyDirs;
     cleanupPendingCreateRef.current = cleanupPendingCreate;
+    uploadExternalFilesRef.current = (files, parentDir, uploadBusyPath) => {
+      void uploadExternalFilesToTarget(files, parentDir, uploadBusyPath);
+    };
     handleSelectionChangeRef.current = (selectedPaths) => {
-      if (suppressSelectionRef.current) return;
+      if (suppressSelectionRef.current || sidebarDragInProgressRef.current) return;
       if (selectedPaths.length !== 1) return;
       const selected = selectedPaths[0];
-      if (selected) activateTreePath(normalizeSelectionPath(selected), documents);
+      if (selected) {
+        setCreationDirCleared(false);
+        activateTreePath(normalizeSelectionPath(selected), documents);
+      }
     };
     handleRenameErrorRef.current = (message) => {
       if (recoverMarkdownRenameConflict(message)) return;
@@ -2244,7 +2759,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     if (loading || documents.length === 0) return;
     const shadow = fileTreeHostRef.current?.querySelector(FILE_TREE_TAG_NAME)?.shadowRoot;
     if (!shadow) return;
-    const apply = () => applyRenameChip(shadow);
+    const apply = () => applyRenameInputAffordance(shadow);
     apply();
     const observer = new MutationObserver(apply);
     observer.observe(shadow, {
@@ -2317,8 +2832,16 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
         folderStateCacheRef.current = next;
         return next;
       },
+      isCreationTargetCleared() {
+        return creationDirClearedRef.current;
+      },
       subscribe(listener: () => void) {
-        return model.subscribe(listener);
+        handleListenersRef.current.add(listener);
+        const unsubscribeModel = model.subscribe(listener);
+        return () => {
+          handleListenersRef.current.delete(listener);
+          unsubscribeModel();
+        };
       },
     }),
     [model],
@@ -2746,7 +3269,13 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
     const item = findTreeItemElement(event.nativeEvent);
-    if (!item || item.getAttribute('aria-selected') !== 'true') return;
+    if (!item) {
+      if (clickIsInTreeContentArea(event.nativeEvent)) {
+        setCreationDirCleared(true);
+      }
+      return;
+    }
+    if (item.getAttribute('aria-selected') !== 'true') return;
 
     const rawPath = item.dataset.itemPath;
     if (!rawPath) return;
@@ -2767,20 +3296,70 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     queueMicrotask(() => activateTreePath(path));
   }
 
+  function handleEmptyExternalFileDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    if (!isExternalFileDrag(event.nativeEvent)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setEmptyExternalFileDropActive(true);
+  }
+
+  function handleEmptyExternalFileDragLeave(event: ReactDragEvent<HTMLDivElement>) {
+    const related = event.relatedTarget;
+    if (related instanceof Node && event.currentTarget.contains(related)) return;
+    setEmptyExternalFileDropActive(false);
+  }
+
+  function handleEmptyExternalFileDrop(event: ReactDragEvent<HTMLDivElement>) {
+    if (!isExternalFileDrag(event.nativeEvent)) return;
+    const files = filesFromExternalDrop(event.nativeEvent);
+    if (files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setEmptyExternalFileDropActive(false);
+    void uploadExternalFilesToTarget(files, '', FILE_TREE_EXTERNAL_FILE_DROP_BUSY_PATH);
+  }
+
   if (loading) {
     return <FileTreeSkeleton />;
   }
 
+  const reconnectNotice = reconnecting
+    ? relaunchInFlight
+      ? t`Relaunching to install the update…`
+      : t`Reconnecting…`
+    : null;
+
   if (documents.length === 0) {
+    if (reconnectNotice !== null) {
+      return (
+        <div className="flex flex-1 items-center justify-center py-8">
+          <span role="status" className="select-none text-sidebar-foreground/50 text-sm">
+            {reconnectNotice}
+          </span>
+        </div>
+      );
+    }
     if (error) {
       return (
         <div className="flex flex-1 items-center justify-center py-8">
-          <span className="select-none text-sidebar-foreground/50 text-sm">{error}</span>
+          <span role="alert" className="select-none text-sidebar-foreground/50 text-sm">
+            {error}
+          </span>
         </div>
       );
     }
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8">
+      <section
+        aria-label={t`File drop zone`}
+        className={cn(
+          'flex flex-1 flex-col items-center justify-center gap-3 rounded-md py-8',
+          emptyExternalFileDropActive && 'bg-primary/5 ring-2 ring-primary/70 ring-inset',
+        )}
+        onDragOver={handleEmptyExternalFileDragOver}
+        onDragLeave={handleEmptyExternalFileDragLeave}
+        onDrop={handleEmptyExternalFileDrop}
+      >
         <span className="select-none text-sidebar-foreground/30 text-sm">
           <Trans>No files yet.</Trans>
         </span>
@@ -2792,36 +3371,41 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
         >
           <Trans>Create your first file</Trans>
         </Button>
-      </div>
+      </section>
     );
   }
 
   const anyActionBusy = busyPath !== null;
   const primaryDeleteTarget = deleteRequest?.targets[0] ?? null;
+  let truncationNotice: string | null = null;
+  if (truncatedShownCount !== null) {
+    const formattedCount = new Intl.NumberFormat(i18n.locale).format(truncatedShownCount);
+    truncationNotice = plural(truncatedShownCount, {
+      one: 'Showing the first item in one folder — the rest of that folder is hidden.',
+      other: `Showing the first ${formattedCount} items in one folder — the rest of that folder is hidden.`,
+    });
+  }
   return (
     <>
       <div ref={fileTreeHostRef} className="flex min-h-0 flex-1 flex-col">
         <PierreFileTree
           header={
-            (error || truncatedShownCount !== null) && (
+            (error || reconnectNotice !== null || truncationNotice !== null) && (
               <>
-                {error && (
-                  <span role="alert" className="px-3 pb-1 text-destructive text-xs">
-                    {error}
-                  </span>
+                {reconnectNotice !== null ? (
+                  <FileTreeHeaderNotice kind="reconnecting">{reconnectNotice}</FileTreeHeaderNotice>
+                ) : (
+                  error && <FileTreeHeaderNotice kind="error">{error}</FileTreeHeaderNotice>
                 )}
-                {truncatedShownCount !== null && (
-                  <span role="status" className="px-3 pb-1 text-muted-foreground text-xs">
-                    <Trans>
-                      Showing first {truncatedShownCount} items — use search to find others
-                    </Trans>
-                  </span>
+                {truncationNotice !== null && (
+                  <FileTreeHeaderNotice kind="info">{truncationNotice}</FileTreeHeaderNotice>
                 )}
               </>
             )
           }
           model={model}
           style={createFileTreeStyle(resolvedTheme)}
+          {...{ [FILE_TREE_CREATION_CLEARED_ATTR]: creationDirCleared ? '' : undefined }}
           onClickCapture={handleTreeClickCapture}
           onMouseMove={handleTreeMouseMove}
           onMouseLeave={cancelCurrentHoverPrewarm}
@@ -2948,6 +3532,47 @@ function findTreeItemElement(event: MouseEvent): HTMLElement | null {
   return null;
 }
 
+function findTreeVirtualizedRootElement(event: MouseEvent): HTMLElement | null {
+  for (const entry of event.composedPath()) {
+    if (entry instanceof HTMLElement && entry.matches('[data-file-tree-virtualized-root]')) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function resolveExternalFileDropTarget(event: MouseEvent): ExternalFileDropTarget | null {
+  const item = findTreeItemElement(event);
+  if (item) {
+    const rawPath = item.dataset.itemPath;
+    if (!rawPath) return null;
+    const isFolder = item.dataset.itemType === 'folder';
+    const parentDir = parentFolderPathForTreeItemDropTarget(rawPath, isFolder);
+    return {
+      parentDir,
+      row: item,
+      root: null,
+      busyPath: isFolder ? folderPathToTreeDirectoryPath(parentDir) : rawPath,
+    };
+  }
+  if (!clickIsInTreeContentArea(event)) return null;
+  return {
+    parentDir: '',
+    row: null,
+    root: findTreeVirtualizedRootElement(event),
+    busyPath: FILE_TREE_EXTERNAL_FILE_DROP_BUSY_PATH,
+  };
+}
+
+function clickIsInTreeContentArea(event: MouseEvent): boolean {
+  for (const entry of event.composedPath()) {
+    if (entry instanceof HTMLElement && entry.matches('[data-file-tree-virtualized-scroll]')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const FILE_TREE_SKELETON_ROW_WIDTHS = ['w-3/4', 'w-2/3', 'w-4/5', 'w-1/2', 'w-3/5', 'w-2/3'];
 
 function FileTreeSkeleton() {
@@ -2970,5 +3595,33 @@ function FileTreeSkeleton() {
         </div>
       ))}
     </div>
+  );
+}
+
+function FileTreeHeaderNotice({
+  kind,
+  children,
+}: {
+  kind: 'error' | 'info' | 'reconnecting';
+  children: ReactNode;
+}) {
+  const Icon = kind === 'error' ? TriangleAlert : kind === 'reconnecting' ? RefreshCw : Info;
+  return (
+    <span
+      role={kind === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'mx-2 mb-1 flex items-start gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-snug',
+        kind === 'error' ? 'text-destructive' : 'text-muted-foreground',
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          'mt-0.5 size-3.5 shrink-0',
+          kind === 'reconnecting' && 'animate-spin motion-reduce:animate-none',
+        )}
+      />
+      <span className="min-w-0">{children}</span>
+    </span>
   );
 }

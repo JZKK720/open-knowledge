@@ -12,6 +12,7 @@ export {
   type EditorId,
   type EditorMcpTarget,
   isEntryUpToDate,
+  isOwnManagedEntry,
   type McpInstallOptions,
 } from './commands/editors.ts';
 export {
@@ -62,6 +63,7 @@ export {
   type ProjectAiIntegrationsResult,
   writeProjectAiIntegrations,
 } from './integrations/write-project-ai-integrations.ts';
+export { assertProjectPathSafe } from './integrations/write-project-skill.ts';
 export {
   addOkPathsToGitExclude,
   type ExcludeWriteResult,

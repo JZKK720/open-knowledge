@@ -14,6 +14,9 @@ export const docs = defineDocs({
     schema: frontmatterSchema.extend({
       sidebarTitle: z.string().optional(),
       keywords: z.string().optional(),
+      // Set `footer: false` on hub/index pages to hide Fumadocs' prev/next
+      // page navigation when the page already curates its own forward links.
+      footer: z.boolean().optional(),
     }),
   },
 });

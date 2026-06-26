@@ -25,6 +25,7 @@ interface PageListContextValue {
   pageMeta: ReadonlyMap<string, PageMeta>;
   folderPaths: Set<string>;
   assetPaths: Set<string>;
+  filePaths: Set<string>;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -43,7 +44,7 @@ interface PageSummary {
 }
 
 interface DocumentListEntry {
-  kind?: 'document' | 'asset' | 'folder';
+  kind?: 'document' | 'asset' | 'folder' | 'file';
   path?: string;
 }
 
@@ -95,14 +96,18 @@ async function loadPages(): Promise<PageSummary[]> {
   return [];
 }
 
-async function loadDocumentListSummary(): Promise<{ assetPaths: string[]; folderPaths: string[] }> {
+async function loadDocumentListSummary(): Promise<{
+  assetPaths: string[];
+  folderPaths: string[];
+  filePaths: string[];
+}> {
   const r = await fetch('/api/documents');
   if (!r.ok) {
     const body = (await r.json().catch(() => null)) as unknown;
     throw new Error(parseApiError(body) ?? `/api/documents responded with ${r.status}`);
   }
   const data: { documents?: DocumentListEntry[] } = await r.json();
-  if (!Array.isArray(data.documents)) return { assetPaths: [], folderPaths: [] };
+  if (!Array.isArray(data.documents)) return { assetPaths: [], folderPaths: [], filePaths: [] };
   const assetPaths = data.documents
     .filter((entry): entry is DocumentListEntry & { kind: 'asset'; path: string } => {
       return entry.kind === 'asset' && typeof entry.path === 'string' && entry.path.length > 0;
@@ -113,7 +118,12 @@ async function loadDocumentListSummary(): Promise<{ assetPaths: string[]; folder
       return entry.kind === 'folder' && typeof entry.path === 'string' && entry.path.length > 0;
     })
     .map((entry) => entry.path);
-  return { assetPaths, folderPaths };
+  const filePaths = data.documents
+    .filter((entry): entry is DocumentListEntry & { kind: 'file'; path: string } => {
+      return entry.kind === 'file' && typeof entry.path === 'string' && entry.path.length > 0;
+    })
+    .map((entry) => entry.path);
+  return { assetPaths, folderPaths, filePaths };
 }
 
 function logLoadPagesError(err: unknown) {
@@ -130,6 +140,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
   const [serverPageMeta, setServerPageMeta] = useState(new Map<string, PageMeta>());
   const [serverAssetPaths, setServerAssetPaths] = useState(new Set<string>());
   const [serverFolderPaths, setServerFolderPaths] = useState(new Set<string>());
+  const [serverFilePaths, setServerFilePaths] = useState(new Set<string>());
   const [optimisticPages, setOptimisticPages] = useState(new Set<string>());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +152,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
       loadPages(),
       loadDocumentListSummary().catch((err) => {
         logLoadAssetsError(err);
-        return { assetPaths: [], folderPaths: [] };
+        return { assetPaths: [], folderPaths: [], filePaths: [] };
       }),
     ])
       .then(([pageSummaries, documentList]) => {
@@ -169,6 +180,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
         );
         setServerAssetPaths(new Set(documentList.assetPaths));
         setServerFolderPaths(new Set(documentList.folderPaths));
+        setServerFilePaths(new Set(documentList.filePaths));
         setOptimisticPages((prev) => pruneConfirmedOptimisticPages(prev, pageNames));
         setError(null);
       })
@@ -219,6 +231,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
   const pageTitles = mergePageTitles(serverPageTitles, optimisticPages);
   const pageMeta: ReadonlyMap<string, PageMeta> = serverPageMeta;
   const assetPaths = serverAssetPaths;
+  const filePaths = serverFilePaths;
   const folderPaths = new Set([...deriveKnownFolderPaths(pages), ...serverFolderPaths]);
   const pagesBySlug = buildPagesBySlugIndex(pages, toWikiLinkSlug);
   const pagesByBasename = buildPagesByBasenameIndex(pages, toWikiLinkSlug);
@@ -231,9 +244,10 @@ export function PageListProvider({ children }: { children: ReactNode }) {
       pagesBySlug,
       pagesByBasename,
       assetPaths,
+      filePaths,
       pageIcons,
     });
-  }, [pages, folderPaths, pagesBySlug, pagesByBasename, assetPaths, pageIcons]);
+  }, [pages, folderPaths, pagesBySlug, pagesByBasename, assetPaths, filePaths, pageIcons]);
 
   return (
     <PageListContext
@@ -245,6 +259,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
         pageMeta,
         folderPaths,
         assetPaths,
+        filePaths,
         loading,
         error,
         refetch,

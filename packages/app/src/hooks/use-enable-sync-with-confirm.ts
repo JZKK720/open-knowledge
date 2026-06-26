@@ -15,6 +15,17 @@ export function useSyncEnabledWriter(): SyncEnabledWriter | null {
   };
 }
 
+type SyncDefaultWriter = (next: boolean | null) => { ok: true } | { ok: false; error: string };
+
+export function useSyncDefaultWriter(): SyncDefaultWriter | null {
+  const { projectBinding } = useConfigContext();
+  if (projectBinding === null) return null;
+  return (next: boolean | null) => {
+    const result = projectBinding.patch({ autoSync: { default: next } });
+    return result.ok ? { ok: true } : { ok: false, error: humanFormat(result.error) };
+  };
+}
+
 interface UseEnableSyncWithConfirmResult {
   confirmOpen: boolean;
   setConfirmOpen: (open: boolean) => void;

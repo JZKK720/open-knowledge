@@ -12,6 +12,7 @@ import {
   ensureProjectGit,
 } from '@inkeep/open-knowledge-server';
 import * as Y from 'yjs';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { waitForSync } from './test-harness.ts';
 
 const IDLE_SHUTDOWN_MS = 400;
@@ -29,6 +30,7 @@ beforeAll(async () => {
   writeFileSync(join(okDir, 'config.yml'), '', 'utf-8');
   writeFileSync(join(okDir, '.gitignore'), '', 'utf-8');
   booted = await bootServer({
+    host: '127.0.0.1',
     config: ConfigSchema.parse({}),
     contentDir,
     port: 0,
@@ -39,7 +41,7 @@ beforeAll(async () => {
     idleShutdownMs: IDLE_SHUTDOWN_MS,
   });
   lockPath = resolve(contentDir, OK_DIR, LOCAL_DIR, 'server.lock');
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await booted?.destroy();
@@ -58,13 +60,13 @@ test('closing spawning editor leaves sibling editor connected; idle-shutdown fir
   const yDocA = new Y.Doc();
   const yDocB = new Y.Doc();
   const providerA = new HocuspocusProvider({
-    url: `ws://localhost:${port}/collab`,
+    url: `ws://127.0.0.1:${port}/collab`,
     name: docA,
     document: yDocA,
     connect: true,
   });
   const providerB = new HocuspocusProvider({
-    url: `ws://localhost:${port}/collab`,
+    url: `ws://127.0.0.1:${port}/collab`,
     name: docB,
     document: yDocB,
     connect: true,

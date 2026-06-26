@@ -5,6 +5,7 @@ import {
   ShareConstructUrlResponseSchema,
 } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
+import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import { resolveWithinRoot } from './path-safety.ts';
 import { encodeDocName, resolvePreviewUrlForTool } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
@@ -19,10 +20,10 @@ import {
 
 type ShareKind = 'doc' | 'folder';
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   "[Requires: Hocuspocus server] Build a shareable GitHub-substrate URL (`https://openknowledge.ai/d/...`) pinned to the project's current branch + the focused target (a doc or a folder). Read-only against the working tree — no commits, no pushes, no `git fetch`.",
   '',
-  'Use this when the user asks for a share link / shareable link / URL to send to a teammate. Recipients open the link to receive the doc (or folder subtree) into their own Open Knowledge install.',
+  'Use this when the user asks for a share link / shareable link / URL to send to a teammate. Recipients open the link to receive the doc (or folder subtree) into their own OpenKnowledge install.',
   '',
   '**Publishing is a user act.** Agents do NOT publish projects to GitHub from this tool. When the project has no GitHub remote, this tool returns an error pointing the user at the Share wizard (or `gh repo create` + `git push`) — it does not run those steps itself.',
   '',
@@ -94,7 +95,7 @@ function isExistingDirectory(abs: string): boolean {
 }
 
 function resolveExistingDocPath(projectDir: string, absBase: string): string | null {
-  for (const ext of ['.mdx', '.md'] as const) {
+  for (const ext of SUPPORTED_DOC_EXTENSIONS) {
     const absWithExt = `${absBase}${ext}`;
     if (existsSync(absWithExt)) {
       const projectContained = resolveWithinRoot(projectDir, absWithExt);

@@ -117,3 +117,40 @@ describe('planSeed — nested .ok/ era', () => {
     await expect(planSeed({ projectDir, rootDir: '../escape' })).rejects.toThrow(SeedRootDirError);
   });
 });
+
+describe('planSeed — codebase-wiki nested paths', () => {
+  let projectDir: string;
+  const WIKI_PACK = STARTER_PACKS['codebase-wiki'];
+
+  beforeEach(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), 'seed-plan-wiki-'));
+    mkdirSync(join(projectDir, '.ok'), { recursive: true });
+    writeFileSync(join(projectDir, '.ok', 'config.yml'), '', 'utf-8');
+  });
+
+  afterEach(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  test('plans nested folder + .ok/frontmatter.yml + template entries with slash-bearing template ids', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    const byPath = new Map(plan.created.map((e) => [e.path, e]));
+
+    for (const folder of WIKI_PACK.folders) {
+      expect(byPath.has(folder.path)).toBe(true); // e.g. wiki/architecture
+      expect(byPath.get(`${folder.path}/.ok/frontmatter.yml`)?.template).toBe(
+        `${folder.path}/.ok/frontmatter.yml`,
+      );
+      expect(
+        byPath.get(`${folder.path}/.ok/templates/${folder.starterTemplate}.md`)?.template,
+      ).toBe(`${folder.path}/.ok/templates/${folder.starterTemplate}.md`);
+    }
+  });
+
+  test('plans wiki/-prefixed rootFiles at their nested paths', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    const createdPaths = new Set(plan.created.map((e) => e.path));
+    expect(createdPaths.has('wiki/OVERVIEW.md')).toBe(true);
+    expect(createdPaths.has('wiki/log.md')).toBe(true);
+  });
+});

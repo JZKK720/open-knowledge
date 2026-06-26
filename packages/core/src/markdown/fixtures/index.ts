@@ -43,6 +43,39 @@ export function loadBuiltInFixtures(): BuiltInFixture[] {
   return JSON.parse(readFileSync(fixturePath('mdx', 'built-ins.json'), 'utf8')) as BuiltInFixture[];
 }
 
+export interface IndentedJsxFixture {
+  name: string;
+  source: string;
+  notes?: string;
+}
+
+export function loadIndentedJsxFixtures(): IndentedJsxFixture[] {
+  return JSON.parse(
+    readFileSync(fixturePath('mdx', 'indented-jsx.json'), 'utf8'),
+  ) as IndentedJsxFixture[];
+}
+
+export interface LargeEmbedFixture {
+  name: string;
+  source: string;
+  scriptsMustParse?: boolean;
+  notes?: string;
+}
+
+export function loadLargeEmbedFixtures(): LargeEmbedFixture[] {
+  return JSON.parse(
+    readFileSync(fixturePath('mdx', 'large-embed.json'), 'utf8'),
+  ) as LargeEmbedFixture[];
+}
+
+export function loadPrd6955Before(): string {
+  return readFileSync(fixturePath('regression', 'prd-6955-before.md'), 'utf8');
+}
+
+export function loadPrd6955CorruptedTriplicated(): string {
+  return readFileSync(fixturePath('regression', 'prd-6955-corrupted-triplicated.md'), 'utf8');
+}
+
 export interface NgPinnedCase {
   id: string;
   name: string;

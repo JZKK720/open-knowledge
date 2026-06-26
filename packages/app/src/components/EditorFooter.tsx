@@ -1,5 +1,6 @@
 import { Plural, useLingui } from '@lingui/react/macro';
-import { GitBranch } from 'lucide-react';
+import { ChevronUp, GitBranch, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type EditorFooterIdentity,
@@ -16,12 +17,20 @@ interface EditorFooterProps {
   /** Stats group renders only when there's a real doc scope. When false and
    *  identity is also empty, the footer renders nothing. */
   showStats?: boolean;
+  /** When set, a "Ask AI" reopen badge renders next to the stats — shown only
+   *  while the bottom composer is dismissed. Clicking it reopens the composer. */
+  composerBadge?: { onReopen: () => void } | null;
 }
 
-export function EditorFooter({ stats, selectionStats, showStats = true }: EditorFooterProps) {
+export function EditorFooter({
+  stats,
+  selectionStats,
+  showStats = true,
+  composerBadge,
+}: EditorFooterProps) {
   const { t } = useLingui();
   const identity = useEditorFooterIdentity();
-  if (!showStats && identity === null) return null;
+  if (!showStats && identity === null && composerBadge == null) return null;
   const active = selectionStats ?? stats;
   const isSelection = selectionStats != null;
   const { words, chars, tokens } = active;
@@ -40,11 +49,29 @@ export function EditorFooter({ stats, selectionStats, showStats = true }: Editor
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-full h-2 bg-linear-to-t from-background to-transparent"
       />
+      {/* Reopen tab — centered and flush to the footer's bottom edge (the
+          collapsed counterpart to the composer's top-center collapse handle).
+          The Button base applies `active:translate-y-px` (a press-down nudge);
+          on this edge-anchored tab that 1px shoves it past the viewport bottom
+          and pops a transient scrollbar while held, so neutralize it here. */}
+      {composerBadge ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={composerBadge.onReopen}
+          data-testid="ask-ai-reopen-badge"
+          className="-translate-x-1/2 absolute bottom-0 left-1/2 z-10 h-auto gap-1 rounded-md rounded-b-none bg-card px-2.5 py-0.5 text-2xs font-normal text-muted-foreground shadow-sm hover:text-foreground active:not-aria-[haspopup]:translate-y-0"
+        >
+          <Sparkles className="size-3" aria-hidden />
+          {t`Ask AI`}
+          <ChevronUp className="size-3" aria-hidden />
+        </Button>
+      ) : null}
       <span className="flex min-w-0 items-center gap-3">
         {identity !== null ? <IdentityRow identity={identity} /> : null}
       </span>
       {showStats ? (
-        <span className="flex items-center shrink-0 gap-3">
+        <span className="flex shrink-0 items-center gap-3">
           {isSelection ? (
             <span
               className="font-medium text-foreground/70"

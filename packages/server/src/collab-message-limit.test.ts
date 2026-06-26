@@ -19,6 +19,7 @@ async function bootTestServer(): Promise<{ booted: BootedServer; contentDir: str
   writeFileSync(join(okDir, 'config.yml'), '', 'utf-8');
   writeFileSync(join(okDir, '.gitignore'), '', 'utf-8');
   const booted = await bootServer({
+    host: '127.0.0.1',
     contentDir,
     attachUiSibling: false,
     idleShutdownMs: null,
@@ -97,7 +98,7 @@ describe('collab WebSocket message size limits', () => {
     const frame = makeOversizedSyncUpdate('test-doc', payloadBytes);
     expect(frame.byteLength).toBe(MAX); // validates the layout constant above
 
-    const ws = new WsClient(`ws://localhost:${booted.port}/collab`);
+    const ws = new WsClient(`ws://127.0.0.1:${booted.port}/collab`);
     await new Promise<void>((resolve, reject) => {
       ws.once('open', resolve);
       ws.once('error', reject);
@@ -114,7 +115,7 @@ describe('collab WebSocket message size limits', () => {
       expect(closedEarly).toBe(false);
       expect(getMetrics().collabMessageTooLargeCount).toBe(0);
 
-      const response = await fetch(`http://localhost:${booted.port}/api/server-info`, {
+      const response = await fetch(`http://127.0.0.1:${booted.port}/api/server-info`, {
         signal: AbortSignal.timeout(1_000),
       });
       expect(response.ok).toBe(true);
@@ -132,13 +133,13 @@ describe('collab WebSocket message size limits', () => {
     const { booted } = s;
 
     const beforeRead = await fetch(
-      `http://localhost:${booted.port}/api/document?docName=test-doc`,
+      `http://127.0.0.1:${booted.port}/api/document?docName=test-doc`,
       { signal: AbortSignal.timeout(1_000) },
     );
     expect(beforeRead.ok).toBe(true);
     expect((await beforeRead.json()).content).toBe('# Test doc\n');
 
-    const ws = new WsClient(`ws://localhost:${booted.port}/collab`);
+    const ws = new WsClient(`ws://127.0.0.1:${booted.port}/collab`);
     await new Promise<void>((resolve, reject) => {
       ws.once('open', resolve);
       ws.once('error', reject);
@@ -152,13 +153,13 @@ describe('collab WebSocket message size limits', () => {
       expect(close.code).toBe(1009);
       expect(getMetrics().collabMessageTooLargeCount).toBe(1);
 
-      const response = await fetch(`http://localhost:${booted.port}/api/server-info`, {
+      const response = await fetch(`http://127.0.0.1:${booted.port}/api/server-info`, {
         signal: AbortSignal.timeout(1_000),
       });
       expect(response.ok).toBe(true);
 
       const afterRead = await fetch(
-        `http://localhost:${booted.port}/api/document?docName=test-doc`,
+        `http://127.0.0.1:${booted.port}/api/document?docName=test-doc`,
         {
           signal: AbortSignal.timeout(1_000),
         },

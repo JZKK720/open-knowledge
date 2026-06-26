@@ -48,20 +48,11 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import type { NodeViewProps } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react';
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ArrowDown,
-  ArrowUp,
-  ExternalLink,
-  Pencil,
-  Settings2,
-  Trash2,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, ExternalLink, Pencil, Settings2, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
+import { Button } from '@/components/ui/button';
 import { hashFromDocName } from '@/lib/doc-hash';
 import {
   Popover,
@@ -90,7 +81,6 @@ import {
   focusInsertedComponent,
 } from '../slash-command/component-items.tsx';
 import { ALIGNABLE_DESCRIPTOR_NAMES } from '../utils/alignable-descriptors.ts';
-import { runWithAlignAnimation } from '../utils/animate-align-change.ts';
 import { formatContainerAriaLabel } from '../utils/editor-strings.ts';
 import { reconstructSource } from '../utils/reconstruct-source.ts';
 import { sanitizeComponentProps } from '../utils/sanitize-url.ts';
@@ -172,6 +162,15 @@ export function extractPrimitiveProps(
     result[key] = value;
   }
   return sanitizeComponentProps(result);
+}
+
+interface ElementJsxAttrs extends Record<string, unknown> {
+  kind: 'element';
+  props: Record<string, unknown>;
+}
+
+export function getElementJsxAttrs(attrs: Record<string, unknown>): ElementJsxAttrs | null {
+  return attrs.kind === 'element' ? (attrs as ElementJsxAttrs) : null;
 }
 
 const MAX_AUTO_CONVERT_RETRIES = 3;
@@ -593,81 +592,16 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           onMouseDown={(e) => e.stopPropagation()}
           {...{ [OPT_OUT_ATTR]: 'true' }}
         >
-          {/* Alignment — left / center / right buttons. Renders for every
-            descriptor in `ALIGNABLE_DESCRIPTOR_NAMES` (`img` + `CommonMarkImage`
-            + `Embed` + `video`). Placed in the hover-revealed chrome bar
-            rather than the bubble menu because clicking an image triggers
-            `react-medium-image-zoom`'s lightbox before PM can settle a
-            NodeSelection — the bubble-menu path doesn't reach the user.
-            Chrome bar shows on HOVER, no click required, so it sidesteps
-            the click-vs-zoom conflict for image and stays consistent for
-            video / Embed.
-
-            CommonMarkImage's prop set is just src/alt/title — no align.
-            When the user picks a non-`center` alignment on a CommonMarkImage,
-            the click handler upgrades the descriptor to `img` (which DOES
-            have `align`) so the value persists through serialization. The
-            `![alt](src)` source upgrades to `<img ... align="…" />` on save
-            — a one-way conversion the user can revert by deleting the
-            block and re-typing the markdown. */}
-          {isAlignable &&
-            (
-              [
-                { value: 'left' as const, label: t`Align left`, Icon: AlignLeft },
-                { value: 'center' as const, label: t`Align center`, Icon: AlignCenter },
-                { value: 'right' as const, label: t`Align right`, Icon: AlignRight },
-              ] as const
-            ).map(({ value, label, Icon }) => {
-              const rawAlign =
-                typeof currentProps.align === 'string' ? currentProps.align : 'center';
-              const currentAlign =
-                rawAlign === 'left' || rawAlign === 'right' || rawAlign === 'center'
-                  ? rawAlign
-                  : 'center';
-              const isActive = currentAlign === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  className="jsx-chrome-btn"
-                  aria-label={label}
-                  aria-pressed={isActive}
-                  data-active={isActive ? 'true' : undefined}
-                  onClick={(e) => {
-                    if (typeof pos !== 'number') return;
-                    const curNode = editor.state.doc.nodeAt(pos);
-                    if (!curNode || curNode.type.name !== 'jsxComponent') return;
-                    const wrapperEl = (e.currentTarget as HTMLElement).closest<HTMLElement>(
-                      '.jsx-component-wrapper',
-                    );
-                    const curDescriptorName = String(curNode.attrs.componentName ?? '');
-                    if (!ALIGNABLE_DESCRIPTOR_NAMES.has(curDescriptorName)) {
-                      return;
-                    }
-                    if (curNode.attrs.kind !== 'element') return;
-                    const isCommonMark = curDescriptorName === 'CommonMarkImage';
-                    const nextProps = {
-                      ...(curNode.attrs.props as Record<string, unknown>),
-                      align: value,
-                    };
-                    const nextAttrs = isCommonMark
-                      ? {
-                          ...curNode.attrs,
-                          componentName: 'img',
-                          props: nextProps,
-                          sourceDirty: true,
-                        }
-                      : { ...curNode.attrs, props: nextProps, sourceDirty: true };
-                    runWithAlignAnimation(wrapperEl, () => {
-                      editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, null, nextAttrs));
-                      markUserTyping();
-                    });
-                  }}
-                >
-                  <Icon size={12} aria-hidden="true" />
-                </button>
-              );
-            })}
+          {/* Alignment intentionally absent here — the bubble menu's
+            `ImageAlignButtons` is the single alignment surface for every
+            descriptor in `ALIGNABLE_DESCRIPTOR_NAMES` (`img` /
+            `CommonMarkImage` / `Embed` / `video`). NodeSelection fires
+            on the image click and the floating bubble bar lands centered
+            above the block, so the old chrome-bar trio + PropPanel
+            `Align` Select were redundant duplicates. CommonMarkImage's
+            descriptor-upgrade path on first non-default alignment lives
+            in `ImageAlignButtons` itself; removing it here doesn't lose
+            the conversion. */}
 
           {/* Open in new tab — `Embed` only. Lets the reader hop to the
             embedded URL when they want the full browser surface.
@@ -879,6 +813,7 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
               <button
                 type="button"
                 className="jsx-chrome-btn"
+                data-jsx-gear=""
                 aria-label={t`${settingsDescriptorLabel} properties`}
               >
                 <Settings2 size={12} aria-hidden="true" />
@@ -1024,15 +959,16 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
             if (typeof livePos !== 'number') return;
             const curNode = editor.state.doc.nodeAt(livePos);
             if (!curNode) return;
-            if (curNode.attrs.kind !== 'element') return;
+            const elementAttrs = getElementJsxAttrs(curNode.attrs);
+            if (!elementAttrs) return;
             try {
-              const currentNodeProps = (curNode.attrs.props as Record<string, unknown>) ?? {};
+              const currentNodeProps = elementAttrs.props;
               const nextProps = {
                 ...currentNodeProps,
                 [editableSource.propName]: value,
               };
               const nextAttrs = {
-                ...curNode.attrs,
+                ...elementAttrs,
                 props: nextProps,
                 sourceDirty: true,
               };
@@ -1056,7 +992,7 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           side={showPlaceholder ? 'bottom' : 'right'}
           align={showPlaceholder ? 'center' : 'start'}
           sideOffset={showPlaceholder ? -4 : 8}
-          className="w-64 p-3 z-[60] overflow-y-auto subtle-scrollbar max-h-[calc(100vh-2rem)] overscroll-contain"
+          className="w-64 p-3 z-[60] overflow-y-auto subtle-scrollbar max-h-[var(--radix-popper-available-height)] overscroll-contain"
           onCloseAutoFocus={
             isSelfClosingLeaf
               ? (e) => {
@@ -1072,13 +1008,15 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           <PropPanel
             descriptor={descriptor}
             values={primitiveProps}
+            onDismiss={() => setPopoverOpen(false)}
             onChange={(propName, value) => {
               const p = typeof getPos === 'function' ? getPos() : undefined;
               if (typeof p !== 'number') return;
               const curNode = editor.state.doc.nodeAt(p);
               if (!curNode) return;
-              if (curNode.attrs.kind !== 'element') return;
-              const currentNodeProps = (curNode.attrs.props as Record<string, unknown>) ?? {};
+              const elementAttrs = getElementJsxAttrs(curNode.attrs);
+              if (!elementAttrs) return;
+              const currentNodeProps = elementAttrs.props;
               const nextProps: Record<string, unknown> = { ...currentNodeProps };
               const currentAttributes = Array.isArray(curNode.attrs.attributes)
                 ? (curNode.attrs.attributes as unknown[])
@@ -1100,7 +1038,7 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
               }
               editor.view.dispatch(
                 editor.state.tr.setNodeMarkup(p, null, {
-                  ...curNode.attrs,
+                  ...elementAttrs,
                   attributes: nextAttributes,
                   props: nextProps,
                   sourceDirty: true,
@@ -1109,6 +1047,28 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
               markUserTyping();
             }}
           />
+          {/* Explicit confirmation affordance. PropPanel auto-saves on
+              every keystroke / select change (`onChange` above runs the
+              `setNodeMarkup` dispatch) — the button doesn't gate the
+              save, it gives users the psychological closure UX research
+              flagged was missing (PRD-7058 #1: "I just write, and it
+              just, like, disappears" — without a confirm affordance
+              authors interpret the auto-dismiss-on-outside-click as
+              losing their changes, even though the changes already
+              landed). Click closes the popover; the
+              `onCloseAutoFocus`-driven editor refocus above handles
+              the focus restore. */}
+          <div className="mt-3 flex justify-end border-t border-border pt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setPopoverOpen(false)}
+              className="h-7 px-3 text-xs"
+            >
+              <Trans>Done</Trans>
+            </Button>
+          </div>
         </PopoverContent>
       )}
     </Popover>

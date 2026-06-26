@@ -63,6 +63,27 @@ function listAppSrcTsFiles(): FileLines[] {
   return out;
 }
 
+const SPAWN_BUN_PATTERN = /spawn\(\s*['"]bun['"]/;
+const SPAWN_REQUIRED_ENV_KEYS = ['OK_TEST_VITE_CACHE_DIR', 'OK_TEST_SKIP_I18N_COMPILE'] as const;
+
+function findSpawnIsolationViolations(
+  lines: string[],
+): Array<{ line: number; missingKey: string }> {
+  const spawnLines: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (SPAWN_BUN_PATTERN.test(lines[i] ?? '')) spawnLines.push(i + 1);
+  }
+  if (spawnLines.length === 0) return [];
+  const source = lines.join('\n');
+  const violations: Array<{ line: number; missingKey: string }> = [];
+  for (const key of SPAWN_REQUIRED_ENV_KEYS) {
+    if (!source.includes(key)) {
+      violations.push({ line: spawnLines[0] ?? 1, missingKey: key });
+    }
+  }
+  return violations;
+}
+
 function collectMatches(
   files: FileLines[],
   predicate: (line: string, lineIdx: number, file: FileLines) => boolean,
@@ -260,6 +281,62 @@ describe('E2E STOP rule — zero allowlist', () => {
     }
   });
 
+  test('e2e files that spawn a dev server must isolate shared mutable state (vite cache + i18n compile)', () => {
+    const violations: string[] = [];
+    for (const file of e2eFiles) {
+      for (const v of findSpawnIsolationViolations(file.lines)) {
+        violations.push(
+          `  ${file.path}:${v.line}    spawn('bun', …) without ${v.missingKey} anywhere in the file`,
+        );
+      }
+    }
+    if (violations.length > 0) {
+      throw new Error(
+        `dev-server spawn without shared-state isolation — pass OK_TEST_VITE_CACHE_DIR (via prepareViteCacheDir from ./_helpers, rmSync in teardown) and OK_TEST_SKIP_I18N_COMPILE: '1' in the spawn env:\n${violations.join('\n')}`,
+      );
+    }
+  });
+
+  test('spawn-isolation rule fires on a planted violation and not on adjacent negatives', () => {
+    const planted = [
+      "const proc = spawn('bun', ['run', '--silent', 'dev'], {",
+      '  env: { ...process.env, VITE_PORT: String(port) },',
+      '});',
+    ];
+    const fired = findSpawnIsolationViolations(planted);
+    expect(fired.length).toBe(2);
+    expect(fired[0]?.line).toBe(1);
+
+    const compliant = [
+      "const proc = spawn('bun', ['run', '--silent', 'dev'], {",
+      "  env: { OK_TEST_VITE_CACHE_DIR: dir, OK_TEST_SKIP_I18N_COMPILE: '1' },",
+      '});',
+    ];
+    expect(findSpawnIsolationViolations(compliant).length).toBe(0);
+
+    const otherSpawn = ["const proc = spawn('node', ['script.js'], { env: {} });"];
+    expect(findSpawnIsolationViolations(otherSpawn).length).toBe(0);
+
+    const halfCompliant = [
+      "const proc = spawn('bun', ['run', '--silent', 'dev'], {",
+      '  env: { OK_TEST_VITE_CACHE_DIR: dir },',
+      '});',
+    ];
+    const halfFired = findSpawnIsolationViolations(halfCompliant);
+    expect(halfFired.length).toBe(1);
+    expect(halfFired[0]?.missingKey).toBe('OK_TEST_SKIP_I18N_COMPILE');
+
+    const multiSpawn = [
+      "const p1 = spawn('bun', ['run', '--silent', 'dev'], {",
+      "  env: { OK_TEST_VITE_CACHE_DIR: d, OK_TEST_SKIP_I18N_COMPILE: '1' },",
+      '});',
+      "const p2 = spawn('bun', ['run', '--silent', 'dev'], {",
+      '  env: { VITE_PORT: String(port) },',
+      '});',
+    ];
+    expect(findSpawnIsolationViolations(multiSpawn).length).toBe(0);
+  });
+
   test('window.__activeEditor is published only by DocumentContext.tsx (regression — PR #168 merge collision)', () => {
     const srcFiles = listAppSrcTsFiles();
     const directAssignPattern = /window\.__activeEditor\s*=/;
@@ -350,6 +427,31 @@ describe('E2E STOP rule — zero allowlist', () => {
       throw new Error(
         `Selection-halo transition uses bare \`ease-out\` — use \`var(--ease-out-strong)\` for consistency with the repo's 7 other transitions (round-2 review fix, commit 4e9d96a5):\n${violations.join('\n')}`,
       );
+    }
+  });
+
+  test('predev routes i18n compile through the OK_TEST_SKIP_I18N_COMPILE guard (not a direct compile)', () => {
+    const pkgPath = join(__dirname, '..', '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as {
+      scripts?: Record<string, string>;
+    };
+    const predev = pkg.scripts?.predev ?? '';
+    const errors: string[] = [];
+    if (!predev.includes('i18n-compile-unless-skipped.sh')) {
+      errors.push(
+        'packages/app/package.json "predev" must route the i18n compile through ' +
+          'scripts/i18n-compile-unless-skipped.sh (the OK_TEST_SKIP_I18N_COMPILE guard).',
+      );
+    }
+    if (/\b(?:bun run i18n:compile|lingui compile)\b/.test(predev)) {
+      errors.push(
+        'packages/app/package.json "predev" invokes the i18n compile directly, bypassing the ' +
+          'OK_TEST_SKIP_I18N_COMPILE guard — every concurrent e2e dev-server boot then rewrites ' +
+          'src/locales/<locale>/messages.json and Vite full-page-reloads running tests mid-evaluate.',
+      );
+    }
+    if (errors.length > 0) {
+      throw new Error(`${errors.join('\n')}\nFound predev:\n  ${predev}`);
     }
   });
 });

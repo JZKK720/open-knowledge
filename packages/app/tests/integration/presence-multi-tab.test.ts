@@ -5,13 +5,14 @@ import {
   dedupeHumansByPrincipalId,
   type HumanParticipant,
 } from '../../src/presence/participant-model.ts';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestClient, createTestServer, pollUntil, type TestServer } from './test-harness';
 
 let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer({ keepaliveGraceMs: 150 });
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

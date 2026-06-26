@@ -1,14 +1,17 @@
 import { FrontmatterValueSchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
+import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 
 const FrontmatterPatchValue = z.union([FrontmatterValueSchema, z.null()]);
 
 export const FrontmatterArg = z
   .record(z.string(), FrontmatterPatchValue)
   .describe(
-    'Metadata as a flat key→value map (string | number | boolean | string[]). ' +
-      'Merge-patch: include a key to set it, set a key to null to delete it; keys you omit are unchanged. ' +
-      'Example: { title: "Q3 Planning", tags: ["planning"], status: "draft" }.',
+    'Metadata as a key→value map. Values may be a scalar (string | number | boolean), a scalar array, ' +
+      'a nested object, or an array of objects. Merge-patch: include a top-level key to set it, set a ' +
+      'top-level key to null to delete it; keys you omit are unchanged. A nested object REPLACES the ' +
+      'existing subtree at that key (send the full subtree you want). ' +
+      'Example: { title: "Q3 Planning", tags: ["planning"], metadata: { version: "1.0", author: "Inkeep" } }.',
   );
 
 const POSITIONS = ['append', 'prepend', 'replace'] as const;
@@ -17,6 +20,14 @@ export const PositionArg = z
   .describe(
     'Where content lands. replace = overwrite the whole body (default for a new doc; required for an existing doc). ' +
       'append / prepend = add to the end / start.',
+  );
+
+export const DocExtensionArg = z
+  .enum(SUPPORTED_DOC_EXTENSIONS)
+  .describe(
+    'File format for a NEW doc: `.md` (default) or `.mdx` (Markdown + JSX components). ' +
+      'Honored only on create — an existing doc keeps its on-disk extension. ' +
+      'Takes precedence over an extension typed into `path`.',
   );
 
 export function splitTargetPath(path: string): { folder: string; name: string } {
@@ -31,7 +42,7 @@ const TEMPLATE_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
 export const TEMPLATE_PATH_DESCRIBE =
   'Template path = `<folder>/<name>` (e.g. "fishing-log/trip-log"). The slashes are the folder it belongs to; the final segment is the template name (letters, digits, `_`, `-` only — no dots/spaces). Stored at `<folder>/.ok/templates/<name>.md`.';
 export const TEMPLATE_CONTENT_DESCRIBE =
-  'Template Markdown body. Only the `{{date}}` and `{{user}}` substitution tokens are allowed; any other `{{...}}` token hard-errors at write time.';
+  "Starter content — the Markdown a new document becomes. A leading `---…---` frontmatter block here sets the STARTING PROPERTIES every doc created from this template gets (e.g. `type`, `status`, `tags`); the markdown below it is the body. The template's own picker identity (title/description) is the separate `frontmatter` field, NOT this block — it is stripped at instantiation and never copied onto created docs. (On disk this composes to one frontmatter block with the identity under a reserved `template:` key; you don't author that — just give the starter content here.) Only the `{{date}}` and `{{user}}` substitution tokens are allowed; any other `{{...}}` token hard-errors at write time.";
 
 export function resolveTemplatePath(
   path: string,

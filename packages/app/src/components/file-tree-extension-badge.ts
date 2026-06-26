@@ -2,12 +2,16 @@ import { getFileExtension } from '@/components/file-tree-rename-validation';
 
 export const OK_EXT_BADGE_ATTR = 'data-ok-ext-badge';
 export const OK_EXT_ROW_ATTR = 'data-ok-ext-row';
+export const OK_FULLNAME_ROW_ATTR = 'data-ok-fullname-row';
 
 export const FILE_TREE_EXT_BADGE_CSS = `
   [data-item-selected='true'] [data-icon-token='markdown'] {
     color: var(--trees-selected-fg);
   }
   [data-type='item'][${OK_EXT_ROW_ATTR}] [data-truncate-segment-priority]:last-child {
+    display: none;
+  }
+  [data-type='item'][${OK_FULLNAME_ROW_ATTR}] [data-truncate-segment-priority]:last-child {
     display: none;
   }
   [${OK_EXT_BADGE_ATTR}] {
@@ -28,8 +32,12 @@ export function applyExtensionBadges(root: ParentNode): void {
   const rows = root.querySelectorAll<HTMLElement>('[data-type="item"][data-item-path]');
   for (const row of rows) {
     const treePath = row.dataset.itemPath;
-    if (!treePath || treePath.endsWith('/')) {
+    if (!treePath) {
       clearExtensionRow(row);
+      continue;
+    }
+    if (treePath.endsWith('/')) {
+      applyFullNameEndTruncation(row, treePath);
       continue;
     }
     const ext = getFileExtension(treePath);
@@ -38,19 +46,11 @@ export function applyExtensionBadges(root: ParentNode): void {
       continue;
     }
 
-    const truncateGroup = row.querySelector<HTMLElement>(
-      '[data-truncate-group-container="middle"]',
-    );
-    if (!truncateGroup) continue;
-
-    const segments = truncateGroup.querySelectorAll<HTMLElement>(
-      '[data-truncate-segment-priority]',
-    );
-    if (segments.length < 2) continue;
-    const basenameSeg = segments[0];
+    const basenameSeg = resolveBasenameSegment(row);
     if (!basenameSeg) continue;
 
     row.setAttribute(OK_EXT_ROW_ATTR, '');
+    row.removeAttribute(OK_FULLNAME_ROW_ATTR);
     trimTrailingDotInBasenameSegment(basenameSeg);
 
     const isMarkdown = ext.toLowerCase() === '.md';
@@ -69,18 +69,56 @@ function removeStaleBadge(row: HTMLElement): void {
 
 function clearExtensionRow(row: HTMLElement): void {
   row.removeAttribute(OK_EXT_ROW_ATTR);
+  row.removeAttribute(OK_FULLNAME_ROW_ATTR);
   removeStaleBadge(row);
 }
 
-function trimTrailingDotInBasenameSegment(basenameSeg: HTMLElement): void {
-  const contentDivs = basenameSeg.querySelectorAll<HTMLElement>('[data-truncate-content]');
+function resolveBasenameSegment(row: HTMLElement): HTMLElement | null {
+  const truncateGroup = row.querySelector<HTMLElement>('[data-truncate-group-container="middle"]');
+  if (!truncateGroup) return null;
+  const segments = truncateGroup.querySelectorAll<HTMLElement>('[data-truncate-segment-priority]');
+  if (segments.length < 2) return null;
+  return segments[0] ?? null;
+}
+
+function applyFullNameEndTruncation(row: HTMLElement, treePath: string): void {
+  row.removeAttribute(OK_EXT_ROW_ATTR);
+  removeStaleBadge(row);
+
+  const basenameSeg = resolveBasenameSegment(row);
+  const name = leafName(treePath);
+  if (!basenameSeg || !name) {
+    row.removeAttribute(OK_FULLNAME_ROW_ATTR);
+    return;
+  }
+
+  setSegmentText(basenameSeg, name);
+  row.setAttribute(OK_FULLNAME_ROW_ATTR, '');
+}
+
+function leafName(treePath: string): string {
+  const trimmed = treePath.replace(/\/+$/, '');
+  const slash = trimmed.lastIndexOf('/');
+  return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+}
+
+function mapSegmentTextNodes(segment: HTMLElement, transform: (current: string) => string): void {
+  const contentDivs = segment.querySelectorAll<HTMLElement>('[data-truncate-content]');
   for (const contentDiv of contentDivs) {
     const firstChild = contentDiv.firstChild;
     if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE) continue;
     const current = firstChild.textContent ?? '';
-    if (!current.endsWith('.')) continue;
-    firstChild.textContent = current.replace(/\.+$/, '');
+    const next = transform(current);
+    if (next !== current) firstChild.textContent = next;
   }
+}
+
+function setSegmentText(segment: HTMLElement, text: string): void {
+  mapSegmentTextNodes(segment, () => text);
+}
+
+function trimTrailingDotInBasenameSegment(basenameSeg: HTMLElement): void {
+  mapSegmentTextNodes(basenameSeg, (current) => current.replace(/\.+$/, ''));
 }
 
 function upsertBadge(row: HTMLElement, label: string): void {

@@ -45,6 +45,7 @@ export const SYNC_ERROR_CODES = [
   'auth-403',
   'auth-401',
   'auth-scope-mismatch',
+  'auth-no-credential',
   'semantic-protected-branch',
 ] as const;
 
@@ -134,9 +135,6 @@ export const SyncConflictContentSuccessSchema = z
   })
   .loose() satisfies StandardSchemaV1;
 export type SyncConflictContentSuccess = z.infer<typeof SyncConflictContentSuccessSchema>;
-
-export const SyncAbortMergeSuccessSchema = z.object({}).loose() satisfies StandardSchemaV1;
-export type SyncAbortMergeSuccess = z.infer<typeof SyncAbortMergeSuccessSchema>;
 
 export const SeedPlanSuccessSchema = z
   .object({

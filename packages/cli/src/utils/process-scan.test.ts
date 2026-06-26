@@ -62,7 +62,7 @@ describe('findOkProcessPids', () => {
     const encoded = Buffer.from('/Users/mike/notes/.ok/local', 'utf8').toString('base64url');
     spawnSyncSpy.mockReturnValue(
       makeSpawnResult({
-        stdout: `24680 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper --type=utility --ok-lock-dir-b64=${encoded}\n`,
+        stdout: `24680 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper --type=utility --ok-lock-dir-b64=${encoded}\n`,
         status: 0,
       }),
     );
@@ -71,17 +71,30 @@ describe('findOkProcessPids', () => {
     expect(pids).toEqual([24680]);
   });
 
-  it('finds packaged Open Knowledge Helper processes without lock-dir marker', async () => {
+  it('finds packaged OpenKnowledge Helper processes without lock-dir marker', async () => {
     spawnSyncSpy.mockReturnValue(
       makeSpawnResult({
         stdout:
-          '5816 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper.app/Contents/MacOS/Open Knowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
+          '5816 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper.app/Contents/MacOS/OpenKnowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
         status: 0,
       }),
     );
 
     const pids = await findOkProcessPids();
     expect(pids).toEqual([5816]);
+  });
+
+  it('still finds a pre-rename "Open Knowledge" packaged Helper (backward-compat regex)', async () => {
+    spawnSyncSpy.mockReturnValue(
+      makeSpawnResult({
+        stdout:
+          '5817 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper.app/Contents/MacOS/Open Knowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
+        status: 0,
+      }),
+    );
+
+    const pids = await findOkProcessPids();
+    expect(pids).toEqual([5817]);
   });
 
   it('falls back to ps when pgrep is unavailable (ENOENT)', async () => {
@@ -275,13 +288,13 @@ describe('discoverLockDirs', () => {
     spawnSyncSpy
       .mockReturnValueOnce(
         makeSpawnResult({
-          stdout: `77 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper --type=utility --ok-lock-dir-b64=${encoded}\n`,
+          stdout: `77 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper --type=utility --ok-lock-dir-b64=${encoded}\n`,
           status: 0,
         }),
       )
       .mockReturnValueOnce(
         makeSpawnResult({
-          stdout: 'p77\nfcwd\nn/Applications/Open Knowledge.app/Contents/Resources\n',
+          stdout: 'p77\nfcwd\nn/Applications/OpenKnowledge.app/Contents/Resources\n',
           status: 0,
         }),
       )
@@ -299,13 +312,13 @@ describe('discoverLockDirs', () => {
   });
 
   it('discovers desktop project locks from renderer --ok-project-path argv', async () => {
-    const projectPath = '/Users/mike/Documents/Open Knowledge/garth_nix';
+    const projectPath = '/Users/mike/Documents/OpenKnowledge/garth_nix';
     const lockDir = `${projectPath}/.ok/local`;
 
     spawnSyncSpy
       .mockReturnValueOnce(
         makeSpawnResult({
-          stdout: `93943 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper (Renderer).app/Contents/MacOS/Open Knowledge Helper (Renderer) --type=renderer --ok-collab-url=ws://localhost:51473/collab --ok-project-path=${projectPath} --ok-project-name=garth_nix --seatbelt-client=53\n`,
+          stdout: `93943 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper (Renderer).app/Contents/MacOS/OpenKnowledge Helper (Renderer) --type=renderer --ok-collab-url=ws://localhost:51473/collab --ok-project-path=${projectPath} --ok-project-name=garth_nix --seatbelt-client=53\n`,
           status: 0,
         }),
       )
@@ -325,7 +338,7 @@ describe('discoverLockDirs', () => {
       .mockReturnValueOnce(
         makeSpawnResult({
           stdout:
-            '93943 /Applications/Open Knowledge Helper (Renderer) --type=renderer --ok-project-path=relative/notes --ok-project-name=notes\n',
+            '93943 /Applications/OpenKnowledge Helper (Renderer) --type=renderer --ok-project-path=relative/notes --ok-project-name=notes\n',
           status: 0,
         }),
       )
@@ -363,7 +376,7 @@ describe('discoverLockDirs', () => {
       .mockReturnValueOnce(
         makeSpawnResult({
           stdout:
-            '42 /Applications/Open Knowledge.app/Contents/Frameworks/Helper --ok-lock-dir-b64=\n',
+            '42 /Applications/OpenKnowledge.app/Contents/Frameworks/Helper --ok-lock-dir-b64=\n',
           status: 0,
         }),
       )
@@ -400,7 +413,7 @@ describe('discoverLockDirs', () => {
 
   it('discovers child project locks from the current-directory subtree fallback', async () => {
     const cwdSpy = spyOn(process, 'cwd');
-    const parent = '/Users/mike/Documents/Open Knowledge';
+    const parent = '/Users/mike/Documents/OpenKnowledge';
     const child = `${parent}/garth_nix`;
     const lockDir = `${child}/.ok/local`;
 
@@ -408,7 +421,7 @@ describe('discoverLockDirs', () => {
       .mockReturnValueOnce(
         makeSpawnResult({
           stdout:
-            '5816 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper.app/Contents/MacOS/Open Knowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
+            '5816 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper.app/Contents/MacOS/OpenKnowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
           status: 0,
         }),
       )
@@ -436,7 +449,7 @@ describe('discoverLockDirs', () => {
 
   it('runs subtree fallback for slash-cwd helpers even when another candidate was found', async () => {
     const cwdSpy = spyOn(process, 'cwd');
-    const parent = '/Users/mike/Documents/Open Knowledge';
+    const parent = '/Users/mike/Documents/OpenKnowledge';
     const directProject = '/Users/mike/direct-notes';
     const directLockDir = `${directProject}/.ok/local`;
     const childProject = `${parent}/garth_nix`;
@@ -447,7 +460,7 @@ describe('discoverLockDirs', () => {
         makeSpawnResult({
           stdout:
             '11 /usr/local/bin/ok start\n' +
-            '22 /Applications/Open Knowledge.app/Contents/Frameworks/Open Knowledge Helper.app/Contents/MacOS/Open Knowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
+            '22 /Applications/OpenKnowledge.app/Contents/Frameworks/OpenKnowledge Helper.app/Contents/MacOS/OpenKnowledge Helper --type=utility --utility-sub-type=node.mojom.NodeService\n',
           status: 0,
         }),
       )

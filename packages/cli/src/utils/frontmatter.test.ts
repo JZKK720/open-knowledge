@@ -71,6 +71,20 @@ describe('parseFrontmatter', () => {
     expect(parseFrontmatter(content, StrictSchema)).toBeNull();
   });
 
+  test('parses frontmatter whose opening fence carries a trailing space', () => {
+    const content = '--- \ntitle: Hello\ndescription: World\n---\n\nBody text.';
+    expect(parseFrontmatter(content)).toEqual({ title: 'Hello', description: 'World' });
+  });
+
+  test('parses frontmatter whose closing fence carries a trailing tab', () => {
+    const content = '---\ntitle: Hello\n---\t\n\nBody text.';
+    expect(parseFrontmatter(content)).toEqual({ title: 'Hello' });
+  });
+
+  test('rejects leading whitespace before the opening fence', () => {
+    expect(parseFrontmatter(' ---\ntitle: Not FM\n---\n\nBody.')).toBeNull();
+  });
+
   test('Zod schema applies defaults for missing fields', () => {
     const WithDefaults = z.object({
       title: z.string(),

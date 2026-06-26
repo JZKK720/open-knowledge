@@ -40,6 +40,46 @@ async function selectFirstJsxComponent(page: Page, componentName: string) {
   }, componentName);
 }
 
+/** True when ProseMirror's selection head sits inside a jsxComponent — i.e. the
+ *  caret descended into a compound block's body. Mirrors the inline walk S1c
+ *  uses; shared by the L2d descent-parity tests (S1c-R/L/U/ACC). */
+async function caretInsideCompound(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    const editor = window.__activeEditor;
+    if (!editor) return false;
+    const sel = editor.state.selection;
+    if (!('$head' in sel)) return false;
+    const $head = sel.$head as { depth: number; node: (d: number) => { type: { name: string } } };
+    for (let d = $head.depth; d >= 0; d--) {
+      if ($head.node(d).type.name === 'jsxComponent') return true;
+    }
+    return false;
+  });
+}
+
+/** Place the caret at the start or end of the first textblock whose text equals
+ *  `text`, via the editor API + DOM-focus commit (the S1f/S1g pattern — click +
+ *  Home/End was flaky on loaded CI workers). */
+async function caretAtTextblock(page: Page, text: string, edge: 'start' | 'end'): Promise<void> {
+  await page.evaluate(
+    ({ text, edge }) => {
+      const editor = window.__activeEditor;
+      if (!editor) return;
+      let pos = -1;
+      editor.state.doc.descendants((node, p) => {
+        if (node.type.name === 'heading' && node.textContent === text) {
+          pos = edge === 'start' ? p + 1 : p + 1 + node.textContent.length;
+        }
+        return true;
+      });
+      if (pos >= 0) editor.chain().focus().setTextSelection(pos).run();
+    },
+    { text, edge },
+  );
+  await focusEditor(page);
+  await waitForPmSelectionInNode(page, 'heading');
+}
+
 test('S1: ArrowDown auto-NodeSelects self-closing Callout below the cursor', async ({
   page,
   api,
@@ -88,11 +128,15 @@ test('S1c: ArrowDown into compound Callout descends into body (no NodeSelect)', 
   await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
 
   await page.locator('.ProseMirror h1').first().click();
+  await focusEditor(page);
+  await waitForPmSelectionInNode(page, 'heading');
   await page.keyboard.press('End');
 
   await page.keyboard.press('ArrowDown');
 
   await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+
+  await waitForPmSelectionInNode(page, 'jsxComponent');
 
   const insideBody = await page.evaluate(() => {
     const editor = window.__activeEditor;
@@ -219,6 +263,66 @@ test('S1g: ArrowLeft auto-NodeSelects self-closing Callout to the left of the cu
   await expect(callout).toHaveAttribute('data-selection-origin', 'keyboard');
 });
 
+test('S1c-R: ArrowRight descends into compound Callout body (L2d horizontal)', async ({
+  page,
+  api,
+}) => {
+  await setupDoc(page, api, '# Title\n\n<Callout type="note">\n\nbody content\n\n</Callout>\n');
+  await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
+  await caretAtTextblock(page, 'Title', 'end');
+
+  await page.keyboard.press('ArrowRight');
+
+  await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+  await waitForPmSelectionInNode(page, 'jsxComponent');
+  expect(await caretInsideCompound(page)).toBe(true);
+});
+
+test('S1c-L: ArrowLeft descends into compound Callout body (L2d horizontal)', async ({
+  page,
+  api,
+}) => {
+  await setupDoc(page, api, '<Callout type="note">\n\nbody content\n\n</Callout>\n\n# Footer\n');
+  await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
+  await caretAtTextblock(page, 'Footer', 'start');
+
+  await page.keyboard.press('ArrowLeft');
+
+  await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+  await waitForPmSelectionInNode(page, 'jsxComponent');
+  expect(await caretInsideCompound(page)).toBe(true);
+});
+
+test('S1c-U: ArrowUp descends into compound Callout body from below (L2d vertical)', async ({
+  page,
+  api,
+}) => {
+  await setupDoc(page, api, '<Callout type="note">\n\nbody content\n\n</Callout>\n\n# Footer\n');
+  await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
+  await caretAtTextblock(page, 'Footer', 'start');
+
+  await page.keyboard.press('ArrowUp');
+
+  await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+  await waitForPmSelectionInNode(page, 'jsxComponent');
+  expect(await caretInsideCompound(page)).toBe(true);
+});
+
+test('S1c-ACC: ArrowDown descends into compound Accordion body (L2d type parity)', async ({
+  page,
+  api,
+}) => {
+  await setupDoc(page, api, '# Title\n\n<Accordion title="X">\n\nbody content\n\n</Accordion>\n');
+  await page.waitForSelector('.jsx-component-wrapper[data-component-type="accordion"]');
+  await caretAtTextblock(page, 'Title', 'end');
+
+  await page.keyboard.press('ArrowDown');
+
+  await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+  await waitForPmSelectionInNode(page, 'jsxComponent');
+  expect(await caretInsideCompound(page)).toBe(true);
+});
+
 test('S2: NodeSelection on a Callout emits data-selected=true on its wrapper', async ({
   page,
   api,
@@ -252,8 +356,7 @@ test('S3: nested Callout/Accordion — only innermost paints halo', async ({ pag
   const outerDataSelected = await outerCallout.getAttribute('data-selected');
   expect(outerDataSelected).toBeNull();
 
-  const selectedCount = await page.locator('[data-selected="true"]').count();
-  expect(selectedCount).toBe(1);
+  await expect(page.locator('[data-selected="true"]')).toHaveCount(1);
 });
 
 test('S3b: outer-NodeSelection on Callout with nested Accordion — only outer paints halo', async ({
@@ -276,8 +379,7 @@ test('S3b: outer-NodeSelection on Callout with nested Accordion — only outer p
   const innerDataSelected = await innerAccordion.getAttribute('data-selected');
   expect(innerDataSelected).toBeNull();
 
-  const selectedCount = await page.locator('[data-selected="true"]').count();
-  expect(selectedCount).toBe(1);
+  await expect(page.locator('[data-selected="true"]')).toHaveCount(1);
 });
 
 test('S4: dragstart/dragend toggles data-dragging', async ({ page, api }) => {

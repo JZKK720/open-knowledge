@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { i18n } from '@lingui/core';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
+
+i18n.load('en', {});
+i18n.activate('en');
 
 function PassThrough({ children }: { children?: ReactNode }) {
   return <>{children}</>;
 }
 
-let mergedConfig: unknown = { appearance: { sidebar: { showAllFiles: true } } };
+const SHOW_ALL_DEPTH1_URL = '/api/documents?showAll=true&dir=&depth=1';
+
+let mergedConfig: unknown = { appearance: { sidebar: {} } };
 let showAllBody: unknown = { documents: [], truncated: true };
 let showAllStatus = 200;
 const fetchUrls: string[] = [];
@@ -32,7 +38,7 @@ function makeFetchMock() {
   return mock(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     fetchUrls.push(url);
-    if (url === '/api/documents?showAll=true') return jsonResponse(showAllBody, showAllStatus);
+    if (url === SHOW_ALL_DEPTH1_URL) return jsonResponse(showAllBody, showAllStatus);
     if (url.startsWith('/api/documents')) return jsonResponse({ documents: [docEntry('notes/a')] });
     if (url === '/api/workspace') {
       return jsonResponse({ contentDir: '/tmp/ok', pathSeparator: '/', symlinkResolved: true });
@@ -215,7 +221,7 @@ describe('FileTree showAll truncation notice', () => {
   let consoleWarnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    mergedConfig = { appearance: { sidebar: { showAllFiles: true } } };
+    mergedConfig = { appearance: { sidebar: {} } };
     showAllBody = { documents: [], truncated: true };
     showAllStatus = 200;
     fetchUrls.length = 0;
@@ -228,20 +234,38 @@ describe('FileTree showAll truncation notice', () => {
     consoleWarnSpy.mockRestore();
   });
 
-  test('renders the role=status notice with the cap-bounded count + actionable copy when truncated (QA-001/QA-002)', async () => {
+  test('renders the truncation notice as a contained, iconed status row with truthful copy (QA-001/QA-002)', async () => {
     showAllBody = {
       documents: [docEntry('a'), docEntry('b'), docEntry('c')],
       truncated: true,
     };
     render(<FileTree />);
 
-    await waitFor(() => expect(fetchUrls).toContain('/api/documents?showAll=true'));
+    await waitFor(() => expect(fetchUrls).toContain(SHOW_ALL_DEPTH1_URL));
     const status = await screen.findByRole('status');
     const text = status.textContent ?? '';
-    expect(text).toContain('Showing first');
-    expect(text).toContain('3');
-    expect(text).toContain('use search to find others');
+    expect(text).toContain('Showing the first 3 items in one folder');
+    expect(text).toContain('the rest of that folder is hidden');
+    expect(text.toLowerCase()).not.toContain('search');
+    expect(status.className).toContain('rounded-md');
+    expect(status.className).toContain('bg-muted/50');
+    const icon = status.querySelector('svg');
+    expect(icon).not.toBeNull();
+    expect(icon?.getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('locale-formats the truncation count (1,200 — not a raw 1200)', async () => {
+    showAllBody = {
+      documents: Array.from({ length: 1200 }, (_, i) => docEntry(`dir/file-${i}`)),
+      truncated: true,
+    };
+    render(<FileTree />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent ?? '').toContain('1,200');
+    });
+    expect(screen.getByRole('status').textContent ?? '').not.toContain('1200');
   });
 
   test('does NOT render the notice when the showAll response is not truncated (QA-002 negative)', async () => {
@@ -249,7 +273,7 @@ describe('FileTree showAll truncation notice', () => {
     render(<FileTree />);
 
     await screen.findByTestId('fake-pierre-tree');
-    expect(fetchUrls).toContain('/api/documents?showAll=true');
+    expect(fetchUrls).toContain(SHOW_ALL_DEPTH1_URL);
     expect(screen.queryByRole('status')).toBeNull();
   });
 
@@ -258,18 +282,7 @@ describe('FileTree showAll truncation notice', () => {
     render(<FileTree />);
 
     await screen.findByTestId('fake-pierre-tree');
-    expect(fetchUrls).toContain('/api/documents?showAll=true');
-    expect(screen.queryByRole('status')).toBeNull();
-  });
-
-  test('does NOT render the notice when Show All Files is off, even if a stray truncated flag is present (QA-002 negative)', async () => {
-    mergedConfig = null; // showAllFiles → false
-    showAllBody = { documents: [docEntry('a')], truncated: true };
-    render(<FileTree />);
-
-    await screen.findByTestId('fake-pierre-tree');
-    expect(fetchUrls).toContain('/api/documents');
-    expect(fetchUrls).not.toContain('/api/documents?showAll=true');
+    expect(fetchUrls).toContain(SHOW_ALL_DEPTH1_URL);
     expect(screen.queryByRole('status')).toBeNull();
   });
 
@@ -289,7 +302,7 @@ describe('FileTree showAll truncation notice', () => {
     showAllBody = { documents: [docEntry('a'), docEntry('b'), docEntry('c')], truncated: true };
     render(<FileTree />);
     await waitFor(() =>
-      expect(screen.getByRole('status').textContent ?? '').toContain('Showing first'),
+      expect(screen.getByRole('status').textContent ?? '').toContain('Showing the first'),
     );
 
     showAllBody = { title: 'Internal server error' };
@@ -297,6 +310,13 @@ describe('FileTree showAll truncation notice', () => {
     window.dispatchEvent(new Event('focus'));
 
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
-    expect(screen.getByRole('alert').textContent ?? '').toContain('Internal server error');
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent ?? '').toContain('Internal server error');
+    expect(alert.className).toContain('rounded-md');
+    expect(alert.className).toContain('bg-muted/50');
+    expect(alert.className).toContain('text-destructive');
+    const alertIcon = alert.querySelector('svg');
+    expect(alertIcon).not.toBeNull();
+    expect(alertIcon?.getAttribute('aria-hidden')).toBe('true');
   });
 });

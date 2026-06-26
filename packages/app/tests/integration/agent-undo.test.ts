@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { setTimeout as wait } from 'node:timers/promises';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import type { TestServer } from './test-harness';
 import { assertBridgeInvariant, createTestClient, createTestServer } from './test-harness';
 
@@ -7,7 +8,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -19,7 +20,7 @@ async function agentWriteAs(
   markdown: string,
   docName: string,
 ): Promise<void> {
-  const res = await fetch(`http://localhost:${port}/api/agent-write-md`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/agent-write-md`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -39,7 +40,7 @@ async function agentUndoFor(
   connectionId: string,
   scope: 'last' | 'session' = 'last',
 ): Promise<Response> {
-  return fetch(`http://localhost:${port}/api/agent-undo`, {
+  return fetch(`http://127.0.0.1:${port}/api/agent-undo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ docName, connectionId, scope }),

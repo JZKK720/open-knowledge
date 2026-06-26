@@ -4,7 +4,8 @@ import {
   classifyMarkdownHref,
   type DocLinkTarget,
 } from '@inkeep/open-knowledge-core';
-import { hashFromDocName } from '../lib/doc-hash';
+import { hashFromAssetPath, hashFromDocName } from '../lib/doc-hash';
+import { dispatchAssetClick } from './asset-dispatch';
 import { isSafeNavigationUrl } from './safe-navigation-url';
 
 export function getCurrentDocNameFromHash(locationHash = window.location.hash): string {
@@ -43,6 +44,36 @@ export function openInternalHashHrefInNewTab(
   resolved: Pick<DocLinkTarget, 'docName' | 'anchor'>,
 ): void {
   openHashHrefInNewTab(toInternalHashHref(resolved));
+}
+
+function navigateToAssetPreview(assetPath: string): void {
+  window.location.assign(hashFromAssetPath(assetPath));
+}
+
+interface ActivateAssetLinkParams {
+  url: string;
+  projectRelPath: string;
+  ext: string;
+  title: string;
+  newTab: boolean;
+}
+
+interface ActivateAssetLinkDeps {
+  navigate?: (assetPath: string) => void;
+  dispatch?: typeof dispatchAssetClick;
+}
+
+export function activateAssetLink(
+  { url, projectRelPath, ext, title, newTab }: ActivateAssetLinkParams,
+  deps: ActivateAssetLinkDeps = {},
+): void {
+  const navigate = deps.navigate ?? navigateToAssetPreview;
+  const dispatch = deps.dispatch ?? dispatchAssetClick;
+  if (newTab) {
+    void dispatch({ url, projectRelPath, ext, title, forceOsDelegation: true });
+    return;
+  }
+  navigate(projectRelPath);
 }
 
 export function shouldOpenInNewTab(event: { metaKey: boolean; ctrlKey: boolean }): boolean {

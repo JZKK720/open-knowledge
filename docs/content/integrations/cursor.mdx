@@ -1,32 +1,30 @@
 ---
 title: Cursor
-description: Use Open Knowledge with Cursor.
+description: Use OpenKnowledge with Cursor.
 ---
 
-Open Knowledge plugs into Cursor through MCP plus an installed skill that teaches the agent how to use the tools.
+OpenKnowledge plugs into Cursor through MCP plus an installed skill that teaches the agent how to use the tools.
 
 ## Install
 
-The Open Knowledge desktop app handles wiring. On first launch (or any time you open a project for the first time), the consent dialog detects Cursor on your machine, lists it as one of the editors it can configure, and writes the MCP server entry plus the project skill for you.
-
-It registers the MCP server in Cursor's user config (`~/.cursor/mcp.json`) and project config (`.cursor/mcp.json`), and installs a skill at `.cursor/skills/open-knowledge/SKILL.md`. Re-trigger the dialog by deleting `~/.ok/mcp-status.json` and relaunching.
+<McpInstall editor="Cursor" />
 
 ## Approve the server
 
 Cursor prompts you to approve a new MCP server when you next open the project. Approve `open-knowledge`. Until you do, the agent can't see the tools.
 
+## Open with AI
+
+From the editor, **Open with AI ▸ Cursor** dispatches the current file, folder, or project to Cursor. Two entry points: the sidebar's right-click menu (file / folder / empty space) and the macOS **File → Open with AI** menu. You can also hand the current doc to Cursor from the bottom **Ask AI** composer.
+
+Cursor uses a two-step handoff: OpenKnowledge spawns `cursor <projectDir>` to open the workspace first, then fires the `cursor://` URL with a short prompt asking Cursor to open the target in OpenKnowledge's web preview. The agent then grounds the rest of the conversation through MCP. See [Editor → Open with AI](/docs/features/editor#open-with-ai) for the full UX.
+
+In the web app, Cursor's spawn step runs through a local `POST /api/spawn-cursor` fallback, so the **Open with AI ▸ Cursor** row works there too — not just in the desktop app.
+
 ## Verify
 
 Ask the agent:
 
-> List all the docs in this project.
+<VerifyExec />
 
-The agent should call `exec` (e.g. `ls`) and respond with your knowledge base. If it still doesn't see the tool after approval, restart Cursor so it picks up the new MCP entry.
-
-## Open with AI
-
-From the editor, **Open with AI ▸ Cursor** dispatches the current file, folder, or project to Cursor. Three entry points: the editor header's sparkle icon, the sidebar's right-click menu (file / folder / empty space), and the macOS **File → Open with AI** menu.
-
-Cursor uses a two-step handoff: Open Knowledge spawns `cursor <projectDir>` to open the workspace first, then fires the `cursor://` URL with a short prompt asking Cursor to open the target in Open Knowledge's web preview. The agent then grounds the rest of the conversation through MCP. See [Editor → Open with AI](/docs/features/editor#open-with-ai) for the full UX.
-
-Cursor's spawn step requires the local Electron app. The row is hidden in the web build, where there's no process-spawn API.
+If it still doesn't see the tool after approval, restart Cursor so it picks up the new MCP entry.

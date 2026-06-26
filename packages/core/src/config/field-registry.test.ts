@@ -136,7 +136,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
     ]);
   });
 
-  test('project-strict fields cover content.dir + preview.scriptSrc + telemetry.localSink.*', () => {
+  test('project-strict fields cover autoSync.default + content.dir + telemetry.localSink.*', () => {
     const leaves: { path: string[]; schema: unknown }[] = [];
     walkLeaves(ConfigSchema, [], leaves);
     const projectStrict = leaves
@@ -144,8 +144,8 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       .map((l) => l.path.join('.'))
       .sort();
     expect(projectStrict).toEqual([
+      'autoSync.default',
       'content.dir',
-      'preview.scriptSrc',
       'telemetry.localSink.attributeDenylist',
       'telemetry.localSink.enabled',
       'telemetry.localSink.logs.maxBytes',
@@ -153,7 +153,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
     ]);
   });
 
-  test('project-local-strict fields cover autoSync.enabled + appearance.sidebar.*', () => {
+  test('project-local-strict fields cover autoSync.enabled + appearance.sidebar.* + search.semantic.* + terminal.enabled', () => {
     const leaves: { path: string[]; schema: unknown }[] = [];
     walkLeaves(ConfigSchema, [], leaves);
     const projectLocalStrict = leaves
@@ -161,9 +161,14 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       .map((l) => l.path.join('.'))
       .sort();
     expect(projectLocalStrict).toEqual([
-      'appearance.sidebar.showAllFiles',
       'appearance.sidebar.showHiddenFiles',
       'autoSync.enabled',
+      'search.semantic.baseUrl',
+      'search.semantic.dimensions',
+      'search.semantic.enabled',
+      'search.semantic.model',
+      'search.semantic.similarityFloor',
+      'terminal.enabled',
     ]);
   });
 });

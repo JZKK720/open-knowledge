@@ -64,12 +64,12 @@ function instrumentChain(opts: InstrumentOpts = {}): string {
     }
     chain = replaceOrThrow(
       chain,
-      'USER_BUNDLE="$HOME/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+      'USER_BUNDLE="$HOME/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
       `USER_BUNDLE="${opts.bundleOverride}__user_bundle__"`,
     );
     chain = replaceOrThrow(
       chain,
-      'BUNDLE="/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+      'BUNDLE="/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
       `BUNDLE="${opts.bundleOverride}"`,
     );
   }
@@ -113,7 +113,7 @@ describe('CHAIN_V1 POSIX shell grammar (cross-platform)', () => {
         chainOverride: chain,
       });
       expect(status).toBe(127);
-      expect(stderr).toContain('Open Knowledge: install OK Desktop or Node.js 24+');
+      expect(stderr).toContain('OpenKnowledge: install OK Desktop or Node.js 24+');
     } finally {
       rmSync(tmpHome, { recursive: true, force: true });
     }
@@ -160,7 +160,7 @@ describe('CHAIN_V1 POSIX shell grammar (cross-platform)', () => {
         chainOverride: chain,
       });
       expect(status).toBe(127);
-      expect(stderr).toContain('Open Knowledge: install OK Desktop or Node.js 24+');
+      expect(stderr).toContain('OpenKnowledge: install OK Desktop or Node.js 24+');
       expect(stderr).not.toContain('no matches found');
     } finally {
       rmSync(tmpHome, { recursive: true, force: true });
@@ -176,12 +176,12 @@ describe('CHAIN_V1 POSIX shell grammar (cross-platform)', () => {
 
       let chain = replaceOrThrow(
         CHAIN_V1,
-        'USER_BUNDLE="$HOME/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+        'USER_BUNDLE="$HOME/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
         `USER_BUNDLE="${join(tmpHome, 'no-such-user-bundle.sh')}"`,
       );
       chain = replaceOrThrow(
         chain,
-        'BUNDLE="/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh"',
+        'BUNDLE="/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh"',
         `BUNDLE="${crashBundle}"`,
       );
       const { stdout, status } = runChain({

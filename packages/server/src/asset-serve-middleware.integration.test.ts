@@ -11,6 +11,7 @@ import {
 import sirv from 'sirv';
 import { createAssetServeMiddleware } from './asset-serve-middleware.ts';
 import { createContentFilter } from './content-filter.ts';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 interface Harness {
   baseURL: string;
@@ -38,12 +39,7 @@ async function startHarness(contentDir: string): Promise<Harness> {
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, resolve));
-  const address = server.address();
-  if (typeof address !== 'object' || address === null) {
-    throw new Error('server did not bind to a port');
-  }
-  const baseURL = `http://127.0.0.1:${address.port}`;
+  const { baseUrl: baseURL } = await listenOnLoopback(server);
 
   return {
     baseURL,

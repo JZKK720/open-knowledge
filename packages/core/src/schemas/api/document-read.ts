@@ -20,7 +20,7 @@ export type DocumentReadSuccess = z.infer<typeof DocumentReadSuccessSchema>;
 
 export const DocumentListEntrySchema = z
   .object({
-    kind: z.enum(['document', 'asset', 'folder']).default('document'),
+    kind: z.enum(['document', 'asset', 'folder', 'file']).default('document'),
     docName: z.string().min(1).optional(),
     docExt: z.string().min(1).default('.md'),
     size: z.number().int().nonnegative(),
@@ -56,6 +56,14 @@ export const DocumentListEntrySchema = z
           entry.referencedBy === undefined
         );
       }
+      if (entry.kind === 'file') {
+        return (
+          entry.path !== undefined &&
+          entry.mediaKind === undefined &&
+          entry.referencedBy === undefined &&
+          entry.hasChildren === undefined
+        );
+      }
       return (
         entry.path !== undefined &&
         entry.assetExt !== undefined &&
@@ -65,7 +73,7 @@ export const DocumentListEntrySchema = z
     },
     {
       message:
-        'document/asset/folder kind must match its required fields (document → docName; asset → path+assetExt+referencedBy; folder → path only, no docName)',
+        'document/asset/folder/file kind must match its required fields (document → docName; asset → path+assetExt+referencedBy; folder → path only, no docName; file → path, no mediaKind/referencedBy/hasChildren)',
     },
   ) satisfies StandardSchemaV1;
 export type DocumentListEntry = z.infer<typeof DocumentListEntrySchema>;

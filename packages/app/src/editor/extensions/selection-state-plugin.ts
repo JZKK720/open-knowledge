@@ -118,7 +118,7 @@ function deriveRangeEncompassedBlockIds(
     const node = state.doc.nodeAt(pos);
     if (!node) continue;
     if (pos + node.nodeSize > to) continue;
-    if (!ids) ids = new Set<string>();
+    ids ||= new Set<string>();
     ids.add(id);
   }
   return ids ?? EMPTY_RANGE_SET;

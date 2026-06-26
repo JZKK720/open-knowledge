@@ -1,31 +1,40 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { buildPatternDConstructorOptions } from '../TiptapEditor';
+import { buildSeededPatternDProvider, fakeClipboard } from '../walk-currency-test-harness';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TIPTAP_EDITOR_PATH = join(__dirname, '..', 'TiptapEditor.tsx');
+type WysiwygEditorProps = NonNullable<
+  ReturnType<typeof buildPatternDConstructorOptions>['editorProps']
+> & {
+  handleDOMEvents?: Record<string, unknown>;
+};
 
-describe('WYSIWYG STOP rule — no handleDOMEvents.copy/cut/dragstart (precedent #19(b))', () => {
-  const source = readFileSync(TIPTAP_EDITOR_PATH, 'utf-8');
+function buildWysiwygEditorProps(): WysiwygEditorProps {
+  const { provider, cleanup } = buildSeededPatternDProvider('wysiwyg-stop-rule');
+  try {
+    return buildPatternDConstructorOptions({
+      provider,
+      clipboard: fakeClipboard,
+      ctorStart: 0,
+    }).editorProps as WysiwygEditorProps;
+  } finally {
+    cleanup();
+  }
+}
 
-  test('TiptapEditor.tsx does NOT register handleDOMEvents.copy', () => {
-    expect(source).not.toMatch(/handleDOMEvents\s*:\s*\{[^}]*\bcopy\s*:/);
-    expect(source).not.toMatch(/handleDOMEvents\.copy\s*=/);
+describe('WYSIWYG STOP rule — ProseMirror clipboard hooks', () => {
+  test('wires the ProseMirror clipboard serializer hooks', () => {
+    const props = buildWysiwygEditorProps();
+
+    expect(typeof props.clipboardTextSerializer).toBe('function');
+    expect(props.clipboardSerializer).toBe(fakeClipboard.html.serializer);
   });
 
-  test('TiptapEditor.tsx does NOT register handleDOMEvents.cut', () => {
-    expect(source).not.toMatch(/handleDOMEvents\s*:\s*\{[^}]*\bcut\s*:/);
-    expect(source).not.toMatch(/handleDOMEvents\.cut\s*=/);
-  });
+  test('does not wire DOM-level copy/cut/dragstart handlers on editorProps', () => {
+    const props = buildWysiwygEditorProps();
+    const handleDOMEvents = props.handleDOMEvents ?? {};
 
-  test('TiptapEditor.tsx does NOT register handleDOMEvents.dragstart', () => {
-    expect(source).not.toMatch(/handleDOMEvents\s*:\s*\{[^}]*\bdragstart\s*:/);
-    expect(source).not.toMatch(/handleDOMEvents\.dragstart\s*=/);
-  });
-
-  test('TiptapEditor.tsx DOES wire clipboardTextSerializer (PM-hook path)', () => {
-    expect(source).toContain('clipboardTextSerializer');
-    expect(source).toContain('clipboardSerializer');
+    expect(handleDOMEvents).not.toHaveProperty('copy');
+    expect(handleDOMEvents).not.toHaveProperty('cut');
+    expect(handleDOMEvents).not.toHaveProperty('dragstart');
   });
 });

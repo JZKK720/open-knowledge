@@ -153,6 +153,10 @@ export const ASSET_EXTENSIONS: ReadonlySet<string> = new Set([
   'aac',
   'opus',
   'zip',
+  '7z',
+  'tar',
+  'gz',
+  'rar',
   'woff',
   'woff2',
   'ttf',
@@ -161,13 +165,35 @@ export const ASSET_EXTENSIONS: ReadonlySet<string> = new Set([
   'docx',
   'xlsx',
   'pptx',
+  'doc',
+  'xls',
+  'ppt',
+  'odt',
+  'ods',
+  'odp',
+  'pages',
+  'numbers',
+  'key',
+  'epub',
+  'mobi',
   'csv',
+  'tsv',
   'txt',
   'rtf',
   'json',
+  'yaml',
+  'yml',
+  'xml',
   'toml',
   'lock',
+  'gpx',
+  'html',
+  'htm',
 ]);
+
+export const SANDBOXED_HTML_EXTENSIONS: ReadonlySet<string> = new Set(['html', 'htm']);
+
+export const SANDBOXED_HTML_CSP = "sandbox allow-scripts; connect-src 'none'";
 
 export const INLINE_RENDERABLE_EXTENSIONS: ReadonlySet<string> = new Set([
   'png',
@@ -288,6 +314,7 @@ assertSubset('SIDEBAR_VIDEO_ASSET_EXTENSIONS', SIDEBAR_VIDEO_EXTENSIONS, VIDEO_E
 assertSubset('SIDEBAR_AUDIO_ASSET_EXTENSIONS', SIDEBAR_AUDIO_EXTENSIONS, AUDIO_EXTENSIONS);
 assertSubset('SIDEBAR_PDF_ASSET_EXTENSIONS', SIDEBAR_PDF_EXTENSIONS, PDF_EXTENSIONS);
 assertSubset('FILE_ATTACHMENT_EXTENSIONS', [...FILE_ATTACHMENT_EXTENSIONS], WIKI_EMBED_EXTENSIONS);
+assertSubset('WIKI_EMBED_EXTENSIONS', [...WIKI_EMBED_EXTENSIONS], ASSET_EXTENSIONS);
 
 export const SIDEBAR_IMAGE_ASSET_EXTENSIONS: ReadonlySet<string> = new Set(
   SIDEBAR_IMAGE_EXTENSIONS,
@@ -314,6 +341,17 @@ assertSubset(
   INLINE_RENDERABLE_EXTENSIONS,
 );
 
+export const TEXT_VIEWER_FALLBACK_EXTENSIONS: ReadonlySet<string> = new Set(['base', 'canvas']);
+
+import { CODE_FILE_EXTENSIONS } from './code-languages';
+
+export { CODE_FILE_EXTENSIONS };
+
+export const LINKABLE_ASSET_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...ASSET_EXTENSIONS,
+  ...TEXT_VIEWER_FALLBACK_EXTENSIONS,
+]);
+
 export function mediaKindForSidebarAssetExtension(ext: string): InlineAssetMediaKind | null {
   const normalized = ext.toLowerCase().replace(/^\./, '');
   if (SIDEBAR_IMAGE_ASSET_EXTENSIONS.has(normalized)) return 'image';
@@ -321,5 +359,7 @@ export function mediaKindForSidebarAssetExtension(ext: string): InlineAssetMedia
   if (SIDEBAR_AUDIO_ASSET_EXTENSIONS.has(normalized)) return 'audio';
   if (SIDEBAR_PDF_ASSET_EXTENSIONS.has(normalized)) return 'pdf';
   if (SIDEBAR_TEXT_ASSET_EXTENSIONS.has(normalized)) return 'text';
+  if (TEXT_VIEWER_FALLBACK_EXTENSIONS.has(normalized)) return 'text';
+  if (CODE_FILE_EXTENSIONS.has(normalized)) return 'text';
   return null;
 }

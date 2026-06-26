@@ -2,11 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AutoStartDisabledError } from '../../autostart.ts';
 import { resolveLockDir } from '../../config/paths.ts';
 import { type Config, ConfigSchema } from '../../config/schema.ts';
 import { readArmedPaneTarget } from '../../pane-target.ts';
 import { register } from './get-preview-url.ts';
-import { bindTestUiLock } from './preview-url-test-helpers.ts';
+import { bindTestServerLock, bindTestUiLock } from './preview-url-test-helpers.ts';
 import type { ServerInstance } from './shared.ts';
 
 const BASE_CONFIG: Config = ConfigSchema.parse({});
@@ -21,13 +22,22 @@ interface ToolResult {
 }
 
 type ToolHandler = (args: {
-  docName?: string;
+  document?: string;
   folder?: string;
   armPaneTarget?: boolean;
   cwd?: string;
 }) => Promise<ToolResult>;
 
-function captureRegistration(cwd: string, config: Config = BASE_CONFIG): ToolHandler {
+interface EnsureDeps {
+  serverUrl?: (cwd?: string) => Promise<string | undefined>;
+  uiBindWait?: { timeoutMs?: number; pollIntervalMs?: number };
+}
+
+function captureRegistration(
+  cwd: string,
+  config: Config = BASE_CONFIG,
+  ensure?: EnsureDeps,
+): ToolHandler {
   let captured: ToolHandler | null = null;
   const server = {
     registerTool(_name: string, _config: unknown, handler: ToolHandler) {
@@ -40,13 +50,14 @@ function captureRegistration(cwd: string, config: Config = BASE_CONFIG): ToolHan
   register(server, {
     config,
     resolveCwd: async () => cwd,
+    ...ensure,
   });
   if (!captured) throw new Error('tool not registered');
   return captured;
 }
 
 describe('preview_url tool — UI running', () => {
-  test('with docName: composes baseUrl + the doc route', async () => {
+  test('with document: composes baseUrl + the doc route', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
     const uiBase = bindTestUiLock(cwd);
     const handler = captureRegistration(cwd);
@@ -140,7 +151,7 @@ describe('preview_url tool — UI running', () => {
 });
 
 describe('preview_url tool — no UI running', () => {
-  test('returns running:false + null url when no ui.lock is present', async () => {
+  test('returns running:false + the ok-start hint when nothing is running', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
     const handler = captureRegistration(cwd);
     const result = await handler({ document: 'specs/foo/SPEC' });
@@ -149,7 +160,9 @@ describe('preview_url tool — no UI running', () => {
     expect(result.structuredContent?.url).toBeNull();
     expect(result.structuredContent?.baseUrl).toBeNull();
     expect(result.structuredContent?.autoOpen).toBe(true);
-    expect(result.content[0]?.text).toContain('No UI is running');
+    expect(result.content[0]?.text).toContain('No OpenKnowledge server is running');
+    expect(result.content[0]?.text).toContain('`ok start`');
+    expect(result.content[0]?.text).not.toContain('`ok ui`');
   });
 
   test('no-UI branch is the same regardless of docName', async () => {
@@ -159,6 +172,116 @@ describe('preview_url tool — no UI running', () => {
     expect(result.structuredContent?.running).toBe(false);
     expect(result.structuredContent?.url).toBeNull();
     expect(result.structuredContent?.autoOpen).toBe(true);
+  });
+
+  test('server alive but no UI: advises ok ui, not ok start', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    bindTestServerLock(cwd);
+    const handler = captureRegistration(cwd);
+    const result = await handler({ document: 'specs/foo/SPEC' });
+    expect(result.structuredContent?.running).toBe(false);
+    expect(result.content[0]?.text).toContain('OK server is running');
+    expect(result.content[0]?.text).toContain('`ok ui`');
+    expect(result.content[0]?.text).not.toContain('`ok start`');
+  });
+});
+
+describe('preview_url tool — backend demand-ensure', () => {
+  test('cold project: ensure spawns the backend and the call returns a live URL once ui.lock binds', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    let resolverCalls = 0;
+    let uiBase = '';
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        resolverCalls += 1;
+        bindTestServerLock(cwd);
+        setTimeout(() => {
+          uiBase = bindTestUiLock(cwd);
+        }, 30);
+        return 'http://localhost:4321';
+      },
+      uiBindWait: { timeoutMs: 1500, pollIntervalMs: 10 },
+    });
+    const result = await handler({ document: 'specs/foo/SPEC' });
+    expect(resolverCalls).toBe(1);
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.running).toBe(true);
+    expect(result.structuredContent?.url).toBe(`${uiBase}/#/specs/foo/SPEC`);
+  });
+
+  test('resolver runs on every call, even with a live UI (orphan-heal contract)', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    const uiBase = bindTestUiLock(cwd);
+    let resolverCalls = 0;
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        resolverCalls += 1;
+        return 'http://localhost:4321';
+      },
+    });
+    const result = await handler({});
+    expect(resolverCalls).toBe(1);
+    expect(result.structuredContent?.running).toBe(true);
+    expect(result.structuredContent?.url).toBe(uiBase);
+  });
+
+  test('auto-start opt-out: soft not-running payload naming the knob', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        throw new AutoStartDisabledError(
+          'OpenKnowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
+        );
+      },
+    });
+    const result = await handler({ document: 'specs/foo/SPEC' });
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.running).toBe(false);
+    expect(result.structuredContent?.url).toBeNull();
+    expect(result.content[0]?.text).toContain('`ok start`');
+    expect(result.content[0]?.text).toContain('OK_MCP_AUTOSTART=0');
+    expect(result.content[0]?.text).not.toContain('`ok ui`');
+  });
+
+  test('spawn failure surfaces as a tool error carrying the resolver message', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        throw new Error('server did not start within 5000ms stderr:\nboom');
+      },
+    });
+    const result = await handler({ document: 'specs/foo/SPEC' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('did not start within');
+  });
+
+  test('fresh spawn whose UI never binds: server-running hint after the bounded wait', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        bindTestServerLock(cwd);
+        return 'http://localhost:4321';
+      },
+      uiBindWait: { timeoutMs: 60, pollIntervalMs: 10 },
+    });
+    const result = await handler({ document: 'specs/foo/SPEC' });
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.running).toBe(false);
+    expect(result.content[0]?.text).toContain('OK server is running');
+    expect(result.content[0]?.text).toContain('`ok ui`');
+    expect(result.content[0]?.text).not.toContain('`ok start`');
+  });
+
+  test('ensure failure does not lose a requested pane-target arm', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ok-get-preview-url-'));
+    const handler = captureRegistration(cwd, BASE_CONFIG, {
+      serverUrl: async () => {
+        throw new Error('spawn failed: ENOENT');
+      },
+    });
+    const result = await handler({ document: 'specs/foo/SPEC', armPaneTarget: true });
+    expect(result.isError).toBe(true);
+    expect(readArmedPaneTarget(resolveLockDir(cwd))).toBe('#/specs/foo/SPEC');
   });
 });
 

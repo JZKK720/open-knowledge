@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,6 +146,57 @@ describe('write/edit/delete({ template }) — server-routed for attribution (PRD
     expect(r.isError).toBe(true);
     expect(textOf(r)).toContain('must be letters, digits');
     expect(existsSync(join(cwd, 'x', '.ok', 'templates', 'a.b.md'))).toBe(false);
+  });
+});
+
+describe('edit({ template }) — fence trailing whitespace (fm-delimiter hazard)', () => {
+  test('a body edit preserves frontmatter stored under trailing-whitespace fences', async () => {
+    const cwd = newProject();
+    mkdirSync(join(cwd, 'fishing-log', '.ok', 'templates'), { recursive: true });
+    writeFileSync(
+      join(cwd, 'fishing-log', '.ok', 'templates', 'trip-log.md'),
+      '--- \ntitle: Trip Log\ndescription: Catch log\n---\n\n# Log\n\nFish: none\n',
+    );
+
+    let putPayload: Record<string, unknown> | undefined;
+    const stub = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (req.method === 'PUT' && new URL(req.url).pathname === '/api/template') {
+          putPayload = (await req.json()) as Record<string, unknown>;
+          return Response.json({ path: 'fishing-log/.ok/templates/trip-log.md' });
+        }
+        return Response.json({ error: 'unexpected request' }, { status: 404 });
+      },
+    });
+    try {
+      let handler: Handler | undefined;
+      const server = {
+        registerTool(_name: string, _cfg: unknown, h: Handler) {
+          handler = h;
+        },
+      } as unknown as ServerInstance;
+      registerEdit(server, {
+        serverUrl: `http://127.0.0.1:${stub.port}`,
+        config: BASE_CONFIG,
+        resolveCwd: async () => cwd,
+      } as unknown as Parameters<typeof registerEdit>[1]);
+      if (!handler) throw new Error('tool did not register');
+
+      const r = await handler({
+        template: { path: 'fishing-log/trip-log', find: 'none', replace: 'two bass' },
+      });
+
+      expect(r.isError).toBeUndefined();
+      const fm = putPayload?.frontmatter as Record<string, unknown> | undefined;
+      expect(fm?.title).toBe('Trip Log');
+      expect(fm?.description).toBe('Catch log');
+      const body = putPayload?.body as string | undefined;
+      expect(body).toContain('two bass');
+      expect(body).not.toContain('title: Trip Log');
+    } finally {
+      stub.stop(true);
+    }
   });
 });
 

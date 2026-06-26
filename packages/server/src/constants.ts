@@ -1,1 +1,1 @@
-export const MCP_SERVER_NAME = 'open-knowledge';
+export { MCP_SERVER_NAME } from '@inkeep/open-knowledge-core';

@@ -64,6 +64,25 @@ describe('enrichPath — slim (multi-path) shape', () => {
     expect(meta.tags).toEqual([]);
   });
 
+  test('frontmatter under trailing-whitespace fences still enriches title/description/tags', async () => {
+    const project = await bootstrapProject();
+    const contentDir = resolve(project, 'content');
+    mkdirSync(contentDir, { recursive: true });
+    writeFileSync(
+      resolve(contentDir, 'open-space.md'),
+      '--- \ntitle: Auth\ndescription: OAuth\ntags:\n  - auth\n---\n\nBody\n',
+    );
+    writeFileSync(resolve(contentDir, 'close-tab.md'), '---\ntitle: Sessions\n---\t\n\nBody\n');
+
+    const openSpace = await enrichPath('content/open-space.md', { projectDir: project });
+    expect(openSpace.title).toBe('Auth');
+    expect(openSpace.description).toBe('OAuth');
+    expect(openSpace.tags).toEqual(['auth']);
+
+    const closeTab = await enrichPath('content/close-tab.md', { projectDir: project });
+    expect(closeTab.title).toBe('Sessions');
+  });
+
   test('missing file still returns a slim shape with tags=[]', async () => {
     const project = await bootstrapProject();
     const meta = await enrichPath('does-not-exist.md', { projectDir: project });

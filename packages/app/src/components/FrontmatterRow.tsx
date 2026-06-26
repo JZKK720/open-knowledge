@@ -9,10 +9,16 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import { AlertTriangle, GripVertical, Trash2, X } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useRef } from 'react';
+import { ArrayOfObjectsWidget } from '@/components/ArrayOfObjectsWidget';
+import { ObjectWidget } from '@/components/ObjectWidget';
 import { PageCoverWidget, PageIconWidget } from '@/components/PageHeaderWidgets';
 import {
   BooleanWidget,
+  ComplexValueWidget,
   DateWidget,
+  isArrayOfObjectsValue,
+  isComplexValue,
+  isPlainObjectValue,
   ListWidget,
   NumberWidget,
   TextWidget,
@@ -29,6 +35,8 @@ export interface AddDraft {
   value: FrontmatterValue;
   error: string | null;
 }
+
+const ADD_ROW_PATH: ReadonlyArray<string | number> = ['__add__'] as const;
 
 export interface RenameDraft {
   key: string;
@@ -55,6 +63,7 @@ interface FrontmatterRowProps {
   isDuplicate?: boolean;
   badge?: ReactNode;
   isPlaceholder?: boolean;
+  path?: ReadonlyArray<string | number>;
   onCommit: (next: FrontmatterValue) => void;
   onChangeType: (next: FrontmatterType) => void;
   onRemove?: () => void;
@@ -71,11 +80,14 @@ export function FrontmatterRow({
   isDuplicate = false,
   badge,
   isPlaceholder = false,
+  path,
   onCommit,
   onChangeType,
   onRemove,
 }: FrontmatterRowProps) {
   const { t } = useLingui();
+  const isComplex = isComplexValue(value);
+  const rowPath: ReadonlyArray<string | number> = path ?? [keyName];
   return (
     <SortableShell
       sortableId={sortableId}
@@ -84,18 +96,34 @@ export function FrontmatterRow({
       error={error}
       isDuplicate={isDuplicate}
       isPlaceholder={isPlaceholder}
+      isComplex={isComplex}
     >
       {(dragHandle) => (
         <>
-          <div className="flex items-start gap-1">
+          {/*
+            Narrow-container reflow (precedent: Tailwind v4 container queries,
+            see ui/field.tsx). The row is a `@container/prow`; below ~26rem of
+            row width the fixed 128px key column starves the value widget into a
+            tall thin strip. At that width the value flips to `order-last` +
+            `basis-full` so it wraps to its own full-width line, indented by the
+            drag-handle + type-icon gutter (3.25rem = w-4 + gap + w-7 + gap) so
+            its left edge lines up under the key name instead of jutting out to
+            the row's left edge. Above the breakpoint every reflow class is an
+            inert `@max-*` override, so the wide layout is unchanged.
+          */}
+          <div className="flex items-start gap-1 @max-[26rem]/prow:flex-wrap">
             {dragHandle}
             <div className="flex items-center gap-1" data-testid="property-row-identity">
               {isPlaceholder ? (
                 <PlaceholderIdentity keyName={keyName} type={declared} />
               ) : (
                 <>
-                  <TypeIconButton keyName={keyName} type={declared} onChangeType={onChangeType} />
-                  <div className="w-32 shrink-0">
+                  {isComplex ? (
+                    <ComplexValueTypeIcon keyName={keyName} type={declared} />
+                  ) : (
+                    <TypeIconButton keyName={keyName} type={declared} onChangeType={onChangeType} />
+                  )}
+                  <div className="w-32 shrink-0 @max-[26rem]/prow:w-auto">
                     {rename?.state ? (
                       <RenameInput
                         keyName={keyName}
@@ -126,12 +154,13 @@ export function FrontmatterRow({
                 <AlertTriangle className="size-3.5" />
               </span>
             ) : null}
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 @max-[26rem]/prow:order-last @max-[26rem]/prow:mt-0.5 @max-[26rem]/prow:basis-full @max-[26rem]/prow:pl-[3.25rem]">
               <Widget
                 key={`widget-${resetCounter}`}
                 keyName={keyName}
                 value={value}
                 widgetType={declared}
+                path={rowPath}
                 onCommit={onCommit}
               />
             </div>
@@ -156,7 +185,7 @@ export function FrontmatterRow({
               role="alert"
               data-testid="property-error"
               data-key={keyName}
-              className="pl-9 text-[10px] text-destructive"
+              className="pl-9 text-[10px] text-destructive @max-[26rem]/prow:pl-[3.25rem]"
             >
               {error}
             </div>
@@ -174,6 +203,7 @@ function SortableShell({
   error,
   isDuplicate,
   isPlaceholder,
+  isComplex,
   children,
 }: {
   sortableId: string | undefined;
@@ -182,6 +212,7 @@ function SortableShell({
   error?: string | null;
   isDuplicate: boolean;
   isPlaceholder: boolean;
+  isComplex: boolean;
   children: (dragHandle: ReactNode) => ReactNode;
 }) {
   if (sortableId) {
@@ -192,6 +223,7 @@ function SortableShell({
         declared={declared}
         error={error}
         isDuplicate={isDuplicate}
+        isComplex={isComplex}
       >
         {children}
       </SortableRowBody>
@@ -200,12 +232,13 @@ function SortableShell({
   const dragHandleSlot = isPlaceholder ? <span aria-hidden className="h-7 w-4 shrink-0" /> : null;
   return (
     <div
-      className="group py-0.5"
+      className="group @container/prow py-0.5"
       data-testid="property-row"
       data-key={keyName}
       data-widget-type={declared}
       data-error={error ?? undefined}
       data-duplicate={isDuplicate || undefined}
+      data-complex-value={isComplex || undefined}
     >
       {children(dragHandleSlot)}
     </div>
@@ -218,6 +251,7 @@ function SortableRowBody({
   declared,
   error,
   isDuplicate,
+  isComplex,
   children,
 }: {
   sortableId: string;
@@ -225,6 +259,7 @@ function SortableRowBody({
   declared: FrontmatterType;
   error?: string | null;
   isDuplicate: boolean;
+  isComplex: boolean;
   children: (dragHandle: ReactNode) => ReactNode;
 }) {
   const { t } = useLingui();
@@ -256,16 +291,34 @@ function SortableRowBody({
     <div
       ref={setNodeRef}
       style={style}
-      className="group py-0.5"
+      className="group @container/prow py-0.5"
       data-testid="property-row"
       data-key={keyName}
       data-widget-type={declared}
       data-error={error ?? undefined}
       data-duplicate={isDuplicate || undefined}
+      data-complex-value={isComplex || undefined}
       data-dragging={isDragging || undefined}
     >
       {children(dragHandle)}
     </div>
+  );
+}
+
+function ComplexValueTypeIcon({ keyName, type }: { keyName: string; type: FrontmatterType }) {
+  const { t } = useLingui();
+  const Icon = TYPE_ICON[type];
+  return (
+    <span
+      role="img"
+      data-testid="type-icon-static"
+      data-key={keyName}
+      data-type={type}
+      aria-label={t`${keyName} type: complex value (nested; read-only)`}
+      className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
+    >
+      <Icon className="size-3.5" aria-hidden="true" />
+    </span>
   );
 }
 
@@ -361,7 +414,7 @@ function PlaceholderIdentity({ keyName, type }: { keyName: string; type: Frontma
       >
         <Icon className="size-3.5" />
       </span>
-      <div className="w-32 shrink-0">
+      <div className="w-32 shrink-0 @max-[26rem]/prow:w-auto">
         <span
           data-testid="property-placeholder-name"
           data-key={keyName}
@@ -379,7 +432,7 @@ interface AddPropertyRowProps {
   onChangeName: (next: string) => void;
   onChangeType: (next: FrontmatterType) => void;
   onChangeValue: (next: FrontmatterValue) => void;
-  onCommit: () => void;
+  onCommit: (valueOverride?: FrontmatterValue) => void;
   onCancel: () => void;
 }
 
@@ -398,10 +451,10 @@ export function AddPropertyRow({
 
   return (
     <div
-      className="mt-1 rounded border border-dashed bg-background/40 p-1"
+      className="mt-1 rounded border border-dashed bg-background/40 p-1 @container/prow"
       data-testid="add-property-row"
     >
-      <div className="flex items-start gap-1">
+      <div className="flex items-start gap-1 @max-[26rem]/prow:flex-wrap">
         <TypeIconButton
           keyName="__add__"
           type={draft.type}
@@ -431,21 +484,23 @@ export function AddPropertyRow({
               onCancel();
             }
           }}
-          className="h-7 w-32 border-transparent bg-transparent px-2 text-sm shadow-none placeholder:text-muted-foreground/60 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 rounded-sm"
+          className="h-7 w-32 border-transparent bg-transparent px-2 text-sm shadow-none placeholder:text-muted-foreground/60 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 rounded-sm @max-[26rem]/prow:w-auto @max-[26rem]/prow:flex-1"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 @max-[26rem]/prow:order-last @max-[26rem]/prow:mt-0.5 @max-[26rem]/prow:basis-full @max-[26rem]/prow:pl-[2rem]">
           <Widget
             keyName="__add__"
             value={draft.value}
             widgetType={draft.type}
+            path={ADD_ROW_PATH}
             onCommit={onChangeValue}
+            onSubmit={onCommit}
           />
         </div>
 
         <Button
           type="button"
           data-testid="add-property-commit"
-          onClick={onCommit}
+          onClick={() => onCommit()}
           disabled={isAddDisabled}
           size="sm"
           className="rounded bg-primary text-xs text-primary-foreground hover:bg-primary/90"
@@ -482,10 +537,12 @@ interface WidgetProps {
   keyName: string;
   value: FrontmatterValue;
   widgetType: FrontmatterType;
+  path: ReadonlyArray<string | number>;
   onCommit: (next: FrontmatterValue) => void;
+  onSubmit?: (next: FrontmatterValue) => void;
 }
 
-function Widget({ keyName, value, widgetType, onCommit }: WidgetProps) {
+function Widget({ keyName, value, widgetType, path, onCommit, onSubmit }: WidgetProps) {
   if (keyName === 'icon') {
     const str = typeof value === 'string' ? value : '';
     return <PageIconWidget keyName={keyName} value={str} onCommit={onCommit} />;
@@ -494,8 +551,21 @@ function Widget({ keyName, value, widgetType, onCommit }: WidgetProps) {
     const str = typeof value === 'string' ? value : '';
     return <PageCoverWidget keyName={keyName} value={str} onCommit={onCommit} />;
   }
+  if (isPlainObjectValue(value)) {
+    return <ObjectWidget keyName={keyName} value={value} path={path} depth={path.length - 1} />;
+  }
+  if (isArrayOfObjectsValue(value)) {
+    return (
+      <ArrayOfObjectsWidget keyName={keyName} value={value} path={path} depth={path.length - 1} />
+    );
+  }
+  if (isComplexValue(value)) {
+    return <ComplexValueWidget keyName={keyName} value={value} />;
+  }
   if (widgetType === 'list') {
-    const arr = Array.isArray(value) ? value : [];
+    const arr = Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === 'string')
+      : [];
     return <ListWidget keyName={keyName} value={arr} onCommit={onCommit} />;
   }
   if (widgetType === 'boolean') {
@@ -504,15 +574,15 @@ function Widget({ keyName, value, widgetType, onCommit }: WidgetProps) {
   }
   if (widgetType === 'number') {
     const num = typeof value === 'number' ? value : 0;
-    return <NumberWidget keyName={keyName} value={num} onCommit={onCommit} />;
+    return <NumberWidget keyName={keyName} value={num} onCommit={onCommit} onSubmit={onSubmit} />;
   }
   if (widgetType === 'date') {
     const str = typeof value === 'string' ? value : '';
-    return <DateWidget keyName={keyName} value={str} onCommit={onCommit} />;
+    return <DateWidget keyName={keyName} value={str} onCommit={onCommit} onSubmit={onSubmit} />;
   }
   const str =
     typeof value === 'string' ? value : Array.isArray(value) ? value.join(', ') : String(value);
-  return <TextWidget keyName={keyName} value={str} onCommit={onCommit} />;
+  return <TextWidget keyName={keyName} value={str} onCommit={onCommit} onSubmit={onSubmit} />;
 }
 
 export function InheritedBadge({

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { resolveGitDir } from '@inkeep/open-knowledge-core/shadow-repo-layout';
-import { readBranchFromHead } from './head-watcher';
+import { readBranchFromHead, startHeadWatcher, watchedGitFile } from './head-watcher';
 
 let tmpDir: string;
 
@@ -83,5 +84,49 @@ describe('readBranchFromHead', () => {
     writeFileSync(resolve(gitDir, 'HEAD'), 'invalid\n');
 
     expect(readBranchFromHead(gitDir)).toBeNull();
+  });
+});
+
+describe('watchedGitFile', () => {
+  test('returns the basename for watched .git ref files', () => {
+    expect(watchedGitFile('/x/.git/HEAD')).toBe('HEAD');
+    expect(watchedGitFile('/x/.git/ORIG_HEAD')).toBe('ORIG_HEAD');
+    expect(watchedGitFile('/x/.git/MERGE_HEAD')).toBe('MERGE_HEAD');
+    expect(watchedGitFile('/x/.git/index.lock')).toBe('index.lock');
+  });
+
+  test('returns null for paths outside the watched set', () => {
+    expect(watchedGitFile('/x/.git/config')).toBeNull();
+    expect(watchedGitFile('/x/.git/objects/ab/cdef')).toBeNull();
+    expect(watchedGitFile('')).toBeNull();
+  });
+});
+
+describe('startHeadWatcher chokidar fallback', () => {
+  test('selects the chokidar backend, reads initial state, and tears down cleanly', async () => {
+    const projectRoot = resolve(tmpDir, 'repo');
+    mkdirSync(projectRoot, { recursive: true });
+    const git = (args: string) => execSync(`git ${args}`, { cwd: projectRoot, stdio: 'ignore' });
+    git('init -q');
+    git('config user.email t@t.co');
+    git('config user.name t');
+    writeFileSync(resolve(projectRoot, 'a.md'), 'hello\n');
+    git('add -A');
+    git('commit -qm init');
+    git('branch -M main'); // normalize branch name across git default-branch configs
+
+    const handle = await startHeadWatcher(
+      projectRoot,
+      () => {},
+      () => {},
+      {
+        forceBackend: 'chokidar',
+      },
+    );
+    try {
+      expect(handle.getLastKnownBranch()).toBe('main');
+    } finally {
+      await handle.unsubscribe();
+    }
   });
 });

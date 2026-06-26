@@ -1,6 +1,6 @@
-# Open Knowledge Agent Guide
+# OpenKnowledge Agent Guide
 
-This is the public mirror of Open Knowledge. Keep changes compatible with the internal source path `public/open-knowledge/` in `inkeep/agents-private`.
+This is the public mirror of OpenKnowledge. Keep changes compatible with the internal source path `public/open-knowledge/` in `inkeep/agents-private`.
 
 ## Start Here
 
@@ -8,7 +8,7 @@ This is the public mirror of Open Knowledge. Keep changes compatible with the in
 - Read [CONTRIBUTING.md](./CONTRIBUTING.md) before changing public PR flow, dependencies, or exported docs.
 - Use Bun 1.3.13 or newer and Node.js 24 or newer.
 
-For maintainers working inside `inkeep/agents-private`, start Open Knowledge agent sessions from `public/open-knowledge/` when possible. If launched at the monorepo root, first read `public/open-knowledge/AGENTS.md`, then run Bun/build/test commands with cwd set to `public/open-knowledge`.
+For maintainers working inside `inkeep/agents-private`, start OpenKnowledge agent sessions from `public/open-knowledge/` when possible. If launched at the monorepo root, first read `public/open-knowledge/AGENTS.md`, then run Bun/build/test commands with cwd set to `public/open-knowledge`.
 
 ## Commands
 

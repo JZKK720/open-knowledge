@@ -1,5 +1,5 @@
 {
   "title": "Workflows",
   "icon": "LuWorkflow",
-  "pages": ["karpathy-llm-wiki", "entity-vault"]
+  "pages": ["karpathy-llm-wiki", "entity-vault", "supporting-open-knowledge-format"]
 }

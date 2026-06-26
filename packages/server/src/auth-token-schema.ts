@@ -1,3 +1,4 @@
+import { LINEAGE_EPOCH_KEY } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 
 export const HocuspocusAuthTokenSchema = z
@@ -6,6 +7,7 @@ export const HocuspocusAuthTokenSchema = z
     tabSessionId: z.string().optional(),
     expectedServerInstanceId: z.string().optional(),
     expectedBranch: z.string().optional(),
+    expectedDocLineageEpoch: z.string().optional(),
     clientProtocolVersion: z.number().optional(),
     clientRuntimeVersion: z.string().optional(),
     clientKind: z.string().optional(),
@@ -14,11 +16,14 @@ export const HocuspocusAuthTokenSchema = z
 
 export type HocuspocusAuthToken = z.infer<typeof HocuspocusAuthTokenSchema>;
 
+export { LINEAGE_EPOCH_KEY };
+
 export const HOCUSPOCUS_AUTH_REJECTION_REASONS = [
   'server-instance-mismatch',
   'branch-mismatch',
   'rename-redirect',
   'doc-deleted',
+  'doc-lineage-mismatch',
 ] as const;
 export type HocuspocusAuthRejectionReason = (typeof HOCUSPOCUS_AUTH_REJECTION_REASONS)[number];
 

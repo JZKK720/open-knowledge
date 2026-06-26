@@ -42,6 +42,19 @@ function reconstructAttrs(
       continue;
     }
 
+    if (existingIdx >= 0) {
+      const existing = preserved[existingIdx];
+      if (
+        existing.type === 'mdxJsxAttribute' &&
+        existing.value != null &&
+        typeof existing.value === 'object' &&
+        existing.value.type === 'mdxJsxAttributeValueExpression' &&
+        expressionMatchesValue(existing.value.value, value)
+      ) {
+        continue;
+      }
+    }
+
     const newAttr = propToMdxJsxAttribute(key, value);
     if (existingIdx >= 0) {
       preserved[existingIdx] = newAttr;
@@ -51,6 +64,14 @@ function reconstructAttrs(
   }
 
   return preserved;
+}
+
+function expressionMatchesValue(exprText: string, value: unknown): boolean {
+  try {
+    return JSON.stringify(JSON.parse(exprText)) === JSON.stringify(value);
+  } catch {
+    return false;
+  }
 }
 
 export function propToMdxJsxAttribute(name: string, value: unknown): MdxJsxAttribute {

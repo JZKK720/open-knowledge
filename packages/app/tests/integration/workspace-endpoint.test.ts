@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import { sep } from 'node:path';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestServer, type TestServer } from './test-harness';
 
 let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -75,7 +76,7 @@ describe('GET /api/workspace — filesystem edge cases', () => {
 
   beforeAll(async () => {
     fsServer = await createTestServer();
-  });
+  }, HARNESS_BOOT_TIMEOUT_MS);
 
   afterAll(async () => {
     await fsServer.cleanup();

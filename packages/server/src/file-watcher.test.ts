@@ -719,7 +719,7 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
       const result = await filter.rebuildIgnorePatterns();
       expect(result.ok).toBe(true);
 
-      const { prunedFiles, prunedFolders } = reconcileFileIndexAfterFilterRebuild(handle);
+      const { prunedFiles, prunedFolders } = await reconcileFileIndexAfterFilterRebuild(handle);
       expect(prunedFiles).toBe(0);
       expect(prunedFolders).toBe(0);
       expect(handle.getFileIndex().has('hide-me')).toBe(true);
@@ -744,7 +744,7 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
       const result = await filter.rebuildIgnorePatterns();
       expect(result.ok).toBe(true);
 
-      const { prunedFiles, prunedFolders } = reconcileFileIndexAfterFilterRebuild(handle);
+      const { prunedFiles, prunedFolders } = await reconcileFileIndexAfterFilterRebuild(handle);
       expect(prunedFiles).toBe(1);
       expect(prunedFolders).toBe(0);
       expect(handle.getFileIndex().has('will-hide')).toBe(false);
@@ -772,7 +772,7 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
       const result = await filter.rebuildIgnorePatterns();
       expect(result.ok).toBe(true);
 
-      reconcileFileIndexAfterFilterRebuild(handle);
+      await reconcileFileIndexAfterFilterRebuild(handle);
       expect(handle.getFolderIndex().has('archive')).toBe(true);
       expect(handle.getFolderIndex().has('archive/sub')).toBe(true);
       expect(handle.getFileIndex().has('archive/sub/old')).toBe(true);
@@ -790,7 +790,7 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
     try {
       writeFileSync(resolve(tmpDir, '.okignore'), 'unrelated.md\n');
       await filter.rebuildIgnorePatterns();
-      const { prunedFiles, prunedFolders } = reconcileFileIndexAfterFilterRebuild(handle);
+      const { prunedFiles, prunedFolders } = await reconcileFileIndexAfterFilterRebuild(handle);
       expect(prunedFiles).toBe(0);
       expect(prunedFolders).toBe(0);
       expect(handle.getFileIndex().has('keep')).toBe(true);
@@ -814,7 +814,7 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
       const result = await filter.rebuildIgnorePatterns();
       expect(result.ok).toBe(true);
 
-      const { prunedFiles } = reconcileFileIndexAfterFilterRebuild(handle);
+      const { prunedFiles } = await reconcileFileIndexAfterFilterRebuild(handle);
       expect(prunedFiles).toBe(1);
       expect(handle.getFileIndex().has('will-hide')).toBe(false);
       expect(handle.getFileIndex().has('was-hidden')).toBe(true);
@@ -823,8 +823,8 @@ describe('reconcileFileIndexAfterFilterRebuild', () => {
     }
   });
 
-  test('returns zero counts when watcher is undefined (defensive guard)', () => {
-    const { prunedFiles, prunedFolders } = reconcileFileIndexAfterFilterRebuild(undefined);
+  test('returns zero counts when watcher is undefined (defensive guard)', async () => {
+    const { prunedFiles, prunedFolders } = await reconcileFileIndexAfterFilterRebuild(undefined);
     expect(prunedFiles).toBe(0);
     expect(prunedFolders).toBe(0);
   });
@@ -916,13 +916,49 @@ describe('file-watcher ContentFilter refcount hooks', () => {
     );
 
     const kinds = collected.map((e) => e.kind).sort();
-    expect(kinds).toEqual(['asset-create', 'create']);
+    expect(kinds).toEqual(['asset-create', 'create', 'file-create']);
     const asset = collected.find((e) => e.kind === 'asset-create');
     expect(asset?.kind).toBe('asset-create');
     if (asset?.kind === 'asset-create') {
       expect(asset.relativePath).toBe('fresh/pic.png');
     }
     expect(filter.isExcluded('fresh/pic.png')).toBe(false);
+  });
+
+  test('LINKABLE_ASSET_EXTENSIONS: .base file alongside .md dispatches asset-create event', async () => {
+    const filter = createContentFilter({
+      projectDir: tmpDir,
+      contentDir,
+    });
+
+    const newDir = resolve(contentDir, 'canvas-test');
+    mkdirSync(newDir);
+    const mdPath = resolve(newDir, 'note.md');
+    const assetPath = resolve(newDir, 'board.base');
+    writeFileSync(mdPath, '# Note\n');
+    writeFileSync(assetPath, '{}');
+
+    const collected: DiskEvent[] = [];
+    await handleRawEvents(
+      [
+        { type: 'create', path: mdPath },
+        { type: 'create', path: assetPath },
+      ],
+      contentDir,
+      filter,
+      new Map(),
+      new Map(),
+      async (e) => {
+        collected.push(e);
+      },
+    );
+
+    const kinds = collected.map((e) => e.kind).sort();
+    expect(kinds).toEqual(['asset-create', 'create', 'file-create']);
+    const asset = collected.find((e) => e.kind === 'asset-create');
+    if (asset?.kind === 'asset-create') {
+      expect(asset.relativePath).toBe('canvas-test/board.base');
+    }
   });
 
   test('folder create/delete events update the folder index', async () => {
@@ -1077,6 +1113,37 @@ describe('startWatcher symlink handling', () => {
       expect(entry?.canonicalPath).toBe(targetPath);
       expect(entry?.inode).toBeGreaterThan(0);
       expect(entry?.aliases).toContain('link');
+    } finally {
+      await handle.unsubscribe();
+    }
+  });
+
+  test('records a folder-alias edge for a symlinked directory without materializing its subtree', async () => {
+    const canonicalDir = resolve(contentDir, 'canonical');
+    mkdirSync(canonicalDir, { recursive: true });
+    writeFileSync(resolve(canonicalDir, 'note.md'), '# Note\n');
+    mkdirSync(resolve(canonicalDir, 'sub'), { recursive: true });
+    writeFileSync(resolve(canonicalDir, 'sub', 'deep.md'), '# Deep\n');
+    symlinkSync(canonicalDir, resolve(contentDir, 'aliasA'));
+    symlinkSync(canonicalDir, resolve(contentDir, 'aliasB'));
+
+    const handle = await startWatcher(contentDir, async () => {});
+    try {
+      const folderAliasIndex = handle.getFolderAliasIndex();
+      expect(folderAliasIndex.get('aliasA')).toBe('canonical');
+      expect(folderAliasIndex.get('aliasB')).toBe('canonical');
+
+      const index = handle.getFileIndex();
+      expect(index.has('canonical/note')).toBe(true);
+      expect(index.has('canonical/sub/deep')).toBe(true);
+      expect(index.has('aliasA/note')).toBe(false);
+      expect(index.has('aliasB/sub/deep')).toBe(false);
+
+      const folderIndex = handle.getFolderIndex();
+      expect(folderIndex.has('canonical')).toBe(true);
+      expect(folderIndex.has('canonical/sub')).toBe(true);
+      expect(folderIndex.has('aliasA')).toBe(false);
+      expect(folderIndex.has('aliasB')).toBe(false);
     } finally {
       await handle.unsubscribe();
     }

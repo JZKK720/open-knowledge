@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
 import { resolveWithinRoot } from './path-safety.ts';
 import { type PreviewUrlSource, resolvePreviewUrlForTool } from './preview-url.ts';
@@ -25,7 +26,7 @@ import {
 } from './shared.ts';
 import { resolveTemplatePath } from './verb-schemas.ts';
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   '[Requires: Hocuspocus server] Move or rename a document, folder, or asset through the managed flow at `POST /api/rename-path`. Works for all three — the tool probes the content directory to decide. Inbound wiki-links plus supported inline Markdown links are rewritten across affected docs; renamed assets are reported.',
   '',
   '**Parameters:**',
@@ -123,7 +124,7 @@ function resolveMoveKind(contentDir: string, from: string): 'file' | 'folder' | 
       if (code === 'EACCES' || code === 'EPERM') return 'file';
     }
   }
-  for (const ext of ['.md', '.mdx']) {
+  for (const ext of SUPPORTED_DOC_EXTENSIONS) {
     if (existsSync(`${absBase}${ext}`)) return 'file';
   }
   return null;

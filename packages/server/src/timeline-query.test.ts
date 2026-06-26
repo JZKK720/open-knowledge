@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,10 +22,11 @@ import {
   type ParkableDoc,
   parkBranch,
   SERVICE_WRITER,
+  type ShadowHandle,
   saveVersion,
   type WriterIdentity,
 } from './shadow-repo';
-import { getDocumentHistory } from './timeline-query';
+import { getDocumentHistory, historyWalkCap } from './timeline-query';
 
 let tmpDir: string;
 
@@ -65,6 +67,19 @@ const agent: WriterIdentity = {
   name: 'cursor-agent',
   email: 'cursor@openknowledge.local',
 };
+
+function datedCommits(shadow: ShadowHandle) {
+  let t = Date.parse('2026-05-05T12:00:00.000Z');
+  const next = () => {
+    t += 1000;
+    return new Date(t).toISOString();
+  };
+  return {
+    cw: (message: string) =>
+      commitWip(shadow, human, 'content/docs', message, 'main', { date: next() }),
+    sv: () => saveVersion(shadow, 'content/docs', [human], 'main', undefined, { date: next() }),
+  };
+}
 
 describe('getDocumentHistory', () => {
   test('returns empty result when shadow has no commits', async () => {
@@ -383,20 +398,19 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
 
   test('rename a → b: timeline of `b` includes pre-rename WIP commits at path `a`', async () => {
     const { contentDir, shadow } = await setup();
+    const { cw, sv } = datedCommits(shadow);
 
     writeFileSync(resolve(contentDir, 'a.md'), '# A v1\n');
-    const aWipSha = await commitWip(shadow, human, 'content/docs', 'WIP: a v1');
-    await saveVersion(shadow, 'content/docs', [human]);
-
-    await new Promise((r) => setTimeout(r, 1100));
+    const aWipSha = await cw('WIP: a v1');
+    await sv();
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B v1\n');
-    const renameSha = await commitWip(shadow, human, 'content/docs', 'rename: a -> b');
-    await saveVersion(shadow, 'content/docs', [human]);
+    const renameSha = await cw('rename: a -> b');
+    await sv();
 
     writeFileSync(resolve(contentDir, 'b.md'), '# B v2\n');
-    const bWipSha = await commitWip(shadow, human, 'content/docs', 'WIP: b v2');
+    const bWipSha = await cw('WIP: b v2');
 
     const index = createEmptyIndex();
     appendRenameLogEntry(shadow.gitDir, entry({ from: 'a', to: 'b', commitSha: renameSha }), index);
@@ -427,20 +441,20 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
   test('chained A→B→C: timeline of `c` spans all three name epochs', async () => {
     const { contentDir, shadow } = await setup();
 
+    const { cw, sv } = datedCommits(shadow);
+
     writeFileSync(resolve(contentDir, 'a.md'), '# A\n');
-    const aSha = await commitWip(shadow, human, 'content/docs', 'WIP: a');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const aSha = await cw('WIP: a');
+    await sv();
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B\n');
-    const renameAB = await commitWip(shadow, human, 'content/docs', 'rename: a -> b');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const renameAB = await cw('rename: a -> b');
+    await sv();
 
     rmSync(resolve(contentDir, 'b.md'));
     writeFileSync(resolve(contentDir, 'c.md'), '# C\n');
-    const renameBC = await commitWip(shadow, human, 'content/docs', 'rename: b -> c');
+    const renameBC = await cw('rename: b -> c');
 
     const index = createEmptyIndex();
     appendRenameLogEntry(shadow.gitDir, entry({ from: 'a', to: 'b', commitSha: renameAB }), index);
@@ -457,21 +471,21 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
   test('name-reuse contamination: timeline of `b` does NOT include new-`a` commits', async () => {
     const { contentDir, shadow } = await setup();
 
+    const { cw, sv } = datedCommits(shadow);
+
     writeFileSync(resolve(contentDir, 'a.md'), '# A old\n');
-    await commitWip(shadow, human, 'content/docs', 'WIP: a old');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    await cw('WIP: a old');
+    await sv();
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B\n');
-    const renameSha = await commitWip(shadow, human, 'content/docs', 'rename: a -> b');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const renameSha = await cw('rename: a -> b');
+    await sv();
 
     rmSync(resolve(contentDir, 'b.md'));
     writeFileSync(resolve(contentDir, 'a.md'), '# A new (unrelated)\n');
-    const newASha = await commitWip(shadow, human, 'content/docs', 'WIP: new-a');
-    await saveVersion(shadow, 'content/docs', [human]);
+    const newASha = await cw('WIP: new-a');
+    await sv();
 
     const index = createEmptyIndex();
     appendRenameLogEntry(shadow.gitDir, entry({ from: 'a', to: 'b', commitSha: renameSha }), index);
@@ -584,22 +598,22 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
   test('per-step error isolation: failure on one predecessor preserves others', async () => {
     const { contentDir, shadow } = await setup();
 
+    const { cw, sv } = datedCommits(shadow);
+
     writeFileSync(resolve(contentDir, 'a.md'), '# A v1\n');
-    const aWipSha = await commitWip(shadow, human, 'content/docs', 'WIP: a v1');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const aWipSha = await cw('WIP: a v1');
+    await sv();
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B v1\n');
-    await commitWip(shadow, human, 'content/docs', 'rename: a -> b');
+    await cw('rename: a -> b');
     writeFileSync(resolve(contentDir, 'b.md'), '# B v2\n');
-    const bWipSha = await commitWip(shadow, human, 'content/docs', 'WIP: b v2');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const bWipSha = await cw('WIP: b v2');
+    await sv();
 
     rmSync(resolve(contentDir, 'b.md'));
     writeFileSync(resolve(contentDir, 'c.md'), '# C v1\n');
-    const renameBC = await commitWip(shadow, human, 'content/docs', 'rename: b -> c');
+    const renameBC = await cw('rename: b -> c');
 
     const index = createEmptyIndex();
     const bogusSha = '0123456789abcdef0123456789abcdef01234567';
@@ -628,15 +642,16 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
   test('checkpoint-only fast path: pre-rename checkpoint visible after rename', async () => {
     const { contentDir, shadow } = await setup();
 
+    const { cw, sv } = datedCommits(shadow);
+
     writeFileSync(resolve(contentDir, 'a.md'), '# A pre-rename\n');
-    await commitWip(shadow, human, 'content/docs', 'WIP: a');
-    await saveVersion(shadow, 'content/docs', [human]);
-    await new Promise((r) => setTimeout(r, 1100));
+    await cw('WIP: a');
+    await sv();
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B post-rename\n');
-    const renameSha = await commitWip(shadow, human, 'content/docs', 'rename: a -> b');
-    await saveVersion(shadow, 'content/docs', [human]);
+    const renameSha = await cw('rename: a -> b');
+    await sv();
 
     const index = createEmptyIndex();
     appendRenameLogEntry(shadow.gitDir, entry({ from: 'a', to: 'b', commitSha: renameSha }), index);
@@ -650,4 +665,108 @@ describe('getDocumentHistory — rename-history mitigation (US-004)', () => {
     expect(result.entries.length).toBeGreaterThanOrEqual(2);
     expect(result.entries.every((e) => e.type === 'checkpoint')).toBe(true);
   });
+});
+
+describe('depth-bound history walk (PRD-6972 FR3 / D14)', () => {
+  test('historyWalkCap: 3x(offset+limit) with a 500-commit ceiling', () => {
+    expect(historyWalkCap(0, 50)).toBe(150); // 3 * 50
+    expect(historyWalkCap(0, 2)).toBe(6);
+    expect(historyWalkCap(100, 50)).toBe(450); // 3 * 150
+    expect(historyWalkCap(200, 50)).toBe(500); // 3 * 250 = 750 → ceiling 500
+    expect(historyWalkCap(10_000, 10)).toBe(500); // ceiling
+    for (const [o, l] of [
+      [0, 50],
+      [50, 50],
+      [149, 50],
+    ] as const) {
+      expect(historyWalkCap(o, l)).toBeGreaterThan(o);
+    }
+  });
+
+  function buildDeepDocChain(shadow: Awaited<ReturnType<typeof setup>>['shadow'], n: number) {
+    const ref = 'refs/wip/main/human-ada';
+    let stream = `reset ${ref}\n`;
+    for (let i = 0; i < n; i++) {
+      const content = `# Edit ${i}\n`;
+      const msg = `wip: edit ${i}`;
+      const ts = 1_700_000_000 + i; // monotonically increasing author/commit date
+      const blobMark = 2 * i + 1;
+      const commitMark = 2 * i + 2;
+      stream += `blob\nmark :${blobMark}\ndata ${Buffer.byteLength(content)}\n${content}\n`;
+      stream += `commit ${ref}\nmark :${commitMark}\n`;
+      stream += `author Ada <ada@example.com> ${ts} +0000\n`;
+      stream += `committer Ada <ada@example.com> ${ts} +0000\n`;
+      stream += `data ${Buffer.byteLength(msg)}\n${msg}\n`;
+      stream += `M 100644 :${blobMark} content/docs/intro.md\n\n`;
+    }
+    stream += 'done\n';
+    execFileSync('git', ['fast-import', '--done'], {
+      cwd: shadow.workTree,
+      env: { ...process.env, GIT_DIR: shadow.gitDir, GIT_WORK_TREE: shadow.workTree },
+      input: stream,
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+  }
+
+  test('bounds the walk on a >500-commit doc; saturates hasMore; paginates within window', async () => {
+    const { shadow } = await setup();
+    buildDeepDocChain(shadow, 505);
+
+    const page0 = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 0 },
+      'content/docs',
+    );
+    expect(page0.entries).toHaveLength(50);
+    expect(page0.total).toBeLessThanOrEqual(150);
+    expect(page0.hasMore).toBe(true);
+
+    const page1 = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 50 },
+      'content/docs',
+    );
+    expect(page1.entries).toHaveLength(50);
+    expect(page1.hasMore).toBe(true);
+    const page0Shas = new Set(page0.entries.map((e) => e.sha));
+    expect(page1.entries.every((e) => !page0Shas.has(e.sha))).toBe(true);
+
+    const beyond = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 10, offset: 500 },
+      'content/docs',
+    );
+    expect(beyond.entries).toHaveLength(0);
+    expect(beyond.hasMore).toBe(false);
+  }, 180_000);
+
+  test('does NOT falsely saturate when commits are under the cap', async () => {
+    const { shadow, contentDir } = await setup();
+    for (let i = 0; i < 5; i++) {
+      writeFileSync(resolve(contentDir, 'intro.md'), `# Edit ${i}\n`);
+      await commitWip(shadow, human, 'content/docs', `WIP: edit ${i}`);
+    }
+    const result = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 50, offset: 0 },
+      'content/docs',
+    );
+    expect(result.entries.length).toBe(5);
+    expect(result.hasMore).toBe(false);
+  });
+
+  test('noise-dominated multi-writer fixture still fills a full page (slack absorbs filtering)', async () => {
+    const { shadow, contentDir } = await setup();
+    for (let i = 0; i < 24; i++) {
+      const w = i % 2 === 0 ? human : agent;
+      writeFileSync(resolve(contentDir, 'intro.md'), `# Edit ${i}\n`);
+      await commitWip(shadow, w, 'content/docs', `WIP: edit ${i}`);
+    }
+    const result = await getDocumentHistory(
+      shadow,
+      { docName: 'intro', limit: 10, offset: 0 },
+      'content/docs',
+    );
+    expect(result.entries).toHaveLength(10);
+  }, 60_000);
 });

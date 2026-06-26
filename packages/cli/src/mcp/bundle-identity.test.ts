@@ -9,8 +9,8 @@ import {
 } from './bundle-identity.ts';
 
 const DARWIN: NodeJS.Platform = 'darwin';
-const ANCHOR_PATH = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
-const REAL_ANCHOR_PATH = '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge';
+const ANCHOR_PATH = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
+const REAL_ANCHOR_PATH = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 
 function input(overrides: Partial<BundleIdentityCheckInput> = {}): BundleIdentityCheckInput {
   return {
@@ -442,15 +442,15 @@ describe('captureBootIdentity', () => {
   test('returns { resolvedPath, inode } when both fs probes succeed', () => {
     const logs: string[] = [];
     const result = captureBootIdentity(
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       {
-        realpathSync: () => '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        realpathSync: () => '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         statInoSync: () => 299_520_753,
         log: (m) => logs.push(m),
       },
     );
     expect(result).toEqual({
-      resolvedPath: '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      resolvedPath: '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       inode: 299_520_753,
     });
     expect(logs).toEqual([]);
@@ -477,9 +477,9 @@ describe('captureBootIdentity', () => {
   test('returns undefined and logs underlying error when statInoSync throws', () => {
     const logs: string[] = [];
     const result = captureBootIdentity(
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       {
-        realpathSync: () => '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        realpathSync: () => '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         statInoSync: () => {
           throw new Error("EACCES: permission denied, stat '/path/to/bundle'");
         },

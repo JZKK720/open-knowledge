@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parseTemplateFile } from '@inkeep/open-knowledge-core';
 
 type TemplateScope = 'local' | 'inherited';
 
@@ -199,33 +199,15 @@ function readTemplateMeta(absPath: string): TemplateMeta {
     }
     return {};
   }
-  const fmYaml = extractFrontmatterYaml(content);
-  if (fmYaml === null) return {};
-
-  let parsed: unknown;
-  try {
-    parsed = parseYaml(fmYaml);
-  } catch (err) {
-    if (!templateMetaWarnedPaths.has(absPath)) {
-      templateMetaWarnedPaths.add(absPath);
-      const reason = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[ok-templates] malformed YAML frontmatter at ${absPath} — title/description unavailable. Reason: ${reason}`,
-      );
-    }
-    return {};
+  const { identity } = parseTemplateFile(content);
+  if (typeof identity.title !== 'string' && !templateMetaWarnedPaths.has(absPath)) {
+    templateMetaWarnedPaths.add(absPath);
+    console.warn(
+      `[ok-templates] template at ${absPath} has no title — YAML may be malformed or the title is missing.`,
+    );
   }
-  if (parsed == null || typeof parsed !== 'object') return {};
-
-  const fm = parsed as Record<string, unknown>;
   const result: TemplateMeta = {};
-  if (typeof fm.title === 'string') result.title = fm.title;
-  if (typeof fm.description === 'string') result.description = fm.description;
+  if (typeof identity.title === 'string') result.title = identity.title;
+  if (typeof identity.description === 'string') result.description = identity.description;
   return result;
-}
-
-function extractFrontmatterYaml(content: string): string | null {
-  const normalized = content.replace(/^﻿/, '');
-  const match = /^[ \t]*---\r?\n([\s\S]*?)\r?\n[ \t]*---(\r?\n|$)/.exec(normalized);
-  return match ? (match[1] ?? null) : null;
 }

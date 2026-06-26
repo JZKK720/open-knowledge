@@ -1,7 +1,7 @@
 ---
 name: open-knowledge-pack-plain-notes
 description: "How to work in a Plain Notes project (the `plain-notes` starter pack): a flat notes/ folder plus a daily/ journal. The 'I just want to write' layout. Read when the project has these folders. Carries the linking habit and daily-entry behavior so templates and folder descriptions stay minimal. Complements the platform `open-knowledge` skill; does not replace it."
-compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires Open Knowledge MCP server. Installed project-local by `ok seed --pack plain-notes`."
+compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires OpenKnowledge MCP server. Installed project-local by `ok seed --pack plain-notes`."
 metadata:
   pack: "plain-notes"
   author: "Inkeep"

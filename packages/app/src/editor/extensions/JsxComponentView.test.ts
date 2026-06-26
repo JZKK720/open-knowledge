@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { extractPrimitiveProps, stableHash } from './JsxComponentView.tsx';
+import { extractPrimitiveProps, getElementJsxAttrs, stableHash } from './JsxComponentView.tsx';
 
 /** Test helper: build a `ReadonlySet<string>` of reactnode-typed prop names.
  *  (In production the descriptor registry pre-computes this once at build
@@ -122,6 +122,32 @@ describe('extractPrimitiveProps', () => {
   });
 });
 
+describe('getElementJsxAttrs', () => {
+  test('returns attrs for element-kind jsxComponent nodes', () => {
+    const attrs = {
+      kind: 'element',
+      componentName: 'Callout',
+      props: { title: 'Heads up' },
+    };
+
+    expect(getElementJsxAttrs(attrs)).toBe(attrs);
+  });
+
+  test('returns null for expression-kind jsxComponent nodes', () => {
+    expect(
+      getElementJsxAttrs({
+        kind: 'expression',
+        sourceRaw: '{/* comment */}',
+        props: { title: 'should not be writable' },
+      }),
+    ).toBeNull();
+  });
+
+  test('returns null when kind is absent', () => {
+    expect(getElementJsxAttrs({ props: {} })).toBeNull();
+  });
+});
+
 describe('stableHash', () => {
   test('key-order independence — primary load-bearing invariant', () => {
     expect(stableHash({ a: 1, b: 2 })).toBe(stableHash({ b: 2, a: 1 }));
@@ -151,33 +177,64 @@ describe('stableHash', () => {
 });
 
 const VIEW_FILE = join(dirname(fileURLToPath(import.meta.url)), 'JsxComponentView.tsx');
-const KIND_GUARD_RE = /attrs\.kind\s*(?:!==|===)\s*['"]element['"]/;
-const EXEMPTION_PHRASE = 'setNodeMarkup-no-kind-guard';
+const SET_NODE_MARKUP_GUARD_WINDOW = 40;
 
-describe('JsxComponentView kind-discriminator drift-guard (Pass 1 Minor 1)', () => {
-  const GUARD_WINDOW = 40;
-
-  test(`every setNodeMarkup call has a 'kind === element' guard within ${GUARD_WINDOW} lines above`, () => {
-    const src = readFileSync(VIEW_FILE, 'utf8');
-    const lines = src.split('\n');
-    const offenders: Array<{ line: number; snippet: string }> = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i] ?? '';
-      if (line.trim().startsWith('//')) continue;
-      if (line.trim().startsWith('*')) continue;
-      if (!line.includes('setNodeMarkup(')) continue;
-      const window = lines.slice(Math.max(0, i - GUARD_WINDOW), i).join('\n');
-      const hasGuard = KIND_GUARD_RE.test(window);
-      const hasExemption = window.includes(EXEMPTION_PHRASE);
-      if (!hasGuard && !hasExemption) {
-        offenders.push({ line: i + 1, snippet: line.trim().slice(0, 100) });
-      }
+function findSetNodeMarkupSitesWithoutElementAttrsHelper(
+  source: string,
+): Array<{ line: number; snippet: string }> {
+  const lines = source.split('\n');
+  const offenders: Array<{ line: number; snippet: string }> = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+    if (!line.includes('setNodeMarkup(')) continue;
+    const priorWindow = lines.slice(Math.max(0, i - SET_NODE_MARKUP_GUARD_WINDOW), i).join('\n');
+    if (!priorWindow.includes('getElementJsxAttrs(')) {
+      offenders.push({ line: i + 1, snippet: trimmed.slice(0, 100) });
     }
+  }
+  return offenders;
+}
+
+describe('JsxComponentView setNodeMarkup write-boundary coverage', () => {
+  test('finder flags a setNodeMarkup call without nearby getElementJsxAttrs', () => {
+    const offenders = findSetNodeMarkupSitesWithoutElementAttrsHelper(`
+      function update() {
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, null, { ...curNode.attrs }));
+      }
+    `);
+
+    expect(offenders).toEqual([
+      {
+        line: 3,
+        snippet:
+          'editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, null, { ...curNode.attrs }));',
+      },
+    ]);
+  });
+
+  test('finder accepts a setNodeMarkup call guarded by getElementJsxAttrs', () => {
+    const offenders = findSetNodeMarkupSitesWithoutElementAttrsHelper(`
+      function update() {
+        const elementAttrs = getElementJsxAttrs(curNode.attrs);
+        if (!elementAttrs) return;
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, null, { ...elementAttrs }));
+      }
+    `);
+
+    expect(offenders).toEqual([]);
+  });
+
+  test('every setNodeMarkup call site uses getElementJsxAttrs nearby', () => {
+    const source = readFileSync(VIEW_FILE, 'utf8');
+    const offenders = findSetNodeMarkupSitesWithoutElementAttrsHelper(source);
+
     expect(
       offenders,
-      `setNodeMarkup call site(s) without a 'kind === element' guard within ${GUARD_WINDOW} lines: ` +
-        `${JSON.stringify(offenders)}. Either add the guard or document the exemption ` +
-        `with a comment containing the literal phrase '${EXEMPTION_PHRASE}'.`,
+      `setNodeMarkup call site(s) without a nearby getElementJsxAttrs guard: ${JSON.stringify(
+        offenders,
+      )}`,
     ).toEqual([]);
   });
 });

@@ -40,6 +40,7 @@ describe('workflow — kind discriminator + per-kind teaching errors', () => {
     expect(capture(cwd).name).toBe('workflow');
     expect(DESCRIPTION).toContain('ingest');
     expect(DESCRIPTION).toContain('discover');
+    expect(DESCRIPTION).toContain('wiki');
   });
 
   test('kind:ingest with source returns the framed ingest plan', async () => {
@@ -64,6 +65,14 @@ describe('workflow — kind discriminator + per-kind teaching errors', () => {
     const r = await capture(cwd).handler({ kind: 'discover' });
     expect(r.isError).toBeFalsy();
     expect(textOf(r)).toContain('# Discover');
+    expect(r.structuredContent?.previewUrl).toBeNull();
+  });
+
+  test('kind:wiki returns the Codebase Wiki plan interpolated with contentDir', async () => {
+    const r = await capture(cwd).handler({ kind: 'wiki' });
+    expect(r.isError).toBeFalsy();
+    expect(textOf(r)).toContain('# Codebase Wiki');
+    expect(textOf(r)).toContain('wiki/OVERVIEW.md');
     expect(r.structuredContent?.previewUrl).toBeNull();
   });
 

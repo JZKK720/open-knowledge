@@ -1,4 +1,4 @@
-import { FRONTMATTER_TAG_VALUE_RE } from '@inkeep/open-knowledge-core';
+import { INLINE_TAG_VALUE_RE } from '@inkeep/open-knowledge-core';
 import { useLingui } from '@lingui/react/macro';
 import type { NodeViewProps } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
@@ -11,7 +11,7 @@ function commitDraft(
   next: string,
 ): boolean {
   if (typeof pos !== 'number') return false;
-  if (!next || !FRONTMATTER_TAG_VALUE_RE.test(next)) return false;
+  if (!next || !INLINE_TAG_VALUE_RE.test(next)) return false;
   const { state, view } = editor;
   const curNode = state.doc.nodeAt(pos);
   if (!curNode || curNode.type.name !== 'tag') return false;
@@ -86,7 +86,7 @@ function PlaceholderInput({ initialDraft, onCommit, onCancel }: PlaceholderInput
         className="bg-transparent border-0 p-0 outline-none focus:outline-none focus:ring-0 text-inherit font-inherit"
         onChange={(e) => {
           const next = e.target.value;
-          if (next === '' || FRONTMATTER_TAG_VALUE_RE.test(next)) {
+          if (next === '' || INLINE_TAG_VALUE_RE.test(next)) {
             setDraft(next);
           }
         }}
@@ -113,7 +113,7 @@ function PlaceholderInput({ initialDraft, onCommit, onCancel }: PlaceholderInput
             onCancel();
             return;
           }
-          if (FRONTMATTER_TAG_VALUE_RE.test(draft)) {
+          if (INLINE_TAG_VALUE_RE.test(draft)) {
             onCommit(draft);
           } else {
             onCancel();

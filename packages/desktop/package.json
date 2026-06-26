@@ -1,7 +1,7 @@
 {
   "name": "@inkeep/open-knowledge-desktop",
-  "productName": "Open Knowledge",
-  "version": "0.9.1",
+  "productName": "OpenKnowledge",
+  "version": "0.19.2",
   "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -20,6 +20,7 @@
     "postinstall": "node scripts/postinstall.mjs",
     "rebuild:native": "electron-builder install-app-deps",
     "smoke:mock-update": "OK_UPDATER_FORCE_DEV=1 node scripts/smoke-mock-update.mjs",
+    "instances": "node scripts/launch-instances.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun --conditions=development test"
   },
@@ -29,6 +30,7 @@
     "@inkeep/open-knowledge-server": "workspace:*",
     "@napi-rs/keyring": "^1.3.0",
     "electron-updater": "6.8.4",
+    "node-pty": "1.1.0",
     "pino": "^10.3.1",
     "semver": "^7.7.4",
     "yaml": "^2.8.3"

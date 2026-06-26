@@ -304,5 +304,5 @@ export function resolveDefaultProjectsRoot(
       console.warn('[create-new-project] persisted lastUsedProjectParent existsCheck failed:', err);
     }
   }
-  return resolve(documentsDir, 'Open Knowledge');
+  return resolve(documentsDir, 'OpenKnowledge');
 }

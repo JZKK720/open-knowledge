@@ -15,6 +15,7 @@ import type {
   Break,
   Code,
   Definition,
+  Delete,
   Emphasis,
   FootnoteDefinition,
   FootnoteReference,
@@ -67,6 +68,10 @@ import {
 } from './pipeline.ts';
 import { normalizeDocRelativeAssetUrl } from './resolve-image-url.ts';
 import { toMarkdownHandlers } from './to-markdown-handlers.ts';
+import {
+  decodeInlineWhitespaceNumericCharRefRun,
+  isInlineWhitespaceNumericCharRef,
+} from './whitespace-char-ref.ts';
 
 interface MdastToPmState {
   all: (node: MdastNodes) => PmNode[];
@@ -109,13 +114,7 @@ export class MarkdownManager {
       pmNodeHandlers: this.pmNodeHandlers,
       pmMarkHandlers: this.pmMarkHandlers,
     });
-    this.serializeProcessor = createSerializeProcessor({
-      schema: this.schema,
-      handlers: this.handlers,
-      pmNodeHandlers: this.pmNodeHandlers,
-      pmMarkHandlers: this.pmMarkHandlers,
-      toMarkdownHandlers,
-    });
+    this.serializeProcessor = createSerializeProcessor({ toMarkdownHandlers });
   }
 
   parse(markdown: string, opts?: ParseContext): JSONContent {
@@ -240,6 +239,7 @@ function isEmptyMdastParagraph(node: MdastNodes): boolean {
 interface InlineCodeFidelityData {
   sourceFenceChar?: string;
   sourceFenceLength?: number;
+  sourcePadded?: boolean;
 }
 
 function withInlineCodeData(
@@ -251,6 +251,9 @@ function withInlineCodeData(
   if (data.sourceFenceChar) dataEntry.sourceFenceChar = data.sourceFenceChar;
   if (typeof data.sourceFenceLength === 'number') {
     dataEntry.sourceFenceLength = data.sourceFenceLength;
+  }
+  if (data.sourcePadded === true) {
+    dataEntry.sourcePadded = true;
   }
   if (Object.keys(dataEntry).length === 0) return node as unknown as MdastNodes;
   return { ...node, data: dataEntry } as unknown as MdastNodes;
@@ -299,7 +302,6 @@ import {
   FILE_ATTACHMENT_EXTENSIONS,
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
-  WIKI_EMBED_EXTENSIONS,
 } from '../constants/upload.ts';
 
 const WIKI_EMBED_IMAGE_EXTS = IMAGE_EXTENSIONS;
@@ -386,7 +388,12 @@ function buildMdastToPmHandlers(
         if (rowNode) pmRows.push(rowNode);
       }
       const sourceDashCounts = node.data?.sourceDashCounts ?? null;
-      return n.table.createAndFill({ sourceDashCounts }, pmRows.length > 0 ? pmRows : null);
+      const sourceOuterPipes = node.data?.sourceOuterPipes ?? null;
+      const sourceAlignmentPadding = node.data?.sourceAlignmentPadding ?? null;
+      return n.table.createAndFill(
+        { sourceDashCounts, sourceOuterPipes, sourceAlignmentPadding },
+        pmRows.length > 0 ? pmRows : null,
+      );
     };
   }
 
@@ -449,9 +456,29 @@ function buildMdastToPmHandlers(
         ),
       ];
       markers.sort((a, b) => a.offset - b.offset);
+      const coalesced: Marker[] = [];
+      for (const marker of markers) {
+        const prev = coalesced[coalesced.length - 1];
+        if (
+          marker.kind === 'entity' &&
+          prev?.kind === 'entity' &&
+          prev.offset + prev.length === marker.offset &&
+          decodeInlineWhitespaceNumericCharRefRun(prev.raw) !== null &&
+          isInlineWhitespaceNumericCharRef(marker.raw)
+        ) {
+          coalesced[coalesced.length - 1] = {
+            kind: 'entity',
+            offset: prev.offset,
+            length: prev.length + marker.length,
+            raw: prev.raw + marker.raw,
+          };
+        } else {
+          coalesced.push(marker);
+        }
+      }
       const fragments: PmNode[] = [];
       let lastIdx = 0;
-      for (const marker of markers) {
+      for (const marker of coalesced) {
         if (marker.offset > lastIdx) {
           const segment = value.slice(lastIdx, marker.offset).replaceAll('\u00A0', ' ');
           if (segment) fragments.push(schema.text(segment));
@@ -464,8 +491,11 @@ function buildMdastToPmHandlers(
             if (marker.kind === 'escape') {
               fragments.push(schema.text(segmentText, [m.escapeMark.create()]));
             } else if (m.sourceLiteral) {
+              const decodedWhitespace = decodeInlineWhitespaceNumericCharRefRun(marker.raw);
               fragments.push(
-                schema.text(segmentText, [m.sourceLiteral.create({ sourceRaw: marker.raw })]),
+                schema.text(decodedWhitespace ?? segmentText, [
+                  m.sourceLiteral.create({ sourceRaw: marker.raw }),
+                ]),
               );
             } else {
               fragments.push(schema.text(segmentText));
@@ -489,12 +519,17 @@ function buildMdastToPmHandlers(
           sourceFenceChar: node.data?.sourceFenceChar ?? '`',
           sourceFenceLength:
             typeof node.data?.sourceFenceLength === 'number' ? node.data.sourceFenceLength : 1,
+          sourcePadded: node.data?.sourcePadded === true,
         }),
       ]);
   }
 
   const strikeMark = m.strike ?? m.delete;
-  if (strikeMark) handlers.delete = toPmMark(strikeMark);
+  if (strikeMark) {
+    handlers.delete = toPmMark(strikeMark, (node: Delete) => ({
+      sourceDelimiter: node.data?.sourceDelimiter === '~' ? '~' : '~~',
+    }));
+  }
 
   if (m.highlight) handlers.mark = toPmMark(m.highlight);
 
@@ -530,6 +565,8 @@ function buildMdastToPmHandlers(
       sourceTrailingHashes: node.data?.sourceTrailingHashes ?? null,
       sourceUnderlineLength: node.data?.sourceUnderlineLength ?? null,
       sourceContiguousNext: node.data?.sourceContiguousNext ?? false,
+      sourceLeadingIndent: node.data?.sourceLeadingIndent ?? null,
+      sourceInteriorSpacing: node.data?.sourceInteriorSpacing ?? null,
     }));
   }
 
@@ -543,6 +580,10 @@ function buildMdastToPmHandlers(
           fenceDelimiter: node.data?.sourceFenceChar ?? '`',
           fenceLength: node.data?.sourceFenceLength ?? 3,
           sourceStyle: node.data?.sourceStyle ?? 'fenced',
+          sourceClosingFenceLength: node.data?.sourceClosingFenceLength ?? null,
+          sourceFenceIndent: node.data?.sourceFenceIndent ?? null,
+          sourceInfoPadding: node.data?.sourceInfoPadding ?? null,
+          sourceIndents: node.data?.sourceIndents ?? null,
         },
         textContent,
       );
@@ -576,6 +617,10 @@ function buildMdastToPmHandlers(
     handlers.listItem = toPmNode(n.listItem, (node: ListItem) => ({
       checked: node.checked ?? null,
       spread: !!node.spread,
+      sourceMarkerSpacing: node.data?.sourceMarkerSpacing ?? null,
+      sourceOrdinal: node.data?.sourceOrdinal ?? null,
+      sourceCheckboxChar: node.data?.sourceCheckboxChar ?? null,
+      sourceContinuationIndent: node.data?.sourceContinuationIndent ?? null,
     }));
   }
 
@@ -742,6 +787,9 @@ function buildMdastToPmHandlers(
         target: node.data?.target ?? '',
         alias: node.data?.alias ?? null,
         anchor: node.data?.anchor ?? null,
+        sourceTarget: node.data?.sourceTarget ?? null,
+        sourceAnchor: node.data?.sourceAnchor ?? null,
+        sourceAlias: node.data?.sourceAlias ?? null,
       });
   }
 
@@ -833,7 +881,7 @@ function buildMdastToPmHandlers(
       }
 
       const label = alias || (anchor ? `${target}#${anchor}` : target);
-      if (WIKI_EMBED_EXTENSIONS.has(ext) && m.link) {
+      if (m.link) {
         const linkMark = m.link.create({
           href: srcOrTarget,
           title: null,
@@ -843,16 +891,6 @@ function buildMdastToPmHandlers(
           target,
           anchor,
           alias,
-        });
-        return schema.text(label, [linkMark]);
-      }
-
-      if (m.link) {
-        const linkMark = m.link.create({
-          href: target,
-          title: null,
-          linkStyle: 'inline',
-          refLabel: null,
         });
         return schema.text(label, [linkMark]);
       }
@@ -898,12 +936,19 @@ function buildMdastToPmHandlers(
   };
 
   if (n.mathInline) {
-    handlers.inlineMath = (node: { type: 'inlineMath'; value?: string }) =>
-      n.mathInline.create({ formula: node.value ?? '' });
+    handlers.inlineMath = (node: {
+      type: 'inlineMath';
+      value?: string;
+      data?: { sourceDelimiter?: string };
+    }) =>
+      n.mathInline.create({
+        formula: node.value ?? '',
+        sourceDelimiter: node.data?.sourceDelimiter ?? null,
+      });
   }
 
-  if (!handlers.math) handlers.math = blockUnknownHandler;
-  if (!handlers.inlineMath) handlers.inlineMath = inlineUnknownHandler;
+  handlers.math ||= blockUnknownHandler;
+  handlers.inlineMath ||= inlineUnknownHandler;
 
   if (n.footnoteReference) {
     handlers.footnoteReference = (node: FootnoteReference) =>
@@ -911,8 +956,8 @@ function buildMdastToPmHandlers(
         identifier: node.identifier,
         label: node.label ?? node.identifier,
       });
-  } else if (!handlers.footnoteReference) {
-    handlers.footnoteReference = (node: FootnoteReference) => {
+  } else {
+    handlers.footnoteReference ||= (node: FootnoteReference) => {
       console.warn(
         JSON.stringify({
           event: 'unknown-mdast-type',
@@ -931,8 +976,8 @@ function buildMdastToPmHandlers(
         label: def.label ?? def.identifier,
       };
     });
-  } else if (!handlers.footnoteDefinition) {
-    handlers.footnoteDefinition = (node: FootnoteDefinition) => {
+  } else {
+    handlers.footnoteDefinition ||= (node: FootnoteDefinition) => {
       console.warn(
         JSON.stringify({
           event: 'unknown-mdast-type',
@@ -952,6 +997,7 @@ function buildMdastToPmHandlers(
     type: 'rawMdxFallbackMdast';
     originalType: string;
     value: string;
+    unresolvedPosition?: boolean;
     position?: { start: { offset: number }; end: { offset: number } };
   }) => {
     if (!n.rawMdxFallback) return null;
@@ -966,6 +1012,7 @@ function buildMdastToPmHandlers(
         event: 'unknown-mdast-type',
         type: node.originalType,
         reason: `Unhandled mdast: ${node.originalType}`,
+        unresolvedPosition: node.unresolvedPosition ?? false,
       }),
     );
     return n.rawMdxFallback.createAndFill(
@@ -993,7 +1040,7 @@ function buildPmToMdastHandlers(schema: Schema): {
   if (n.blockquote) {
     nodeHandlers.blockquote = fromPmNode('blockquote', (pmNode: PmNode) => {
       const spacings = pmNode.attrs.sourceMarkerSpacings;
-      const data: { sourceMarkerSpacings?: Array<'single' | 'none'> } = {};
+      const data: { sourceMarkerSpacings?: Array<number | 'single' | 'none'> } = {};
       if (Array.isArray(spacings) && spacings.length > 0) {
         data.sourceMarkerSpacings = spacings;
       }
@@ -1009,6 +1056,8 @@ function buildPmToMdastHandlers(schema: Schema): {
         sourceTrailingHashes: pmNode.attrs.sourceTrailingHashes ?? undefined,
         sourceUnderlineLength: pmNode.attrs.sourceUnderlineLength ?? undefined,
         sourceContiguousNext: pmNode.attrs.sourceContiguousNext === true ? true : undefined,
+        sourceLeadingIndent: pmNode.attrs.sourceLeadingIndent ?? undefined,
+        sourceInteriorSpacing: pmNode.attrs.sourceInteriorSpacing ?? undefined,
       },
     }));
   }
@@ -1028,6 +1077,10 @@ function buildPmToMdastHandlers(schema: Schema): {
           sourceFenceChar: pmNode.attrs.fenceDelimiter,
           sourceFenceLength: pmNode.attrs.fenceLength,
           sourceStyle,
+          sourceClosingFenceLength: pmNode.attrs.sourceClosingFenceLength ?? undefined,
+          sourceFenceIndent: pmNode.attrs.sourceFenceIndent ?? undefined,
+          sourceInfoPadding: pmNode.attrs.sourceInfoPadding ?? undefined,
+          sourceIndents: pmNode.attrs.sourceIndents ?? undefined,
         },
       };
     };
@@ -1064,10 +1117,24 @@ function buildPmToMdastHandlers(schema: Schema): {
       const children = state.all(pmNode);
       const stripped =
         children.length > 1 && isEmptyMdastParagraph(children[0]) ? children.slice(1) : children;
+      const itemData: NonNullable<ListItem['data']> = {};
+      if (typeof pmNode.attrs.sourceMarkerSpacing === 'number') {
+        itemData.sourceMarkerSpacing = pmNode.attrs.sourceMarkerSpacing;
+      }
+      if (typeof pmNode.attrs.sourceOrdinal === 'number') {
+        itemData.sourceOrdinal = pmNode.attrs.sourceOrdinal;
+      }
+      if (pmNode.attrs.sourceCheckboxChar === 'X') {
+        itemData.sourceCheckboxChar = 'X';
+      }
+      if (typeof pmNode.attrs.sourceContinuationIndent === 'number') {
+        itemData.sourceContinuationIndent = pmNode.attrs.sourceContinuationIndent;
+      }
       return {
         type: 'listItem' as const,
         checked: pmNode.attrs.checked ?? null,
         spread: pmNode.attrs.spread ?? false,
+        ...(Object.keys(itemData).length > 0 ? { data: itemData } : {}),
         children: stripped,
       } as ListItem;
     };
@@ -1088,10 +1155,25 @@ function buildPmToMdastHandlers(schema: Schema): {
         (c): c is TableRow => (c as MdastNodes).type === 'tableRow',
       );
       const sourceDashCounts = pmNode.attrs.sourceDashCounts;
+      const tableData: NonNullable<Table['data']> = {};
+      if (Array.isArray(sourceDashCounts) && sourceDashCounts.length > 0) {
+        tableData.sourceDashCounts = sourceDashCounts as number[];
+      }
+      const outerPipes = pmNode.attrs.sourceOuterPipes;
+      if (
+        outerPipes !== null &&
+        typeof outerPipes === 'object' &&
+        typeof (outerPipes as { leading?: unknown }).leading === 'boolean' &&
+        typeof (outerPipes as { trailing?: unknown }).trailing === 'boolean'
+      ) {
+        tableData.sourceOuterPipes = outerPipes as { leading: boolean; trailing: boolean };
+      }
+      const alignPadding = pmNode.attrs.sourceAlignmentPadding;
+      if (Array.isArray(alignPadding) && alignPadding.length > 0) {
+        tableData.sourceAlignmentPadding = alignPadding as Array<{ left: number; right: number }>;
+      }
       const data: Table['data'] | undefined =
-        Array.isArray(sourceDashCounts) && sourceDashCounts.length > 0
-          ? { sourceDashCounts: sourceDashCounts as number[] }
-          : undefined;
+        Object.keys(tableData).length > 0 ? tableData : undefined;
       const result: Table = {
         type: 'table' as const,
         align,
@@ -1260,9 +1342,13 @@ function buildPmToMdastHandlers(schema: Schema): {
           children: [],
         } as unknown as MdastNodes;
       }
+      const sourceDelimiter = pmNode.attrs.sourceDelimiter;
       return {
         type: 'inlineMath' as const,
         value: formula,
+        ...(typeof sourceDelimiter === 'string' && sourceDelimiter.length > 0
+          ? { data: { sourceDelimiter } }
+          : {}),
       } as unknown as MdastNodes;
     };
   }
@@ -1273,10 +1359,16 @@ function buildPmToMdastHandlers(schema: Schema): {
       const anchor: string | null = pmNode.attrs.anchor ?? null;
       const alias: string | null = pmNode.attrs.alias ?? null;
       const label = alias ? alias : anchor ? `${target}#${anchor}` : target;
+      const sourceTarget: string | null =
+        typeof pmNode.attrs.sourceTarget === 'string' ? pmNode.attrs.sourceTarget : null;
+      const sourceAnchor: string | null =
+        typeof pmNode.attrs.sourceAnchor === 'string' ? pmNode.attrs.sourceAnchor : null;
+      const sourceAlias: string | null =
+        typeof pmNode.attrs.sourceAlias === 'string' ? pmNode.attrs.sourceAlias : null;
       return {
         type: 'wikiLink' as const,
         value: label,
-        data: { target, anchor, alias },
+        data: { target, anchor, alias, sourceTarget, sourceAnchor, sourceAlias },
         children: [{ type: 'text' as const, value: label }],
       } as unknown as MdastNodes;
     };
@@ -1321,14 +1413,17 @@ function buildPmToMdastHandlers(schema: Schema): {
     markHandlers.code = (mark: PmMark, _parent: PmNode, children: MdastNodes[]) => {
       const sourceFenceChar = mark.attrs.sourceFenceChar as string | undefined;
       const sourceFenceLength = mark.attrs.sourceFenceLength as number | undefined;
-      return wrapAsInlineCode(children, { sourceFenceChar, sourceFenceLength });
+      const sourcePadded = mark.attrs.sourcePadded === true ? true : undefined;
+      return wrapAsInlineCode(children, { sourceFenceChar, sourceFenceLength, sourcePadded });
     };
   }
 
   const strikeMark = m.strike ?? m.delete;
   if (strikeMark) {
     const name = m.strike ? 'strike' : 'delete';
-    markHandlers[name] = fromPmMark('delete');
+    markHandlers[name] = fromPmMark('delete', (mark: PmMark) => ({
+      data: { sourceDelimiter: mark.attrs.sourceDelimiter === '~' ? '~' : '~~' },
+    }));
   }
 
   if (m.highlight) {
@@ -1378,11 +1473,18 @@ function buildPmToMdastHandlers(schema: Schema): {
           typeof mark.attrs.anchor === 'string' && mark.attrs.anchor.length > 0
             ? mark.attrs.anchor
             : null;
-        const alias: string | null =
+        let alias: string | null =
           typeof mark.attrs.alias === 'string' && mark.attrs.alias.length > 0
             ? mark.attrs.alias
             : null;
-        const label = alias ? alias : anchor ? `${target}#${anchor}` : target;
+        let label = alias ? alias : anchor ? `${target}#${anchor}` : target;
+        const visibleText = children
+          .map((child) => ('value' in child && typeof child.value === 'string' ? child.value : ''))
+          .join('');
+        if (visibleText !== label && visibleText.trim().length > 0 && !visibleText.includes(']]')) {
+          alias = visibleText;
+          label = visibleText;
+        }
         return {
           type: 'wikiLinkEmbed' as const,
           value: label,
@@ -1442,8 +1544,8 @@ function buildPmToMdastHandlers(schema: Schema): {
       for (const child of children) {
         if (child.type === 'text' && child.value) {
           const textChild = child as Text;
-          textChild.data = textChild.data ?? {};
-          textChild.data.escapedChars = textChild.data.escapedChars ?? [];
+          textChild.data ??= {};
+          textChild.data.escapedChars ??= [];
           for (let i = 0; i < textChild.value.length; i++) {
             textChild.data.escapedChars.push({ offset: i, char: textChild.value[i] });
           }
@@ -1460,7 +1562,7 @@ function buildPmToMdastHandlers(schema: Schema): {
         const textChild = children[0] as Text;
         const candidate = raw || textChild.value;
         if (isValidSourceLiteralRaw(candidate, textChild.value)) {
-          textChild.data = textChild.data ?? {};
+          textChild.data ??= {};
           textChild.data.sourceRaw = candidate;
         }
         return textChild;

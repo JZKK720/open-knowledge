@@ -1,18 +1,20 @@
 import { DocumentListSuccessSchema } from '@inkeep/open-knowledge-core';
-import { Trans, useLingui } from '@lingui/react/macro';
-import { ArrowRightIcon } from 'lucide-react';
+import { useLingui } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'react';
+import { CopyablePromptList } from '@/components/empty-state/CopyablePromptList';
+import { CreatePromptComposer } from '@/components/empty-state/CreatePromptComposer';
 import { CreateView } from '@/components/empty-state/CreateView';
 import { EmptyStateHeader } from '@/components/empty-state/EmptyStateHeader';
+import { getEmptyStateCopy } from '@/components/empty-state/empty-state-copy';
 import { filterVisibleEntries } from '@/components/file-tree-utils';
 import { PackCardGrid } from '@/components/PackCardGrid';
 import { SeedDialog } from '@/components/SeedDialog';
-import { Button } from '@/components/ui/button';
+import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { emitCreateTopLevelFile } from '@/lib/create-file-events';
 import type { OkPackId } from '@/lib/desktop-bridge-types';
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
 
-export function EmptyEditorState() {
+export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?: boolean }) {
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
   const [seedDialogInitialPackId, setSeedDialogInitialPackId] = useState<OkPackId | undefined>(
     undefined,
@@ -81,6 +83,16 @@ export function EmptyEditorState() {
     if (!next) setSeedDialogInitialPackId(undefined);
   }
 
+  if (terminalVisible) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-end px-6 sm:px-12 md:px-16 pb-8 pt-10">
+        {messageReady ? (
+          <TerminalEmptyHeader isOnboarding={isOnboarding} celebrateSignal={celebrateSignal} />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 sm:px-12 md:px-16 subtle-scrollbar">
       {messageReady ? (
@@ -119,6 +131,23 @@ export function countEntries(
   ).length;
 }
 
+function TerminalEmptyHeader({
+  isOnboarding,
+  celebrateSignal,
+}: {
+  isOnboarding: boolean;
+  celebrateSignal: number;
+}) {
+  const { t } = useLingui();
+  const isEmbedded = useIsEmbedded();
+  const { title, subtitle } = getEmptyStateCopy({ isOnboarding, isEmbedded });
+  return (
+    <div className="w-full max-w-5xl">
+      <EmptyStateHeader title={t(title)} subtitle={t(subtitle)} celebrateSignal={celebrateSignal} />
+    </div>
+  );
+}
+
 function OnboardingView({
   celebrateSignal,
   onPackSelect,
@@ -127,33 +156,46 @@ function OnboardingView({
   onPackSelect: (packId: OkPackId) => void;
 }) {
   const { t } = useLingui();
+  const isEmbedded = useIsEmbedded();
+  const { title, subtitle } = getEmptyStateCopy({ isOnboarding: true, isEmbedded });
   return (
     <div className="flex w-full flex-col gap-10 py-12 max-w-5xl my-auto">
-      <EmptyStateHeader
-        title={t`Let's set up your project.`}
-        subtitle={t`Pick a starter pack to scaffold folders, templates, and AI-readable rules.`}
-        celebrateSignal={celebrateSignal}
-      />
-      {/* Group the grid + escape hatch in their own tight container so the
-          link sits close beneath the cards while the header above keeps the
-          parent's wider `gap-10` breathing room. */}
-      <div className="flex w-full flex-col gap-3">
-        <PackCardGrid onPackSelect={onPackSelect} />
-        {/* Escape hatch for users who don't want a scaffolded layout — fires
-            the same window-level event the sidebar toolbar uses, so the new
-            file lands with the standard inline-rename flow (sidebar handles
-            focus + navigation). */}
-        <Button
-          variant="link"
-          className="text-muted-foreground font-normal justify-end"
-          size="sm"
-          onClick={() => emitCreateTopLevelFile()}
-        >
-          <Trans>
-            or start from scratch <ArrowRightIcon aria-hidden="true" className="size-3" />
-          </Trans>
-        </Button>
+      <EmptyStateHeader title={t(title)} subtitle={t(subtitle)} celebrateSignal={celebrateSignal} />
+      {/* AI surface up top — the primary path. Non-embedded: compose a brief and
+          hand off to a coding agent. Embedded (OK inside Cursor/Codex/Claude):
+          show the same starter prompts as copy-to-paste rows, since the launch
+          handoff would loop back. `new-project`: brand-new project. */}
+      {isEmbedded ? (
+        <CopyablePromptList scenario="new-project" />
+      ) : (
+        <CreatePromptComposer scenario="new-project" />
+      )}
+      {/* Group the divider + grid + escape hatch in their own tight container
+          so the link sits close beneath the cards while the header/composer
+          above keep the parent's wider `gap-10` breathing room. */}
+      <div className="flex w-full flex-col gap-4">
+        <TemplateDivider label={isEmbedded ? t`Use a starter pack` : t`Or use a starter pack`} />
+        {/* The trailing "Blank file" card is the escape hatch for users who
+            don't want a scaffolded layout — it fires the same window-level
+            event the sidebar toolbar uses, so the new file lands with the
+            standard inline-rename flow (sidebar handles focus + navigation). */}
+        <PackCardGrid
+          onPackSelect={onPackSelect}
+          onCreateBlankFile={() => emitCreateTopLevelFile()}
+        />
       </div>
+    </div>
+  );
+}
+
+/** Labeled hairline rule above the starter-pack grid ("Or start from a
+ *  template"). Mirrors the screenshot's section divider. */
+function TemplateDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-2xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+        {label}
+      </span>
     </div>
   );
 }

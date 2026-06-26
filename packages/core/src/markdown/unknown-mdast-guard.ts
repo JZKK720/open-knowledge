@@ -51,10 +51,16 @@ export function unknownMdastGuardPlugin() {
   };
 }
 
+interface WalkablePoint {
+  line?: number;
+  column?: number;
+  offset?: number;
+}
+
 interface WalkableNode {
   type?: string;
   children?: unknown[];
-  position?: { start?: { offset?: number }; end?: { offset?: number } };
+  position?: { start?: WalkablePoint; end?: WalkablePoint };
 }
 
 function walk(node: WalkableNode | null | undefined, source: string): void {
@@ -75,17 +81,46 @@ interface RawMdxFallbackMdast {
   type: 'rawMdxFallbackMdast';
   originalType: string;
   value: string;
+  unresolvedPosition: boolean;
   position?: WalkableNode['position'];
 }
 
+function resolvePointOffset(point: WalkablePoint | undefined, source: string): number | null {
+  if (!point || typeof point !== 'object') return null;
+  if (typeof point.offset === 'number') {
+    return point.offset >= 0 && point.offset <= source.length ? point.offset : null;
+  }
+  const { line, column } = point;
+  if (typeof line !== 'number' || typeof column !== 'number' || line < 1 || column < 1) {
+    return null;
+  }
+  let lineStart = 0;
+  for (let current = 1; current < line; current++) {
+    const newline = source.indexOf('\n', lineStart);
+    if (newline === -1) return null;
+    lineStart = newline + 1;
+  }
+  const newline = source.indexOf('\n', lineStart);
+  const lineEnd = newline === -1 ? source.length : newline;
+  const offset = lineStart + column - 1;
+  return offset <= lineEnd ? offset : null;
+}
+
+function resolveSourceSlice(position: WalkableNode['position'], source: string): string | null {
+  if (!position) return null;
+  const start = resolvePointOffset(position.start, source);
+  const end = resolvePointOffset(position.end, source);
+  if (start === null || end === null || end < start) return null;
+  return source.slice(start, end);
+}
+
 export function toRawMdxFallbackMdast(node: WalkableNode, source: string): RawMdxFallbackMdast {
-  const start = node.position?.start?.offset ?? 0;
-  const end = node.position?.end?.offset ?? 0;
-  const sourceSlice = end > start ? source.slice(start, end) : '';
+  const sourceSlice = resolveSourceSlice(node.position, source);
   return {
     type: 'rawMdxFallbackMdast',
     originalType: node.type ?? 'unknown',
-    value: sourceSlice || (node.type ?? 'unknown'),
+    value: sourceSlice ?? '',
+    unresolvedPosition: sourceSlice === null,
     position: node.position,
   };
 }

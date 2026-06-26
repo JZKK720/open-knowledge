@@ -35,16 +35,6 @@ describe('getLeafFieldMeta', () => {
     });
   });
 
-  test('returns metadata for the project-strict preview.scriptSrc leaf', () => {
-    const meta = getLeafFieldMeta(ConfigSchema, ['preview', 'scriptSrc']);
-    expect(meta).toEqual({
-      scope: 'project',
-      agentSettable: false,
-      defaultScope: 'project',
-      description: expect.any(String),
-    });
-  });
-
   test('returns metadata for the user-scope appearance.theme leaf', () => {
     const meta = getLeafFieldMeta(ConfigSchema, ['appearance', 'theme']);
     expect(meta).toEqual({

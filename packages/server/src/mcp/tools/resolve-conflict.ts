@@ -10,7 +10,7 @@ import {
   textResult,
 } from './shared.ts';
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   '[Requires: Hocuspocus server] Resolve a tracked merge conflict by writing the chosen content to disk and committing.',
   '',
   'Strategy:',

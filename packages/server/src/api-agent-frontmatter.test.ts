@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -822,6 +822,588 @@ describe('POST /api/agent-write-md (write_document) — malformed-FM refusal (PR
       expect(parsed.type).toBe('urn:ok:error:frontmatter-malformed');
       expect(parsed.parseError).toBe('top-level value is not a mapping');
       expect(session.dc.document.getText('source').toString()).toBe('');
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe('POST /api/agent-write-md (write_document) — nested frontmatter acceptance (PRD-6947)', () => {
+  test('replace with nested `metadata:` map succeeds; Y.Text reflects the nested structure', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      const skillFile = [
+        '---',
+        'name: example-skill',
+        'description: a one-line description',
+        'metadata:',
+        '  version: 1.0.0',
+        '  author: Inkeep',
+        '  repository: https://github.com/example/repo',
+        '---',
+        '',
+        '# Body',
+        '',
+      ].join('\n');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        { docName: 'test-doc', markdown: skillFile, position: 'replace' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        name: 'example-skill',
+        description: 'a one-line description',
+        metadata: {
+          version: '1.0.0',
+          author: 'Inkeep',
+          repository: 'https://github.com/example/repo',
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('replace with arbitrarily deep nesting succeeds', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      const deep = [
+        '---',
+        'title: Deep',
+        'metadata:',
+        '  outer:',
+        '    inner:',
+        '      leaf: deep-value',
+        '---',
+        '',
+        '# Body',
+        '',
+      ].join('\n');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        { docName: 'test-doc', markdown: deep, position: 'replace' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'Deep',
+        metadata: { outer: { inner: { leaf: 'deep-value' } } },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('replace with array-of-objects frontmatter succeeds', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      const arrayOfObjects = [
+        '---',
+        'title: With Plugins',
+        'plugins:',
+        '  - name: alpha',
+        '    version: 1.0',
+        '  - name: beta',
+        '    version: 2.0',
+        '---',
+        '',
+        '# Body',
+        '',
+      ].join('\n');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        { docName: 'test-doc', markdown: arrayOfObjects, position: 'replace' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'With Plugins',
+        plugins: [
+          { name: 'alpha', version: 1.0 },
+          { name: 'beta', version: 2.0 },
+        ],
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('replace that adds a nested key to an existing doc succeeds (gate accepts the change)', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(
+          session.dc.document,
+          '---\ntitle: Flat Start\n---\n# Body\n',
+          'replace',
+        );
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        {
+          docName: 'test-doc',
+          markdown: '---\ntitle: Flat Start\nmetadata:\n  version: 2.0\n---\n# Body\n',
+          position: 'replace',
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'Flat Start',
+        metadata: { version: 2.0 },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('genuinely malformed YAML still returns the RFC-9457 envelope (PRD-6781 case preserved)', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        {
+          docName: 'test-doc',
+          markdown: '---\ntitle: The End of 3% Mortgages: Why the Lock-In Is Fading\n---\n# Body\n',
+          position: 'replace',
+        },
+      );
+
+      expect(response.status).toBe(400);
+      const parsed = JSON.parse(response.body);
+      expect(parsed.type).toBe('urn:ok:error:frontmatter-malformed');
+      expect(session.dc.document.getText('source').toString()).toBe('');
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe('POST /api/agent-write-md — telemetry refusal-class split (PRD-6947, Q-X7)', () => {
+  function collectRefusalEvents(
+    spy: ReturnType<typeof spyOn<typeof console, 'warn'>>,
+  ): Array<Record<string, unknown>> {
+    return spy.mock.calls
+      .map((call) => call[0])
+      .filter((arg): arg is string => typeof arg === 'string')
+      .map((arg) => {
+        try {
+          return JSON.parse(arg) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter(
+        (parsed): parsed is Record<string, unknown> =>
+          parsed !== null && parsed.event === 'frontmatter-malformed-write-refused',
+      );
+  }
+
+  test('yaml@2 parse error (PRD-6781 unquoted-colon) classifies as `yaml-parse-error`', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      await sessionManager.getSession('test-doc');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        {
+          docName: 'test-doc',
+          markdown: '---\ntitle: Foo: bar\n---\n# Body\n',
+          position: 'replace',
+        },
+      );
+
+      expect(response.status).toBe(400);
+      const events = collectRefusalEvents(warnSpy);
+      expect(events.length).toBe(1);
+      expect(events[0]?.class).toBe('yaml-parse-error');
+      expect(events[0]?.handler).toBe('agent-write-md');
+    } finally {
+      warnSpy.mockRestore();
+      await cleanup();
+    }
+  });
+
+  test('top-level array FM classifies as `non-mapping-top-level`', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      await sessionManager.getSession('test-doc');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        {
+          docName: 'test-doc',
+          markdown: '---\n- one\n- two\n---\n# Body\n',
+          position: 'replace',
+        },
+      );
+
+      expect(response.status).toBe(400);
+      const events = collectRefusalEvents(warnSpy);
+      expect(events.length).toBe(1);
+      expect(events[0]?.class).toBe('non-mapping-top-level');
+    } finally {
+      warnSpy.mockRestore();
+      await cleanup();
+    }
+  });
+
+  test('nested-but-valid frontmatter does NOT fire the refusal event (retired bucket)', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      await sessionManager.getSession('test-doc');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        {
+          docName: 'test-doc',
+          markdown:
+            '---\ntitle: Nested Skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n---\n# Body\n',
+          position: 'replace',
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const events = collectRefusalEvents(warnSpy);
+      expect(events.length).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+      await cleanup();
+    }
+  });
+});
+
+describe('POST /api/frontmatter-patch — nested value acceptance (PRD-6947)', () => {
+  test('nested-object patch value sets the subtree on a fresh doc; Y.Text reflects the nested YAML', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, '# Body\n', 'replace');
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: { metadata: { version: '1.0.0', author: 'Inkeep' } },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const parsed = JSON.parse(response.body);
+      expect(parsed.appliedKeys).toEqual(['metadata']);
+      expect(fmMap(session.dc.document)).toEqual({
+        metadata: { version: '1.0.0', author: 'Inkeep' },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('nested-object patch REPLACES the existing subtree at the top-level key (whole-subtree merge)', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(
+          session.dc.document,
+          '---\ntitle: Skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n  license: MIT\n---\n# Body\n',
+          'replace',
+        );
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: { metadata: { version: '2.0.0', author: 'Inkeep' } },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'Skill',
+        metadata: { version: '2.0.0', author: 'Inkeep' },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('top-level null deletes the nested subtree; sibling top-level keys preserved', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(
+          session.dc.document,
+          '---\ntitle: Skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n---\n# Body\n',
+          'replace',
+        );
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        { docName: 'test-doc', patch: { metadata: null } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({ title: 'Skill' });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('array-of-objects patch value sets the array; per-item objects round-trip into Y.Text', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, '# Body\n', 'replace');
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: {
+            plugins: [
+              { name: 'alpha', version: '1.0' },
+              { name: 'beta', version: '2.0' },
+            ],
+          },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        plugins: [
+          { name: 'alpha', version: '1.0' },
+          { name: 'beta', version: '2.0' },
+        ],
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('arbitrarily deep nesting (map in map in map) is accepted and round-trips', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, '# Body\n', 'replace');
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: { metadata: { outer: { inner: { leaf: 'deep-value' } } } },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        metadata: { outer: { inner: { leaf: 'deep-value' } } },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('flat patch behaves exactly as before (regression guard for the existing contract)', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(
+          session.dc.document,
+          '---\ntitle: Original\n---\n# Body\n',
+          'replace',
+        );
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        { docName: 'test-doc', patch: { title: 'Updated', tags: ['planning', 'q3'] } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'Updated',
+        tags: ['planning', 'q3'],
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('mixed flat + nested keys in one patch apply atomically', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, '# Body\n', 'replace');
+      }, AGENT_WRITE_ORIGIN);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: {
+            title: 'Skill',
+            tags: ['demo'],
+            metadata: { version: '1.0.0', author: 'Inkeep' },
+          },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        title: 'Skill',
+        tags: ['demo'],
+        metadata: { version: '1.0.0', author: 'Inkeep' },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('nested null inside a subtree (a deep-leaf delete) is rejected with per-key fieldErrors; Y.Doc untouched', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(
+          session.dc.document,
+          '---\ntitle: Skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n---\n# Body\n',
+          'replace',
+        );
+      }, AGENT_WRITE_ORIGIN);
+
+      const beforeFm = ytextFm(session.dc.document);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: { metadata: { version: null } },
+        },
+      );
+
+      expect(response.status).toBe(400);
+      const parsed = JSON.parse(response.body);
+      expect(parsed.type).toBe('urn:ok:error:invalid-request');
+      expect(ytextFm(session.dc.document)).toBe(beforeFm);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('invalid nested leaf (function value) is rejected with per-key fieldErrors; Y.Doc untouched', async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      session.dc.document.transact(() => {
+        applyAgentMarkdownWrite(session.dc.document, '---\ntitle: Skill\n---\n# Body\n', 'replace');
+      }, AGENT_WRITE_ORIGIN);
+
+      const beforeFm = ytextFm(session.dc.document);
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/frontmatter-patch',
+        {
+          docName: 'test-doc',
+          patch: { frontmatter: { not: 'allowed' } },
+        },
+      );
+
+      expect(response.status).toBe(400);
+      const parsed = JSON.parse(response.body);
+      expect(parsed.type).toBe('urn:ok:error:invalid-frontmatter-patch');
+      expect(parsed.fieldErrors).toBeDefined();
+      expect(parsed.fieldErrors.frontmatter).toContain('reserved');
+      expect(ytextFm(session.dc.document)).toBe(beforeFm);
     } finally {
       await cleanup();
     }

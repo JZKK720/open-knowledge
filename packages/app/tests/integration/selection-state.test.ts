@@ -8,6 +8,7 @@ import {
   SELECTION_ORIGIN_META_KEY,
   selectionStatePluginKey,
 } from '../../src/editor/extensions/selection-state-plugin';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
   agentWriteMd,
   assertBridgeInvariant,
@@ -73,7 +74,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer({ debounce: 200 });
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

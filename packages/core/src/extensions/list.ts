@@ -201,6 +201,7 @@ export const ListNode = Node.create({
           ordered: false,
           bulletMarker: match[1],
         }),
+        joinPredicate: (_match, node) => node.attrs.ordered === false,
       }),
       wrappingInputRule({
         find: /^\s*(\d+)([.)])\s$/,
@@ -210,6 +211,7 @@ export const ListNode = Node.create({
           start: Number(match[1]),
           listMarkerDelimiter: match[2],
         }),
+        joinPredicate: (_match, node) => node.attrs.ordered === true,
       }),
       new InputRule({
         find: /^\s*[-*+]\s\[([ xX])\]\s$/,
@@ -263,6 +265,10 @@ export const ListItemNode = Node.create({
     return {
       checked: { default: null },
       spread: { default: false },
+      sourceMarkerSpacing: { default: null, rendered: false },
+      sourceOrdinal: { default: null, rendered: false },
+      sourceCheckboxChar: { default: null, rendered: false },
+      sourceContinuationIndent: { default: null, rendered: false },
     };
   },
 
@@ -323,6 +329,10 @@ export const ListItemNode = Node.create({
       let checkbox: HTMLInputElement | null = null;
       const contentDiv = document.createElement('div');
 
+      const syncDisabled = () => {
+        if (checkbox) checkbox.disabled = !editor.isEditable;
+      };
+
       if (node.attrs.checked !== null) {
         checkboxLabel = document.createElement('label');
         checkboxLabel.contentEditable = 'false';
@@ -330,10 +340,8 @@ export const ListItemNode = Node.create({
         checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = !!node.attrs.checked;
-
-        if (!editor.isEditable) {
-          checkbox.disabled = true;
-        }
+        syncDisabled();
+        editor.on('update', syncDisabled);
 
         checkbox.addEventListener('change', () => {
           const pos = getPos();
@@ -362,10 +370,14 @@ export const ListItemNode = Node.create({
           }
           if (checkbox && updatedNode.attrs.checked !== null) {
             checkbox.checked = !!updatedNode.attrs.checked;
+            checkbox.disabled = !editor.isEditable;
             li.setAttribute('data-checked', String(!!updatedNode.attrs.checked));
           }
           node = updatedNode;
           return true;
+        },
+        destroy() {
+          editor.off('update', syncDisabled);
         },
       };
     };

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button> awaiting shadcn Button migration; tracked at https://github.com/inkeep/open-knowledge-legacy/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
+// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button> awaiting shadcn Button migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 
 import { SHOW_INSTALL_SKILL } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
@@ -48,6 +48,8 @@ export function SettingsDialogShell({ open, onOpenChange }: SettingsDialogShellP
 
   const hasProject = collabUrl !== null;
 
+  const isOkDesktopHost = typeof window !== 'undefined' && window.okDesktop != null;
+
   const groups: SidebarGroup[] = [
     {
       id: 'user',
@@ -65,6 +67,8 @@ export function SettingsDialogShell({ open, onOpenChange }: SettingsDialogShellP
       enabled: hasProject,
       items: [
         { id: 'sync', label: t`Sync` },
+        { id: 'search', label: t`Search` },
+        ...(isOkDesktopHost ? [{ id: 'terminal', label: t`Terminal` }] : []),
         { id: 'project-templates', label: t`Templates` },
         { id: 'okignore', label: t`Ignore patterns` },
         { id: 'sharing', label: t`Config sharing` },

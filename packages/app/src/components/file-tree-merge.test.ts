@@ -22,7 +22,11 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { mergeAndPruneRecentLocalAdds, STALE_REFRESH_PRESERVE_WINDOW_MS } from './file-tree-merge';
+import {
+  mergeAndPruneRecentLocalAdds,
+  STALE_REFRESH_PRESERVE_WINDOW_MS,
+  spliceLazyFolderChildren,
+} from './file-tree-merge';
 import type { FileEntry } from './file-tree-utils';
 
 function doc(basename: string, modified = '2026-05-21T00:00:00.000Z'): FileEntry {
@@ -143,5 +147,104 @@ describe('mergeAndPruneRecentLocalAdds', () => {
 
     expect(result).toEqual([doc('edge')]);
     expect(recentAdds.has('edge.md')).toBe(true);
+  });
+});
+
+describe('spliceLazyFolderChildren', () => {
+  test('a splice for a target folder absent from the entry set is a no-op', () => {
+    const current = [folder('team'), doc('README')];
+    const result = spliceLazyFolderChildren(current, 'gone/', [doc('gone/x')], new Map());
+    expect(result).toEqual(current);
+  });
+
+  test('replaces the folder level with the server children; entries outside it pass through', () => {
+    const current = [folder('team'), folder('other'), doc('README')];
+    const children = [doc('team/notes'), folder('team/sub')];
+    const recentAdds = new Map<string, number>();
+
+    const result = spliceLazyFolderChildren(current, 'team/', children, recentAdds);
+
+    expect(result).toEqual([
+      folder('team'),
+      folder('other'),
+      doc('README'),
+      doc('team/notes'),
+      folder('team/sub'),
+    ]);
+  });
+
+  test('a parent-level resplice leaves already-loaded grandchildren untouched', () => {
+    const current = [folder('team'), folder('team/sub'), doc('team/sub/deep'), doc('team/notes')];
+    const children = [folder('team/sub')]; // team/notes gone server-side
+    const recentAdds = new Map<string, number>();
+
+    const result = spliceLazyFolderChildren(current, 'team/', children, recentAdds);
+
+    expect(result).toEqual([folder('team'), doc('team/sub/deep'), folder('team/sub')]);
+  });
+
+  test('sibling folders sharing the name prefix are not treated as children', () => {
+    const current = [folder('team'), folder('teammates'), doc('teammates/roster')];
+    const children = [doc('team/notes')];
+    const recentAdds = new Map<string, number>();
+
+    const result = spliceLazyFolderChildren(current, 'team/', children, recentAdds);
+
+    expect(result).toEqual([
+      folder('team'),
+      folder('teammates'),
+      doc('teammates/roster'),
+      doc('team/notes'),
+    ]);
+  });
+
+  test('optimistic local adds inside the folder ride the same preserve window as a full refresh', () => {
+    const NOW = 1_700_000_000_000;
+    const current = [folder('team'), doc('team/just-created')];
+    const children = [doc('team/notes')]; // server response races the create
+    const recentAdds = new Map<string, number>([['team/just-created.md', NOW]]);
+
+    const result = spliceLazyFolderChildren(current, 'team/', children, recentAdds, NOW);
+
+    expect(result).toEqual([folder('team'), doc('team/notes'), doc('team/just-created')]);
+    expect(recentAdds.has('team/just-created.md')).toBe(true);
+  });
+
+  test('descendants of a child folder the server no longer returns are pruned with it', () => {
+    const current = [folder('team'), folder('team/sub'), doc('team/sub/deep'), doc('team/notes')];
+    const children = [doc('team/notes')]; // team/sub gone server-side
+    const recentAdds = new Map<string, number>();
+
+    const result = spliceLazyFolderChildren(current, 'team/', children, recentAdds);
+
+    expect(result).toEqual([folder('team'), doc('team/notes')]);
+  });
+
+  test("root splice ('') replaces the top level and keeps loaded descendants of surviving folders", () => {
+    const current = [
+      folder('team'),
+      doc('team/notes'),
+      folder('gone'),
+      doc('gone/stale'),
+      doc('README'),
+    ];
+    const children = [folder('team'), doc('README'), doc('NEW')];
+    const recentAdds = new Map<string, number>();
+
+    const result = spliceLazyFolderChildren(current, '', children, recentAdds);
+
+    expect(result).toEqual([doc('team/notes'), folder('team'), doc('README'), doc('NEW')]);
+  });
+
+  test('root splice preserves in-window optimistic adds at the root level', () => {
+    const NOW = 1_700_000_000_000;
+    const current = [folder('team'), doc('just-created')];
+    const children = [folder('team')]; // server index races the create
+    const recentAdds = new Map<string, number>([['just-created.md', NOW]]);
+
+    const result = spliceLazyFolderChildren(current, '', children, recentAdds, NOW);
+
+    expect(result).toEqual([folder('team'), doc('just-created')]);
+    expect(recentAdds.has('just-created.md')).toBe(true);
   });
 });

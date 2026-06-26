@@ -101,10 +101,13 @@ function describeReason(reason) {
  *   - setVerifiedStatus(internalPr, state, description) => Promise<void>  posts `cla/verified`
  * @param {object} input.publicPr    Public PR: { user: { login }, draft, head: { sha } }.
  * @param {object} input.internalPr  Internal PR: { head: { sha } }.
+ * @param {boolean} [input.forceDraft]  When true, hold the PR as a draft regardless
+ *   of CLA/origin draft state — used when the bridged commit carries conflict
+ *   markers that a maintainer must resolve before the PR can merge.
  * @returns {Promise<{ gated: boolean, reason: string }>} reason is one of
  *   evaluateClaGate's reasons, or "cla-read-error" when a read threw.
  */
-export async function applyClaGate({ gh, publicPr, internalPr }) {
+export async function applyClaGate({ gh, publicPr, internalPr, forceDraft = false }) {
   const author = publicPr?.user?.login;
   let gate;
   try {
@@ -115,11 +118,15 @@ export async function applyClaGate({ gh, publicPr, internalPr }) {
     // An exempt author never needs the public CLA status, so skip the read.
     const claStatus = exempt ? null : await gh.readClaStatus(publicPr);
     gate = evaluateClaGate({ claStatus, exempt });
-  } catch {
+  } catch (error) {
+    // Fail closed for the security gate, but surface WHY the read failed
+    // (401 / rate limit / API down) so a perpetual cla-read-error hold is
+    // triagable; forceDraft routing makes this catch newly load-bearing.
+    console.warn(`Bridge: CLA gate read failed for ${author}: ${error.message}`);
     gate = { gated: true, reason: "cla-read-error" };
   }
 
-  const shouldBeDraft = Boolean(publicPr?.draft) || gate.gated;
+  const shouldBeDraft = Boolean(publicPr?.draft) || gate.gated || forceDraft;
   await gh.setDraft(internalPr, shouldBeDraft);
   await gh.setVerifiedStatus(
     internalPr,

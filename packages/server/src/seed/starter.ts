@@ -1,10 +1,12 @@
 export type PackId =
   | 'knowledge-base'
   | 'software-lifecycle'
+  | 'codebase-wiki'
   | 'plain-notes'
   | 'worldbuilding'
   | 'writing-pipeline'
-  | 'entity-vault';
+  | 'entity-vault'
+  | 'okf';
 
 export const DEFAULT_PACK_ID: PackId = 'knowledge-base';
 
@@ -56,10 +58,11 @@ const KNOWLEDGE_BASE_FOLDERS: readonly StarterFolder[] = [
 
 const KNOWLEDGE_BASE_TEMPLATES: Readonly<Record<string, string>> = {
   clip: `---
-title: External Source
-description: Capture a URL or article text verbatim as raw reference material. For binary files (PDFs, images, audio), use the \`ingest\` tool instead — this \`clip\` template is for text sources only.
----
----
+template:
+  title: External Source
+  description: Capture a URL or article text verbatim as raw reference material. For binary files (PDFs, images, audio), use the \`ingest\` tool instead — this \`clip\` template is for text sources only.
+type: source
+description: "Raw source text captured verbatim for reference, with its original URL and fetch date."
 source_url:
 date_fetched: {{date}}
 preservation: text-extracted
@@ -73,10 +76,11 @@ tags: [source, immutable, layer-ingest, text]
 ## My notes
 `,
   'research-log': `---
-title: Research Log
-description: Provisional analysis synthesizing external sources. Every factual claim cites a doc in external-sources/. Promoted to articles/ via consolidate once findings are stable.
----
----
+template:
+  title: Research Log
+  description: Provisional analysis synthesizing external sources. Every factual claim cites a doc in external-sources/. Promoted to articles/ via consolidate once findings are stable.
+type: research-note
+description: "Provisional findings that synthesize the cited sources, pending promotion to a canonical article."
 status: provisional
 sources: []
 created: {{date}}
@@ -93,10 +97,11 @@ tags: [research, provisional]
 ## Open questions
 `,
   article: `---
-title: Canonical Article
-description: Canonical knowledge committed after a team decision. Carries status:canonical plus a supersedes chain tying back to the research/ docs it replaces. Source-of-truth for the domain.
----
----
+template:
+  title: Canonical Article
+  description: Canonical knowledge committed after a team decision. Carries status:canonical plus a supersedes chain tying back to the research/ docs it replaces. Source-of-truth for the domain.
+type: article
+description: "Canonical, team-approved reference for this topic."
 status: canonical
 supersedes: []
 authored: {{date}}
@@ -169,10 +174,11 @@ const SOFTWARE_LIFECYCLE_FOLDERS: readonly StarterFolder[] = [
 
 const SOFTWARE_LIFECYCLE_TEMPLATES: Readonly<Record<string, string>> = {
   proposal: `---
-title: Proposal Title
-description: One-line summary of the proposal.
----
----
+template:
+  title: Proposal Title
+  description: One-line summary of the proposal.
+type: proposal
+description: "A proposal put forward for discussion and a decision."
 status: draft
 authors: [{{user}}]
 created: {{date}}
@@ -190,10 +196,11 @@ tags: [proposal]
 ## Unresolved questions
 `,
   decision: `---
-title: Decision Title
-description: One-line decision summary.
----
----
+template:
+  title: Decision Title
+  description: One-line decision summary.
+type: decision
+description: "A recorded decision with its context and rationale."
 status: proposed
 date: {{date}}
 deciders: [{{user}}]
@@ -208,10 +215,11 @@ tags: [decision]
 ## Consequences
 `,
   spec: `---
-title: Spec Title
-description: One-line description of what's being built.
----
----
+template:
+  title: Spec Title
+  description: One-line description of what's being built.
+type: spec
+description: "Specification of the problem, requirements, and intended solution."
 status: draft
 owner: {{user}}
 target_release:
@@ -231,10 +239,11 @@ tags: [spec]
 ## Test plan
 `,
   'spec-plan': `---
-title: 'Plan: <Spec Title>'
-description: Implementation plan derived from the parent spec. Pairs with spec.md and tasks.md (github/spec-kit triple shape).
----
----
+template:
+  title: 'Plan: <Spec Title>'
+  description: Implementation plan derived from the parent spec. Pairs with spec.md and tasks.md (github/spec-kit triple shape).
+type: spec-plan
+description: "Implementation plan breaking the spec into an ordered approach."
 parent_spec:
 created: {{date}}
 author: {{user}}
@@ -252,10 +261,11 @@ tags: [spec, plan]
 ## Rollout
 `,
   'spec-tasks': `---
-title: 'Tasks: <Spec Title>'
-description: Task checklist for the parent spec. Pairs with spec.md and plan.md (github/spec-kit triple shape).
----
----
+template:
+  title: 'Tasks: <Spec Title>'
+  description: Task checklist for the parent spec. Pairs with spec.md and plan.md (github/spec-kit triple shape).
+type: spec-tasks
+description: "Task breakdown tracking the work needed to deliver the spec."
 parent_spec:
 created: {{date}}
 author: {{user}}
@@ -273,10 +283,11 @@ tags: [spec, tasks]
 ## Out of scope
 `,
   guide: `---
-title: '<Topic>: <Action>'
-description: One-line summary of what the reader will accomplish.
----
----
+template:
+  title: '<Topic>: <Action>'
+  description: One-line summary of what the reader will accomplish.
+type: guide
+description: "Step-by-step guide for completing a task."
 category: how-to
 last_verified: {{date}}
 tags: [guide]
@@ -291,10 +302,11 @@ tags: [guide]
 ## Links
 `,
   'onboarding-guide': `---
-title: 'Onboarding: <Audience>'
-description: First-N-days setup path for <audience> (e.g. new engineer, new contributor, new oncall).
----
----
+template:
+  title: 'Onboarding: <Audience>'
+  description: First-N-days setup path for <audience> (e.g. new engineer, new contributor, new oncall).
+type: guide
+description: "Onboarding guide that orients a new audience and gets them started."
 category: onboarding
 audience:
 last_verified: {{date}}
@@ -314,10 +326,11 @@ tags: [guide, onboarding]
 ## Links
 `,
   runbook: `---
-title: '<Service>: <Symptom>'
-description: Oncall procedure for diagnosing and remediating <symptom> in <service>.
----
----
+template:
+  title: '<Service>: <Symptom>'
+  description: Oncall procedure for diagnosing and remediating <symptom> in <service>.
+type: guide
+description: "Troubleshooting guide for diagnosing and resolving a symptom."
 category: runbook
 service:
 severity:
@@ -336,10 +349,11 @@ tags: [guide, runbook, oncall]
 ## Links
 `,
   postmortem: `---
-title: 'Incident: <short name>'
-description: Blameless postmortem for <incident>.
----
----
+template:
+  title: 'Incident: <short name>'
+  description: Blameless postmortem for <incident>.
+type: postmortem
+description: "Post-incident review covering impact, timeline, root cause, and follow-ups."
 severity:
 duration:
 services: []
@@ -360,6 +374,183 @@ tags: [postmortem]
 ## Action items
 `,
 };
+
+const CODEBASE_WIKI_FOLDERS: readonly StarterFolder[] = [
+  {
+    path: 'wiki/architecture',
+    title: 'Architecture',
+    description:
+      'System boundaries, layers, subsystems, and cross-cutting concerns — the big-picture structure. One page per architectural area, each with a `mermaid` system-context or component diagram, the key components, and the design decisions behind them. Uses the `architecture-page` template. Cross-link the modules and flows each area touches. Reference source files per the wiki source-reference convention (relative links + symbol code-spans for `internal`; GitHub blob URLs for `public`).',
+    tags: ['wiki', 'architecture'],
+    starterTemplate: 'architecture-page',
+  },
+  {
+    path: 'wiki/modules',
+    title: 'Modules',
+    description:
+      'One page per package or module: purpose, responsibilities, public API / entry points, key files (linked per the source-reference convention), dependencies, and the flows it participates in. Uses the `module-page` template. At `depth: tour` these fold into the architecture pages; at `standard`+ each package gets its own page. Cross-link concepts and flows.',
+    tags: ['wiki', 'module'],
+    starterTemplate: 'module-page',
+  },
+  {
+    path: 'wiki/flows',
+    title: 'Flows',
+    description:
+      'Key end-to-end flows as `mermaid` sequence or flow diagrams plus narrative — how a request, job, or interaction moves through the system. Uses the `flow-page` template; record failure modes at `depth: exhaustive`. Link every module and concept the flow crosses.',
+    tags: ['wiki', 'flow'],
+    starterTemplate: 'flow-page',
+  },
+  {
+    path: 'wiki/concepts',
+    title: 'Concepts',
+    description:
+      'Glossary of atomic pages for domain terms and core abstractions — the vocabulary a newcomer needs. Uses the `concept-page` template: definition, why it matters, where it lives in the code. Keep pages small and densely cross-linked so concepts become hubs for everywhere they appear.',
+    tags: ['wiki', 'concept'],
+    starterTemplate: 'concept-page',
+  },
+  {
+    path: 'wiki/guides',
+    title: 'Guides',
+    description:
+      'Task-oriented "how / where do I change X" walkthroughs. Uses the `guide-page` template: goal, steps, relevant code, gotchas. Populated at `depth: standard` and rich at `exhaustive`; thin or empty at `tour`. Link the modules and flows each guide touches.',
+    tags: ['wiki', 'guide', 'how-to'],
+    starterTemplate: 'guide-page',
+  },
+] as const;
+
+const CODEBASE_WIKI_TEMPLATES: Readonly<Record<string, string>> = {
+  'architecture-page': `---
+template:
+  title: Architecture Page
+  description: One subsystem, layer, or cross-cutting concern — boundaries, a diagram, and the key components.
+type: architecture
+tags: [wiki, architecture]
+---
+
+## Summary
+
+## Diagram
+
+## Key components
+
+## Design decisions
+
+## Related
+`,
+  'module-page': `---
+template:
+  title: Module Page
+  description: One package or module — its purpose, public surface, key files, and dependencies.
+type: module
+tags: [wiki, module]
+---
+
+## Summary
+
+## Responsibilities
+
+## Public API / entry points
+
+## Key files
+
+## Dependencies
+
+## Participates in
+
+## Related
+`,
+  'flow-page': `---
+template:
+  title: Flow Page
+  description: One end-to-end flow as a sequence diagram, with narrative and failure modes.
+type: flow
+tags: [wiki, flow]
+---
+
+## Summary
+
+## Trigger
+
+## Sequence diagram
+
+## Steps
+
+## Failure modes
+
+## Related
+`,
+  'concept-page': `---
+template:
+  title: Concept Page
+  description: One domain term or core abstraction — what it means, why it matters, and where it lives in the code.
+type: concept
+tags: [wiki, concept]
+---
+
+## Definition
+
+## Why it matters
+
+## Where it lives
+
+## Related
+`,
+  'guide-page': `---
+template:
+  title: Guide Page
+  description: A task-oriented how / where-do-I-change-X walkthrough — goal, steps, relevant code, and gotchas.
+type: guide
+tags: [wiki, guide]
+---
+
+## Goal
+
+## Steps
+
+## Relevant code
+
+## Gotchas
+
+## Related
+`,
+};
+
+const CODEBASE_WIKI_OVERVIEW_MD = `---
+title: Codebase Wiki — Overview
+description: Home page and navigation hub for this codebase wiki. Generated and refreshed by the wiki workflow.
+profile:
+source_commit:
+tags: [wiki, overview]
+---
+
+# Overview
+
+The home page and navigation hub for this codebase's wiki. It is a stub until you run the wiki workflow — ask your agent to "build the wiki" (optionally naming an audience and depth, e.g. "public, exhaustive"), or call \`workflow({ kind: "wiki" })\` directly.
+
+Once generated, this page carries: what the project is, a big-picture architecture diagram, and a navigation map linking every section below.
+
+## What this is
+
+## Architecture at a glance
+
+## Navigation
+
+- Architecture — system boundaries, layers, subsystems
+- Modules — one page per package / module
+- Flows — key end-to-end sequences
+- Concepts — glossary of domain terms and core abstractions
+- Guides — task-oriented how / where-do-I-change-X walkthroughs
+`;
+
+const CODEBASE_WIKI_LOG_MD = `---
+title: Wiki Log
+description: Append-only audit trail of wiki generation and refresh runs.
+---
+
+# Wiki Log
+
+Append-only audit trail. Add one dated entry per generation or refresh run, recording the profile, the \`source_commit\` it was anchored to, and the coverage. The codebase-wiki skill describes the entry shape.
+`;
 
 const PLAIN_NOTES_FOLDERS: readonly StarterFolder[] = [
   {
@@ -382,20 +573,22 @@ const PLAIN_NOTES_FOLDERS: readonly StarterFolder[] = [
 
 const PLAIN_NOTES_TEMPLATES: Readonly<Record<string, string>> = {
   note: `---
-title: Note title
-description: One-line summary.
----
----
+template:
+  title: Note title
+  description: One-line summary.
+type: note
+description: "A short freeform note."
 created: {{date}}
 author: {{user}}
 tags: []
 ---
 `,
   daily: `---
-title: Daily entry
-description: Daily journal entry.
----
----
+template:
+  title: Daily entry
+  description: Daily journal entry.
+type: daily-note
+description: "Daily journal entry capturing intentions, notes, and reflections."
 title: {{date}}
 date: {{date}}
 author: {{user}}
@@ -464,11 +657,11 @@ const WORLDBUILDING_FOLDERS: readonly StarterFolder[] = [
 
 const WORLDBUILDING_TEMPLATES: Readonly<Record<string, string>> = {
   character: `---
-title: Character Name
-description: One-line characterization.
----
----
+template:
+  title: Character Name
+  description: One-line characterization.
 type: character
+description: "Profile of a character: traits, motivations, relationships, and arc."
 status: alive
 faction: []
 first_appeared:
@@ -486,11 +679,11 @@ tags: [character]
 ## Links
 `,
   setting: `---
-title: Setting Name
-description: One-line atmospheric summary.
----
----
+template:
+  title: Setting Name
+  description: One-line atmospheric summary.
 type: setting
+description: "Description of a place or setting in the world."
 region:
 controlling_faction:
 danger_level:
@@ -506,11 +699,11 @@ tags: [setting]
 ## What's hidden
 `,
   theme: `---
-title: Theme Name
-description: One-line statement of the recurring concern.
----
----
+template:
+  title: Theme Name
+  description: One-line statement of the recurring concern.
 type: theme
+description: "A recurring theme and how it surfaces across the work."
 created: {{date}}
 author: {{user}}
 tags: [theme]
@@ -523,11 +716,11 @@ tags: [theme]
 ## Tension
 `,
   faction: `---
-title: Faction Name
-description: One-line description of who they are and what they want.
----
----
+template:
+  title: Faction Name
+  description: One-line description of who they are and what they want.
 type: faction
+description: "Profile of a faction: goals, members, and allegiances."
 alignment:
 leader:
 members: []
@@ -544,11 +737,11 @@ tags: [faction]
 ## Internal tensions
 `,
   'political-faction': `---
-title: Faction Name
-description: One-line summary of their politics and their ambition.
----
----
+template:
+  title: Faction Name
+  description: One-line summary of their politics and their ambition.
 type: political-faction
+description: "Profile of a political faction: ideology, power base, and aims."
 form: monarchy
 seat:
 leader:
@@ -572,11 +765,11 @@ tags: [faction, politics]
 ## Pressure points
 `,
   religion: `---
-title: Religion Name
-description: One-line summary of the faith and its central tension.
----
----
+template:
+  title: Religion Name
+  description: One-line summary of the faith and its central tension.
 type: religion
+description: "Profile of a religion: beliefs, practices, and followers."
 deity:
 pantheon: []
 clergy_structure:
@@ -600,11 +793,11 @@ tags: [faction, religion]
 ## Relations with power
 `,
   lore: `---
-title: Lore Topic
-description: One-line summary.
----
----
+template:
+  title: Lore Topic
+  description: One-line summary.
 type: lore
+description: "A piece of world lore and its place in the larger canon."
 era:
 scope: history
 created: {{date}}
@@ -619,11 +812,11 @@ tags: [lore]
 ## Implications
 `,
   'magic-system': `---
-title: Magic System Name
-description: One-line summary of the source and the cost.
----
----
+template:
+  title: Magic System Name
+  description: One-line summary of the source and the cost.
 type: magic-system
+description: "The rules, costs, and limits of a magic system."
 source:
 cost:
 discoverable_by: []
@@ -645,11 +838,11 @@ tags: [lore, magic]
 ## How it shapes the world
 `,
   'historical-event': `---
-title: Event Name
-description: One-line summary of what happened and why it mattered.
----
----
+template:
+  title: Event Name
+  description: One-line summary of what happened and why it mattered.
 type: historical-event
+description: "Account of a historical event: what happened, when, and why it matters."
 when:
 where:
 duration:
@@ -702,10 +895,11 @@ const WRITING_PIPELINE_FOLDERS: readonly StarterFolder[] = [
 
 const WRITING_PIPELINE_TEMPLATES: Readonly<Record<string, string>> = {
   idea: `---
-title: Idea title
-description: One-line hook.
----
----
+template:
+  title: Idea title
+  description: One-line hook.
+type: idea
+description: "An early idea captured for later development."
 captured_at: {{date}}
 hook:
 tags: [idea]
@@ -714,10 +908,11 @@ tags: [idea]
 ## Stimulus
 `,
   draft: `---
-title: Draft title
-description: What's this piece about?
----
----
+template:
+  title: Draft title
+  description: What's this piece about?
+type: draft
+description: "A work-in-progress draft."
 status: drafting
 target_form:
 target_words:
@@ -729,10 +924,11 @@ tags: [draft]
 
 `,
   published: `---
-title: Published title
-description: One-line summary.
----
----
+template:
+  title: Published title
+  description: One-line summary.
+type: publication
+description: "A finished, published piece."
 status: published
 published_at:
 canonical_url:
@@ -798,11 +994,11 @@ const ENTITY_VAULT_FOLDERS: readonly StarterFolder[] = [
 
 const ENTITY_VAULT_TEMPLATES: Readonly<Record<string, string>> = {
   person: `---
-title: Person Name
-description: One-line characterization. Who they are, why they matter to you.
----
----
+template:
+  title: Person Name
+  description: One-line characterization. Who they are, why they matter to you.
 type: person
+description: "Profile of a person: role, context, and how you know them."
 title: Person Name
 created: {{date}}
 author: {{user}}
@@ -811,7 +1007,7 @@ tags: [person]
 
 ## Compiled truth
 
-(Your current best understanding. Rewrite this section as new evidence changes the synthesis. Prefer path-qualified links such as [[companies/acme|Acme]] when identity matters.)
+(Your current best understanding. Rewrite this section as new evidence changes the synthesis. Prefer path-qualified links such as \`[[companies/acme|Acme]]\` when identity matters.)
 
 --- timeline ---
 
@@ -820,11 +1016,11 @@ tags: [person]
 - **{{date}}** | source | @{{user}} — First evidence entry. Confidence: draft.
 `,
   company: `---
-title: Company Name
-description: One-line company summary. What they do, who's involved.
----
----
+template:
+  title: Company Name
+  description: One-line company summary. What they do, who's involved.
 type: company
+description: "Profile of a company: what it does and why it matters to you."
 title: Company Name
 created: {{date}}
 author: {{user}}
@@ -833,7 +1029,7 @@ tags: [company]
 
 ## Compiled truth
 
-(Your current best understanding of the company. Rewrite this section as new evidence changes the synthesis. Prefer path-qualified links such as [[people/jane-founder|Jane Founder]].)
+(Your current best understanding of the company. Rewrite this section as new evidence changes the synthesis. Prefer path-qualified links such as \`[[people/jane-founder|Jane Founder]]\`.)
 
 --- timeline ---
 
@@ -842,11 +1038,11 @@ tags: [company]
 - **{{date}}** | source | @{{user}} — First evidence entry. Confidence: draft.
 `,
   meeting: `---
-title: Meeting Title
-description: One-line meeting summary. Fill in after the meeting.
----
----
+template:
+  title: Meeting Title
+  description: One-line meeting summary. Fill in after the meeting.
 type: meeting
+description: "Meeting notes: attendees, discussion, decisions, and action items."
 title: Meeting Title
 date: {{date}}
 attendees: []
@@ -856,18 +1052,18 @@ tags: [meeting]
 
 ## Notes
 
-(Raw notes from the meeting. Prefer path-qualified links such as [[people/jane-founder|Jane Founder]], [[companies/jane-co|Jane Co]], and [[concepts/agent-runtime-observability|agent-runtime observability]].)
+(Raw notes from the meeting. Prefer path-qualified links such as \`[[people/jane-founder|Jane Founder]]\`, \`[[companies/jane-co|Jane Co]]\`, and \`[[concepts/agent-runtime-observability|agent-runtime observability]]\`.)
 
 ## Action items
 
 - [ ]
 `,
   concept: `---
-title: Concept Name
-description: One-line concept summary. What it names and why it recurs.
----
----
+template:
+  title: Concept Name
+  description: One-line concept summary. What it names and why it recurs.
 type: concept
+description: "Explanation of a concept and how it connects to related ideas."
 title: Concept Name
 created: {{date}}
 author: {{user}}
@@ -885,11 +1081,11 @@ tags: [concept]
 - **{{date}}** | source | @{{user}} — First evidence entry. Confidence: draft.
 `,
   original: `---
-title: Idea Title
-description: One-line summary of the idea or take.
----
----
+template:
+  title: Idea Title
+  description: One-line summary of the idea or take.
 type: original
+description: "An original idea in its initial form."
 title: Idea Title
 date: {{date}}
 author: {{user}}
@@ -899,11 +1095,11 @@ tags: [original]
 (Your own thinking. Link to anything that should become its own entity, preferably with path-qualified wikilinks once the entity dossier exists.)
 `,
   transcript: `---
-title: Transcript
-description: One-line transcript summary. Source and key topic.
----
----
+template:
+  title: Transcript
+  description: One-line transcript summary. Source and key topic.
 type: transcript
+description: "Verbatim transcript of a conversation or recording."
 title: Transcript
 date: {{date}}
 source:
@@ -939,16 +1135,16 @@ What to log:
 
 **Reference docs as markdown links, not bare paths.** Every doc you touched should appear as \`[name](./path/to/doc.md)\` so the log shows up in \`links({ kind: "backlinks" })\` for those docs.
 
-<!-- Example entry shape:
+Example entry shape:
 
+\`\`\`markdown
 ## YYYY-MM-DD: <short title>
 
 - <what was done>
 - Dossiers updated: [Jane Founder](./people/jane-founder.md), [Jane Co](./companies/jane-co.md)
 - Meetings logged: [2026-05-12 coffee](./meetings/2026-05-12-jane-founder-coffee.md)
 - Open follow-ups: <topic-1>, <topic-2>
-
--->
+\`\`\`
 `;
 
 const ENTITY_VAULT_USER_MD = `---
@@ -1023,7 +1219,7 @@ description: What the agent may read, write, and surface. A 4-tier privacy model
 
 const ENTITY_VAULT_HEARTBEAT_MD = `---
 title: Operational cadence
-description: When the agent does scheduled work: daily briefings, end-of-day dossier maintenance, weekly audits. If you also use GBrain, note its sync/dream cadence here.
+description: "When the agent does scheduled work: daily briefings, end-of-day dossier maintenance, weekly audits. If you also use GBrain, note its sync/dream cadence here."
 ---
 
 # Heartbeat
@@ -1047,12 +1243,137 @@ description: When the agent does scheduled work: daily briefings, end-of-day dos
 
 `;
 
+const OKF_FOLDERS: readonly StarterFolder[] = [
+  {
+    path: 'concepts',
+    title: 'Concepts',
+    description:
+      'Durable ideas and definitions, one file per concept. Each doc carries `type: concept` in its frontmatter. Link related concepts so the graph builds itself.',
+    tags: ['concept', 'okf'],
+    starterTemplate: 'concept',
+  },
+  {
+    path: 'references',
+    title: 'References',
+    description:
+      'External sources and citations you rely on, one file per source. Each doc carries `type: reference`. Link the docs that cite a reference so the evidence trail stays navigable.',
+    tags: ['reference', 'okf'],
+    starterTemplate: 'reference',
+  },
+  {
+    path: 'notes',
+    title: 'Notes',
+    description:
+      'Working notes and observations, one file per note. Each doc carries `type: note`. The lightest section — capture first, link as ideas connect.',
+    tags: ['note', 'okf'],
+    starterTemplate: 'note',
+  },
+] as const;
+
+const OKF_TEMPLATES: Readonly<Record<string, string>> = {
+  concept: `---
+template:
+  title: Concept Name
+  description: One-line definition of the concept.
+type: concept
+description: "Explanation of a concept and how it connects to related ideas."
+created: {{date}}
+author: {{user}}
+tags: [concept]
+---
+
+## Definition
+
+## Why it matters
+
+## Related
+
+- Link a related idea, e.g. \`[another concept](./another-concept.md)\`.
+`,
+  reference: `---
+template:
+  title: Reference Title
+  description: One-line summary of the source.
+type: reference
+description: "A reference entry kept for quick lookup."
+created: {{date}}
+author: {{user}}
+tags: [reference]
+---
+
+## Summary
+
+## Key points
+
+## Where this is used
+
+- Link the docs that cite this reference.
+`,
+  note: `---
+template:
+  title: Note Title
+  description: One-line summary of the note.
+type: note
+description: "A freeform note."
+created: {{date}}
+author: {{user}}
+tags: [note]
+---
+
+## Note
+
+## Links
+`,
+};
+
+const OKF_WELCOME_MD = `---
+title: Welcome
+description: Start here — what this knowledge base is and how it is organized.
+type: Document
+tags: [welcome]
+---
+
+# Welcome
+
+This knowledge base was scaffolded with the **OKF starter pack**, so it is conformant with the Open Knowledge Format (OKF) from the first commit.
+
+## How it is organized
+
+- [index](./index.md) — the navigation hub (a reserved OKF file; carries no frontmatter).
+- [log](./log.md) — the change history (a reserved OKF file; carries no frontmatter).
+- [concepts/](./concepts/), [references/](./references/), [notes/](./notes/) — your content. Every document here carries a non-empty \`type\` in its frontmatter.
+
+## The one rule
+
+OKF requires exactly one thing of every non-reserved document: a non-empty \`type\`. The value is yours to choose — \`concept\`, \`reference\`, \`note\`, or anything that fits. \`Document\` is a fine generic fallback.
+
+See the project skill for the full set of conventions.
+`;
+
+const OKF_INDEX_MD = `# Index
+
+The navigation hub for this knowledge base. Start with [welcome](./welcome.md), then explore by section.
+
+## Sections
+
+- [welcome](./welcome.md) — what this knowledge base is and how it is organized
+- [concepts/](./concepts/) — durable ideas and definitions, one file per concept (\`type: concept\`)
+- [references/](./references/) — sources and citations you rely on (\`type: reference\`)
+- [notes/](./notes/) — working notes and observations (\`type: note\`)
+
+Every document outside this file and \`log.md\` carries a non-empty \`type\` in its frontmatter — that is all OKF requires.
+`;
+
+const OKF_LOG_MD = `# Log
+
+Change history for this knowledge base, newest entry first. Add a dated entry (\`## YYYY-MM-DD: <summary>\`) whenever you create, edit, or restructure content — one entry per working session, not per file.
+`;
+
 export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
   'knowledge-base': {
     id: 'knowledge-base',
     name: 'Knowledge base',
-    description:
-      'Source-grounded canonical articles. Three layers (sources → research → articles) wired to the ingest / research / consolidate MCP tools.',
+    description: 'Trusted articles from your sources.',
     defaultSubfolder: 'brain',
     folders: KNOWLEDGE_BASE_FOLDERS,
     templates: KNOWLEDGE_BASE_TEMPLATES,
@@ -1061,44 +1382,57 @@ export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
   'software-lifecycle': {
     id: 'software-lifecycle',
     name: 'Software lifecycle',
-    description:
-      'Proposals, decisions, specs, postmortems, guides. The doc lifecycle for an engineering team or OSS project.',
+    description: 'Proposals, decisions, and specs.',
     defaultSubfolder: 'project-docs',
     folders: SOFTWARE_LIFECYCLE_FOLDERS,
     templates: SOFTWARE_LIFECYCLE_TEMPLATES,
   },
+  'codebase-wiki': {
+    id: 'codebase-wiki',
+    name: 'Codebase wiki',
+    description:
+      'An agent-authored, navigable wiki of your codebase — architecture, modules, flows, concepts, and guides, with diagrams, cross-links, and source references. Generated and refreshed by the `wiki` workflow; version-controlled and private by default.',
+    defaultSubfolder: undefined,
+    folders: CODEBASE_WIKI_FOLDERS,
+    templates: CODEBASE_WIKI_TEMPLATES,
+    rootFiles: {
+      'wiki/OVERVIEW.md': CODEBASE_WIKI_OVERVIEW_MD,
+      'wiki/log.md': CODEBASE_WIKI_LOG_MD,
+    },
+  },
   'plain-notes': {
     id: 'plain-notes',
     name: 'Plain notes',
-    description:
-      'Just notes/ + daily/. The "I just want to write" escape hatch. No posture imposed, link freely.',
+    description: 'Notes and daily entries.',
     defaultSubfolder: undefined,
     folders: PLAIN_NOTES_FOLDERS,
     templates: PLAIN_NOTES_TEMPLATES,
   },
-  worldbuilding: {
-    id: 'worldbuilding',
-    name: 'Worldbuilding',
-    description:
-      'Encyclopedia for fiction: characters, settings, themes, factions, lore. The graph is the product; agent excels at auto-stub creation and dead-link cleanup.',
-    defaultSubfolder: 'world',
-    folders: WORLDBUILDING_FOLDERS,
-    templates: WORLDBUILDING_TEMPLATES,
+  okf: {
+    id: 'okf',
+    name: 'Open Knowledge Format',
+    description: "Wiki using Google's Open Knowledge Format.",
+    defaultSubfolder: undefined,
+    folders: OKF_FOLDERS,
+    templates: OKF_TEMPLATES,
+    rootFiles: {
+      'welcome.md': OKF_WELCOME_MD,
+      'index.md': OKF_INDEX_MD,
+      'log.md': OKF_LOG_MD,
+    },
   },
   'writing-pipeline': {
     id: 'writing-pipeline',
     name: 'Writing pipeline',
-    description:
-      'Three-stage drafting flow: ideas → drafts → published. Lean by default; CRDT history covers per-file revisions.',
+    description: 'From first draft to finished piece.',
     defaultSubfolder: 'writing',
     folders: WRITING_PIPELINE_FOLDERS,
     templates: WRITING_PIPELINE_TEMPLATES,
   },
   'entity-vault': {
     id: 'entity-vault',
-    name: 'Entity vault (GBrain-compatible)',
-    description:
-      'Track people, companies, meetings, and concepts with dossiers: rewritable summaries plus append-only evidence timelines. GBrain-compatible Markdown; OK handles editing and review.',
+    name: 'Personal CRM',
+    description: 'Track the people, companies, and meetings.',
     defaultSubfolder: 'vault',
     folders: ENTITY_VAULT_FOLDERS,
     templates: ENTITY_VAULT_TEMPLATES,
@@ -1110,9 +1444,19 @@ export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
       'HEARTBEAT.md': ENTITY_VAULT_HEARTBEAT_MD,
     },
   },
+  worldbuilding: {
+    id: 'worldbuilding',
+    name: 'Worldbuilding',
+    description: 'A wiki for your story world.',
+    defaultSubfolder: 'world',
+    folders: WORLDBUILDING_FOLDERS,
+    templates: WORLDBUILDING_TEMPLATES,
+  },
 };
 
 export const STARTER_PACK_IDS: readonly PackId[] = Object.keys(STARTER_PACKS) as PackId[];
+
+export const OKF_RESERVED_FILENAMES: readonly string[] = ['index.md', 'log.md'];
 
 export function resolvePack(packId?: PackId): StarterPack {
   if (!packId) return STARTER_PACKS[DEFAULT_PACK_ID];

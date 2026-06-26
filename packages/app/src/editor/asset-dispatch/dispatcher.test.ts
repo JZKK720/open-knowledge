@@ -94,24 +94,40 @@ describe('dispatchAssetClick', () => {
     expect(openAsset).toHaveBeenCalledTimes(1);
   });
 
-  test('openAsset refusal is logged but does not throw or fall through to web', async () => {
+  test('extension-blocked refusal reveals the asset in the file manager (no web fallback)', async () => {
     const openAsset = mock(
-      async (_: string) =>
-        ({
-          ok: false,
-          reason: 'extension-blocked',
-        }) as const,
+      async (_: string) => ({ ok: false, reason: 'extension-blocked' }) as const,
     );
+    const revealAsset = mock(async (_: string) => ({ ok: true }) as const);
     const openUrl = mock((_: string) => {});
     const desktopBridge = {
-      shell: { openAsset },
+      shell: { openAsset, revealAsset },
+    } as unknown as NonNullable<typeof window.okDesktop>;
+
+    await dispatchAssetClick(ctx({ ext: 'html', projectRelPath: 'fishing-log/trip-viewer.html' }), {
+      desktopBridge,
+      openUrl,
+    });
+
+    expect(openAsset).toHaveBeenCalledTimes(1);
+    expect(revealAsset).toHaveBeenCalledTimes(1);
+    expect(revealAsset).toHaveBeenCalledWith('fishing-log/trip-viewer.html');
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  test('non-blocked refusal (resolve-error) is logged, does not reveal or fall through to web', async () => {
+    const openAsset = mock(async (_: string) => ({ ok: false, reason: 'resolve-error' }) as const);
+    const revealAsset = mock(async (_: string) => ({ ok: true }) as const);
+    const openUrl = mock((_: string) => {});
+    const desktopBridge = {
+      shell: { openAsset, revealAsset },
     } as unknown as NonNullable<typeof window.okDesktop>;
 
     const consoleWarn = mock((..._args: unknown[]) => {});
     const origWarn = console.warn;
     console.warn = consoleWarn as unknown as typeof console.warn;
     try {
-      await dispatchAssetClick(ctx({ ext: 'sh', projectRelPath: 'notes/setup.sh' }), {
+      await dispatchAssetClick(ctx({ ext: 'pdf', projectRelPath: 'notes/meeting.pdf' }), {
         desktopBridge,
         openUrl,
       });
@@ -120,6 +136,7 @@ describe('dispatchAssetClick', () => {
     }
 
     expect(openAsset).toHaveBeenCalledTimes(1);
+    expect(revealAsset).not.toHaveBeenCalled();
     expect(openUrl).not.toHaveBeenCalled();
     expect(consoleWarn).toHaveBeenCalled();
   });

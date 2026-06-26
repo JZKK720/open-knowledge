@@ -41,6 +41,7 @@ msgstr "\"{docName}\" took too long. Check your connection."
 msgid "\"{trimmed}\" already exists here"
 msgstr "\"{trimmed}\" already exists here"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "\"frontmatter\" is a reserved property name"
 msgstr "\"frontmatter\" is a reserved property name"
@@ -49,6 +50,10 @@ msgstr "\"frontmatter\" is a reserved property name"
 #: src/components/ShareReceiveDialog.tsx
 msgid "(a worktree of {0})"
 msgstr "(a worktree of {0})"
+
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "(inline)"
+msgstr "(inline)"
 
 #: src/components/CommandPalette.tsx
 msgid "(missing)"
@@ -67,6 +72,10 @@ msgstr "(opens in new tab)"
 msgid "(project + user)"
 msgstr "(project + user)"
 
+#: src/components/PropertyWidgets.tsx
+msgid "(read-only — edit in source mode for now)"
+msgstr "(read-only — edit in source mode for now)"
+
 #: src/components/NewItemDialog.tsx
 msgid "(root)"
 msgstr "(root)"
@@ -84,6 +93,21 @@ msgstr "(user-level only)"
 #: src/components/CommandPalette.tsx
 msgid "{0, plural, one {# doc} other {# docs}}"
 msgstr "{0, plural, one {# doc} other {# docs}}"
+
+#. placeholder {0}: value.length
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "{0, plural, one {# item} other {# items}}"
+msgstr "{0, plural, one {# item} other {# items}}"
+
+#. placeholder {0}: entries.length
+#: src/components/ObjectWidget.tsx
+msgid "{0, plural, one {# key} other {# keys}}"
+msgstr "{0, plural, one {# key} other {# keys}}"
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "{0, plural, one {# request blocked by the preview's security policy} other {# requests blocked by the preview's security policy}}"
+msgstr "{0, plural, one {# request blocked by the preview's security policy} other {# requests blocked by the preview's security policy}}"
 
 #. placeholder {0}: item.count
 #: src/editor/tag-suggestion/TagSuggestionMenu.tsx
@@ -181,8 +205,8 @@ msgid "{days, plural, one {# day ago} other {# days ago}}"
 msgstr "{days, plural, one {# day ago} other {# days ago}}"
 
 #: src/components/FileTree.tsx
-msgid "{deleteCount, plural, one {Delete} other {Delete # Items}}"
-msgstr "{deleteCount, plural, one {Delete} other {Delete # Items}}"
+msgid "{deleteCount, plural, one {Delete} other {Delete # items}}"
+msgstr "{deleteCount, plural, one {Delete} other {Delete # items}}"
 
 #: src/editor/extensions/JsxComponentView.tsx
 msgid "{descriptorLabel} — render error, source editable below"
@@ -204,35 +228,36 @@ msgstr "{diffHrs}h ago"
 msgid "{diffMin}m ago"
 msgstr "{diffMin}m ago"
 
+#: src/components/TerminalCliMissingBanner.tsx
+msgid "{displayName} ({bin}) isn't installed or on your PATH."
+msgstr "{displayName} ({bin}) isn't installed or on your PATH."
+
+#: src/components/BottomComposer.tsx
+#: src/components/empty-state/CreatePromptComposer.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+msgid "{displayName} CLI"
+msgstr "{displayName} CLI"
+
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+msgid "{displayName} CLI, {hint}"
+msgstr "{displayName} CLI, {hint}"
+
 #. placeholder {0}: formatFileSize(size)
 #. placeholder {1}: formatFileSize(limit)
 #: src/components/LargeFileEditorState.tsx
-msgid "{docName} is {0}. Open Knowledge currently opens files up to {1}."
-msgstr "{docName} is {0}. Open Knowledge currently opens files up to {1}."
+msgid "{docName} is {0}. OpenKnowledge currently opens files up to {1}."
+msgstr "{docName} is {0}. OpenKnowledge currently opens files up to {1}."
 
-#: src/components/TimelinePanel.tsx
-msgid "{entryCount, plural, one {Hide # auto-save} other {Hide # auto-saves}}"
-msgstr "{entryCount, plural, one {Hide # auto-save} other {Hide # auto-saves}}"
-
-#: src/components/TimelinePanel.tsx
-msgid "{entryCount, plural, one {Show # auto-save} other {Show # auto-saves}}"
-msgstr "{entryCount, plural, one {Show # auto-save} other {Show # auto-saves}}"
+#: src/components/FileTree.tsx
+msgid "{failedCount, plural, one {1 file failed to upload} other {{failedCount} files failed to upload}}"
+msgstr "{failedCount, plural, one {1 file failed to upload} other {{failedCount} files failed to upload}}"
 
 #: src/components/ActivityModeContent.tsx
 msgid "{fileCount, plural, one {# file} other {# files}}"
 msgstr "{fileCount, plural, one {# file} other {# files}}"
-
-#: src/components/PackCardGrid.tsx
-msgid "{fileLabel} · {folderLabel}"
-msgstr "{fileLabel} · {folderLabel}"
-
-#: src/components/PackCardGrid.tsx
-msgid "{files, plural, one {# file} other {# files}}"
-msgstr "{files, plural, one {# file} other {# files}}"
-
-#: src/components/PackCardGrid.tsx
-msgid "{folders, plural, one {# folder} other {# folders}}"
-msgstr "{folders, plural, one {# folder} other {# folders}}"
 
 #: src/components/ActivityModeContent.tsx
 #: src/components/ActivityPanelFileRow.tsx
@@ -251,6 +276,10 @@ msgstr "{keyName} type: {typeLabel} (inherited from folder properties; not edita
 #: src/components/PropertyWidgets.tsx
 msgid "{keyName} type: {typeLabel}. Click to change."
 msgstr "{keyName} type: {typeLabel}. Click to change."
+
+#: src/components/FrontmatterRow.tsx
+msgid "{keyName} type: complex value (nested; read-only)"
+msgstr "{keyName} type: complex value (nested; read-only)"
 
 #: src/components/PageHeaderWidgets.tsx
 #: src/components/PropertyWidgets.tsx
@@ -317,6 +346,14 @@ msgstr "{settingsDescriptorLabel} properties"
 msgid "{tokens, plural, one {token} other {tokens}}"
 msgstr "{tokens, plural, one {token} other {tokens}}"
 
+#: src/components/FileTree.tsx
+msgid "{truncatedShownCount, plural, one {Showing the first item in one folder — the rest of that folder is hidden.} other {Showing the first {formattedCount} items in one folder — the rest of that folder is hidden.}}"
+msgstr "{truncatedShownCount, plural, one {Showing the first item in one folder — the rest of that folder is hidden.} other {Showing the first {formattedCount} items in one folder — the rest of that folder is hidden.}}"
+
+#: src/components/FileTree.tsx
+msgid "{uploadedCount, plural, one {Uploaded one file} other {Uploaded {uploadedCount} files}}"
+msgstr "{uploadedCount, plural, one {Uploaded one file} other {Uploaded {uploadedCount} files}}"
+
 #: src/presence/PresenceBar.tsx
 msgid "{userName} · {tabCount, plural, one {# tab} other {# tabs}}"
 msgstr "{userName} · {tabCount, plural, one {# tab} other {# tabs}}"
@@ -324,10 +361,6 @@ msgstr "{userName} · {tabCount, plural, one {# tab} other {# tabs}}"
 #: src/presence/PresenceBar.tsx
 msgid "{userName}, {tabCount, plural, one {# concurrent tab} other {# concurrent tabs}}"
 msgstr "{userName}, {tabCount, plural, one {# concurrent tab} other {# concurrent tabs}}"
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "{webFallbackLabel}, opens in browser with prompt pre-filled"
-msgstr "{webFallbackLabel}, opens in browser with prompt pre-filled"
 
 #: src/components/EditorFooter.tsx
 msgid "{words, plural, one {word} other {words}}"
@@ -371,15 +404,6 @@ msgstr "<{componentName}> isn't a known component. Copy the source to use it els
 msgid "<{descriptorLabel}> failed to render (likely a bad prop). Copy the source to see what went wrong, or delete the block."
 msgstr "<{descriptorLabel}> failed to render (likely a bad prop). Copy the source to see what went wrong, or delete the block."
 
-#: src/components/ConsentDialogBody.tsx
-#: src/components/CreateProjectDialog.tsx
-msgid "<0>.ok/</0>, <1>.mcp.json</1> (and per-editor variants), project skills, and <2>.claude/launch.json</2>. Switch later in Settings → Config sharing, or from the command line with <3>ok config-sharing share|unshare</3>."
-msgstr "<0>.ok/</0>, <1>.mcp.json</1> (and per-editor variants), project skills, and <2>.claude/launch.json</2>. Switch later in Settings → Config sharing, or from the command line with <3>ok config-sharing share|unshare</3>."
-
-#: src/components/CreateProjectDialog.tsx
-msgid "<0>{rawName}</0> has characters unsafe for the on-disk identifier, so the project will be created as <1>{sanitized}</1>. Click Browse to pick a safer name."
-msgstr "<0>{rawName}</0> has characters unsafe for the on-disk identifier, so the project will be created as <1>{sanitized}</1>. Click Browse to pick a safer name."
-
 #: src/editor/components/Mirror.tsx
 msgid "<0>Mirror — pick a source.</0> Set <1>src</1> + <2>anchor</2> via the property panel to point at a <3><MirrorSource></3> elsewhere."
 msgstr "<0>Mirror — pick a source.</0> Set <1>src</1> + <2>anchor</2> via the property panel to point at a <3><MirrorSource></3> elsewhere."
@@ -397,14 +421,23 @@ msgid "📝 or assets/icon.png"
 msgstr "📝 or assets/icon.png"
 
 #: src/components/CreateProjectDialog.tsx
-msgid "A folder named <0>{sanitized}</0> already has files at this location. Pick a different name."
-msgstr "A folder named <0>{sanitized}</0> already has files at this location. Pick a different name."
+msgid "A folder named <0>{sanitized}</0> already has files here. Pick a different name."
+msgstr "A folder named <0>{sanitized}</0> already has files here. Pick a different name."
+
+#: src/components/settings/SearchSection.tsx
+msgid "A key is set, but the embeddings provider rejected it or was unreachable — search fell back to keyword matching. Check the key in <0>Settings → Account</0> and your provider settings."
+msgstr "A key is set, but the embeddings provider rejected it or was unreachable — search fell back to keyword matching. Check the key in <0>Settings → Account</0> and your provider settings."
 
 #: src/editor/slash-command/items.tsx
 msgid "A line with a footnote<0><1>[1]</1></0> and a definition shown below."
 msgstr "A line with a footnote<0><1>[1]</1></0> and a definition shown below."
 
+#: src/components/ShareReceiveDialog.tsx
+msgid "A network problem or GitHub outage interrupted the clone."
+msgstr "A network problem or GitHub outage interrupted the clone."
+
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "A newer version may have been deployed since this tab opened."
 msgstr "A newer version may have been deployed since this tab opened."
 
@@ -420,6 +453,10 @@ msgstr "A project already exists at this location. Pick a different parent folde
 msgid "A pull quote stands out from the surrounding text."
 msgstr "A pull quote stands out from the surrounding text."
 
+#: src/components/settings/TerminalSection.tsx
+msgid "A real shell is off for this project. Turning it on runs commands with the full access of your macOS user account."
+msgstr "A real shell is off for this project. Turning it on runs commands with the full access of your macOS user account."
+
 #: src/components/NewTemplateDialog.tsx
 msgid "A reusable starting point for new documents in this folder."
 msgstr "A reusable starting point for new documents in this folder."
@@ -427,6 +464,10 @@ msgstr "A reusable starting point for new documents in this folder."
 #: src/components/TemplateForm.tsx
 msgid "A short line shown under the name in the template list."
 msgstr "A short line shown under the name in the template list."
+
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "A team knowledge base, a personal wiki, project docs..."
+msgstr "A team knowledge base, a personal wiki, project docs..."
 
 #: src/components/TemplateForm.tsx
 msgid "A template named <0>{trimmedSlug}</0> already exists here. Saving creates a local copy that overrides it for this folder."
@@ -476,9 +517,14 @@ msgstr "Activity"
 #. Primary button that writes MCP config for the selected AI tools
 #: src/components/FrontmatterRow.tsx
 #: src/components/McpConsentDialogBody.tsx
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Add"
 msgstr "Add"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Add a key"
+msgstr "Add a key"
 
 #: src/components/FolderPropertiesCard.tsx
 msgid "Add a property"
@@ -492,13 +538,29 @@ msgstr "Add a starter pack"
 msgid "Add another pattern"
 msgstr "Add another pattern"
 
+#: src/components/CreateProjectDialog.tsx
+msgid "Add at least one letter or number."
+msgstr "Add at least one letter or number."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Add cursors or select matching occurrences through CodeMirror."
 msgstr "Add cursors or select matching occurrences through CodeMirror."
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Add item"
+msgstr "Add item"
+
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Add item to {keyName}"
+msgstr "Add item to {keyName}"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
+msgstr "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
+
 #: src/components/McpConsentDialogBody.tsx
-msgid "Add Open Knowledge to your AI tools"
-msgstr "Add Open Knowledge to your AI tools"
+msgid "Add OpenKnowledge to your AI tools"
+msgstr "Add OpenKnowledge to your AI tools"
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "Add pattern"
@@ -509,8 +571,13 @@ msgid "Add properties"
 msgstr "Add properties"
 
 #: src/components/PropertyPanel.tsx
+#: src/components/TemplateForm.tsx
 msgid "Add property"
 msgstr "Add property"
+
+#: src/components/ObjectWidget.tsx
+msgid "Add property to {keyName}"
+msgstr "Add property to {keyName}"
 
 #: src/editor/components/Tabs.tsx
 msgid "Add tab"
@@ -525,12 +592,17 @@ msgid "Add the next matching source selection."
 msgstr "Add the next matching source selection."
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
-msgid "Adds the Open Knowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
-msgstr "Adds the Open Knowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
+msgid "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
+msgstr "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
 
 #: src/editor/components/PropPanel.tsx
 msgid "Advanced"
 msgstr "Advanced"
+
+#: src/components/ConsentDialogBody.tsx
+#: src/components/CreateProjectDialog.tsx
+msgid "Advanced settings"
+msgstr "Advanced settings"
 
 #: src/presence/PresenceBar.tsx
 msgid "Agent"
@@ -543,18 +615,6 @@ msgstr "Agent activity"
 #: src/components/FileTree.tsx
 msgid "Agent configuration file"
 msgstr "Agent configuration file"
-
-#: src/editor/extensions/JsxComponentView.tsx
-msgid "Align center"
-msgstr "Align center"
-
-#: src/editor/extensions/JsxComponentView.tsx
-msgid "Align left"
-msgstr "Align left"
-
-#: src/editor/extensions/JsxComponentView.tsx
-msgid "Align right"
-msgstr "Align right"
 
 #: src/components/FolderOverview.tsx
 msgid "All files"
@@ -600,6 +660,10 @@ msgstr "and more"
 msgid "Anyone can see"
 msgstr "Anyone can see"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "API key set"
+msgstr "API key set"
+
 #: src/components/CreatedItemsList.tsx
 msgid "Append-only timeline"
 msgstr "Append-only timeline"
@@ -607,6 +671,10 @@ msgstr "Append-only timeline"
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Apply link"
 msgstr "Apply link"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Applying your change"
+msgstr "Applying your change"
 
 #: src/components/FileTree.tsx
 msgid "Are you sure you want to delete {folderName}/ and all files inside? This action cannot be undone."
@@ -619,6 +687,31 @@ msgstr "Are you sure you want to delete {itemName}? This action cannot be undone
 #: src/components/FileTree.tsx
 msgid "Are you sure you want to delete {targetCount} selected items? Folders and all files inside them will be deleted. This action cannot be undone."
 msgstr "Are you sure you want to delete {targetCount} selected items? Folders and all files inside them will be deleted. This action cannot be undone."
+
+#: src/components/BottomComposer.tsx
+msgid "Ask"
+msgstr "Ask"
+
+#. placeholder {0}: resolvedTarget.displayName
+#: src/components/BottomComposer.tsx
+msgid "Ask {0}"
+msgstr "Ask {0}"
+
+#. placeholder {0}: TERMINAL_CLIS[selectedCli].displayName
+#: src/components/BottomComposer.tsx
+msgid "Ask {0} CLI"
+msgstr "Ask {0} CLI"
+
+#: src/components/BottomComposer.tsx
+#: src/components/EditorFooter.tsx
+#: src/editor/bubble-menu/EditWithAiBubbleButton.tsx
+#: src/lib/keyboard-shortcuts.ts
+msgid "Ask AI"
+msgstr "Ask AI"
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Ask AI (from selection)"
+msgstr "Ask AI (from selection)"
 
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 #: src/editor/link-path-suggestions.tsx
@@ -645,10 +738,6 @@ msgstr "Authorize in browser"
 #: src/components/TimelinePanel.tsx
 msgid "Auto-save"
 msgstr "Auto-save"
-
-#: src/components/TimelinePanel.tsx
-msgid "Auto-saved before a concurrent edit{sizeSuffix}"
-msgstr "Auto-saved before a concurrent edit{sizeSuffix}"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Auto-sync is off — you don't have permission to push to this repo"
@@ -680,8 +769,8 @@ msgid "Available"
 msgstr "Available"
 
 #: src/components/settings/SharingSection.tsx
-msgid "Available in the Open Knowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
-msgstr "Available in the Open Knowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
+msgid "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
+msgstr "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
 
 #: src/components/SeedDialog.tsx
 msgid "Back"
@@ -707,10 +796,6 @@ msgstr "Becomes the document's content when someone creates a doc from this temp
 msgid "Before syncing, set your identity for git commits:"
 msgstr "Before syncing, set your identity for git commits:"
 
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "Before you enable it"
-msgstr "Before you enable it"
-
 #: src/editor/slash-command/items.tsx
 msgid "Below"
 msgstr "Below"
@@ -726,6 +811,10 @@ msgstr "Beta channel"
 #: src/editor/slash-command/items.tsx
 msgid "Big section heading."
 msgstr "Big section heading."
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Bird wiki"
+msgstr "Bird wiki"
 
 #: src/components/NewItemDialog.tsx
 msgid "Blank note"
@@ -801,6 +890,14 @@ msgstr "Browse"
 msgid "Browse your repos:"
 msgstr "Browse your repos:"
 
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Build a competitor research knowledge base. Start with an overview page, then add cross-linked pages for each competitor, their products and pricing, and the sources behind every claim."
+msgstr "Build a competitor research knowledge base. Start with an overview page, then add cross-linked pages for each competitor, their products and pricing, and the sources behind every claim."
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Build a knowledge wiki about the different types of flightless birds. Start with an overview page, then add cross-linked pages for each major group (ratites like ostriches, emus, and kiwis; penguins; and flightless rails), the regions they live in, and a timeline of how flightlessness evolved."
+msgstr "Build a knowledge wiki about the different types of flightless birds. Start with an overview page, then add cross-linked pages for each major group (ratites like ostriches, emus, and kiwis; penguins; and flightless rails), the regions they live in, and a timeline of how flightlessness evolved."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Building <0>openknowledge.skill</0> and opening the Claude Desktop App"
 msgstr "Building <0>openknowledge.skill</0> and opening the Claude Desktop App"
@@ -814,12 +911,16 @@ msgid "Bullet List"
 msgstr "Bullet List"
 
 #: src/components/CommandPalette.tsx
+msgid "By meaning"
+msgstr "By meaning"
+
+#: src/components/CommandPalette.tsx
 msgid "By tag"
 msgstr "By tag"
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Can't nest projects. An Open Knowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
-msgstr "Can't nest projects. An Open Knowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
+msgid "Can't nest projects. An OpenKnowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
+msgstr "Can't nest projects. An OpenKnowledge project already exists at <0>{rootPath}</0>. Choose a location outside it, or open that project instead."
 
 #: src/components/ActivityPanelFileRow.tsx
 #: src/components/AuthModal.tsx
@@ -835,6 +936,7 @@ msgstr "Can't nest projects. An Open Knowledge project already exists at <0>{roo
 #: src/components/NewTemplateDialog.tsx
 #: src/components/PublishToGitHubDialog.tsx
 #: src/components/SeedDialog.tsx
+#: src/components/settings/SearchSection.tsx
 #: src/components/ShareBranchSwitchDialog.tsx
 #: src/components/ShareReceiveDialog.tsx
 #: src/components/TemplateEditDialog.tsx
@@ -858,6 +960,9 @@ msgstr "Cannot upload: no document is open"
 msgid "Checkbox"
 msgstr "Checkbox"
 
+#: src/components/BottomComposer.tsx
+#: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "Checking for installed agents"
 msgstr "Checking for installed agents"
@@ -886,13 +991,38 @@ msgstr "Checking..."
 msgid "Checklist with checkboxes."
 msgstr "Checklist with checkboxes."
 
+#: src/components/BottomComposer.tsx
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Choose agent"
+msgstr "Choose agent"
+
 #: src/components/settings/SharingSection.tsx
-msgid "Choose whether to commit <0>.ok/</0>, <1>.mcp.json</1> (and per-editor variants), project skills, and <2>.claude/launch.json</2> alongside content — or keep them on this machine only via <3>.git/info/exclude</3>."
-msgstr "Choose whether to commit <0>.ok/</0>, <1>.mcp.json</1> (and per-editor variants), project skills, and <2>.claude/launch.json</2> alongside content — or keep them on this machine only via <3>.git/info/exclude</3>."
+msgid "Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
+msgstr "Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is saved with the project so teammates get it too, or kept only on your computer."
+
+#: src/components/handoff/AgentSplitButton.tsx
+msgid "Claude"
+msgstr "Claude"
+
+#: src/components/handoff/AgentSplitButton.tsx
+msgid "Claude CLI"
+msgstr "Claude CLI"
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Claude Code (claude) isn't installed or on your PATH."
+msgstr "Claude Code (claude) isn't installed or on your PATH."
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Claude Code is installed, but OpenKnowledge tools aren't connected to it yet."
+msgstr "Claude Code is installed, but OpenKnowledge tools aren't connected to it yet."
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Claude Desktop"
 msgstr "Claude Desktop"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Clear"
+msgstr "Clear"
 
 #: src/components/PageHeaderWidgets.tsx
 msgid "Clear {keyName}"
@@ -914,10 +1044,6 @@ msgstr "Click <0>+</0> <1/> <2>Create skill</2> <3/> <4>Upload skill</4>."
 msgid "Click an agent's avatar in the presence bar to view their session."
 msgstr "Click an agent's avatar in the presence bar to view their session."
 
-#: src/components/CreateProjectDialog.tsx
-msgid "Click Browse to pick or create a project folder."
-msgstr "Click Browse to pick or create a project folder."
-
 #: src/components/CloneDialog.tsx
 msgid "Clone"
 msgstr "Clone"
@@ -926,10 +1052,6 @@ msgstr "Clone"
 msgid "Clone complete — opening project"
 msgstr "Clone complete — opening project"
 
-#: src/lib/share/clone-controller.ts
-msgid "Clone ended unexpectedly."
-msgstr "Clone ended unexpectedly."
-
 #: src/components/CloneDialog.tsx
 msgid "Clone failed — connection error"
 msgstr "Clone failed — connection error"
@@ -937,18 +1059,6 @@ msgstr "Clone failed — connection error"
 #: src/components/CloneDialog.tsx
 msgid "Clone failed: {cloneError}"
 msgstr "Clone failed: {cloneError}"
-
-#: src/lib/share/clone-controller.ts
-msgid "Clone failed: {failureMessage}"
-msgstr "Clone failed: {failureMessage}"
-
-#: src/lib/share/clone-controller.ts
-msgid "Clone failed: {message}"
-msgstr "Clone failed: {message}"
-
-#: src/components/ShareReceiveDialog.tsx
-msgid "Clone failed. Please try again."
-msgstr "Clone failed. Please try again."
 
 #: src/components/CloneDialog.tsx
 #: src/components/NavigatorApp.tsx
@@ -996,6 +1106,11 @@ msgstr "Cloning..."
 msgid "Close"
 msgstr "Close"
 
+#. placeholder {0}: session.label
+#: src/components/TerminalTabStrip.tsx
+msgid "Close {0}"
+msgstr "Close {0}"
+
 #: src/components/EditorTabs.tsx
 msgid "Close {accessibleLabel}"
 msgstr "Close {accessibleLabel}"
@@ -1019,6 +1134,10 @@ msgstr "Close new tab"
 #: src/components/EditorTabs.tsx
 msgid "Close others"
 msgstr "Close others"
+
+#: src/components/TerminalRefusalNotice.tsx
+msgid "Close terminal"
+msgstr "Close terminal"
 
 #: src/components/GraphLegend.tsx
 msgid "Clusters"
@@ -1048,6 +1167,10 @@ msgstr "Code copied to clipboard"
 msgid "Code expired — please try again"
 msgstr "Code expired — please try again"
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Collaborators see your in-progress edits as soon as they sync."
+msgstr "Collaborators see your in-progress edits as soon as they sync."
+
 #: src/components/GraphPanel.tsx
 msgid "Collapse"
 msgstr "Collapse"
@@ -1056,14 +1179,19 @@ msgstr "Collapse"
 msgid "Collapse {docName}"
 msgstr "Collapse {docName}"
 
-#: src/components/FileSidebar.tsx
-msgid "Collapse all"
-msgstr "Collapse all"
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Collapse {keyName}"
+msgstr "Collapse {keyName}"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Collapse All"
-msgstr "Collapse All"
+msgid "Collapse all"
+msgstr "Collapse all"
+
+#: src/components/BottomComposer.tsx
+msgid "Collapse Ask AI"
+msgstr "Collapse Ask AI"
 
 #: src/components/ActivityPanelBurstRow.tsx
 msgid "Collapse burst {burstNumber} diff"
@@ -1089,9 +1217,21 @@ msgstr "Command palette"
 msgid "Commands"
 msgstr "Commands"
 
+#: src/components/settings/TerminalSection.tsx
+msgid "Commands run with the full access of your macOS user account on this machine. Turn this off to disable the shell."
+msgstr "Commands run with the full access of your macOS user account on this machine. Turn this off to disable the shell."
+
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Commit or stash changes to switch:"
 msgstr "Commit or stash changes to switch:"
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Commits happen automatically"
+msgstr "Commits happen automatically"
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Competitor research"
+msgstr "Competitor research"
 
 #: src/components/CloneDialog.tsx
 msgid "Complete"
@@ -1104,6 +1244,10 @@ msgstr "Component boundary navigation"
 #: src/components/SeedDialog.tsx
 msgid "Computing scaffold plan"
 msgstr "Computing scaffold plan"
+
+#: src/components/BottomComposer.tsx
+msgid "Condense my AGENTS.md file to less than 40k characters"
+msgstr "Condense my AGENTS.md file to less than 40k characters"
 
 #: src/components/settings/SettingsDialogShell.tsx
 #: src/components/settings/SharingSection.tsx
@@ -1164,21 +1308,21 @@ msgid "Connect GitHub to continue."
 msgstr "Connect GitHub to continue."
 
 #: src/components/settings/SettingsDialogBody.tsx
-msgid "Connect Open Knowledge to other tools you use."
-msgstr "Connect Open Knowledge to other tools you use."
+msgid "Connect OpenKnowledge to other tools you use."
+msgstr "Connect OpenKnowledge to other tools you use."
 
 #: src/components/ConsentDialogBody.tsx
 #: src/components/CreateProjectDialog.tsx
 msgid "Connect to AI tools"
 msgstr "Connect to AI tools"
 
-#: src/components/ShareReceiveDialog.tsx
-msgid "Connect to clone"
-msgstr "Connect to clone"
-
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Connect to GitHub"
 msgstr "Connect to GitHub"
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Connect tools"
+msgstr "Connect tools"
 
 #: src/components/AuthModal.tsx
 #: src/components/settings/AccountSection.tsx
@@ -1229,6 +1373,7 @@ msgstr "Convert selection to footnote"
 msgid "Convert the current block to a paragraph."
 msgstr "Convert the current block to a paragraph."
 
+#: src/components/empty-state/CopyablePromptList.tsx
 #: src/components/InstallInClaudeDesktopDialog.tsx
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Copied"
@@ -1244,9 +1389,28 @@ msgstr "Copied full path"
 msgid "Copied relative path"
 msgstr "Copied relative path"
 
+#: src/components/CopyButton.tsx
+msgid "Copied!"
+msgstr "Copied!"
+
+#: src/components/CopyButton.tsx
+#: src/components/empty-state/CopyablePromptList.tsx
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Copy"
 msgstr "Copy"
+
+#. placeholder {0}: suggestion.label
+#: src/components/empty-state/CopyablePromptList.tsx
+msgid "Copy {0} prompt"
+msgstr "Copy {0} prompt"
+
+#: src/components/empty-state/empty-state-copy.ts
+msgid "Copy a prompt and paste it into your agent to set up your project."
+msgstr "Copy a prompt and paste it into your agent to set up your project."
+
+#: src/components/empty-state/empty-state-copy.ts
+msgid "Copy a prompt for your agent, start a blank file, or scaffold from a template."
+msgstr "Copy a prompt for your agent, start a blank file, or scaffold from a template."
 
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Copy code"
@@ -1269,8 +1433,8 @@ msgid "Copy full path, No workspace"
 msgstr "Copy full path, No workspace"
 
 #: src/components/FileTree.tsx
-msgid "Copy Path"
-msgstr "Copy Path"
+msgid "Copy path"
+msgstr "Copy path"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Copy share link"
@@ -1318,6 +1482,12 @@ msgstr "Could not duplicate item"
 msgid "Could not enable sync: {detail}"
 msgstr "Could not enable sync: {detail}"
 
+#. placeholder {0}: result.error
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalGate.tsx
+msgid "Could not enable the terminal: {0}"
+msgstr "Could not enable the terminal: {0}"
+
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Could not fetch branch. Check your connection."
 msgstr "Could not fetch branch. Check your connection."
@@ -1330,10 +1500,6 @@ msgstr "Could not finalize project setup. Try again."
 #: src/components/ShareReceiveDialog.tsx
 msgid "Could not initialize {0}."
 msgstr "Could not initialize {0}."
-
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Could not launch Terminal"
-msgstr "Could not launch Terminal"
 
 #: src/components/NewItemDialog.tsx
 msgid "Could not load templates: {templatesError}. You can still create a blank note."
@@ -1359,10 +1525,6 @@ msgstr "Could not open folder picker"
 msgid "Could not open GitHub sign-in. Please try again."
 msgstr "Could not open GitHub sign-in. Please try again."
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Could not open Terminal"
-msgstr "Could not open Terminal"
-
 #: src/components/FileTree.tsx
 msgid "Could not reach server"
 msgstr "Could not reach server"
@@ -1383,6 +1545,11 @@ msgstr "Could not start creating a new item"
 msgid "Could not switch to {shareBranch}. Try switching manually."
 msgstr "Could not switch to {shareBranch}. Try switching manually."
 
+#. placeholder {0}: result.error
+#: src/components/settings/TerminalSection.tsx
+msgid "Could not turn off the terminal: {0}"
+msgstr "Could not turn off the terminal: {0}"
+
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
 msgid "Could not update sidebar settings"
@@ -1396,9 +1563,13 @@ msgstr "Could not validate folder. Please try again."
 msgid "Could not write project files. Try a different location."
 msgstr "Could not write project files. Try a different location."
 
-#: src/components/ShareButton.tsx
-msgid "Couldn't auto-copy"
-msgstr "Couldn't auto-copy"
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Couldn't clear the key — please try again."
+msgstr "Couldn't clear the key — please try again."
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Couldn't connect OpenKnowledge tools to Claude Code. Please try again."
+msgstr "Couldn't connect OpenKnowledge tools to Claude Code. Please try again."
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Couldn't construct the share URL. Try Done and re-share."
@@ -1432,6 +1603,10 @@ msgstr "Couldn't load {fileName}"
 msgid "Couldn't load conflict content for {filePath}. Try reloading the page."
 msgstr "Couldn't load conflict content for {filePath}. Try reloading the page."
 
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "Couldn't load docs — type @ again to retry"
+msgstr "Couldn't load docs — type @ again to retry"
+
 #: src/components/DocumentErrorBoundary.tsx
 msgid "Couldn't load document"
 msgstr "Couldn't load document"
@@ -1448,13 +1623,13 @@ msgstr "Couldn't load templates"
 msgid "Couldn't move to Trash"
 msgstr "Couldn't move to Trash"
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Couldn't open {CLAUDE_WEB_FALLBACK_LABEL} in your browser."
-msgstr "Couldn't open {CLAUDE_WEB_FALLBACK_LABEL} in your browser."
-
 #: src/components/DocumentErrorBoundary.tsx
 msgid "Couldn't open document"
 msgstr "Couldn't open document"
+
+#: src/components/BottomComposer.tsx
+msgid "Couldn't open the terminal — please try again."
+msgstr "Couldn't open the terminal — please try again."
 
 #: src/components/ConnectingBanner.tsx
 msgid "Couldn't reach collab server — {errorDetail}. Try <0>ok status</0> or check <1>.ok/local/last-spawn-error.log</1>."
@@ -1464,9 +1639,9 @@ msgstr "Couldn't reach collab server — {errorDetail}. Try <0>ok status</0> or 
 msgid "Couldn't reach GitHub. Try again?"
 msgstr "Couldn't reach GitHub. Try again?"
 
-#: src/editor/bubble-menu/EditWithAiBubbleButton.tsx
-msgid "Couldn't read the selection — please try again."
-msgstr "Couldn't read the selection — please try again."
+#: src/components/CommandPalette.tsx
+msgid "Couldn't reach the embeddings provider — press ↵ to retry"
+msgstr "Couldn't reach the embeddings provider — press ↵ to retry"
 
 #: src/components/EditorActivityPool.tsx
 msgid "Couldn't reconnect after server restart"
@@ -1480,27 +1655,40 @@ msgstr "Couldn't remove <0>{targetGitPath}</0>: {removeGitError}"
 msgid "Couldn't resolve the conflict for {filePath}."
 msgstr "Couldn't resolve the conflict for {filePath}."
 
+#: src/lib/install-server-drift-listener.ts
+msgid "Couldn't restart the server — it's running under a different account. Restart your computer to clear it, then reopen this project."
+msgstr "Couldn't restart the server — it's running under a different account. Restart your computer to clear it, then reopen this project."
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Couldn't restart the server automatically. Try running `ok stop all` in a terminal, then reopen this project — or restart your computer if it persists."
+msgstr "Couldn't restart the server automatically. Try running `ok stop all` in a terminal, then reopen this project — or restart your computer if it persists."
+
 #: src/components/TemplateForm.tsx
 msgid "Couldn't save template: {error}"
 msgstr "Couldn't save template: {error}"
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Couldn't save the key — please try again."
+msgstr "Couldn't save the key — please try again."
 
 #: src/components/DiffViewBoundary.tsx
 msgid "Couldn't save the resolution for {filePath}."
 msgstr "Couldn't save the resolution for {filePath}."
 
-#: src/components/EditorPane.tsx
-msgid "Couldn't save version — try again"
-msgstr "Couldn't save version — try again"
-
-#: src/components/EditorPane.tsx
+#: src/components/handoff/EditWithAiPopover.tsx
 msgid "Couldn't send the selection — please try again."
 msgstr "Couldn't send the selection — please try again."
+
+#: src/components/BottomComposer.tsx
+msgid "Couldn't send your prompt — please try again."
+msgstr "Couldn't send your prompt — please try again."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "Counting markdown files"
 msgstr "Counting markdown files"
 
 #: src/components/CreateProjectDialog.tsx
+#: src/components/empty-state/CreatePromptComposer.tsx
 #: src/components/NewItemDialog.tsx
 #: src/components/TemplateRow.tsx
 msgid "Create"
@@ -1519,8 +1707,12 @@ msgid "Create a new list item from the current list item."
 msgstr "Create a new list item from the current list item."
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Create a new Open Knowledge project in the folder of your choice."
-msgstr "Create a new Open Knowledge project in the folder of your choice."
+msgid "Create a new OpenKnowledge project in the folder of your choice."
+msgstr "Create a new OpenKnowledge project in the folder of your choice."
+
+#: src/components/BottomComposer.tsx
+msgid "Create a new spec file for my user story"
+msgstr "Create a new spec file for my user story"
 
 #: src/components/NewItemDialog.tsx
 msgid "Create in <0>{dirDisplay}</0>"
@@ -1541,13 +1733,23 @@ msgstr "Create new tag #{tagValue}"
 msgid "Create page"
 msgstr "Create page"
 
-#: src/components/empty-state/CreateView.tsx
+#: src/components/empty-state/empty-state-copy.ts
 msgid "Create something great."
 msgstr "Create something great."
 
 #: src/components/NewTemplateDialog.tsx
 msgid "Create template"
 msgstr "Create template"
+
+#. placeholder {0}: getDisplayNameDefault(selectedAgentId)
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Create with {0}"
+msgstr "Create with {0}"
+
+#. placeholder {0}: TERMINAL_CLIS[selectedCli].displayName
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Create with {0} CLI"
+msgstr "Create with {0} CLI"
 
 #: src/components/FileTree.tsx
 msgid "Create your first file"
@@ -1599,6 +1801,10 @@ msgstr "Customize how the editor looks and behaves."
 #: src/components/PropertyWidgets.tsx
 msgid "Date"
 msgstr "Date"
+
+#: src/components/TemplateForm.tsx
+msgid "Default properties"
+msgstr "Default properties"
 
 #: src/components/DeleteConfirmationDialog.tsx
 #: src/components/TemplateRow.tsx
@@ -1659,6 +1865,22 @@ msgstr "deleted template"
 msgid "Deleting"
 msgstr "Deleting"
 
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Describe the project you want to create"
+msgstr "Describe the project you want to create"
+
+#: src/components/empty-state/empty-state-copy.ts
+msgid "Describe what you want to build, start a blank file, or scaffold from a template."
+msgstr "Describe what you want to build, start a blank file, or scaffold from a template."
+
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Describe what you want to create to continue"
+msgstr "Describe what you want to create to continue"
+
+#: src/components/empty-state/empty-state-copy.ts
+msgid "Describe what you're working on and the agent sets it up for you."
+msgstr "Describe what you're working on and the agent sets it up for you."
+
 #: src/components/TemplateForm.tsx
 msgid "Description"
 msgstr "Description"
@@ -1666,6 +1888,14 @@ msgstr "Description"
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Description (optional)"
 msgstr "Description (optional)"
+
+#: src/components/empty-state/CreatePromptComposer.tsx
+#: src/components/handoff/AgentSplitButton.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+msgid "Desktop"
+msgstr "Desktop"
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Detached HEAD — checkout a branch to resume"
@@ -1700,6 +1930,10 @@ msgstr "Diff unavailable"
 msgid "Disable git auto-sync"
 msgstr "Disable git auto-sync"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Disable semantic search"
+msgstr "Disable semantic search"
+
 #: src/components/SyncStatusBadge.tsx
 msgid "Disable sync"
 msgstr "Disable sync"
@@ -1712,12 +1946,15 @@ msgstr "Disconnect"
 msgid "Disconnecting"
 msgstr "Disconnecting"
 
+#: src/components/ClaudeReadinessBanner.tsx
 #: src/components/NavigatorApp.tsx
 #: src/components/settings/SharingSection.tsx
+#: src/components/TerminalCliMissingBanner.tsx
 msgid "Dismiss"
 msgstr "Dismiss"
 
 #: src/components/UpdateNotices.tsx
+#: src/editor/components/PreviewBlockedNotice.tsx
 msgid "Dismiss notice"
 msgstr "Dismiss notice"
 
@@ -1728,6 +1965,14 @@ msgstr "Display text"
 #: src/components/TrashFailureModal.tsx
 msgid "Do you want to permanently delete instead?"
 msgstr "Do you want to permanently delete instead?"
+
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "Doc mention suggestions"
+msgstr "Doc mention suggestions"
+
+#: src/components/HelpPopover.tsx
+msgid "Docs"
+msgstr "Docs"
 
 #: src/components/CommandPalette.tsx
 msgid "Docs tagged #{tagDocsName}"
@@ -1754,9 +1999,9 @@ msgstr "Document panels"
 msgid "Document statistics"
 msgstr "Document statistics"
 
-#: src/components/HelpPopover.tsx
-msgid "Documentation"
-msgstr "Documentation"
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Document the architecture of this repo: create an overview page that links to a page per major module describing its responsibilities and entry points."
+msgstr "Document the architecture of this repo: create an overview page that links to a page per major module describing its responsibilities and entry points."
 
 #: src/components/FileTree.tsx
 msgid "Documents response did not match expected shape."
@@ -1772,6 +2017,7 @@ msgstr "Don't see <0>Skills</0>? Enable <1>Settings <2/> Capabilities <3/> Code 
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 #: src/components/PublishToGitHubDialog.tsx
+#: src/editor/extensions/JsxComponentView.tsx
 #: src/editor/slash-command/items.tsx
 msgid "Done"
 msgstr "Done"
@@ -1788,6 +2034,14 @@ msgstr "Download started"
 msgid "Downloads {shareOwner}/{shareRepo} from GitHub."
 msgstr "Downloads {shareOwner}/{shareRepo} from GitHub."
 
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Draft a spec"
+msgstr "Draft a spec"
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Draft a technical spec for my project. Start with an overview, then add cross-linked pages for the architecture, the key modules, and the open questions, all linked from a specs index."
+msgstr "Draft a technical spec for my project. Start with an overview, then add cross-linked pages for the architecture, the key modules, and the open questions, all linked from a specs index."
+
 #: src/components/FrontmatterRow.tsx
 msgid "Drag {keyName} to reorder"
 msgstr "Drag {keyName} to reorder"
@@ -1795,6 +2049,11 @@ msgstr "Drag {keyName} to reorder"
 #: src/components/settings/OkignoreSection.tsx
 msgid "Drag {patternText} to reorder"
 msgstr "Drag {patternText} to reorder"
+
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Drag item {0} to reorder"
+msgstr "Drag item {0} to reorder"
 
 #: src/components/FileTree.tsx
 msgid "Duplicate"
@@ -1825,8 +2084,8 @@ msgid "e.g. server.ts"
 msgstr "e.g. server.ts"
 
 #: src/components/CreateProjectDialog.tsx
-msgid "Each selected tool gets an Open Knowledge MCP entry."
-msgstr "Each selected tool gets an Open Knowledge MCP entry."
+msgid "Each selected tool gets an OpenKnowledge MCP entry."
+msgstr "Each selected tool gets an OpenKnowledge MCP entry."
 
 #: src/components/TemplateForm.tsx
 #: src/components/TemplateRow.tsx
@@ -1868,8 +2127,7 @@ msgstr "Edit this HTML — the preview updates live."
 msgid "Edit wiki link"
 msgstr "Edit wiki link"
 
-#: src/editor/bubble-menu/EditWithAiBubbleButton.tsx
-#: src/lib/keyboard-shortcuts.ts
+#: src/components/handoff/EditWithAiPopover.tsx
 msgid "Edit with AI"
 msgstr "Edit with AI"
 
@@ -1921,6 +2179,19 @@ msgstr "Embed an external page in an inline iframe (docs, demos, Figma, CodeSand
 msgid "Embed an image with optional alt text."
 msgstr "Embed an image with optional alt text."
 
+#: src/components/settings/SearchSection.tsx
+msgid "Embeddings are computed only when a search runs and are cached locally under <0>.ok/local</0>."
+msgstr "Embeddings are computed only when a search runs and are cached locally under <0>.ok/local</0>."
+
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Embeddings provider key"
+msgstr "Embeddings provider key"
+
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "empty"
+msgstr "empty"
+
 #: src/components/PropertyWidgets.tsx
 msgid "Empty"
 msgstr "Empty"
@@ -1942,25 +2213,49 @@ msgstr "Enable git auto-sync"
 msgid "Enable git auto-sync?"
 msgstr "Enable git auto-sync?"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Enable semantic search"
+msgstr "Enable semantic search"
+
 #: src/components/SyncStatusBadge.tsx
 msgid "Enable sync"
 msgstr "Enable sync"
+
+#: src/components/TerminalGate.tsx
+msgid "Enable terminal"
+msgstr "Enable terminal"
+
+#: src/components/settings/TerminalSection.tsx
+msgid "Enable terminal for this project"
+msgstr "Enable terminal for this project"
 
 #: src/components/ActivityModeContent.tsx
 msgid "Ended"
 msgstr "Ended"
 
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Eng specs"
+msgstr "Eng specs"
+
 #: src/components/SeedDialog.tsx
 msgid "Enter a folder name (e.g. brain)."
 msgstr "Enter a folder name (e.g. brain)."
 
-#: src/components/TemplateForm.tsx
-msgid "Enter a name for this template."
-msgstr "Enter a name for this template."
+#: src/components/CreateProjectDialog.tsx
+msgid "Enter a project name"
+msgstr "Enter a project name"
 
 #: src/components/CloneDialog.tsx
 msgid "Enter a repository URL or owner/repo"
 msgstr "Enter a repository URL or owner/repo"
+
+#: src/components/TemplateForm.tsx
+msgid "Enter a title for this template."
+msgstr "Enter a title for this template."
+
+#: src/components/ShareReceiveDialog.tsx
+msgid "Error:"
+msgstr "Error:"
 
 #: src/components/DiffView.tsx
 msgid "Exit merge"
@@ -1970,14 +2265,15 @@ msgstr "Exit merge"
 msgid "Expand {docName}"
 msgstr "Expand {docName}"
 
-#: src/components/FileSidebar.tsx
-msgid "Expand all"
-msgstr "Expand all"
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Expand {keyName}"
+msgstr "Expand {keyName}"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Expand All"
-msgstr "Expand All"
+msgid "Expand all"
+msgstr "Expand all"
 
 #: src/components/ActivityPanelBurstRow.tsx
 msgid "Expand burst {burstNumber} diff"
@@ -2007,6 +2303,11 @@ msgstr "External link"
 msgid "External wiki link"
 msgstr "External wiki link"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Failed to add item"
+msgstr "Failed to add item"
+
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to add property"
 msgstr "Failed to add property"
@@ -2035,9 +2336,21 @@ msgstr "Failed to create folder"
 msgid "Failed to create page"
 msgstr "Failed to create page"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Failed to delete item"
+msgstr "Failed to delete item"
+
 #: src/components/FileTree.tsx
 msgid "Failed to delete path"
 msgstr "Failed to delete path"
+
+#: src/components/ObjectWidget.tsx
+msgid "Failed to delete property"
+msgstr "Failed to delete property"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Failed to disable semantic search — {detail}"
+msgstr "Failed to disable semantic search — {detail}"
 
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Failed to disable sync — {detail}"
@@ -2046,6 +2359,10 @@ msgstr "Failed to disable sync — {detail}"
 #: src/components/FileTree.tsx
 msgid "Failed to duplicate path"
 msgstr "Failed to duplicate path"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Failed to enable semantic search — {detail}"
+msgstr "Failed to enable semantic search — {detail}"
 
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Failed to enable sync — {detail}"
@@ -2070,10 +2387,6 @@ msgstr "Failed to load documents"
 #: src/components/TextViewer.tsx
 msgid "Failed to load file"
 msgstr "Failed to load file"
-
-#: src/components/TextViewer.tsx
-msgid "Failed to load file (HTTP {status})"
-msgstr "Failed to load file (HTTP {status})"
 
 #: src/components/FolderPropertiesCard.tsx
 msgid "Failed to load folder properties: {message}"
@@ -2173,6 +2486,7 @@ msgstr "Failed to rename"
 msgid "Failed to rename path"
 msgstr "Failed to rename path"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to rename property"
 msgstr "Failed to rename property"
@@ -2181,9 +2495,23 @@ msgstr "Failed to rename property"
 msgid "Failed to render PDF"
 msgstr "Failed to render PDF"
 
+#: src/components/ArrayOfObjectsWidget.tsx
+#: src/components/ObjectWidget.tsx
+msgid "Failed to reorder"
+msgstr "Failed to reorder"
+
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to update property"
 msgstr "Failed to update property"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Failed to update the project sync default — {detail}"
+msgstr "Failed to update the project sync default — {detail}"
+
+#: src/components/FileTree.tsx
+msgid "Failed to upload file"
+msgstr "Failed to upload file"
 
 #: src/components/ActivityPanelBurstRow.tsx
 msgid "Failed: {loadError}"
@@ -2207,12 +2535,16 @@ msgid "File"
 msgstr "File"
 
 #: src/components/FileTree.tsx
-msgid "File duplicated"
-msgstr "File duplicated"
+msgid "File already exists"
+msgstr "File already exists"
 
 #: src/components/FileTree.tsx
-msgid "File extensions are managed automatically - please rename without changing the extension"
-msgstr "File extensions are managed automatically - please rename without changing the extension"
+msgid "File drop zone"
+msgstr "File drop zone"
+
+#: src/components/FileTree.tsx
+msgid "File duplicated"
+msgstr "File duplicated"
 
 #: src/components/NewItemDialog.tsx
 msgid "File name"
@@ -2309,6 +2641,7 @@ msgid "folder"
 msgstr "folder"
 
 #: src/components/share-metadata-rows.tsx
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
 #: src/editor/extensions/InternalLinkPropPanel.tsx
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 #: src/editor/link-path-suggestions.tsx
@@ -2355,17 +2688,29 @@ msgstr "Found the repo but could not open the project. Please try again."
 msgid "From template"
 msgstr "From template"
 
+#: src/components/TemplateForm.tsx
+msgid "Frontmatter every document created from this template starts with. Values are YAML — a list is <0>[a, b]</0>; <1>{{date}}</1> fills in on create."
+msgstr "Frontmatter every document created from this template starts with. Values are YAML — a list is <0>[a, b]</0>; <1>{{date}}</1> fills in on create."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Full guide"
 msgstr "Full guide"
 
 #: src/components/FileTree.tsx
-msgid "Full Path"
-msgstr "Full Path"
+msgid "Full path"
+msgstr "Full path"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "General"
 msgstr "General"
+
+#: src/components/TerminalCliMissingBanner.tsx
+msgid "Get {displayName}"
+msgstr "Get {displayName}"
+
+#: src/components/ClaudeReadinessBanner.tsx
+msgid "Get Claude Code"
+msgstr "Get Claude Code"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Git auto-sync"
@@ -2378,6 +2723,10 @@ msgstr "Git identity isn't set — commits use a default author. Set yours so te
 #: src/components/SyncStatusBadge.tsx
 msgid "GitHub authentication failed. Try signing in again."
 msgstr "GitHub authentication failed. Try signing in again."
+
+#: src/components/SyncStatusBadge.tsx
+msgid "GitHub sign-in is missing or expired. Reconnect to resume syncing."
+msgstr "GitHub sign-in is missing or expired. Reconnect to resume syncing."
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Global"
@@ -2446,6 +2795,10 @@ msgstr "Heading suggestions"
 msgid "heading-slug"
 msgstr "heading-slug"
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Heads up"
+msgstr "Heads up"
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "Hello, world!"
 msgstr "Hello, world!"
@@ -2506,6 +2859,10 @@ msgstr "Hide panel ({panelShortcutLabel})"
 msgid "Hide replace"
 msgstr "Hide replace"
 
+#: src/components/BottomComposer.tsx
+msgid "Hide selection preview"
+msgstr "Hide selection preview"
+
 #: src/components/FileTree.tsx
 msgid "Hide this file"
 msgstr "Hide this file"
@@ -2539,6 +2896,10 @@ msgstr "Horizontal rule that divides sections."
 msgid "Hotkeys"
 msgstr "Hotkeys"
 
+#: src/components/ShareButton.tsx
+msgid "How does sharing work?"
+msgstr "How does sharing work?"
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "HTML"
 msgstr "HTML"
@@ -2556,12 +2917,12 @@ msgid "Hubs"
 msgstr "Hubs"
 
 #: src/components/ShareReceiveDialog.tsx
+msgid "I already have it locally"
+msgstr "I already have it locally"
+
+#: src/components/ShareReceiveDialog.tsx
 msgid "I already have it locally →"
 msgstr "I already have it locally →"
-
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "If this repo is shared, your in-progress edits become visible to collaborators as soon as they sync."
-msgstr "If this repo is shared, your in-progress edits become visible to collaborators as soon as they sync."
 
 #: src/components/ConsentDialogBody.tsx
 #: src/components/settings/OkignoreSection.tsx
@@ -2600,6 +2961,14 @@ msgstr "Indent or outdent the current list item."
 #: src/editor/slash-command/items.tsx
 msgid "Indented blockquote for citations."
 msgstr "Indented blockquote for citations."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Indexed {embedded} of {total} pages."
+msgstr "Indexed {embedded} of {total} pages."
+
+#: src/components/CommandPalette.tsx
+msgid "Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready. Results may be incomplete."
+msgstr "Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready. Results may be incomplete."
 
 #: src/components/FrontmatterRow.tsx
 msgid "inherited"
@@ -2695,7 +3064,11 @@ msgstr "Install"
 msgid "Install {brand} →"
 msgstr "Install {brand} →"
 
-#. Dialog title — installing the Open Knowledge skill into the Claude Desktop App
+#: src/components/empty-state/CreatePromptComposer.tsx
+msgid "Install an AI agent to create with AI"
+msgstr "Install an AI agent to create with AI"
+
+#. Dialog title — installing the OpenKnowledge skill into the Claude Desktop App
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Install for Claude Chat & Cowork"
 msgstr "Install for Claude Chat & Cowork"
@@ -2716,6 +3089,11 @@ msgstr "Install in Claude Desktop"
 msgid "Installing"
 msgstr "Installing"
 
+#: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+msgid "Instruction for the AI"
+msgstr "Instruction for the AI"
+
 #: src/components/settings/SettingsDialogBody.tsx
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Integrations"
@@ -2732,6 +3110,11 @@ msgstr "Invalid patch payload"
 #: src/lib/keyboard-shortcuts.ts
 msgid "Italic"
 msgstr "Italic"
+
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Item {0}"
+msgstr "Item {0}"
 
 #: src/components/CreatedItemsList.tsx
 msgid "Items to be created"
@@ -2760,6 +3143,10 @@ msgstr "Keep file deleted"
 msgid "Keep my version"
 msgstr "Keep my version"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Key ending in {keyHint}"
+msgstr "Key ending in {keyHint}"
+
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Keyboard shortcuts available in the editor and workspace."
 msgstr "Keyboard shortcuts available in the editor and workspace."
@@ -2787,10 +3174,6 @@ msgstr "Layout options"
 #: src/lib/keyboard-shortcuts.ts
 msgid "Let Tab leave the source editor instead of indenting."
 msgstr "Let Tab leave the source editor instead of indenting."
-
-#: src/components/EmptyEditorState.tsx
-msgid "Let's set up your project."
-msgstr "Let's set up your project."
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Light, dark, or follow the OS."
@@ -2950,11 +3333,10 @@ msgstr "Local collaboration data for \"{docName}\" could not be cleared in time.
 msgid "Local collaboration data for \"{docName}\" could not be cleared. Reload to retry."
 msgstr "Local collaboration data for \"{docName}\" could not be cleared. Reload to retry."
 
-#: src/components/ConsentDialogBody.tsx
-#: src/components/CreateProjectDialog.tsx
 #: src/components/settings/SharingSection.tsx
-msgid "Local only on this machine"
-msgstr "Local only on this machine"
+#: src/components/SharingModeField.tsx
+msgid "Local only"
+msgstr "Local only"
 
 #: src/components/CloneDialog.tsx
 msgid "Local path"
@@ -2972,10 +3354,6 @@ msgstr "Looking for <0>{lookingForUrl}</0>."
 msgid "Lost connection to \"{docName}\"."
 msgstr "Lost connection to \"{docName}\"."
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Lost connection to the main process"
-msgstr "Lost connection to the main process"
-
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Make this knowledge base available as a Claude Skill."
 msgstr "Make this knowledge base available as a Claude Skill."
@@ -2985,8 +3363,12 @@ msgid "Manage hidden files in Settings → Ignore patterns."
 msgstr "Manage hidden files in Settings → Ignore patterns."
 
 #: src/components/settings/AccountSection.tsx
-msgid "Manage the GitHub account Open Knowledge uses to browse and sync your repositories."
-msgstr "Manage the GitHub account Open Knowledge uses to browse and sync your repositories."
+msgid "Manage the GitHub account OpenKnowledge uses to browse and sync your repositories."
+msgstr "Manage the GitHub account OpenKnowledge uses to browse and sync your repositories."
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Map the architecture"
+msgstr "Map the architecture"
 
 #: src/editor/slash-command/component-items.tsx
 msgid "Mark a block as the source of truth. Mirror references elsewhere render this content read-only and update live as you edit here."
@@ -3056,6 +3438,15 @@ msgstr "Modify the link target, anchor, and display label."
 msgid "More"
 msgstr "More"
 
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More requests were blocked."
+msgstr "More requests were blocked."
+
+#. placeholder {0}: blocked.length
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "More than {0} requests were blocked by the preview's security policy"
+msgstr "More than {0} requests were blocked by the preview's security policy"
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Move between table cells"
 msgstr "Move between table cells"
@@ -3118,7 +3509,6 @@ msgstr "Multi-page PDF viewer with toolbar controls (thumbnails, page nav, zoom)
 
 #: src/components/AuthModal.tsx
 #: src/components/FolderOverview.tsx
-#: src/components/TemplateForm.tsx
 #: src/editor/slash-command/items.tsx
 msgid "Name"
 msgstr "Name"
@@ -3136,6 +3526,7 @@ msgid "Name cannot be empty"
 msgstr "Name cannot be empty"
 
 #: src/components/FolderPropertiesCard.tsx
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Name is required"
 msgstr "Name is required"
@@ -3188,16 +3579,12 @@ msgid "New"
 msgstr "New"
 
 #: src/components/CommandPalette.tsx
-#: src/components/empty-state/CreateView.tsx
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/NewItemDialog.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "New file"
 msgstr "New file"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "New File"
-msgstr "New File"
 
 #: src/components/empty-state/CreateView.tsx
 msgid "New file from template \"{displayTitle}\" ({fileName}) in {targetLabel}"
@@ -3208,14 +3595,11 @@ msgid "New file from template \"{displayTitle}\" ({fileName}) in the project roo
 msgstr "New file from template \"{displayTitle}\" ({fileName}) in the project root"
 
 #: src/components/CommandPalette.tsx
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/NewItemDialog.tsx
 msgid "New folder"
 msgstr "New folder"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "New Folder"
-msgstr "New Folder"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
@@ -3244,6 +3628,10 @@ msgstr "New tab"
 #: src/components/TemplatesCard.tsx
 msgid "New template"
 msgstr "New template"
+
+#: src/components/TerminalTabStrip.tsx
+msgid "New terminal"
+msgstr "New terminal"
 
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Next match"
@@ -3329,6 +3717,9 @@ msgstr "No hub pages yet. Hubs appear once pages accumulate inbound graph links.
 msgid "No Incoming"
 msgstr "No Incoming"
 
+#: src/components/BottomComposer.tsx
+#: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "No installed agents found"
 msgstr "No installed agents found"
@@ -3341,9 +3732,21 @@ msgstr "No language match."
 msgid "No links yet. Add wiki links or markdown links to build a graph."
 msgstr "No links yet. Add wiki links or markdown links to build a graph."
 
+#: src/components/CreateProjectDialog.tsx
+msgid "No location selected. Use Browse to choose a folder."
+msgstr "No location selected. Use Browse to choose a folder."
+
+#: src/components/CommandPalette.tsx
+msgid "No matches. Some files are excluded from search (hidden or ignored files)."
+msgstr "No matches. Some files are excluded from search (hidden or ignored files)."
+
 #: src/components/CommandPalette.tsx
 msgid "No matching commands."
 msgstr "No matching commands."
+
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "No matching docs"
+msgstr "No matching docs"
 
 #: src/editor/link-path-suggestions.tsx
 msgid "No matching paths"
@@ -3384,6 +3787,10 @@ msgstr "No pages found for \"{trimmedQuery}\""
 #: src/components/LinksPanel.tsx
 msgid "No pages link here yet."
 msgstr "No pages link here yet."
+
+#: src/components/CommandPalette.tsx
+msgid "No pages matched \"{semanticQueryText}\" by meaning."
+msgstr "No pages matched \"{semanticQueryText}\" by meaning."
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "No patterns yet. Type a folder or file name below to start hiding files."
@@ -3449,6 +3856,10 @@ msgstr "No templates yet. Add one to give new docs in this folder a ready-made s
 msgid "No workspace"
 msgstr "No workspace"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "None"
+msgstr "None"
+
 #: src/components/settings/AccountSection.tsx
 msgid "Not connected"
 msgstr "Not connected"
@@ -3465,6 +3876,10 @@ msgstr "Not detected"
 #: src/components/handoff/OpenInAgentMenuItem.tsx
 msgid "Not installed"
 msgstr "Not installed"
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Not now"
+msgstr "Not now"
 
 #: src/components/FolderPropertiesCard.tsx
 msgid "Nothing set yet."
@@ -3486,28 +3901,25 @@ msgstr "Number"
 msgid "Numbered list of items."
 msgstr "Numbered list of items."
 
+#: src/components/PropertyWidgets.tsx
+msgid "Object"
+msgstr "Object"
+
 #: src/editor/components/Pdf.tsx
 msgid "of {totalPages}"
 msgstr "of {totalPages}"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Off"
+msgstr "Off"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Off — search ranks by keyword only. No content leaves this computer."
+msgstr "Off — search ranks by keyword only. No content leaves this computer."
+
 #: src/components/SyncStatusBadge.tsx
 msgid "Offline"
 msgstr "Offline"
-
-#: src/components/ConsentDialogBody.tsx
-#: src/components/CreateProjectDialog.tsx
-#: src/components/settings/SharingSection.tsx
-msgid "OK config is committed alongside content (default)."
-msgstr "OK config is committed alongside content (default)."
-
-#: src/components/ConsentDialogBody.tsx
-msgid "OK config stays on this machine via <0>.git/info/exclude</0> (per-clone, not committed)."
-msgstr "OK config stays on this machine via <0>.git/info/exclude</0> (per-clone, not committed)."
-
-#: src/components/CreateProjectDialog.tsx
-#: src/components/settings/SharingSection.tsx
-msgid "OK config stays on this machine via <0>.git/info/exclude</0>(per-clone, not committed)."
-msgstr "OK config stays on this machine via <0>.git/info/exclude</0>(per-clone, not committed)."
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "OK Desktop"
@@ -3516,6 +3928,14 @@ msgstr "OK Desktop"
 #: src/components/ConnectingBanner.tsx
 msgid "ok ui responded but server.lock has no port yet"
 msgstr "ok ui responded but server.lock has no port yet"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "On"
+msgstr "On"
+
+#: src/components/settings/SearchSection.tsx
+msgid "On — your search queries and the text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
+msgstr "On — your search queries and the text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "One pattern per line — appended to <0>.okignore</0>."
@@ -3576,6 +3996,14 @@ msgid "Open an existing project folder from disk."
 msgstr "Open an existing project folder from disk."
 
 #: src/lib/keyboard-shortcuts.ts
+msgid "Open and focus the Ask AI composer for the current editor selection."
+msgstr "Open and focus the Ask AI composer for the current editor selection."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Open and focus the bottom Ask AI prompt composer."
+msgstr "Open and focus the bottom Ask AI prompt composer."
+
+#: src/lib/keyboard-shortcuts.ts
 msgid "Open CodeMirror search in source editor mode."
 msgstr "Open CodeMirror search in source editor mode."
 
@@ -3588,12 +4016,12 @@ msgid "Open CodeMirror's lint diagnostics panel."
 msgstr "Open CodeMirror's lint diagnostics panel."
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder"
-msgstr "Open Containing Folder"
+msgid "Open containing folder"
+msgstr "Open containing folder"
 
 #: src/components/FileTree.tsx
-msgid "Open Containing Folder, {hint}"
-msgstr "Open Containing Folder, {hint}"
+msgid "Open containing folder, {hint}"
+msgstr "Open containing folder, {hint}"
 
 #: src/components/PropertyWidgets.tsx
 msgid "Open date picker for {keyName}"
@@ -3634,63 +4062,9 @@ msgstr "Open graph"
 msgid "Open in {shareBranch}"
 msgstr "Open in {shareBranch}"
 
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Open in claude.ai →"
-msgstr "Open in claude.ai →"
-
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "Open in claude.ai, opens in browser with prompt pre-filled"
-msgstr "Open in claude.ai, opens in browser with prompt pre-filled"
-
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Open in current branch"
 msgstr "Open in current branch"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "Open in Terminal"
-msgstr "Open in Terminal"
-
-#: src/components/FileTree.tsx
-msgid "Open in Terminal, {hint}"
-msgstr "Open in Terminal, {hint}"
-
-#: src/components/FileSidebar.tsx
-msgid "Open in Terminal, No workspace"
-msgstr "Open in Terminal, No workspace"
-
-#: src/components/ConsentDialogBody.tsx
-msgid "Open Knowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
-msgstr "Open Knowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
-
-#: src/components/settings/AccountSection.tsx
-msgid "Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate Open Knowledge credential to disconnect."
-msgstr "Open Knowledge is using a GitHub account provided by the gh CLI. There's no separate Open Knowledge credential to disconnect."
-
-#: src/components/settings/AccountSection.tsx
-msgid "Open Knowledge is using this GitHub account."
-msgstr "Open Knowledge is using this GitHub account."
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Open Knowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-msgstr "Open Knowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-
-#: src/components/CreateProjectDialog.tsx
-msgid "Open Knowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
-msgstr "Open Knowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
-
-#: src/components/ConsentDialogBody.tsx
-msgid "Open Knowledge will create a <0>.ok/</0> folder here to track this project's metadata."
-msgstr "Open Knowledge will create a <0>.ok/</0> folder here to track this project's metadata."
-
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "Open Knowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
-msgstr "Open Knowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
 
 #: src/components/GraphPanel.tsx
 msgid "Open link"
@@ -3746,20 +4120,12 @@ msgid "Open the insert menu in an empty or active text position."
 msgstr "Open the insert menu in an empty or active text position."
 
 #: src/lib/keyboard-shortcuts.ts
-msgid "Open the Open with AI menu for the current editor selection."
-msgstr "Open the Open with AI menu for the current editor selection."
-
-#: src/lib/keyboard-shortcuts.ts
 msgid "Open the Project Navigator."
 msgstr "Open the Project Navigator."
 
 #: src/components/GraphPanel.tsx
 msgid "Open this document in the editor and collapse the graph."
 msgstr "Open this document in the editor and collapse the graph."
-
-#: src/components/ConsentDialogBody.tsx
-msgid "Open this folder with Open Knowledge"
-msgstr "Open this folder with Open Knowledge"
 
 #: src/components/GraphPanel.tsx
 msgid "Open this link in a new tab and collapse the graph."
@@ -3783,6 +4149,7 @@ msgstr "Open with AI"
 #: src/components/CommandPalette.tsx
 #: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
 msgid "Open with AI {displayName}"
 msgstr "Open with AI {displayName}"
 
@@ -3800,21 +4167,41 @@ msgstr "Open with AI {targetDisplayName}"
 msgid "Open with AI {targetDisplayName}, {hint}"
 msgstr "Open with AI {targetDisplayName}, {hint}"
 
-#: src/components/AssetPreview.tsx
-msgid "Open with built-in text editor"
-msgstr "Open with built-in text editor"
-
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Opened {displayName} in your browser."
-msgstr "Opened {displayName} in your browser."
-
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr "Opening..."
+
+#: src/components/ConsentDialogBody.tsx
+msgid "OpenKnowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
+msgstr "OpenKnowledge initializes at <0>{projectDir}</0> — the parent of <1>{pickedRelative}</1> because it contains a <2>.git</2> folder (one .ok/ per git repo). <3>Content directory</3> defaults to <4>.</4> (the whole repo); type a sub-folder to narrow it."
+
+#: src/components/settings/AccountSection.tsx
+msgid "OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate OpenKnowledge credential to disconnect."
+msgstr "OpenKnowledge is using a GitHub account provided by the gh CLI. There's no separate OpenKnowledge credential to disconnect."
+
+#: src/components/settings/AccountSection.tsx
+msgid "OpenKnowledge is using this GitHub account."
+msgstr "OpenKnowledge is using this GitHub account."
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
+msgstr "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
+
+#: src/components/ConsentDialogBody.tsx
+msgid "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
+msgstr "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
+
+#: src/components/CreateProjectDialog.tsx
+msgid "OpenKnowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
+msgstr "OpenKnowledge will be initialized at <0>{gitRoot}</0> — the parent of your new folder, because it contains a <1>.git</1> folder (one project per git repo)."
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "OpenKnowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
+msgstr "OpenKnowledge will create commits and push them to your remote automatically. If you do not want automatic commits in your git history, you should not enable auto-sync."
 
 #: src/components/CloneDialog.tsx
 msgid "Opens a folder picker to choose where to clone the repository."
@@ -3824,19 +4211,14 @@ msgstr "Opens a folder picker to choose where to clone the repository."
 msgid "Opens in a new tab"
 msgstr "Opens in a new tab"
 
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "opens in browser"
-msgstr "opens in browser"
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "opens in browser with prompt pre-filled"
-msgstr "opens in browser with prompt pre-filled"
+#: src/components/empty-state/CreateView.tsx
+#: src/components/PackCardGrid.tsx
+msgid "or create a new file <0/>"
+msgstr "or create a new file <0/>"
 
 #: src/components/EmptyEditorState.tsx
-msgid "or start from scratch <0/>"
-msgstr "or start from scratch <0/>"
+msgid "Or use a starter pack"
+msgstr "Or use a starter pack"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Ordered list"
@@ -3846,9 +4228,13 @@ msgstr "Ordered list"
 msgid "Ordered List"
 msgstr "Ordered List"
 
-#: src/components/PublishToGitHubDialog.tsx
-msgid "org"
-msgstr "org"
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Organize my existing specs into a linked index grouped by area, and flag any that have drifted out of sync with the current code."
+msgstr "Organize my existing specs into a linked index grouped by area, and flag any that have drifted out of sync with the current code."
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Organize specs"
+msgstr "Organize specs"
 
 #: src/components/GraphPanel.tsx
 msgid "Orphan mode"
@@ -3921,6 +4307,10 @@ msgstr "Page thumbnails"
 msgid "page-name"
 msgstr "page-name"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Pages are embedded the first time a search needs them."
+msgstr "Pages are embedded the first time a search needs them."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Paragraph"
 msgstr "Paragraph"
@@ -3949,6 +4339,10 @@ msgstr "Paste URL, owner/repo, or search your repos"
 msgid "Paste was incomplete — {chunksCompleted} of {totalChunks} chunks landed.{restoreSuffix}"
 msgstr "Paste was incomplete — {chunksCompleted} of {totalChunks} chunks landed.{restoreSuffix}"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Paste your API key"
+msgstr "Paste your API key"
+
 #: src/components/NewItemDialog.tsx
 msgid "Path cannot contain \"..\""
 msgstr "Path cannot contain \"..\""
@@ -3968,10 +4362,6 @@ msgstr "Path cannot start with \"/\""
 #: src/components/TrashFailureModal.tsx
 msgid "Path resolves outside project"
 msgstr "Path resolves outside project"
-
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Path resolves outside the project"
-msgstr "Path resolves outside the project"
 
 #: src/editor/link-path-suggestions.tsx
 msgid "Path suggestions"
@@ -4013,14 +4403,6 @@ msgstr "Pick a layout that matches what you're building. Each pack ships with fo
 msgid "Pick a name"
 msgstr "Pick a name"
 
-#: src/components/EmptyEditorState.tsx
-msgid "Pick a starter pack to scaffold folders, templates, and AI-readable rules."
-msgstr "Pick a starter pack to scaffold folders, templates, and AI-readable rules."
-
-#: src/components/PublishToGitHubDialog.tsx
-msgid "Pick an owner"
-msgstr "Pick an owner"
-
 #: src/components/ShareReceiveDialog.tsx
 msgid "Pick the folder where you've cloned it."
 msgstr "Pick the folder where you've cloned it."
@@ -4037,6 +4419,10 @@ msgstr "Plain"
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Preferences"
 msgstr "Preferences"
+
+#: src/components/CommandPalette.tsx
+msgid "Preparing search"
+msgstr "Preparing search"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Preparing share URL..."
@@ -4078,6 +4464,11 @@ msgstr "Project"
 msgid "Project folder created, but git init failed. Try again."
 msgstr "Project folder created, but git init failed. Try again."
 
+#: src/components/CreateProjectDialog.tsx
+msgid "Project name"
+msgstr "Project name"
+
+#: src/components/FileTree.tsx
 #: src/components/SeedDialog.tsx
 msgid "Project root"
 msgstr "Project root"
@@ -4110,17 +4501,27 @@ msgstr "Project-level pages with no outgoing graph edges."
 msgid "Properties"
 msgstr "Properties"
 
+#: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Property \"{trimmed}\" already exists"
 msgstr "Property \"{trimmed}\" already exists"
 
 #: src/components/FrontmatterRow.tsx
+#: src/components/TemplateForm.tsx
 msgid "Property name"
 msgstr "Property name"
+
+#: src/components/TemplateForm.tsx
+msgid "Property value"
+msgstr "Property value"
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Protected branch — cannot push"
 msgstr "Protected branch — cannot push"
+
+#: src/components/TemplateForm.tsx
+msgid "provisional"
+msgstr "provisional"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Public"
@@ -4155,8 +4556,8 @@ msgid "Pulling"
 msgstr "Pulling"
 
 #: src/components/AutoSyncEnableWarning.tsx
-msgid "Pulls may overwrite uncommitted local file changes."
-msgstr "Pulls may overwrite uncommitted local file changes."
+msgid "Pulls may overwrite uncommitted edits in your local files."
+msgstr "Pulls may overwrite uncommitted edits in your local files."
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Push"
@@ -4177,6 +4578,10 @@ msgstr "Quote"
 #: src/components/AuthModal.tsx
 msgid "Re-authenticate with GitHub"
 msgstr "Re-authenticate with GitHub"
+
+#: src/components/empty-state/use-create-suggestions.ts
+msgid "Read through this codebase and draft a technical spec for the most complex module: an overview, the architecture, key files, and open questions, all linked from a specs index page."
+msgstr "Read through this codebase and draft a technical spec for the most complex module: an overview, the architecture, key files, and open questions, all linked from a specs index page."
 
 #: src/editor/slash-command/component-items.tsx
 msgid "Read-only copy of a MirrorSource block from another doc. Edit at the source — every Mirror reflects the change live."
@@ -4214,16 +4619,16 @@ msgstr "Reconnected"
 msgid "Reconnecting after server restart"
 msgstr "Reconnecting after server restart"
 
-#: src/components/TimelinePanel.tsx
-msgid "Recovered from an external change{sizeSuffix}"
-msgstr "Recovered from an external change{sizeSuffix}"
+#: src/components/FileTree.tsx
+msgid "Reconnecting…"
+msgstr "Reconnecting…"
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Reinstall"
 msgstr "Reinstall"
 
-#. Dialog title — installing the Open Knowledge skill into the Claude Desktop App
+#. Dialog title — installing the OpenKnowledge skill into the Claude Desktop App
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Reinstall for Claude Chat & Cowork"
 msgstr "Reinstall for Claude Chat & Cowork"
@@ -4237,8 +4642,12 @@ msgid "Reject"
 msgstr "Reject"
 
 #: src/components/FileTree.tsx
-msgid "Relative Path"
-msgstr "Relative Path"
+msgid "Relative path"
+msgstr "Relative path"
+
+#: src/components/FileTree.tsx
+msgid "Relaunching to install the update…"
+msgstr "Relaunching to install the update…"
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Release notes"
@@ -4246,6 +4655,7 @@ msgstr "Release notes"
 
 #: src/components/EditorActivityPool.tsx
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "Reload"
 msgstr "Reload"
 
@@ -4258,9 +4668,17 @@ msgstr "Remove"
 msgid "Remove {chip}"
 msgstr "Remove {chip}"
 
+#: src/editor/composer-mention/composer-mention.ts
+msgid "Remove {fullLabel} from context"
+msgstr "Remove {fullLabel} from context"
+
 #: src/components/FrontmatterRow.tsx
 msgid "Remove {keyName}"
 msgstr "Remove {keyName}"
+
+#: src/components/ComposerContextChips.tsx
+msgid "Remove {label} from context"
+msgstr "Remove {label} from context"
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "Remove {patternText}"
@@ -4282,9 +4700,22 @@ msgstr "Remove failed: {error}"
 msgid "Remove from recent projects"
 msgstr "Remove from recent projects"
 
+#. placeholder {0}: index + 1
+#: src/components/ArrayOfObjectsWidget.tsx
+msgid "Remove item {0}"
+msgstr "Remove item {0}"
+
 #: src/editor/bubble-menu/LinkEditPopover.tsx
 msgid "Remove link"
 msgstr "Remove link"
+
+#: src/components/TemplateForm.tsx
+msgid "Remove property"
+msgstr "Remove property"
+
+#: src/components/BottomComposer.tsx
+msgid "Remove selection"
+msgstr "Remove selection"
 
 #: src/components/CreateProjectDialog.tsx
 msgid "Remove the parent <0>.git</0> folder"
@@ -4343,6 +4774,10 @@ msgstr "Replace current match"
 msgid "Replace current match from field"
 msgstr "Replace current match from field"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Replace key"
+msgstr "Replace key"
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Replace the active match from the replace field."
 msgstr "Replace the active match from the replace field."
@@ -4369,9 +4804,13 @@ msgstr "Repository not found. It may have been renamed, deleted, or moved."
 msgid "Requires {brand}."
 msgstr "Requires {brand}."
 
-#: src/components/ConsentDialogBody.tsx
-msgid "Requires a git repository — pick a different folder or enable git init."
-msgstr "Requires a git repository — pick a different folder or enable git init."
+#: src/components/BottomComposer.tsx
+msgid "Research the extinction of flightless birds"
+msgstr "Research the extinction of flightless birds"
+
+#: src/components/TemplateForm.tsx
+msgid "research-note"
+msgstr "research-note"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Reset {labelText} to default"
@@ -4389,6 +4828,10 @@ msgstr "Resize {handleKey}"
 msgid "Resolve conflict in your terminal"
 msgstr "Resolve conflict in your terminal"
 
+#: src/components/CreateProjectDialog.tsx
+msgid "Resolving default location"
+msgstr "Resolving default location"
+
 #: src/components/CloneDialog.tsx
 msgid "Resolving deltas"
 msgstr "Resolving deltas"
@@ -4396,6 +4839,26 @@ msgstr "Resolving deltas"
 #: src/components/HelpPopover.tsx
 msgid "Resources"
 msgstr "Resources"
+
+#: src/components/TerminalExitNotice.tsx
+msgid "Restart terminal"
+msgstr "Restart terminal"
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Restart with this app's version"
+msgstr "Restart with this app's version"
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Restarted — now running v{appRuntime}."
+msgstr "Restarted — now running v{appRuntime}."
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+msgstr "Restarting closes this project's server. Connected agents (Claude Code, Codex, Cursor) will see their OpenKnowledge MCP connection close unexpectedly — you may need to restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Restarting the server…"
+msgstr "Restarting the server…"
 
 #: src/components/TimelinePanel.tsx
 msgid "Restore"
@@ -4410,22 +4873,6 @@ msgid "Restore failed — document unchanged"
 msgstr "Restore failed — document unchanged"
 
 #: src/components/TimelinePanel.tsx
-msgid "Restore this auto-save"
-msgstr "Restore this auto-save"
-
-#: src/components/TimelinePanel.tsx
-msgid "Restore this auto-save?"
-msgstr "Restore this auto-save?"
-
-#: src/components/TimelinePanel.tsx
-msgid "Restore this version"
-msgstr "Restore this version"
-
-#: src/components/TimelinePanel.tsx
-msgid "Restore this version?"
-msgstr "Restore this version?"
-
-#: src/components/TimelinePanel.tsx
 msgid "Restore to this point"
 msgstr "Restore to this point"
 
@@ -4436,6 +4883,10 @@ msgstr "Restore to this point?"
 #: src/components/DiffViewBoundary.tsx
 msgid "Restore with remote changes"
 msgstr "Restore with remote changes"
+
+#: src/components/CommandPalette.tsx
+msgid "Results capped — this workspace has more files than search can index. A missing file may be a cap artifact, not a typo."
+msgstr "Results capped — this workspace has more files than search can index. A missing file may be a cap artifact, not a typo."
 
 #: src/components/ActivityModeContent.tsx
 #: src/components/ConnectingBanner.tsx
@@ -4490,6 +4941,10 @@ msgstr "Role"
 msgid "root"
 msgstr "root"
 
+#: src/components/settings/TerminalSection.tsx
+msgid "Run a real terminal docked inside OpenKnowledge, starting in this project's folder."
+msgstr "Run a real terminal docked inside OpenKnowledge, starting in this project's folder."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Run this in your terminal"
 msgstr "Run this in your terminal"
@@ -4499,6 +4954,7 @@ msgid "Sandboxed HTML embed — write HTML, see the rendered preview live."
 msgstr "Sandboxed HTML embed — write HTML, see the rendered preview live."
 
 #: src/components/AuthModal.tsx
+#: src/components/settings/EmbeddingsKeySection.tsx
 #: src/components/TemplateEditDialog.tsx
 #: src/editor/components/CodePreviewEditModal.tsx
 #: src/editor/extensions/InternalLinkPropPanel.tsx
@@ -4518,14 +4974,6 @@ msgstr "Save failed: {error}"
 msgid "Save resolution"
 msgstr "Save resolution"
 
-#: src/components/TimelinePanel.tsx
-msgid "Save version"
-msgstr "Save version"
-
-#: src/components/TimelinePanel.tsx
-msgid "Save Version"
-msgstr "Save Version"
-
 #: src/components/settings/OkignoreSection.tsx
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Saved"
@@ -4535,12 +4983,17 @@ msgstr "Saved"
 msgid "Saved as <0>{slug}.md</0>"
 msgstr "Saved as <0>{slug}.md</0>"
 
+#: src/components/settings/SharingSection.tsx
+#: src/components/SharingModeField.tsx
+msgid "Saved with the project for your team."
+msgstr "Saved with the project for your team."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Saves the file to <0>~/Downloads/openknowledge.skill</0> and opens the Claude Desktop App. Requires Node.js or Bun on your PATH."
 msgstr "Saves the file to <0>~/Downloads/openknowledge.skill</0> and opens the Claude Desktop App. Requires Node.js or Bun on your PATH."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
 #: src/components/TemplateEditDialog.tsx
-#: src/components/TimelinePanel.tsx
 msgid "Saving"
 msgstr "Saving"
 
@@ -4553,15 +5006,23 @@ msgid "Scope: "
 msgstr "Scope: "
 
 #: src/components/CommandPalette.tsx
-#: src/components/empty-state/KeyboardHintsFooter.tsx
+#: src/components/settings/SettingsDialogShell.tsx
 #: src/components/SidebarSearchBar.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "Search"
 msgstr "Search"
 
+#: src/components/CommandPalette.tsx
+msgid "Search \"{semanticSubmitQuery}\" by meaning"
+msgstr "Search \"{semanticSubmitQuery}\" by meaning"
+
 #: src/components/EditorHeader.tsx
 msgid "Search ({searchShortcut})"
 msgstr "Search ({searchShortcut})"
+
+#: src/components/CommandPalette.tsx
+msgid "Search by meaning"
+msgstr "Search by meaning"
 
 #: src/components/PageHeaderWidgets.tsx
 msgid "Search emoji"
@@ -4583,6 +5044,10 @@ msgstr "Search files, folders, and commands for the current workspace."
 msgid "Search files, folders, or commands"
 msgstr "Search files, folders, or commands"
 
+#: src/components/CommandPalette.tsx
+msgid "Search matches file names, paths, and folders. Open a file to search its body (⌘F)."
+msgstr "Search matches file names, paths, and folders. Open a file to search its body (⌘F)."
+
 #: src/components/ProjectSwitcher.tsx
 msgid "Search recent projects"
 msgstr "Search recent projects"
@@ -4591,6 +5056,10 @@ msgstr "Search recent projects"
 msgid "Search recent projects..."
 msgstr "Search recent projects..."
 
+#: src/components/settings/SearchSection.tsx
+msgid "Search settings not yet loaded — try again in a moment"
+msgstr "Search settings not yet loaded — try again in a moment"
+
 #: src/components/NewItemDialog.tsx
 msgid "Search templates"
 msgstr "Search templates"
@@ -4598,6 +5067,14 @@ msgstr "Search templates"
 #: src/components/CommandPalette.tsx
 msgid "Searching"
 msgstr "Searching"
+
+#: src/components/CommandPalette.tsx
+msgid "Searching by meaning"
+msgstr "Searching by meaning"
+
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "Searching docs"
+msgstr "Searching docs"
 
 #: src/editor/slash-command/items.tsx
 msgid "Second item"
@@ -4664,6 +5141,26 @@ msgstr "Selection must be inside the project"
 msgid "Selection statistics"
 msgstr "Selection statistics"
 
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic ranking activates the first time an agent runs a search."
+msgstr "Semantic ranking activates the first time an agent runs a search."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search"
+msgstr "Semantic search"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
+msgstr "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
+
+#: src/components/settings/SearchSection.tsx
+msgid "Semantic search is on, but no API key is set — search falls back to keyword matching. Add one in <0>Settings → Account</0> (it's stored once for your whole machine)."
+msgstr "Semantic search is on, but no API key is set — search falls back to keyword matching. Add one in <0>Settings → Account</0> (it's stored once for your whole machine)."
+
+#: src/components/handoff/EditWithAiPopover.tsx
+msgid "Send to"
+msgstr "Send to"
+
 #: src/editor/slash-command/items.tsx
 msgid "Separator"
 msgstr "Separator"
@@ -4706,6 +5203,10 @@ msgid "Set identity"
 msgstr "Set identity"
 
 #: src/components/settings/SettingsDialogBody.tsx
+msgid "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+msgstr "Set the auto-sync default for users opening this project for the first time. This setting is committed to your repository."
+
+#: src/components/settings/SettingsDialogBody.tsx
 msgid "Set up syncing"
 msgstr "Set up syncing"
 
@@ -4728,6 +5229,19 @@ msgstr "Settings failed to load"
 msgid "Settings sections"
 msgstr "Settings sections"
 
+#. Primary button — begins scaffolding the project
+#: src/components/ConsentDialogBody.tsx
+msgid "Setup"
+msgstr "Setup"
+
+#: src/components/ConfigSharingInfoTooltip.tsx
+msgid "Setup files include: <0>.ok/</0>, AI-tool MCP configs (<1>.mcp.json</1> and per-tool files), project skills, and <2>.claude/launch.json</2>.<3/><4>Shared</4> commits them to git, so anyone who clones the repo gets the same setup. <5/><6>Local only</6> keeps them out of git (via <7>.git/info/exclude</7>)."
+msgstr "Setup files include: <0>.ok/</0>, AI-tool MCP configs (<1>.mcp.json</1> and per-tool files), project skills, and <2>.claude/launch.json</2>.<3/><4>Shared</4> commits them to git, so anyone who clones the repo gets the same setup. <5/><6>Local only</6> keeps them out of git (via <7>.git/info/exclude</7>)."
+
+#: src/components/ConsentDialogBody.tsx
+msgid "Setup OpenKnowledge in this folder?"
+msgstr "Setup OpenKnowledge in this folder?"
+
 #: src/components/ShareButton.tsx
 msgid "Share"
 msgstr "Share"
@@ -4740,21 +5254,31 @@ msgstr "Share doc"
 msgid "Share folder"
 msgstr "Share folder"
 
-#: src/components/ConsentDialogBody.tsx
-#: src/components/CreateProjectDialog.tsx
-msgid "Share OK config with my team?"
-msgstr "Share OK config with my team?"
+#: src/components/SharingModeField.tsx
+msgid "Share this setup with your team?"
+msgstr "Share this setup with your team?"
 
 #: src/components/PublishToGitHubDialog.tsx
 #: src/components/ShareButton.tsx
 msgid "Share URL"
 msgstr "Share URL"
 
-#: src/components/ConsentDialogBody.tsx
-#: src/components/CreateProjectDialog.tsx
 #: src/components/settings/SharingSection.tsx
-msgid "Share with my team"
-msgstr "Share with my team"
+#: src/components/SharingModeField.tsx
+msgid "Shared"
+msgstr "Shared"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared auto-sync default"
+msgstr "Shared auto-sync default"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Shared default"
+msgstr "Shared default"
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Shared repositories"
+msgstr "Shared repositories"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Sharing a doc needs a GitHub repository. Create one for this project."
@@ -4768,11 +5292,6 @@ msgstr "Show {hidden} more"
 #: src/components/settings/OkignoreSection.tsx
 msgid "Show advanced"
 msgstr "Show advanced"
-
-#: src/components/FileSidebar.tsx
-#: src/components/FileTree.tsx
-msgid "Show all files"
-msgstr "Show all files"
 
 #: src/components/GraphPanel.tsx
 msgid "Show external URL nodes"
@@ -4796,8 +5315,8 @@ msgstr "Show Files ({sidebarShortcutLabel})"
 
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
-msgid "Show Hidden Files"
-msgstr "Show Hidden Files"
+msgid "Show hidden files"
+msgstr "Show hidden files"
 
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Show HTML preview"
@@ -4811,6 +5330,10 @@ msgstr "Show or hide document panel"
 msgid "Show or hide Files"
 msgstr "Show or hide Files"
 
+#: src/lib/keyboard-shortcuts.ts
+msgid "Show or hide terminal"
+msgstr "Show or hide terminal"
+
 #: src/components/EditorToolbar.tsx
 msgid "Show panel ({panelShortcut})"
 msgstr "Show panel ({panelShortcut})"
@@ -4823,13 +5346,17 @@ msgstr "Show panel ({panelShortcutLabel})"
 msgid "Show replace"
 msgstr "Show replace"
 
+#: src/components/BottomComposer.tsx
+msgid "Show selection preview"
+msgstr "Show selection preview"
+
 #: src/editor/components/Pdf.tsx
 msgid "Show thumbnails"
 msgstr "Show thumbnails"
 
-#: src/components/FileTree.tsx
-msgid "Showing first {truncatedShownCount} items — use search to find others"
-msgstr "Showing first {truncatedShownCount} items — use search to find others"
+#: src/components/CommandPalette.tsx
+msgid "Showing results for \"{semanticResultsLabel}\""
+msgstr "Showing results for \"{semanticResultsLabel}\""
 
 #. placeholder {0}: items.length
 #: src/editor/wiki-link-suggestion/WikiLinkSuggestionMenu.tsx
@@ -4840,6 +5367,10 @@ msgstr "Showing top {0} headings — keep typing to narrow"
 #: src/editor/wiki-link-suggestion/WikiLinkSuggestionMenu.tsx
 msgid "Showing top {0} matches — keep typing to narrow"
 msgstr "Showing top {0} matches — keep typing to narrow"
+
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "Showing top matches — keep typing to narrow"
+msgstr "Showing top matches — keep typing to narrow"
 
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Shows above the code body. Round-trips as `title=\"...\"` in markdown."
@@ -4883,6 +5414,14 @@ msgstr "Something went wrong loading the settings panel."
 #: src/components/DocumentErrorBoundary.tsx
 msgid "Something went wrong opening \"{docName}\"."
 msgstr "Something went wrong opening \"{docName}\"."
+
+#: src/components/TextViewer.tsx
+msgid "Something went wrong opening this file (HTTP {status})."
+msgstr "Something went wrong opening this file (HTTP {status})."
+
+#: src/components/TerminalGate.tsx
+msgid "Something went wrong starting the terminal."
+msgstr "Something went wrong starting the terminal."
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Source editing"
@@ -4928,18 +5467,9 @@ msgstr "Split diff"
 msgid "Split list item"
 msgstr "Split list item"
 
-#. Primary button — begins scaffolding the project
-#: src/components/ConsentDialogBody.tsx
-msgid "Start"
-msgstr "Start"
-
-#: src/components/empty-state/CreateView.tsx
-msgid "Start a blank file, scaffold from a template, or open this folder in your AI editor."
-msgstr "Start a blank file, scaffold from a template, or open this folder in your AI editor."
-
 #: src/components/NavigatorApp.tsx
-msgid "Start a new Open Knowledge project."
-msgstr "Start a new Open Knowledge project."
+msgid "Start a new OpenKnowledge project."
+msgstr "Start a new OpenKnowledge project."
 
 #: src/components/NewItemDialog.tsx
 msgid "Start from"
@@ -4952,6 +5482,10 @@ msgstr "Start source completion"
 #: src/components/EditorArea.tsx
 msgid "Start writing to create this page"
 msgstr "Start writing to create this page"
+
+#: src/lib/install-server-drift-listener.ts
+msgid "Started a fresh OpenKnowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
+msgstr "Started a fresh OpenKnowledge server (v{appRuntime}) for this dev session — the server already running for this project was terminated. Connected agents (Claude Code, Codex, Cursor) just lost their OpenKnowledge MCP connection; restart the agent, or toggle its OpenKnowledge MCP server off and on, to reconnect."
 
 #: src/components/TemplateBody.tsx
 msgid "Starter content"
@@ -4969,6 +5503,15 @@ msgstr "Starting clone"
 msgid "Starting sign-in flow"
 msgstr "Starting sign-in flow"
 
+#: src/components/TemplateForm.tsx
+msgid "status"
+msgstr "status"
+
+#: src/components/settings/SharingSection.tsx
+#: src/components/SharingModeField.tsx
+msgid "Stays on this computer."
+msgstr "Stays on this computer."
+
 #: src/components/MountStalledAffordance.tsx
 msgid "Still loading"
 msgstr "Still loading"
@@ -4977,13 +5520,13 @@ msgstr "Still loading"
 msgid "Stored at <0>.ok/templates/</0> in this project. Available in every folder (folder-scoped templates can override by filename)."
 msgstr "Stored at <0>.ok/templates/</0> in this project. Available in every folder (folder-scoped templates can override by filename)."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Stored on this machine."
+msgstr "Stored on this machine."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Strikethrough"
 msgstr "Strikethrough"
-
-#: src/components/CreateProjectDialog.tsx
-msgid "Subfolder name"
-msgstr "Subfolder name"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Suggestion menu navigation"
@@ -4993,14 +5536,15 @@ msgstr "Suggestion menu navigation"
 msgid "Suggestion menu open"
 msgstr "Suggestion menu open"
 
-#: src/lib/keyboard-shortcuts.ts
-msgid "Switch project"
-msgstr "Switch project"
+#: src/components/BottomComposer.tsx
+msgid "Summarize everything I changed this week"
+msgstr "Summarize everything I changed this week"
 
 #: src/components/CommandPalette.tsx
 #: src/components/ProjectSwitcher.tsx
-msgid "Switch Project"
-msgstr "Switch Project"
+#: src/lib/keyboard-shortcuts.ts
+msgid "Switch project"
+msgstr "Switch project"
 
 #: src/components/settings/SharingSection.tsx
 msgid "Switch to local-only refused"
@@ -5061,6 +5605,7 @@ msgid "Sync paused — you don't have permission to push to this repo"
 msgstr "Sync paused — you don't have permission to push to this repo"
 
 #: src/components/AutoSyncOnboardingDialog.tsx
+#: src/components/settings/SettingsDialogBody.tsx
 #: src/hooks/use-enable-sync-with-confirm.ts
 msgid "Sync settings not yet loaded — try again in a moment"
 msgstr "Sync settings not yet loaded — try again in a moment"
@@ -5129,6 +5674,10 @@ msgstr "Task list"
 msgid "Task List"
 msgstr "Task List"
 
+#: src/components/CreateProjectDialog.tsx
+msgid "Team Wiki"
+msgstr "Team Wiki"
+
 #: src/components/TemplateEditDialog.tsx
 msgid "Template"
 msgstr "Template"
@@ -5165,25 +5714,58 @@ msgstr "Templates"
 msgid "Templates available"
 msgstr "Templates available"
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Terminal took too long to respond"
-msgstr "Terminal took too long to respond"
+#: src/components/empty-state/CreatePromptComposer.tsx
+#: src/components/handoff/AgentSplitButton.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
+#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+#: src/components/settings/SettingsDialogShell.tsx
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalPanel.tsx
+msgid "Terminal"
+msgstr "Terminal"
 
-#: src/lib/dispatch-open-in-terminal.ts
-msgid "Terminal.app not found"
-msgstr "Terminal.app not found"
+#. placeholder {0}: index + 1
+#: src/components/TerminalDock.tsx
+msgid "Terminal {0}"
+msgstr "Terminal {0}"
+
+#: src/components/TerminalRefusalNotice.tsx
+msgid "Terminal access isn't enabled for this project."
+msgstr "Terminal access isn't enabled for this project."
+
+#: src/components/TerminalGate.tsx
+msgid "Terminal disabled"
+msgstr "Terminal disabled"
+
+#: src/components/TerminalGate.tsx
+msgid "Terminal failed to load"
+msgstr "Terminal failed to load"
+
+#: src/components/TerminalTabStrip.tsx
+msgid "Terminal sessions"
+msgstr "Terminal sessions"
+
+#: src/components/settings/TerminalSection.tsx
+#: src/components/TerminalGate.tsx
+msgid "Terminal settings not loaded yet — try again in a moment."
+msgstr "Terminal settings not loaded yet — try again in a moment."
 
 #: src/components/PropertyWidgets.tsx
 msgid "Text"
 msgstr "Text"
 
 #: src/components/ShareReceiveDialog.tsx
-msgid "That folder isn't an Open Knowledge project yet. Initialize it and open?"
-msgstr "That folder isn't an Open Knowledge project yet. Initialize it and open?"
+msgid "That folder isn't an OpenKnowledge project yet. Initialize it and open?"
+msgstr "That folder isn't an OpenKnowledge project yet. Initialize it and open?"
 
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "The {targetNoun} could not be opened — try navigating to it manually."
 msgstr "The {targetNoun} could not be opened — try navigating to it manually."
+
+#: src/components/TemplateForm.tsx
+msgid "The <0>type</0> every document created from this template gets (e.g. <1>research-note</1>). Keeps new docs Open Knowledge Format–conformant."
+msgstr "The <0>type</0> every document created from this template gets (e.g. <1>research-note</1>). Keeps new docs Open Knowledge Format–conformant."
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "The Claude Desktop App didn't open the file. Is it installed? ({msg})"
@@ -5205,10 +5787,6 @@ msgstr "The file is in your Trash; the file-watcher will reconcile."
 msgid "The file on disk, and the id agents use. It can't be changed later."
 msgstr "The file on disk, and the id agents use. It can't be changed later."
 
-#: src/components/CreateProjectDialog.tsx
-msgid "The folder name <0>{rawName}</0> can't be used as a project identifier — it has no characters left after sanitization. Click Browse to pick a folder whose name contains at least one alphanumeric character."
-msgstr "The folder name <0>{rawName}</0> can't be used as a project identifier — it has no characters left after sanitization. Click Browse to pick a folder whose name contains at least one alphanumeric character."
-
 #: src/components/SeedDialog.tsx
 msgid "The folders and templates are in place; there's nothing left to scaffold."
 msgstr "The folders and templates are in place; there's nothing left to scaffold."
@@ -5217,13 +5795,51 @@ msgstr "The folders and templates are in place; there's nothing left to scaffold
 msgid "The formula <0>c = √(a² + b²)</0> renders inline."
 msgstr "The formula <0>c = √(a² + b²)</0> renders inline."
 
+#: src/editor/components/PreviewBlockedNotice.tsx
+msgid "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
+msgstr "The preview blocks resources that don't meet its security rules (for example plain http:// URLs, or code that uses eval). The content above may render incompletely."
+
 #: src/components/PropertyPanel.tsx
 msgid "The properties block at the top of this doc has a formatting error. Switch to source mode to fix it."
 msgstr "The properties block at the top of this doc has a formatting error. Switch to source mode to fix it."
 
+#: src/components/ShareReceiveDialog.tsx
+msgid "The repository is private and your GitHub account doesn't have access to it."
+msgstr "The repository is private and your GitHub account doesn't have access to it."
+
+#: src/components/ShareReceiveDialog.tsx
+msgid "The repository was moved, renamed, or deleted."
+msgstr "The repository was moved, renamed, or deleted."
+
+#: src/components/TerminalGate.tsx
+msgid "The terminal is turned off for this project. Turn it back on to run commands here."
+msgstr "The terminal is turned off for this project. Turn it back on to run commands here."
+
+#. placeholder {0}: info.exitCode
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended (exit code {0})."
+msgstr "The terminal session ended (exit code {0})."
+
+#. placeholder {0}: info.signal
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended (signal {0})."
+msgstr "The terminal session ended (signal {0})."
+
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal session ended."
+msgstr "The terminal session ended."
+
+#: src/components/TerminalExitNotice.tsx
+msgid "The terminal stopped unexpectedly."
+msgstr "The terminal stopped unexpectedly."
+
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Theme"
 msgstr "Theme"
+
+#: src/components/TerminalRefusalNotice.tsx
+msgid "There's no project folder for this window, so a terminal can't start here."
+msgstr "There's no project folder for this window, so a terminal can't start here."
 
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "This {targetNoun} only exists on branch <0>{shareBranch}</0>. You have uncommitted changes that prevent switching. Commit or stash your changes, then open the share link again."
@@ -5245,9 +5861,17 @@ msgstr "This branch is checked out in:"
 msgid "This document is already active in the editor. Use Open to collapse the graph."
 msgstr "This document is already active in the editor. Use Open to collapse the graph."
 
-#: src/components/CreateProjectDialog.tsx
-msgid "This folder already has files. Add a name to create a new subfolder inside it."
-msgstr "This folder already has files. Add a name to create a new subfolder inside it."
+#: src/components/TextViewer.tsx
+msgid "This file can't be opened in the text editor."
+msgstr "This file can't be opened in the text editor."
+
+#: src/components/TextViewer.tsx
+msgid "This file could not be found."
+msgstr "This file could not be found."
+
+#: src/components/TextViewer.tsx
+msgid "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
+msgstr "This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app."
 
 #: src/components/FolderOverview.tsx
 msgid "This folder is empty."
@@ -5260,10 +5884,6 @@ msgstr "this item"
 #: src/components/ConsentDialogBody.tsx
 msgid "This looks like a drive root (e.g., C:\\). Scaffolding here will scan an entire drive."
 msgstr "This looks like a drive root (e.g., C:\\). Scaffolding here will scan an entire drive."
-
-#: src/components/CreateProjectDialog.tsx
-msgid "This name has no characters that are safe for a folder identifier. Try a name with at least one letter or number."
-msgstr "This name has no characters that are safe for a folder identifier. Try a name with at least one letter or number."
 
 #: src/components/SeedDialog.tsx
 msgid "This pack is already set up here."
@@ -5278,8 +5898,8 @@ msgid "This page doesn't link to anything yet."
 msgstr "This page doesn't link to anything yet."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects."
-msgstr "This path is on an external volume (/Volumes/...). Open Knowledge will lose track of files when the drive ejects."
+msgid "This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects."
+msgstr "This path is on an external volume (/Volumes/...). OpenKnowledge will lose track of files when the drive ejects."
 
 #: src/components/TemplateDeleteDialog.tsx
 msgid "This permanently removes {path}. Agents that reference this template by name will fail until it's recreated or replaced by one in a parent folder."
@@ -5293,17 +5913,46 @@ msgstr "This project"
 msgid "This project has no git repository — sharing mode does not apply. Initialize a repo to enable the toggle."
 msgstr "This project has no git repository — sharing mode does not apply. Initialize a repo to enable the toggle."
 
+#. placeholder {0}: info.appRuntime
+#: src/lib/install-server-drift-listener.ts
+msgid "This project is running a different, incompatible build of OpenKnowledge than this app (v{0})."
+msgstr "This project is running a different, incompatible build of OpenKnowledge than this app (v{0})."
+
+#. placeholder {0}: info.serverRuntime
+#. placeholder {1}: info.appRuntime
+#: src/lib/install-server-drift-listener.ts
+msgid "This project is running an older version of OpenKnowledge (v{0}) than this app (v{1})."
+msgstr "This project is running an older version of OpenKnowledge (v{0}) than this app (v{1})."
+
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "This project lives only on this computer. Connect it to GitHub to back it up and share it with other people."
 msgstr "This project lives only on this computer. Connect it to GitHub to back it up and share it with other people."
 
 #: src/components/DocumentErrorBoundary.tsx
-msgid "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
-msgstr "This project's running server doesn't support live editing. Restart Open Knowledge to fix."
+msgid "This project's running server doesn't support live editing. Restart OpenKnowledge to fix."
+msgstr "This project's running server doesn't support live editing. Restart OpenKnowledge to fix."
+
+#. placeholder {0}: info.serverRuntime
+#. placeholder {1}: info.appRuntime
+#: src/lib/install-server-drift-listener.ts
+msgid "This project's server (v{0}) is newer than this app (v{1})."
+msgstr "This project's server (v{0}) is newer than this app (v{1})."
+
+#: src/components/settings/SearchSection.tsx
+msgid "This sends content off your machine"
+msgstr "This sends content off your machine"
+
+#: src/components/settings/SearchSection.tsx
+msgid "This setting is per-machine and isn't shared with collaborators. It needs an API key set with <0>ok embeddings set-key</0>."
+msgstr "This setting is per-machine and isn't shared with collaborators. It needs an API key set with <0>ok embeddings set-key</0>."
 
 #: src/components/TemplateDeleteDialog.tsx
 msgid "This template lives in a parent folder — deleting it affects every folder beneath it that doesn't define its own version."
 msgstr "This template lives in a parent folder — deleting it affects every folder beneath it that doesn't define its own version."
+
+#: src/components/ShareReceiveDialog.tsx
+msgid "This usually means one of:"
+msgstr "This usually means one of:"
 
 #: src/components/TimelinePanel.tsx
 msgid "This will replace the current document content with the version from <0>{relative} ({absoluteTime}, {entrySha})</0> by <1>{authorName}</1>. Your current content is already saved in the timeline — you can restore it anytime."
@@ -5314,6 +5963,7 @@ msgstr "This will replace the current document content with the version from <0>
 msgid "Timeline"
 msgstr "Timeline"
 
+#: src/components/TemplateForm.tsx
 #: src/editor/extensions/CodeBlockView.tsx
 msgid "Title"
 msgstr "Title"
@@ -5375,6 +6025,10 @@ msgid "Toggle strikethrough formatting."
 msgstr "Toggle strikethrough formatting."
 
 #: src/lib/keyboard-shortcuts.ts
+msgid "Toggle the bottom terminal panel."
+msgstr "Toggle the bottom terminal panel."
+
+#: src/lib/keyboard-shortcuts.ts
 msgid "Toggle the left file sidebar."
 msgstr "Toggle the left file sidebar."
 
@@ -5395,14 +6049,23 @@ msgid "Top linked pages"
 msgstr "Top linked pages"
 
 #: src/components/FileSidebar.tsx
-msgid "Tree View Options"
-msgstr "Tree View Options"
+msgid "Tree view options"
+msgstr "Tree view options"
 
 #: src/components/DocumentErrorBoundary.tsx
 #: src/components/InstallInClaudeDesktopDialog.tsx
 #: src/components/settings/AccountSection.tsx
+#: src/components/ShareReceiveDialog.tsx
 msgid "Try again"
 msgstr "Try again"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Turn on"
+msgstr "Turn on"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Turn on semantic search?"
+msgstr "Turn on semantic search?"
 
 #: src/editor/components/Pdf.tsx
 msgid "Two-page (even)"
@@ -5412,9 +6075,25 @@ msgstr "Two-page (even)"
 msgid "Two-page (odd)"
 msgstr "Two-page (odd)"
 
+#: src/components/TemplateForm.tsx
+msgid "Type"
+msgstr "Type"
+
+#: src/components/CommandPalette.tsx
+msgid "Type a query, then press ↵ to search your pages by meaning."
+msgstr "Type a query, then press ↵ to search your pages by meaning."
+
 #: src/editor/components/CodePreviewEditModal.tsx
 msgid "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
 msgstr "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
+
+#: src/editor/composer-mention/ComposerMentionMenu.tsx
+msgid "Type to find a doc"
+msgstr "Type to find a doc"
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Uncommitted changes"
+msgstr "Uncommitted changes"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Underline"
@@ -5489,7 +6168,6 @@ msgid "Unknown component: {unregisteredComponentName}"
 msgstr "Unknown component: {unregisteredComponentName}"
 
 #: src/components/DocumentErrorBoundary.tsx
-#: src/lib/share/clone-controller.ts
 msgid "Unknown error"
 msgstr "Unknown error"
 
@@ -5538,8 +6216,16 @@ msgid "Upload failed: {message}"
 msgstr "Upload failed: {message}"
 
 #: src/editor/components/PropPanel.tsx
-msgid "Upload file"
-msgstr "Upload file"
+msgid "Upload from computer"
+msgstr "Upload from computer"
+
+#: src/components/FileTree.tsx
+msgid "Upload may have succeeded but the sidebar is out of date — refresh to resync"
+msgstr "Upload may have succeeded but the sidebar is out of date — refresh to resync"
+
+#: src/editor/components/PropPanel.tsx
+msgid "Uploading"
+msgstr "Uploading"
 
 #: src/editor/image-upload/index.ts
 msgid "Uploading {fileName}"
@@ -5561,6 +6247,10 @@ msgstr "Upstream sync"
 msgid "Use a folder you already have."
 msgstr "Use a folder you already have."
 
+#: src/components/EmptyEditorState.tsx
+msgid "Use a starter pack"
+msgstr "Use a starter pack"
+
 #: src/components/ShareButton.tsx
 msgid "Use Cmd/Ctrl+C to copy the link below, or open OK in the desktop app."
 msgstr "Use Cmd/Ctrl+C to copy the link below, or open OK in the desktop app."
@@ -5573,17 +6263,22 @@ msgstr "Use letters, digits, <0>-</0> or <1>_</1> only."
 msgid "User"
 msgstr "User"
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside OpenKnowledge)."
+msgstr "Using the <0>OK_EMBEDDINGS_API_KEY</0> environment variable (managed outside OpenKnowledge)."
+
 #: src/components/FolderPropertiesCard.tsx
+#: src/components/PropertyPanel.tsx
 msgid "Value is required"
 msgstr "Value is required"
-
-#: src/components/EditorPane.tsx
-msgid "Version saved"
-msgstr "Version saved"
 
 #: src/components/CommandPalette.tsx
 msgid "via {viaTags}"
 msgstr "via {viaTags}"
+
+#: src/components/AssetPreview.tsx
+msgid "View as text"
+msgstr "View as text"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Visibility"
@@ -5630,6 +6325,10 @@ msgstr "Waiting for authorization"
 msgid "We couldn't check your GitHub connection."
 msgstr "We couldn't check your GitHub connection."
 
+#: src/components/ShareReceiveDialog.tsx
+msgid "We couldn't clone this repository."
+msgstr "We couldn't clone this repository."
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "We'll build <0>openknowledge.skill</0>, save it to <1>~/Downloads</1>, and open the Claude Desktop App for you."
 msgstr "We'll build <0>openknowledge.skill</0>, save it to <1>~/Downloads</1>, and open the Claude Desktop App for you."
@@ -5638,9 +6337,9 @@ msgstr "We'll build <0>openknowledge.skill</0>, save it to <1>~/Downloads</1>, a
 msgid "We'll create a repository and start syncing — no terminal needed."
 msgstr "We'll create a repository and start syncing — no terminal needed."
 
-#: src/components/HelpPopover.tsx
-msgid "Website"
-msgstr "Website"
+#: src/components/ConfigSharingInfoTooltip.tsx
+msgid "What config sharing covers"
+msgstr "What config sharing covers"
 
 #: src/components/CreatedItemsList.tsx
 msgid "What gets created"
@@ -5649,6 +6348,15 @@ msgstr "What gets created"
 #: src/components/PublishToGitHubDialog.tsx
 msgid "What is this knowledge base for?"
 msgstr "What is this knowledge base for?"
+
+#: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentMenu.tsx
+msgid "What should the AI do? (optional)"
+msgstr "What should the AI do? (optional)"
+
+#: src/components/empty-state/empty-state-copy.ts
+msgid "What would you like to create?"
+msgstr "What would you like to create?"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "When enabled, the agent opens or refreshes the preview after each edit. Disable if you manage your own preview window (OK Desktop, a browser tab on another display, etc.)."
@@ -5675,16 +6383,16 @@ msgid "Will be created as <0>{sanitizedName}</0>"
 msgstr "Will be created as <0>{sanitizedName}</0>"
 
 #: src/components/CreateProjectDialog.tsx
+msgid "Will be created at: <0>{targetPreview}</0>"
+msgstr "Will be created at: <0>{targetPreview}</0>"
+
+#: src/components/CreateProjectDialog.tsx
 msgid "Will be saved as <0>{sanitized}</0>."
 msgstr "Will be saved as <0>{sanitized}</0>."
 
 #: src/components/McpConsentDialogBody.tsx
-msgid "Will replace existing Open Knowledge entry"
-msgstr "Will replace existing Open Knowledge entry"
-
-#: src/components/empty-state/CreateView.tsx
-msgid "With AI"
-msgstr "With AI"
+msgid "Will replace existing OpenKnowledge entry"
+msgstr "Will replace existing OpenKnowledge entry"
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Word wrap"
@@ -5718,9 +6426,9 @@ msgstr "writing"
 msgid "yesterday"
 msgstr "yesterday"
 
-#: src/components/PublishToGitHubDialog.tsx
-msgid "you"
-msgstr "you"
+#: src/components/TerminalGate.tsx
+msgid "You can also manage this in Settings."
+msgstr "You can also manage this in Settings."
 
 #: src/components/AutoSyncOnboardingDialog.tsx
 msgid "You can turn this on later in <0>Settings → Sync</0>."
@@ -5755,12 +6463,12 @@ msgid "You modified <0>{filePath}</0> locally, but it was deleted upstream."
 msgstr "You modified <0>{filePath}</0> locally, but it was deleted upstream."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked ~/Desktop. Open Knowledge will index everything on your desktop."
-msgstr "You picked ~/Desktop. Open Knowledge will index everything on your desktop."
+msgid "You picked ~/Desktop. OpenKnowledge will index everything on your desktop."
+msgstr "You picked ~/Desktop. OpenKnowledge will index everything on your desktop."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
-msgstr "You picked ~/Documents. Open Knowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
+msgid "You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
+msgstr "You picked ~/Documents. OpenKnowledge will index every markdown file under it. If you only want to manage a sub-folder, choose a smaller scope."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "You picked ~/Downloads. Files there are usually transient — consider a stable folder instead."
@@ -5771,8 +6479,8 @@ msgid "You picked the filesystem root (/). Scaffolding here will scan every file
 msgstr "You picked the filesystem root (/). Scaffolding here will scan every file on this machine — make sure that's what you want."
 
 #: src/components/ConsentDialogBody.tsx
-msgid "You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files."
-msgstr "You picked your home directory. Open Knowledge will index everything in your home tree — large and may surface personal files."
+msgid "You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files."
+msgstr "You picked your home directory. OpenKnowledge will index everything in your home tree — large and may surface personal files."
 
 #: src/components/settings/SettingsDialogBody.tsx
 #: src/components/SyncStatusBadge.tsx
@@ -5787,9 +6495,17 @@ msgstr "Your GitHub token is missing required scopes. Try signing in again."
 msgid "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
 msgstr "Your knowledge base is now on GitHub at <0>{ownerLogin}/{repoName}</0>."
 
+#: src/components/settings/EmbeddingsKeySection.tsx
+msgid "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
+msgstr "Your OpenAI API key, used only to create embeddings of your content for semantic search. Stored once for this machine in <0>~/.ok/secrets.yml</0> (readable only by your user account) and shared across all projects. Turn the feature on per project in This project → Search."
+
 #: src/components/CloneDialog.tsx
 msgid "Your repositories"
 msgstr "Your repositories"
+
+#: src/components/settings/SearchSection.tsx
+msgid "Your search queries and the full text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
+msgstr "Your search queries and the full text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Your share link is ready below."

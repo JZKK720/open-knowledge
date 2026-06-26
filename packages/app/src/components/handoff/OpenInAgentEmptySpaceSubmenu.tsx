@@ -1,23 +1,27 @@
 import {
-  composeFilePrompt,
   type HandoffOutcome,
   type HandoffTarget,
   type InstallState,
+  TERMINAL_CLIS,
 } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
-import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
-import { dispatchClaudeWebFallback, TargetIcon } from './OpenInAgentMenuItem';
+import { TargetIcon } from './OpenInAgentMenuItem';
+import { useTerminalLaunch } from './TerminalLaunchContext';
+import { cliIconTargetId, VISIBLE_CLIS } from './terminal-cli-display';
 import type { HandoffDispatchInput } from './useHandoffDispatch';
 
 /** Status hint shown alongside per-target rows when the input is not ready
@@ -41,20 +45,14 @@ interface OpenInAgentEmptySpaceSubmenuProps {
     target: HandoffTarget,
     input: HandoffDispatchInput,
   ) => Promise<HandoffOutcome>;
-  /** Show the "Open in claude.ai →" web-fallback row when Claude Desktop
-   *  isn't installed. Default `true` matches the file-surface convention;
-   *  folder + empty-space surfaces pass `false` — the claude.ai web URL has
-   *  no companion `folder=` param to ground the cloud agent. */
-  readonly webFallbackVisible?: boolean;
 }
 
 export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenuProps): ReactNode {
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
-  const { merged } = useConfigContext();
-  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
+  const terminalLaunch = useTerminalLaunch();
   if (isEmbedded) return null;
-  const { input, installStates, dispatch, webFallbackVisible = true } = props;
+  const { input, installStates, dispatch } = props;
   const inputMissing = input === null;
   const hint = emptySpaceRowHint(inputMissing);
 
@@ -62,20 +60,10 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
     (target) => installStates[target.id]?.installed === true,
   );
 
-  const claudeInstalled = installStates['claude-code']?.installed === true;
+  const showDesktopSection = installedTargets.length > 0;
+  const showTerminalSection = terminalLaunch !== null;
 
-  const prompt =
-    input !== null && input.docContext !== null
-      ? composeFilePrompt(input.docContext.relativePath, autoOpen)
-      : '';
-
-  const handleClaudeWebFallback = (): void => {
-    if (input === null) return;
-    void dispatchClaudeWebFallback(prompt);
-  };
-
-  const fallbackRowVisible = webFallbackVisible && !claudeInstalled;
-  if (installedTargets.length === 0 && !fallbackRowVisible) {
+  if (!showDesktopSection && !showTerminalSection) {
     return null;
   }
 
@@ -86,48 +74,79 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
         <Trans>Open with AI</Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent>
-        {installedTargets.map((target) => {
-          const enabled = !inputMissing;
-          const { displayName } = target;
-          const accessibleLabel = hint
-            ? t`Open with AI ${displayName}, ${hint}`
-            : t`Open with AI ${displayName}`;
-          return (
-            <ContextMenuItem
-              key={target.id}
-              disabled={!enabled}
-              onSelect={() => {
-                if (!input) return;
-                void dispatch(target.id, input);
-              }}
-              data-testid={`empty-space-open-in-${target.id}`}
-              aria-label={accessibleLabel}
-            >
-              <TargetIcon id={target.id} aria-hidden="true" />
-              <span className="flex-1">{target.displayName}</span>
-              {hint ? (
-                <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-                  {hint}
-                </span>
-              ) : null}
-            </ContextMenuItem>
-          );
-        })}
-        {webFallbackVisible && !claudeInstalled ? (
-          <ContextMenuItem
-            onSelect={handleClaudeWebFallback}
-            disabled={inputMissing}
-            data-testid="empty-space-open-in-claude-web-fallback"
-            aria-label={t`Open in claude.ai, opens in browser with prompt pre-filled`}
-          >
-            <ExternalLink className="size-4" aria-hidden="true" />
-            <span className="flex-1">
-              <Trans>Open in claude.ai →</Trans>
-            </span>
-            <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-              <Trans>opens in browser</Trans>
-            </span>
-          </ContextMenuItem>
+        {showDesktopSection ? (
+          <ContextMenuGroup aria-label={t`Desktop`}>
+            <ContextMenuLabel>
+              <Trans>Desktop</Trans>
+            </ContextMenuLabel>
+            {installedTargets.map((target) => {
+              const enabled = !inputMissing;
+              const { displayName } = target;
+              const accessibleLabel = hint
+                ? t`Open with AI ${displayName}, ${hint}`
+                : t`Open with AI ${displayName}`;
+              return (
+                <ContextMenuItem
+                  key={target.id}
+                  disabled={!enabled}
+                  onSelect={() => {
+                    if (!input) return;
+                    void dispatch(target.id, input);
+                  }}
+                  data-testid={`empty-space-open-in-${target.id}`}
+                  aria-label={accessibleLabel}
+                >
+                  <TargetIcon id={target.id} aria-hidden="true" />
+                  <span className="flex-1">{target.displayName}</span>
+                  {hint ? (
+                    <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
+                      {hint}
+                    </span>
+                  ) : null}
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuGroup>
+        ) : null}
+        {showTerminalSection ? (
+          <>
+            {/* Separator only when a Desktop section sits above this one. */}
+            {showDesktopSection ? <ContextMenuSeparator /> : null}
+            <ContextMenuGroup aria-label={t`Terminal`}>
+              <ContextMenuLabel>
+                <Trans>Terminal</Trans>
+              </ContextMenuLabel>
+              {/* Launches `claude` / `codex` / `cursor-agent` in the docked
+                  terminal with the project-scope prompt. Visible text is the
+                  brand name; the accessible name is "<Brand> CLI" (plus the "No
+                  workspace" hint when input is missing), so it contains the
+                  visible label and AT users can tell it apart from a Desktop row
+                  (WCAG 2.5.3 — name contains visible label). */}
+              {VISIBLE_CLIS.map((cli) => {
+                const { displayName } = TERMINAL_CLIS[cli];
+                return (
+                  <ContextMenuItem
+                    key={cli}
+                    onSelect={() => {
+                      if (input === null) return;
+                      terminalLaunch.launchInTerminal(input, cli);
+                    }}
+                    disabled={inputMissing}
+                    data-testid={`empty-space-open-in-terminal-${cli}`}
+                    aria-label={hint ? t`${displayName} CLI, ${hint}` : t`${displayName} CLI`}
+                  >
+                    <TargetIcon id={cliIconTargetId(cli)} aria-hidden="true" />
+                    <span className="flex-1">{displayName}</span>
+                    {hint ? (
+                      <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
+                        {hint}
+                      </span>
+                    ) : null}
+                  </ContextMenuItem>
+                );
+              })}
+            </ContextMenuGroup>
+          </>
         ) : null}
       </ContextMenuSubContent>
     </ContextMenuSub>

@@ -51,9 +51,7 @@ function createCollector(): PerfCollector {
 export function getCollector(): PerfCollector | undefined {
   if (import.meta.env?.PROD) return undefined;
   const g = globalThis as unknown as PerfGlobal;
-  if (!g[GLOBAL_KEY]) {
-    g[GLOBAL_KEY] = createCollector();
-  }
+  g[GLOBAL_KEY] ||= createCollector();
   return g[GLOBAL_KEY];
 }
 

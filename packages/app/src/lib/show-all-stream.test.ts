@@ -103,6 +103,32 @@ describe('consumeShowAllStream', () => {
     expect(entries.map((e) => e.docName)).toEqual(['alpha', 'beta']);
   });
 
+  test('a stream that closes without a complete line returns the parsed prefix, untruncated', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(docLine('alpha') + docLine('beta')));
+        controller.close();
+      },
+    });
+    const res = new Response(stream, { headers: { 'content-type': 'application/x-ndjson' } });
+    const { entries, truncated } = await consumeShowAllStream(res);
+    expect(entries.map((e) => e.docName)).toEqual(['alpha', 'beta']);
+    expect(truncated).toBe(false);
+  });
+
+  test('a transport error mid-stream rejects so the caller can surface unreachable-server', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(docLine('alpha')));
+        controller.error(new TypeError('connection reset'));
+      },
+    });
+    const res = new Response(stream, { headers: { 'content-type': 'application/x-ndjson' } });
+    await expect(consumeShowAllStream(res)).rejects.toThrow('connection reset');
+  });
+
   test('drops a schema-divergent entry line', async () => {
     const bad = `${JSON.stringify({ kind: 'document', docName: 'x', assetExt: 'png' })}\n`;
     const body = bad + docLine('beta') + completeLine(false, 1);

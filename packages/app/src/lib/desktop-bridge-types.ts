@@ -6,6 +6,7 @@ import type {
   LocalOpOkInitResponse,
   OkFolderState,
   RecentProjectEntry,
+  TerminalCli,
 } from '@inkeep/open-knowledge-core';
 
 export type { OkFolderState, RecentProjectEntry };
@@ -50,10 +51,12 @@ export interface OkSeedError {
 export type OkPackId =
   | 'knowledge-base'
   | 'software-lifecycle'
+  | 'codebase-wiki'
   | 'plain-notes'
   | 'worldbuilding'
   | 'writing-pipeline'
-  | 'entity-vault';
+  | 'entity-vault'
+  | 'okf';
 
 interface OkSeedPlanOptions {
   rootDir?: string;
@@ -113,6 +116,9 @@ export interface OkDesktopConfig {
   readonly projectPath: string;
   readonly projectName: string;
   readonly mode: OkDesktopMode;
+  readonly e2eSmoke: boolean;
+  readonly singleFile: boolean;
+  readonly initialDoc: string | null;
 }
 
 type OkMenuAction =
@@ -121,6 +127,7 @@ type OkMenuAction =
   | 'new-project'
   | 'rename'
   | 'delete'
+  | 'close-active-tab-or-window'
   | 'toggle-sidebar'
   | 'toggle-source'
   | 'save-version'
@@ -131,15 +138,16 @@ type OkMenuAction =
   | 'duplicate'
   | 'move-to-trash'
   | 'reveal-in-finder'
-  | 'open-in-terminal'
   | 'send-to-ai'
   | 'copy-full-path'
   | 'copy-relative-path'
   | 'toggle-show-hidden-files'
-  | 'toggle-show-all-files'
   | 'expand-all-tree'
   | 'collapse-all-tree'
-  | 'toggle-doc-panel';
+  | 'toggle-doc-panel'
+  | 'toggle-terminal'
+  | 'new-terminal'
+  | 'kill-terminal';
 
 type OkUnsubscribe = () => void;
 
@@ -178,6 +186,16 @@ export interface HeadBranchInfo {
 
 interface OkUpdateDownloadedInfo {
   readonly version: string;
+}
+
+interface OkUpdateRelaunchingInfo {
+  readonly version: string;
+}
+
+interface OkUpdateRelaunchFailedInfo {
+  readonly version: string;
+  readonly message?: string;
+  readonly downloadUrl?: string;
 }
 
 interface OkWhatsNewInfo {
@@ -369,11 +387,12 @@ type OkEditorActiveTargetSnapshot =
 
 interface OkEditorViewMenuStateSnapshot {
   readonly showHiddenFiles: boolean;
-  readonly showAllFiles: boolean;
   readonly canExpandAll: boolean;
   readonly canCollapseAll: boolean;
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
+  readonly terminalVisible?: boolean;
+  readonly terminalLive?: boolean;
 }
 
 interface OkKeyringSmokeResult {
@@ -414,11 +433,52 @@ export type OkServerRestartOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: 'eperm' | 'other' };
 
+export type OkPtyCreateResult =
+  | { readonly ok: true; readonly ptyId: string }
+  | { readonly ok: false; readonly reason: 'no-project' | 'not-consented' };
+
+export interface OkPtyData {
+  readonly ptyId: string;
+  readonly data: string;
+}
+
+export interface OkPtyExit {
+  readonly ptyId: string;
+  readonly exitCode: number;
+  readonly signal: number | null;
+  readonly error?: string;
+}
+
+export interface ClaudeReadiness {
+  readonly claude: 'present' | 'not-found' | 'unknown';
+  readonly mcp: 'wired' | 'needs-rewire';
+  /** True when the project's own `open-knowledge` `.mcp.json` entry is verified
+   *  to be OK's canonical managed server (cli `isOwnManagedEntry`), so the docked
+   *  terminal may pre-approve it on Claude launch instead of re-showing Claude's
+   *  trust prompt. False/absent for a foreign, tampered, or missing entry (the
+   *  supply-chain risk in a shared/cloned project) — launch bare and let Claude
+   *  prompt. Computed per-project by the desktop preflight; absent means false
+   *  (fail-safe). */
+  readonly mcpPreApprovable?: boolean;
+  /** Set only on a `rewire`-action result when re-arming MCP wiring threw, so
+   *  the renderer can surface the failure instead of the button silently no-op'ing. */
+  readonly rewireError?: string;
+}
+
+/** On-PATH readiness for a non-Claude agent CLI (codex / cursor-agent) in the
+ *  docked terminal. Canonical shape in `desktop/src/shared/bridge-contract.ts`;
+ *  mirrored verbatim here (drift-tested). */
+export interface CliReadiness {
+  readonly onPath: 'present' | 'not-found' | 'unknown';
+}
+
 export interface OkDesktopBridge {
   readonly config: OkDesktopConfig;
   onProjectSwitched(cb: (next: OkDesktopConfig) => void): OkUnsubscribe;
   onMenuAction(cb: (action: OkMenuAction) => void): OkUnsubscribe;
   onUpdateDownloaded(cb: (info: OkUpdateDownloadedInfo) => void): OkUnsubscribe;
+  onUpdateRelaunching(cb: (info: OkUpdateRelaunchingInfo) => void): OkUnsubscribe;
+  onUpdateRelaunchFailed(cb: (info: OkUpdateRelaunchFailedInfo) => void): OkUnsubscribe;
   onWhatsNew(cb: (info: OkWhatsNewInfo) => void): OkUnsubscribe;
   onWhatsNewDismissed(cb: (info: { readonly version: string }) => void): OkUnsubscribe;
   onUpdateStuckHint(cb: (info: OkUpdateStuckHintInfo) => void): OkUnsubscribe;
@@ -490,11 +550,6 @@ export interface OkDesktopBridge {
           detail?: string;
         }
     >;
-    openInTerminal(
-      dirAbsPath: string,
-    ): Promise<
-      { ok: true } | { ok: false; reason: 'not-found' | 'spawn-error' | 'timeout' | 'path-escape' }
-    >;
   };
   clipboard: {
     writeText(text: string): Promise<void>;
@@ -510,6 +565,11 @@ export interface OkDesktopBridge {
       entryPoint: OkProjectEntryPoint;
       pendingDeepLinkTarget?: { kind: 'doc' | 'folder'; path: string };
       pendingBranch?: string | null;
+      pendingShareBranchSwitch?: {
+        share: OkSharePayloadFields;
+        projectPath: string;
+        currentBranch: string | null;
+      };
     }): Promise<void>;
     createNew(args: {
       parent: string;
@@ -660,6 +720,20 @@ export interface OkDesktopBridge {
     expandAll(cb: () => void): OkUnsubscribe;
     collapseAll(cb: () => void): OkUnsubscribe;
   };
+
+  terminal: {
+    create(opts: { cols: number; rows: number }): Promise<OkPtyCreateResult>;
+    input(ptyId: string, data: string): void;
+    resize(ptyId: string, cols: number, rows: number): void;
+    kill(ptyId: string): Promise<void>;
+    drain(ptyId: string, bytes: number): void;
+    onData(cb: (msg: OkPtyData) => void): OkUnsubscribe;
+    onExit(cb: (msg: OkPtyExit) => void): OkUnsubscribe;
+    claudePreflight(): Promise<ClaudeReadiness>;
+    cliPreflight(cli: TerminalCli): Promise<CliReadiness>;
+    rewireClaudeMcp(): Promise<ClaudeReadiness>;
+  };
+
   readonly platform: 'darwin' | 'win32' | 'linux';
   readonly appVersion: string;
   debug?: {

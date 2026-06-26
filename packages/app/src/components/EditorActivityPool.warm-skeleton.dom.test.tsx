@@ -10,6 +10,7 @@ import {
   type RenameSnapshot,
   storeRenameSnapshot,
 } from '@/editor/editor-cache';
+import { expectVisualClassTokens } from '@/test-utils/visual-contract';
 
 function WarmContentFallbackReplica({ html }: { html: string }) {
   return (
@@ -67,9 +68,7 @@ describe('WarmContentFallback DOM geometry', () => {
     const { container } = render(<WarmContentFallbackReplica html="<p>hello</p>" />);
     const outer = container.firstElementChild as HTMLElement;
     expect(outer.tagName).toBe('DIV');
-    expect(outer.className).toContain('tiptap-editor');
-    expect(outer.className).toContain('h-full');
-    expect(outer.className).toContain('pointer-events-none');
+    expectVisualClassTokens(outer.className, ['tiptap-editor', 'h-full', 'pointer-events-none']);
     expect(outer.getAttribute('aria-hidden')).toBe('true');
   });
 
@@ -78,9 +77,11 @@ describe('WarmContentFallback DOM geometry', () => {
     const outer = container.firstElementChild as HTMLElement;
     const inner = outer.firstElementChild as HTMLElement;
     expect(inner.tagName).toBe('DIV');
-    expect(inner.className).toContain('tiptap');
-    expect(inner.className).toContain('ProseMirror');
-    expect(inner.className).toContain('tiptap-editor-portal-content');
+    expectVisualClassTokens(inner.className, [
+      'tiptap',
+      'ProseMirror',
+      'tiptap-editor-portal-content',
+    ]);
   });
 
   test('inner div renders provided html as child content', () => {

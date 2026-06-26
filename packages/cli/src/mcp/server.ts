@@ -1,12 +1,13 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { realpathSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { OK_PROJECT_MARKER } from '@inkeep/open-knowledge-core';
 import { type KeepaliveHandle, startKeepalive } from '@inkeep/open-knowledge-core/keepalive';
 import {
   type AgentIdentity,
-  buildInstructions,
   type Config,
   getLocalDir,
   installPrettyZodErrors,
@@ -32,6 +33,19 @@ import { parseSpawnTimeoutEnv, resolveMcpHttpUrl, resolveMcpKeepaliveWsUrl } fro
 
 const BUNDLE_IDENTITY_ANCHOR = fileURLToPath(import.meta.url);
 
+const execFileAsync = promisify(execFile);
+
+export async function countWorktrees(dir: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', dir, 'worktree', 'list', '--porcelain'], {
+      timeout: 2000,
+    });
+    return stdout.split('\n').filter((line) => line.startsWith('worktree ')).length;
+  } catch {
+    return 0;
+  }
+}
+
 interface StartGlobalMcpServerOptions {
   startupCwd: string;
   startupConfig: Config;
@@ -50,7 +64,7 @@ export function findProjectDir(startCwd: string): string {
     const parent = dirname(dir);
     if (parent === dir) {
       throw new Error(
-        `No Open Knowledge project found at or above ${startCwd}. Pass an explicit \`cwd\` argument that points inside an OK project (a directory with a \`${OK_PROJECT_MARKER}\`).`,
+        `No OpenKnowledge project found at or above ${startCwd}. Pass an explicit \`cwd\` argument that points inside an OK project (a directory with a \`${OK_PROJECT_MARKER}\`).`,
       );
     }
     dir = parent;
@@ -90,17 +104,43 @@ export async function tryListRootsFallback(opts: {
   return fsPath;
 }
 
-export async function resolveCwdWithFallback(
-  explicit: string | undefined,
-  fallback: () => Promise<string | undefined>,
-): Promise<string> {
-  if (explicit !== undefined) return findProjectDir(explicit);
-  const fromRoots = await fallback();
-  if (fromRoots !== undefined) return findProjectDir(fromRoots);
-  throw new Error(
-    '`cwd` is required for tool calls against the global MCP server. Pass an absolute path inside an Open Knowledge project, or have the MCP client advertise a single root.',
-  );
+export interface StickyProjectResolution {
+  /** Resolved OK project root, or `undefined` when nothing resolves. The
+   *  caller decides whether `undefined` throws (`resolveCwd`) or yields no
+   *  server URL (`resolveServerUrlForCwd`). */
+  projectDir: string | undefined;
+  /** True only when resolution fell through to the MCP client's single-root
+   *  guess — the one rung where a silent wrong-project is possible, so the
+   *  only rung the worktree-ambiguity nudge fires on. */
+  viaRootGuess: boolean;
+  /** Project root to remember as the new sticky anchor: set by an explicit
+   *  `cwd` (and unchanged on sticky reuse); a root guess never sticks. */
+  nextSticky: string | undefined;
 }
+
+export async function resolveStickyProjectDir(
+  explicit: string | undefined,
+  sticky: string | undefined,
+  rootsFallback: () => Promise<string | undefined>,
+  findProject: (startCwd: string) => string = findProjectDir,
+): Promise<StickyProjectResolution> {
+  if (explicit !== undefined) {
+    const pd = findProject(explicit);
+    return { projectDir: pd, viaRootGuess: false, nextSticky: pd };
+  }
+  if (sticky !== undefined) {
+    const pd = findProject(sticky);
+    return { projectDir: pd, viaRootGuess: false, nextSticky: pd };
+  }
+  const fromRoots = await rootsFallback();
+  if (fromRoots === undefined) {
+    return { projectDir: undefined, viaRootGuess: false, nextSticky: undefined };
+  }
+  return { projectDir: findProject(fromRoots), viaRootGuess: true, nextSticky: undefined };
+}
+
+const CWD_REQUIRED_MESSAGE =
+  '`cwd` is required for tool calls against the global MCP server. Pass an absolute path inside an OpenKnowledge project, or have the MCP client advertise a single root.';
 
 export async function startGlobalMcpServer(
   opts: StartGlobalMcpServerOptions,
@@ -115,15 +155,10 @@ export async function startGlobalMcpServer(
     startupConfig: opts.startupConfig,
   });
 
-  const server = new McpServer(
-    {
-      name: MCP_SERVER_NAME,
-      version: RUNTIME_VERSION,
-    },
-    {
-      instructions: buildInstructions({ dir: '.' }),
-    },
-  );
+  const server = new McpServer({
+    name: MCP_SERVER_NAME,
+    version: RUNTIME_VERSION,
+  });
   installPrettyZodErrors(server);
 
   const connectionId = randomUUID();
@@ -159,18 +194,42 @@ export async function startGlobalMcpServer(
       log: (msg) => stderr.write(`[mcp] ${msg}\n`),
     });
 
-  const resolveCwd = (explicit?: string): Promise<string> =>
-    resolveCwdWithFallback(explicit, rootsFallback);
+  let stickyProjectDir: string | undefined;
+  let warnedWorktreeAmbiguity = false;
+
+  const maybeWarnWorktreeAmbiguity = async (projectDir: string): Promise<void> => {
+    if (warnedWorktreeAmbiguity) return;
+    warnedWorktreeAmbiguity = true;
+    const count = await countWorktrees(projectDir);
+    if (count <= 1) {
+      warnedWorktreeAmbiguity = false;
+      return;
+    }
+    const msg =
+      `Routed to ${projectDir} from the MCP client's single advertised root, but this repo ` +
+      `has ${count} git worktrees. If you are working in a worktree, pass its path as \`cwd\` on ` +
+      `OK tool calls once — it sticks for the session, so reads, writes, and the preview all ` +
+      `target that worktree instead of this checkout.`;
+    try {
+      stderr.write(`[mcp] ${msg}\n`);
+      await server.server.sendLoggingMessage({ level: 'warning', data: msg });
+    } catch {}
+  };
+
+  const resolveCwd = async (explicit?: string): Promise<string> => {
+    const r = await resolveStickyProjectDir(explicit, stickyProjectDir, rootsFallback);
+    stickyProjectDir = r.nextSticky ?? stickyProjectDir;
+    if (r.projectDir === undefined) throw new Error(CWD_REQUIRED_MESSAGE);
+    if (r.viaRootGuess) void maybeWarnWorktreeAmbiguity(r.projectDir);
+    return r.projectDir;
+  };
 
   const resolveServerUrlForCwd = async (cwd?: string): Promise<string | undefined> => {
-    let projectDir: string;
-    if (cwd === undefined) {
-      const fromRoots = await rootsFallback();
-      if (fromRoots === undefined) return undefined;
-      projectDir = findProjectDir(fromRoots);
-    } else {
-      projectDir = findProjectDir(cwd);
-    }
+    const r = await resolveStickyProjectDir(cwd, stickyProjectDir, rootsFallback);
+    stickyProjectDir = r.nextSticky ?? stickyProjectDir;
+    if (r.projectDir === undefined) return undefined;
+    if (r.viaRootGuess) void maybeWarnWorktreeAmbiguity(r.projectDir);
+    const projectDir = r.projectDir;
     const config = await resolveConfigForCwd(projectDir);
     const mcpUrl = await resolveMcpHttpUrl({
       lockDir: getLocalDir(projectDir),

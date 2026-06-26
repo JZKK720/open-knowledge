@@ -16,21 +16,21 @@
     "knip": "turbo run build --filter=@inkeep/open-knowledge-server --filter=@inkeep/open-knowledge-core --output-logs=errors-only && knip",
     "notices": "bun scripts/generate-third-party-notices.mjs",
     "schema:dump": "bun packages/core/scripts/dump-schema.ts",
-    "md-audit:measure-comment-discipline": "bun run --cwd md-audit measure-comment-discipline",
     "build": "turbo run build",
     "build:desktop": "turbo run build:desktop",
     "build:desktop:dir": "turbo run build:desktop:dir",
     "check:desktop": "turbo run lint typecheck test --filter=@inkeep/open-knowledge-desktop",
     "check:fast": "bun run typecheck",
-    "check:drift": "bash scripts/check-husky-prepare-guard.sh && bash scripts/check-knip-clean.sh && bash scripts/check-notices-clean.sh && bash scripts/check-schema-snapshot-clean.sh && bash scripts/check-instructions-drift.sh && bash scripts/check-i18n-drift.sh && bash scripts/check-no-major-changeset.sh && bun test scripts/",
+    "check:doc-links": "bun run --cwd docs validate-link",
+    "check:drift": "bash scripts/check-husky-prepare-guard.sh && bash scripts/check-knip-clean.sh && bash scripts/check-notices-clean.sh && bash scripts/check-schema-snapshot-clean.sh && bash scripts/check-i18n-drift.sh && bash scripts/check-no-major-changeset.sh && bun test scripts/",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "bun lint:biome && bun lint:oxlint",
     "lint:biome": "biome check packages docs *.json *.jsonc *.ts --error-on-warnings",
     "lint:oxlint": "oxlint --max-warnings 0 .",
     "format": "bun run lint:biome --write --unsafe",
-    "check": "bun run lint && turbo run typecheck test",
-    "check:full:parallel": "bash scripts/check-husky-prepare-guard.sh && bash scripts/check-knip-clean.sh && bash scripts/check-notices-clean.sh && bash scripts/check-schema-snapshot-clean.sh && bash scripts/check-instructions-drift.sh && bash scripts/check-i18n-drift.sh && bash scripts/check-no-major-changeset.sh && bun run lint && bun test scripts/ && bun test --cwd .github/scripts && turbo run typecheck test test:dom test:integration test:conversion test:fidelity test:perf:regression:unit test:health:unit test:health test:e2e test:visual test:perf test:a11y --concurrency=100% --output-logs=errors-only",
+    "check": "bun run lint && turbo run build typecheck test",
+    "check:full:parallel": "bash scripts/check-husky-prepare-guard.sh && bash scripts/check-knip-clean.sh && bash scripts/check-notices-clean.sh && bash scripts/check-schema-snapshot-clean.sh && bash scripts/check-i18n-drift.sh && bash scripts/check-no-major-changeset.sh && bun run lint && bun run check:doc-links && bun test scripts/ && bun test --cwd .github/scripts && turbo run build typecheck test test:dom test:integration test:conversion test:perf:regression:unit test:health:unit test:health test:e2e test:visual test:perf test:a11y --concurrency=100% --output-logs=errors-only",
     "tier1": "bun run check",
     "tier2": "bun run tier1 && turbo run test:perf:regression:unit test:health:unit test:health test:e2e",
     "tier3": "STRESS_FIDELITY=1 bun run tier2",
@@ -65,6 +65,9 @@
     "oxlint-tsgolint": "^0.23.0",
     "turbo": "^2.7.0"
   },
+  "overrides": {
+    "mdast-util-mdx-jsx": "3.2.0"
+  },
   "patchedDependencies": {
     "@handlewithcare/remark-prosemirror@0.1.5": "patches/@handlewithcare%2Fremark-prosemirror@0.1.5.patch",
     "y-prosemirror@1.3.7": "patches/y-prosemirror@1.3.7.patch",
@@ -72,6 +75,6 @@
     "y-indexeddb@9.0.12": "patches/y-indexeddb@9.0.12.patch",
     "react-medium-image-zoom@5.4.3": "patches/react-medium-image-zoom@5.4.3.patch",
     "@tiptap/extension-drag-handle@3.22.3": "patches/@tiptap%2Fextension-drag-handle@3.22.3.patch",
-    "@pierre/trees@1.0.0-beta.3": "patches/@pierre%2Ftrees@1.0.0-beta.3.patch"
+    "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch"
   }
 }

@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 
-export const HELPER_BUNDLE_NAME = 'Open Knowledge Server.app';
-export const HELPER_EXECUTABLE_NAME = 'Open Knowledge Helper';
+export const HELPER_BUNDLE_NAME = 'OpenKnowledge Server.app';
+export const HELPER_EXECUTABLE_NAME = 'OpenKnowledge Helper';
 
 export function resolveHelperBundleBinary(parentExecPath: string): string {
   return join(

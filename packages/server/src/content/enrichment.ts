@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
-import { OK_DIR } from '@inkeep/open-knowledge-core';
+import { OK_DIR, stripFrontmatter, unwrapFrontmatterFences } from '@inkeep/open-knowledge-core';
 import { parse as parseYaml } from 'yaml';
 import { resolveWithinRoot } from '../mcp/tools/path-safety.ts';
 import { httpGet } from '../mcp/tools/shared.ts';
@@ -10,12 +10,11 @@ import { type GitCommit, type ProjectHistorySource, readProjectGitLog } from './
 import { type HistorySource, readShadowLog, type ShadowCommit } from './shadow-log.ts';
 import { resolveTemplatesAvailable, type TemplateEntry } from './templates-resolver.ts';
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
-  const match = content.match(FRONTMATTER_RE);
-  if (!match) return null;
+  const { frontmatter } = stripFrontmatter(content);
+  if (frontmatter === '') return null;
   try {
-    const parsed = parseYaml(match[1]);
+    const parsed = parseYaml(unwrapFrontmatterFences(frontmatter));
     if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }

@@ -1,4 +1,5 @@
 import { Mark } from '@tiptap/core';
+import { decodeInlineWhitespaceNumericCharRefRun } from '../markdown/whitespace-char-ref.ts';
 
 export const SourceLiteralMark = Mark.create({
   name: 'sourceLiteral',
@@ -28,7 +29,8 @@ export function isValidSourceLiteralRaw(sourceRaw: unknown, visibleText: unknown
   const normalizedRaw = sourceRaw.replaceAll(' ', ' ');
   const normalizedVisible = visibleText.replaceAll(' ', ' ');
   if (normalizedRaw === normalizedVisible) return true;
-  return stripMarkdownBackslashEscapes(normalizedRaw) === normalizedVisible;
+  if (stripMarkdownBackslashEscapes(normalizedRaw) === normalizedVisible) return true;
+  return decodeInlineWhitespaceNumericCharRefRun(normalizedRaw) === normalizedVisible;
 }
 
 function stripMarkdownBackslashEscapes(s: string): string {

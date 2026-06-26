@@ -47,18 +47,19 @@ describe('getOkArtifactPaths', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('returns the canonical nine-path artifact set when no config.yml exists', () => {
+  it('returns the canonical ten-path artifact set when no config.yml exists', () => {
     const paths = getOkArtifactPaths(dir);
     expect(paths).toContain(`${OK_DIR}/`);
     expect(paths).toContain('.okignore');
     expect(paths).toContain('.mcp.json');
     expect(paths).toContain('.cursor/mcp.json');
     expect(paths).toContain('.codex/config.toml');
+    expect(paths).toContain('opencode.json');
     expect(paths).toContain('.claude/skills/open-knowledge/');
     expect(paths).toContain('.cursor/skills/open-knowledge/');
     expect(paths).toContain('.agents/skills/open-knowledge/');
     expect(paths).toContain('.claude/launch.json');
-    expect(paths).toHaveLength(9);
+    expect(paths).toHaveLength(10);
   });
 
   it('preserves a stable order so `ok config-sharing status` and unit-test snapshots are deterministic', () => {
@@ -76,7 +77,7 @@ describe('getOkArtifactPaths', () => {
     expect(paths).not.toContain('docs/.ok/');
     expect(paths).not.toContain('docs/.okignore');
     expect(paths.some((p) => p.includes('**'))).toBe(false);
-    expect(paths).toHaveLength(9);
+    expect(paths).toHaveLength(10);
   });
 });
 
@@ -210,7 +211,7 @@ describe('addOkPathsToGitExclude', () => {
     expect(result.kind).toBe('refused-tracked');
     if (result.kind !== 'refused-tracked') throw new Error('unreachable');
     expect(result.tracked).toEqual(['.mcp.json']);
-    expect(result.remediation).toContain('Cannot switch Open Knowledge to local-only');
+    expect(result.remediation).toContain('Cannot switch OpenKnowledge to local-only');
     expect(result.remediation).toContain('git rm --cached .mcp.json');
     expect(readExclude(dir)).toBe('');
   });

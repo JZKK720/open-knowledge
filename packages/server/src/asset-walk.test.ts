@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe('seedBasenameIndex — initial walk (no filter)', () => {
-  test('admits asset extensions; ignores markdown and unknown', () => {
+  test('admits asset extensions; ignores markdown and unknown', async () => {
     write('docs/meeting.md');
     write('docs/photo.png');
     write('docs/diagram.svg');
@@ -34,7 +34,7 @@ describe('seedBasenameIndex — initial walk (no filter)', () => {
     write('archive/old.png');
 
     const idx = createBasenameIndex();
-    seedBasenameIndex({ contentDir, basenameIndex: idx });
+    await seedBasenameIndex({ contentDir, basenameIndex: idx });
 
     expect(idx.resolveEmbed('photo.png', 'docs/meeting.md')).toBe('docs/photo.png');
     expect(idx.resolveEmbed('diagram.svg', 'docs/meeting.md')).toBe('docs/diagram.svg');
@@ -43,15 +43,27 @@ describe('seedBasenameIndex — initial walk (no filter)', () => {
     expect(idx.resolveEmbed('arbitrary.xyz', 'docs/meeting.md')).toBeNull();
   });
 
-  test('empty contentDir produces empty index without throwing', () => {
+  test('admits .base and .canvas files into the basename index', async () => {
+    write('vault/note.md');
+    write('vault/Characters.base', 'fields:\n  - name\n');
+    write('vault/Board.canvas', '{"nodes":[],"edges":[]}\n');
+
     const idx = createBasenameIndex();
-    seedBasenameIndex({ contentDir, basenameIndex: idx });
+    await seedBasenameIndex({ contentDir, basenameIndex: idx });
+
+    expect(idx.resolveEmbed('Characters.base', 'vault/note.md')).toBe('vault/Characters.base');
+    expect(idx.resolveEmbed('Board.canvas', 'vault/note.md')).toBe('vault/Board.canvas');
+  });
+
+  test('empty contentDir produces empty index without throwing', async () => {
+    const idx = createBasenameIndex();
+    await seedBasenameIndex({ contentDir, basenameIndex: idx });
     expect(idx.size()).toBe(0);
   });
 });
 
 describe('seedBasenameIndex — initial walk (with ContentFilter sibling-asset admission)', () => {
-  test('admits assets only in markdown-neighbored directories', () => {
+  test('admits assets only in markdown-neighbored directories', async () => {
     write('docs/meeting.md');
     write('docs/photo.png');
     write('no-md-here/orphan.png'); // no sibling .md → excluded
@@ -62,13 +74,13 @@ describe('seedBasenameIndex — initial walk (with ContentFilter sibling-asset a
       contentDir,
     });
     contentFilter.incrementMdDir('docs');
-    seedBasenameIndex({ contentDir, contentFilter, basenameIndex: idx });
+    await seedBasenameIndex({ contentDir, contentFilter, basenameIndex: idx });
 
     expect(idx.resolveEmbed('photo.png', 'docs/meeting.md')).toBe('docs/photo.png');
     expect(idx.resolveEmbed('orphan.png', 'docs/meeting.md')).toBeNull();
   });
 
-  test('respects .okignore exclusion patterns', () => {
+  test('respects .okignore exclusion patterns', async () => {
     write('docs/meeting.md');
     write('docs/photo.png');
     write('secret/hidden.png');
@@ -80,7 +92,7 @@ describe('seedBasenameIndex — initial walk (with ContentFilter sibling-asset a
       contentDir,
     });
     contentFilter.incrementMdDir('docs');
-    seedBasenameIndex({ contentDir, contentFilter, basenameIndex: idx });
+    await seedBasenameIndex({ contentDir, contentFilter, basenameIndex: idx });
 
     expect(idx.resolveEmbed('photo.png', 'docs/meeting.md')).toBe('docs/photo.png');
     expect(idx.resolveEmbed('hidden.png', 'docs/meeting.md')).toBeNull();
@@ -88,7 +100,7 @@ describe('seedBasenameIndex — initial walk (with ContentFilter sibling-asset a
 });
 
 describe('seedBasenameIndex — symlink safety', () => {
-  test('follows symlinks inside contentDir but rejects escapes', () => {
+  test('follows symlinks inside contentDir but rejects escapes', async () => {
     write('docs/meeting.md');
     write('docs/real.png');
     const outside = join(baseDir, 'outside');
@@ -100,7 +112,7 @@ describe('seedBasenameIndex — symlink safety', () => {
     symlinkSync(join(contentDir, 'alias-target'), join(contentDir, 'docs', 'alias'));
 
     const idx = createBasenameIndex();
-    seedBasenameIndex({ contentDir, basenameIndex: idx });
+    await seedBasenameIndex({ contentDir, basenameIndex: idx });
 
     expect(idx.resolveEmbed('real.png', 'docs/meeting.md')).toBe('docs/real.png');
     expect(idx.resolveEmbed('aliased.png', 'docs/meeting.md')).not.toBeNull();

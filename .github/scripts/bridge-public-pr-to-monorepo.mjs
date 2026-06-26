@@ -15,6 +15,11 @@ import { applyClaGate } from './cla-gate.mjs';
 // contributor-CLA enforcement — an OK-only divergence. That module ships to the
 // same repo via Copybara, so the import resolves on the mirror; the "no shared
 // code" rule still holds (no module is shared ACROSS the three repos).
+// The OK copy also routes 3-way-apply conflicts to a draft maintainer PR rather
+// than hard-failing (the OK mirror strips comments, so contributor patches
+// conflict against the comment-rich internal tree); the sibling copies keep the
+// hard-fail behavior. No drift check enforces shape alignment, so this OK-only
+// divergence is intentional and scoped here.
 const BRIDGE_COMMENT_MARKER = '<!-- monorepo-pr-bridge -->';
 
 // Strip x-access-token credentials from any string that might end up in an
@@ -388,6 +393,15 @@ This public PR was merged directly in the public repo. The matching monorepo PR 
 ${details}`;
   }
 
+  if (status === 'conflicts') {
+    return `${BRIDGE_COMMENT_MARKER}
+Thanks for the contribution! Your PR has been mirrored into Inkeep's internal monorepo, but it **could not be merged automatically**: the change overlaps edits in the internal source that aren't visible on this public mirror, so it needs a maintainer to reconcile by hand.
+
+**No action is needed from you.** Your PR is already based on the latest \`${publicPr.base.repo.full_name}\` main; the divergence is internal to the mirror, not something to fix from your branch. Your commit attribution is preserved as @${publicPr.user.login}.
+
+An Inkeep maintainer will resolve the conflicts on the internal mirror PR and land it; this PR will close automatically once it merges internally. This comment will be updated as the bridge state changes.`;
+  }
+
   return `${BRIDGE_COMMENT_MARKER}
 I could not sync this public PR into \`agents-private\` automatically.
 
@@ -532,6 +546,62 @@ function createClaGateGh({
   };
 }
 
+// Marker appended to the bridge's mirror commit when the 3-way apply left
+// conflicts, so the conflict draft-hold survives a metadata-only re-sync (where
+// the apply block is skipped) instead of being silently lost.
+const CONFLICT_COMMIT_MARKER = 'with conflicts; needs manual resolution';
+
+// True when an internal mirror commit message marks a conflict-carrying bridge
+// commit (see CONFLICT_COMMIT_MARKER), used to keep that PR held draft across
+// metadata-only re-syncs.
+function commitIndicatesConflicts(commitMessage) {
+  return typeof commitMessage === 'string' && commitMessage.includes(CONFLICT_COMMIT_MARKER);
+}
+
+// Apply the prefixed PR patch onto the internal checkout and classify the
+// outcome. `git apply --index --3way` exits non-zero BOTH when the patch cannot
+// apply at all AND when it applies but leaves conflict markers, so the exit code
+// alone can't tell a genuine failure from a conflict a maintainer can resolve.
+// Distinguish them by the index: a 3-way merge that conflicted leaves unmerged
+// (stage > 0) entries; a genuine non-apply leaves none.
+//   - 'clean'     — applied with no conflicts (exit 0)
+//   - 'conflicts' — applied WITH conflict markers (unmerged entries present)
+//   - 'failed'    — could not apply (no unmerged entries); `message` carries the
+//                   sanitized git output for the contributor-facing comment
+function applyPatchWithConflictDetection(internalRepoDir, patchFile) {
+  try {
+    run('git', ['-C', internalRepoDir, 'apply', '--index', '--3way', patchFile]);
+    return { outcome: 'clean', conflictedPaths: [], message: '' };
+  } catch (error) {
+    // `run()` has already stripped any x-access-token URL from error.message.
+    // Guard the unmerged-index probe: if even it throws (corrupt/locked index),
+    // fall through to 'failed' rather than escaping the classifier. Fail-closed,
+    // never route a real error as a resolvable conflict.
+    let conflictedPaths = [];
+    try {
+      const unmerged = run('git', [
+        '-C',
+        internalRepoDir,
+        'diff',
+        '--name-only',
+        '--diff-filter=U',
+      ]);
+      conflictedPaths = unmerged ? unmerged.split('\n').filter(Boolean) : [];
+    } catch (probeError) {
+      // Fail-closed routing to 'failed' is still correct, but surface the probe
+      // failure so a maintainer can tell "no unmerged entries" from "probe broke".
+      console.warn(
+        `Bridge: git diff --diff-filter=U probe threw after a failed apply; routing as 'failed'. Probe error: ${probeError.message}`,
+      );
+      conflictedPaths = [];
+    }
+    if (conflictedPaths.length > 0) {
+      return { outcome: 'conflicts', conflictedPaths, message: error.message };
+    }
+    return { outcome: 'failed', conflictedPaths: [], message: error.message };
+  }
+}
+
 async function syncPublicPr() {
   const publicToken = requireEnv('PUBLIC_TOKEN');
   const internalToken = requireEnv('INTERNAL_TOKEN');
@@ -566,6 +636,7 @@ async function syncPublicPr() {
       publicPrAction === 'converted_to_draft');
 
   let hasStagedChanges = false;
+  let hasConflicts = false;
   if (!metadataOnlyAction) {
     // Bring agents-private's main into the local clone and check out the new
     // branch first. We need this in place before the public-PR-refs fetch so
@@ -679,27 +750,47 @@ async function syncPublicPr() {
       writeFileSync(patchFile, prefixPatchPaths(patch, mirrorPath, pathRewrites), 'utf8');
 
       try {
-        try {
-          run('git', ['-C', internalRepoDir, 'apply', '--index', '--3way', patchFile]);
-        } catch (error) {
-          // error.message has already been routed through `run()` which
-          // sanitizes any embedded x-access-token URL, so it's safe to surface
-          // verbatim. Including the actual git output makes the failure
-          // actionable for external contributors who can't read internal
-          // workflow logs (matches agents-optional-local-dev's behavior).
-          await upsertIssueComment({
-            token: publicToken,
-            repo: publicRepo,
-            issueNumber: publicPrNumber,
-            body: buildPublicComment({
-              publicPr,
-              status: 'failed',
-              details:
-                'Patch application failed. The diff could not be applied cleanly. ' +
-                `Try rebasing your PR on the latest base branch.\n\n\`\`\`\n${error.message}\n\`\`\``,
-            }),
-          });
-          throw error;
+        const applyResult = applyPatchWithConflictDetection(internalRepoDir, patchFile);
+
+        if (applyResult.outcome === 'failed') {
+          // Genuine non-apply (not a resolvable conflict) — surface it and fail.
+          // `run()` sanitized the git output, so it's safe to include; it makes
+          // the failure actionable. NOT a "rebase" case: the contributor is
+          // already on the latest public base — this is a bridge-side problem.
+          // Wrap the comment post so a GitHub API failure here can't mask the
+          // actual git apply diagnostic in the error thrown below.
+          try {
+            await upsertIssueComment({
+              token: publicToken,
+              repo: publicRepo,
+              issueNumber: publicPrNumber,
+              body: buildPublicComment({
+                publicPr,
+                status: 'failed',
+                details:
+                  'The diff could not be applied to the internal monorepo. This is a ' +
+                  'bridge-side issue, not a problem with your PR (which is already based ' +
+                  'on the latest public base); an Inkeep maintainer will look into it.' +
+                  `\n\n\`\`\`\n${applyResult.message}\n\`\`\``,
+              }),
+            });
+          } catch (commentError) {
+            console.warn(
+              `Bridge: could not post 'failed' comment to public PR: ${commentError.message}`,
+            );
+          }
+          throw new Error(applyResult.message || 'git apply failed');
+        }
+
+        hasConflicts = applyResult.outcome === 'conflicts';
+
+        // A conflicted 3-way apply leaves unmerged (stage > 0) entries with
+        // conflict markers in the working tree; `git apply --index` already
+        // staged the cleanly-merged files. Stage the marker versions too so the
+        // commit captures the full state for a maintainer to resolve on the
+        // internal PR (the markers make it un-mergeable; it's held draft below).
+        if (hasConflicts) {
+          run('git', ['-C', internalRepoDir, 'add', '-A']);
         }
 
         hasStagedChanges = (() => {
@@ -722,6 +813,9 @@ async function syncPublicPr() {
           ]);
 
           const authorEmail = `${publicPr.user.id}+${publicPr.user.login}@users.noreply.github.com`;
+          const commitMessage = hasConflicts
+            ? `chore(sync): mirror ${publicRepo}#${publicPr.number} (${CONFLICT_COMMIT_MARKER})`
+            : `chore(sync): mirror ${publicRepo}#${publicPr.number}`;
           run('git', [
             '-C',
             internalRepoDir,
@@ -729,7 +823,7 @@ async function syncPublicPr() {
             '--author',
             `${publicPr.user.login} <${authorEmail}>`,
             '-m',
-            `chore(sync): mirror ${publicRepo}#${publicPr.number}`,
+            commitMessage,
           ]);
 
           run('git', [
@@ -778,6 +872,28 @@ async function syncPublicPr() {
     }
   }
 
+  // On a metadata-only re-sync (edited / ready_for_review / converted_to_draft)
+  // the apply block above is skipped, so `hasConflicts` is still its initial
+  // false even for a PR previously bridged with conflicts. Re-derive the conflict
+  // hold from the existing internal PR's head-commit marker, otherwise a metadata
+  // event (e.g. the contributor editing their PR body) would un-draft a
+  // conflict-carrying PR and overwrite its comment with 'synced'.
+  if (metadataOnlyAction && internalPr) {
+    const headCommit = await githubRequest({
+      token: internalToken,
+      path: `/repos/${internalRepo}/commits/${internalPr.head.sha}`,
+    });
+    if (headCommit?.commit?.message == null) {
+      // A structurally unexpected 200 (no commit message) would silently default
+      // hasConflicts to false and un-draft a conflict-carrying PR. The endpoint is
+      // stable so this is defensive, but make the implicit fail-open observable.
+      console.warn(
+        `Bridge: missing commit message for ${internalPr.head.sha}; conflict hold not re-derived on metadata re-sync.`,
+      );
+    }
+    hasConflicts = commitIndicatesConflicts(headCommit?.commit?.message);
+  }
+
   const title = internalPullRequestTitle(publicPr);
   const body = buildInternalPrBody({ publicPr, branchName, mirrorPath });
 
@@ -807,11 +923,13 @@ async function syncPublicPr() {
   // PR, but the bridge re-commits under a new SHA here, so that status can't gate
   // the internal PR directly. Hold the internal PR (draft + a failing
   // `cla/verified` status) until signed, re-checked on every sync. This also
-  // takes over draft-state mirroring: shouldBeDraft = publicPr.draft || gated.
+  // takes over draft-state mirroring: shouldBeDraft = publicPr.draft || gated ||
+  // hasConflicts (a conflict-carrying PR must stay a draft until reconciled).
   await applyClaGate({
     gh: createClaGateGh({ publicToken, publicRepo, internalToken, internalRepo }),
     publicPr,
     internalPr,
+    forceDraft: hasConflicts,
   });
 
   await upsertIssueComment({
@@ -821,7 +939,7 @@ async function syncPublicPr() {
     body: buildPublicComment({
       publicPr,
       internalPr,
-      status: 'synced',
+      status: hasConflicts ? 'conflicts' : 'synced',
     }),
   });
 }
@@ -929,11 +1047,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export {
+  applyPatchWithConflictDetection,
   buildInternalPrBody,
+  commitIndicatesConflicts,
   buildPublicComment,
   checkOrgMembership,
   createClaGateGh,
   postCommitStatus,
   prefixPatchPaths,
   readCommitClaStatus,
+  // Exported solely for the metadata-event composition test.
+  syncPublicPr,
 };

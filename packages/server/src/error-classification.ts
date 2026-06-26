@@ -1,7 +1,18 @@
-import type { SyncErrorCode } from '@inkeep/open-knowledge-core';
+import {
+  classifyGitAuthError,
+  type GitAuthFailureSubclass,
+  type SyncErrorCode,
+} from '@inkeep/open-knowledge-core';
 
 type NetworkSubclass = 'dns' | 'timeout' | '5xx' | '429' | 'connection-refused' | 'unknown-network';
-type AuthSubclass = '401' | '403' | 'expired-token' | 'scope-mismatch' | 'unknown-auth';
+type AuthSubclass =
+  | '401'
+  | '403'
+  | 'expired-token'
+  | 'scope-mismatch'
+  | 'no-credential'
+  | 'ssh-auth'
+  | 'unknown-auth';
 type SemanticSubclass =
   | 'non-fast-forward'
   | 'protected-branch'
@@ -66,6 +77,7 @@ export function deriveUserFacingCode(
   if (cls === 'auth' && subclass === '403') return 'auth-403';
   if (cls === 'auth' && subclass === '401') return 'auth-401';
   if (cls === 'auth' && subclass === 'scope-mismatch') return 'auth-scope-mismatch';
+  if (cls === 'auth' && subclass === 'no-credential') return 'auth-no-credential';
   if (cls === 'semantic' && subclass === 'protected-branch') return 'semantic-protected-branch';
   return null;
 }
@@ -79,25 +91,14 @@ function matchesAny(haystack: string, patterns: RegExp[]): boolean {
   return patterns.some((re) => re.test(haystack));
 }
 
-const AUTH_PATTERNS: RegExp[] = [
-  /\b(401|403)\b/,
-  /authentication failed/i,
-  /authorization failed/i,
-  /invalid credentials/i,
-  /credential helper/i,
-  /bad credentials/i,
-  /token.*expired/i,
-  /expired.*token/i,
-  /permission denied.*\(publickey\)/i,
-  /host key verification failed/i,
-  /fatal:.*repository.*not found/i, // often auth-related on private repos
-];
-
-const SCOPE_MISMATCH_PATTERNS: RegExp[] = [
-  /insufficient scopes/i,
-  /missing.*scope/i,
-  /required scope/i,
-];
+const AUTH_SUBCLASS_MESSAGES: Record<GitAuthFailureSubclass, string> = {
+  'no-credential': 'No GitHub credential available — reconnect to resume syncing',
+  '401': 'Authentication failed — token may be expired',
+  '403': 'Access denied (403)',
+  'scope-mismatch': 'GitHub token missing required scopes',
+  'ssh-auth': 'SSH authentication failed — check your SSH key or host-key trust',
+  'unknown-auth': 'Authentication failed',
+};
 
 const NON_FAST_FORWARD_PATTERNS: RegExp[] = [
   /non-fast-forward/i,
@@ -170,7 +171,11 @@ const DIRTY_TREE_PATTERNS: RegExp[] = [
   /commit your changes or stash/i,
 ];
 
-const DISK_FULL_PATTERNS: RegExp[] = [/no space left on device/i, /disk quota exceeded/i, /ENOSPC/];
+const DISK_FULL_PATTERNS: RegExp[] = [
+  /no space left on device/i,
+  /disk quota exceeded/i,
+  /ENOSPC/i,
+];
 
 const NETWORK_PATTERNS: RegExp[] = [
   /could not resolve host/i,
@@ -245,48 +250,22 @@ function classifyGitErrorBase(error: Error | unknown): ClassifiedErrorBase {
     };
   }
 
-  if (matchesAny(combined, SCOPE_MISMATCH_PATTERNS)) {
-    return {
-      class: 'auth',
-      subclass: 'scope-mismatch',
-      retryable: false,
-      message: 'GitHub token missing required scopes',
-      rawStderr: raw,
-    };
-  }
-  if (matchesAny(combined, AUTH_PATTERNS)) {
-    if (/\b401\b/.test(combined) || /token.*expired/i.test(combined)) {
+  const authResult = classifyGitAuthError(err);
+  if (authResult.kind === 'auth') {
+    if (authResult.subclass === '403' && matchesAny(combined, PROTECTED_BRANCH_PATTERNS)) {
       return {
-        class: 'auth',
-        subclass: '401',
+        class: 'semantic',
+        subclass: 'protected-branch',
         retryable: false,
-        message: 'Authentication failed — token may be expired',
-        rawStderr: raw,
-      };
-    }
-    if (/\b403\b/.test(combined)) {
-      if (matchesAny(combined, PROTECTED_BRANCH_PATTERNS)) {
-        return {
-          class: 'semantic',
-          subclass: 'protected-branch',
-          retryable: false,
-          message: 'Push rejected — branch is protected',
-          rawStderr: raw,
-        };
-      }
-      return {
-        class: 'auth',
-        subclass: '403',
-        retryable: false,
-        message: 'Access denied (403)',
+        message: 'Push rejected — branch is protected',
         rawStderr: raw,
       };
     }
     return {
       class: 'auth',
-      subclass: 'unknown-auth',
+      subclass: authResult.subclass,
       retryable: false,
-      message: 'Authentication failed',
+      message: AUTH_SUBCLASS_MESSAGES[authResult.subclass],
       rawStderr: raw,
     };
   }

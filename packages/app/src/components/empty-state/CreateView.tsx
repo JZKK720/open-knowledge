@@ -1,16 +1,15 @@
 import type { TemplatesListEntry } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { FilePlus2, Plus } from 'lucide-react';
-import { AgentHandoffGrid } from '@/components/empty-state/AgentHandoffGrid';
+import { ArrowRightIcon, Plus } from 'lucide-react';
+import { CopyablePromptList } from '@/components/empty-state/CopyablePromptList';
+import { CreatePromptComposer } from '@/components/empty-state/CreatePromptComposer';
 import { EmptyStateHeader } from '@/components/empty-state/EmptyStateHeader';
-import { KeyboardHintsFooter } from '@/components/empty-state/KeyboardHintsFooter';
+import { getEmptyStateCopy } from '@/components/empty-state/empty-state-copy';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Kbd } from '@/components/ui/kbd';
 import { useAllTemplates } from '@/hooks/use-folder-config';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { emitCreateTopLevelFile } from '@/lib/create-file-events';
-import { formatShortcut } from '@/lib/keyboard-shortcuts';
 
 interface CreateViewProps {
   readonly celebrateSignal: number;
@@ -20,28 +19,30 @@ interface CreateViewProps {
 export function CreateView({ celebrateSignal, onAddStarterPack }: CreateViewProps) {
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
+  const { title, subtitle } = getEmptyStateCopy({ isOnboarding: false, isEmbedded });
   const templatesState = useAllTemplates();
   const initialDir = '';
 
   const templates = templatesState.status === 'ready' ? templatesState.data : [];
   const templatesLoading = templatesState.status === 'loading' || templatesState.status === 'idle';
   const templatesError = templatesState.status === 'error';
-  const shortcut = formatShortcut('new-item');
 
   return (
-    <div className="flex w-full flex-col gap-10 py-12 max-w-5xl my-auto">
-      <EmptyStateHeader
-        title={t`Create something great.`}
-        subtitle={t`Start a blank file, scaffold from a template, or open this folder in your AI editor.`}
-        celebrateSignal={celebrateSignal}
-      />
+    <div className="flex w-full flex-col gap-8 py-12 max-w-5xl my-auto">
+      <EmptyStateHeader title={t(title)} subtitle={t(subtitle)} celebrateSignal={celebrateSignal} />
+
+      {/* AI surface up top — the primary path. Non-embedded: compose a brief and
+          hand off to a coding agent. Embedded (OK inside Cursor/Codex/Claude):
+          the handoff would loop back, so show the same starter prompts as
+          copy-to-paste rows instead. `existing-repo`: project already has
+          content, so prompts pitch spec / architecture work. */}
+      {isEmbedded ? (
+        <CopyablePromptList scenario="existing-repo" />
+      ) : (
+        <CreatePromptComposer scenario="existing-repo" />
+      )}
 
       <div className="flex w-full flex-col gap-8">
-        <PrimaryNewFileCard
-          shortcutLabel={shortcut}
-          onClick={() => emitCreateTopLevelFile({ initialDir })}
-        />
-
         {templatesLoading || templatesError || templates.length > 0 ? (
           <TemplatesSection
             templates={templates}
@@ -51,9 +52,10 @@ export function CreateView({ celebrateSignal, onAddStarterPack }: CreateViewProp
           />
         ) : null}
 
-        {isEmbedded ? null : <WithAiSection />}
-
-        <div className="flex w-full items-center justify-between gap-4">
+        {/* Sit the footer links close under the block above — the templates
+            card, or the composer when there are no templates — rather than a
+            full gap-8/gap-10 away. */}
+        <div className="-mt-6 flex w-full items-center justify-between gap-4">
           <Button
             onClick={onAddStarterPack}
             variant="link"
@@ -63,34 +65,22 @@ export function CreateView({ celebrateSignal, onAddStarterPack }: CreateViewProp
             <Plus aria-hidden="true" className="size-3" />
             <Trans>Add a starter pack</Trans>
           </Button>
-          <KeyboardHintsFooter />
+          {/* Escape hatch — fires the same window-level event the sidebar
+              toolbar uses, so the new file lands with the standard inline-rename
+              flow. Mirrors OnboardingView's "or create a new file" link. */}
+          <Button
+            variant="link"
+            className="text-muted-foreground font-normal justify-end"
+            size="sm"
+            onClick={() => emitCreateTopLevelFile({ initialDir })}
+          >
+            <Trans>
+              or create a new file <ArrowRightIcon aria-hidden="true" className="size-3" />
+            </Trans>
+          </Button>
         </div>
       </div>
     </div>
-  );
-}
-
-interface PrimaryNewFileCardProps {
-  readonly shortcutLabel: string;
-  readonly onClick: () => void;
-}
-
-function PrimaryNewFileCard({ shortcutLabel, onClick }: PrimaryNewFileCardProps) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      onClick={onClick}
-      className="group flex h-auto w-full items-center justify-between gap-4 rounded-xl border border-border/60 bg-card p-4 text-left transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-    >
-      <div className="flex items-center gap-3">
-        <FilePlus2 aria-hidden="true" className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium leading-tight text-foreground">
-          <Trans>New file</Trans>
-        </span>
-      </div>
-      <Kbd>{shortcutLabel}</Kbd>
-    </Button>
   );
 }
 
@@ -119,7 +109,7 @@ function TemplatesSection({ templates, loading, error, onSelect }: TemplatesSect
           </Badge>
         )}
       </header>
-      {/* Cap at ~5 rows so With AI stays in the viewport regardless of
+      {/* Cap the height so the footer stays in the viewport regardless of
           template count. */}
       <div className="w-full overflow-hidden rounded-xl border border-border/60 bg-card">
         <section
@@ -194,17 +184,5 @@ function TemplateRow({ template, targetLabel, onClick }: TemplateRowProps) {
         {targetLabel}
       </span>
     </Button>
-  );
-}
-
-function WithAiSection() {
-  const { t } = useLingui();
-  return (
-    <section aria-label={t`With AI`} className="flex w-full flex-col gap-3">
-      <header className="font-mono text-2xs uppercase tracking-wider text-muted-foreground">
-        <Trans>With AI</Trans>
-      </header>
-      <AgentHandoffGrid />
-    </section>
   );
 }

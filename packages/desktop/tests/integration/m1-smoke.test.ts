@@ -144,7 +144,6 @@ describe('M1 smoke', () => {
       'shell.showAssetMenu', // 2026-04-23 FR-A8 (right-click context menu)
       'shell.showItemInFolder', // 2026-04-27 file-tree reveal-in-finder
       'shell.trashItem', // 2026-05-16 sidebar Trash flow (FR8 / D24 Option B)
-      'shell.openInTerminal', // 2026-05-16 sidebar Open in Terminal (FR11 / D26)
     ] as const;
     const REQUIRED_FS_MEMBERS = [
       'fs.defaultProjectsRoot',
@@ -274,8 +273,9 @@ describe('M1 smoke', () => {
         typeName: 'EditorId',
         canonicalPath: editorsConstantPath,
         canonicalRe: /type\s+EditorId\s*=([^;]+);/,
-        expectedLiteralCount: 4,
-        inlineRe: /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'/,
+        expectedLiteralCount: 5,
+        inlineRe:
+          /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'\s*\|\s*'opencode'/,
         mirrors: [
           ['cli/commands/editors.ts', cliEditorsPath],
           ['desktop/shared/ipc-channels.ts', ipcChannelsPath],
@@ -384,8 +384,9 @@ describe('M1 smoke', () => {
     const { readFileSync } = await import('node:fs');
 
     const extractLiteralUnion = (src: string, typeName: string): Set<string> => {
-      const declRegex = new RegExp(`type\\s+${typeName}\\s*=([^;]+);`, 'm');
-      const match = src.match(declRegex);
+      const srcWithoutLineComments = src.replace(/\/\/.*$/gm, '');
+      const declRegex = new RegExp(`type\\s+${typeName}\\s*=([\\s\\S]*?);`, 'm');
+      const match = srcWithoutLineComments.match(declRegex);
       if (!match?.[1]) return new Set();
       const body = match[1];
       const literals = body.match(/'([^']+)'/g) ?? [];
@@ -404,6 +405,44 @@ describe('M1 smoke', () => {
 
     expect(desktopMembers).toEqual(coreMembers);
     expect(desktopMembers).toEqual(appMembers);
+  });
+
+  test('M1 invariant: OkMenuAction literal-union drift catcher', async () => {
+    const desktopPath = join(__dirname, '..', '..', 'src', 'shared', 'bridge-contract.ts');
+    const corePath = join(__dirname, '..', '..', '..', 'core', 'src', 'desktop-bridge.ts');
+    const appPath = join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'app',
+      'src',
+      'lib',
+      'desktop-bridge-types.ts',
+    );
+    const { readFileSync } = await import('node:fs');
+
+    const extractLiteralUnion = (src: string, typeName: string): Set<string> => {
+      const srcWithoutComments = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      const declRegex = new RegExp(`type\\s+${typeName}\\s*=([\\s\\S]*?);`, 'm');
+      const match = srcWithoutComments.match(declRegex);
+      if (!match?.[1]) return new Set();
+      const body = match[1];
+      const literals = body.match(/'([^']+)'/g) ?? [];
+      return new Set(literals.map((l) => l.slice(1, -1)));
+    };
+
+    const desktopMembers = extractLiteralUnion(readFileSync(desktopPath, 'utf-8'), 'OkMenuAction');
+    const coreMembers = extractLiteralUnion(readFileSync(corePath, 'utf-8'), 'OkMenuAction');
+    const appMembers = extractLiteralUnion(readFileSync(appPath, 'utf-8'), 'OkMenuAction');
+
+    expect(desktopMembers.size).toBeGreaterThan(0);
+    expect(coreMembers.size).toBeGreaterThan(0);
+    expect(appMembers.size).toBeGreaterThan(0);
+    expect(desktopMembers.size).toBe(26);
+    expect(desktopMembers).toEqual(coreMembers);
+    expect(desktopMembers).toEqual(appMembers);
+    expect(desktopMembers.has('toggle-show-hidden-files')).toBe(true);
   });
 
   test('M1 invariant: EntryPoint / OkProjectEntryPoint literal-union drift catcher', async () => {

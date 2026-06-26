@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestServer, type TestServer } from './test-harness';
 
 let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

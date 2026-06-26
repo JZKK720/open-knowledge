@@ -29,7 +29,7 @@ const BASE_DESCRIPTION = [
   'Call `links({ kind: "backlinks", document })` BEFORE deleting a doc to see what links here.',
 ].join('\n');
 
-export const DESCRIPTION = BASE_DESCRIPTION;
+const DESCRIPTION = BASE_DESCRIPTION;
 
 interface DeleteDeps {
   serverUrl: ServerUrlOrResolver;

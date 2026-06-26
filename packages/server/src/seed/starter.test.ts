@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseTemplateFile } from '@inkeep/open-knowledge-core';
+import {
+  extractMarkdownLinksFromMarkdown,
+  extractWikiLinksFromMarkdown,
+} from '../backlink-index.ts';
 import {
   buildStarterFolderFrontmatterYaml,
   listStarterPacks,
+  OKF_RESERVED_FILENAMES,
   STARTER_FOLDER_FRONTMATTER_FILENAME,
   STARTER_PACK_IDS,
   STARTER_PACKS,
@@ -13,11 +21,10 @@ const STARTER_TEMPLATES = KNOWLEDGE_BASE_PACK.templates;
 const LOG_MD_TEMPLATE = KNOWLEDGE_BASE_PACK.rootFiles?.['log.md'];
 if (!LOG_MD_TEMPLATE) throw new Error('knowledge-base pack is missing log.md');
 const ENTITY_VAULT_PACK = STARTER_PACKS['entity-vault'];
+const CODEBASE_WIKI_PACK = STARTER_PACKS['codebase-wiki'];
 
 function stripTemplateMetadata(body: string): string {
-  const match = /^---\n[\s\S]*?\n---\n([\s\S]*)$/.exec(body);
-  if (!match?.[1]) throw new Error('template missing outer metadata frontmatter');
-  return match[1];
+  return parseTemplateFile(body).starterContent;
 }
 
 function documentFrontmatter(body: string): string {
@@ -136,11 +143,13 @@ describe('STARTER_FOLDER_FRONTMATTER_FILENAME', () => {
 });
 
 describe('STARTER_PACKS — all packs structural validation', () => {
-  test('STARTER_PACK_IDS contains exactly the 6 expected packs (pinned to detect silent additions/deletions)', () => {
-    expect(STARTER_PACK_IDS.length).toBe(6);
+  test('STARTER_PACK_IDS contains exactly the 8 expected packs (pinned to detect silent additions/deletions)', () => {
+    expect(STARTER_PACK_IDS.length).toBe(8);
     expect([...STARTER_PACK_IDS].sort()).toEqual([
+      'codebase-wiki',
       'entity-vault',
       'knowledge-base',
+      'okf',
       'plain-notes',
       'software-lifecycle',
       'worldbuilding',
@@ -191,10 +200,15 @@ describe('STARTER_PACKS — all packs structural validation', () => {
     }
   });
 
-  test('every folder path uses kebab-case (matches existing scaffolder validator)', () => {
+  test('every folder path uses kebab-case per segment (nested paths allowed, e.g. wiki/architecture)', () => {
     for (const pack of Object.values(STARTER_PACKS)) {
       for (const folder of pack.folders) {
-        expect(folder.path).toMatch(/^[a-z][a-z0-9-]*$/);
+        for (const segment of folder.path.split('/')) {
+          expect(
+            segment,
+            `folder "${folder.path}" in pack "${pack.id}" has a non-kebab segment "${segment}"`,
+          ).toMatch(/^[a-z][a-z0-9-]*$/);
+        }
       }
     }
   });
@@ -219,10 +233,11 @@ describe('STARTER_PACKS — all packs structural validation', () => {
   test('every template body has a description: frontmatter line (load-bearing customer convention)', () => {
     for (const pack of Object.values(STARTER_PACKS)) {
       for (const [name, body] of Object.entries(pack.templates)) {
+        const { description } = parseTemplateFile(body).identity;
         expect(
-          body,
-          `Pack "${pack.id}" template "${name}" missing description: frontmatter line`,
-        ).toMatch(/^description:\s*\S/m);
+          typeof description === 'string' && description.trim().length > 0,
+          `Pack "${pack.id}" template "${name}" missing template.description`,
+        ).toBe(true);
       }
     }
   });
@@ -254,9 +269,12 @@ describe('STARTER_PACKS — all packs structural validation', () => {
     }
   });
 
-  test('every rootFile body has frontmatter with a non-empty title', () => {
+  const OKF_RESERVED_ROOTFILES = new Set(OKF_RESERVED_FILENAMES);
+
+  test('every non-reserved rootFile body has frontmatter with a non-empty title', () => {
     for (const pack of Object.values(STARTER_PACKS)) {
       for (const [filename, body] of Object.entries(pack.rootFiles ?? {})) {
+        if (pack.id === 'okf' && OKF_RESERVED_ROOTFILES.has(filename)) continue;
         expect(
           body.startsWith('---\n'),
           `Pack "${pack.id}" rootFile "${filename}" missing frontmatter`,
@@ -281,23 +299,28 @@ describe('STARTER_PACKS — all packs structural validation', () => {
     }
   });
 
-  test('every rootFile filename is safe (no path separators, no leading dot, non-empty)', () => {
+  test('every rootFile key is a safe relative path (forward-slash nesting allowed, no escape)', () => {
     for (const pack of Object.values(STARTER_PACKS)) {
       for (const filename of Object.keys(pack.rootFiles ?? {})) {
-        expect(filename.length, `Pack "${pack.id}" has an empty rootFile filename`).toBeGreaterThan(
-          0,
-        );
-        expect(
-          filename,
-          `Pack "${pack.id}" rootFile "${filename}" contains path separator`,
-        ).not.toContain('/');
+        expect(filename.length, `Pack "${pack.id}" has an empty rootFile key`).toBeGreaterThan(0);
         expect(
           filename,
           `Pack "${pack.id}" rootFile "${filename}" contains backslash`,
         ).not.toContain('\\');
-        expect(filename, `Pack "${pack.id}" rootFile "${filename}" is a dotfile`).not.toMatch(
-          /^\./,
-        );
+        expect(filename, `Pack "${pack.id}" rootFile "${filename}" is absolute`).not.toMatch(/^\//);
+        for (const segment of filename.split('/')) {
+          expect(
+            segment.length,
+            `Pack "${pack.id}" rootFile "${filename}" has an empty path segment`,
+          ).toBeGreaterThan(0);
+          expect(segment, `Pack "${pack.id}" rootFile "${filename}" has a '..' segment`).not.toBe(
+            '..',
+          );
+          expect(
+            segment,
+            `Pack "${pack.id}" rootFile "${filename}" has a dotfile segment "${segment}"`,
+          ).not.toMatch(/^\./);
+        }
       }
     }
   });
@@ -309,12 +332,10 @@ describe('Entity vault pack — GBrain-compatible Markdown shape', () => {
     expect((STARTER_PACKS as Record<string, unknown>).gbrain).toBeUndefined();
   });
 
-  test('metadata ties Entity vault to GBrain compatibility without a replacement-engine claim', () => {
-    expect(ENTITY_VAULT_PACK.name).toBe('Entity vault (GBrain-compatible)');
-    expect(ENTITY_VAULT_PACK.description).toContain('people, companies, meetings, and concepts');
-    expect(ENTITY_VAULT_PACK.description).toContain('GBrain-compatible Markdown');
-    expect(ENTITY_VAULT_PACK.description).toContain('OK handles editing and review');
-    expect(ENTITY_VAULT_PACK.description).not.toContain('Gbrain');
+  test('display name is the plain-language "Personal CRM"; copy stays novice-friendly', () => {
+    expect(ENTITY_VAULT_PACK.name).toBe('Personal CRM');
+    expect(ENTITY_VAULT_PACK.description).toContain('people, companies, and meetings');
+    expect(ENTITY_VAULT_PACK.description).not.toMatch(/replaces?\s+gbrain/i);
   });
 
   test('entity templates keep title + type in the generated document frontmatter', () => {
@@ -355,6 +376,59 @@ describe('Entity vault pack — GBrain-compatible Markdown shape', () => {
     expect(ENTITY_VAULT_PACK.templates.meeting).toContain(
       '[[concepts/agent-runtime-observability|agent-runtime observability]]',
     );
+  });
+});
+
+describe('Codebase wiki pack — nested wiki/ layout', () => {
+  test('scaffolds the five sections nested under wiki/, in reading order', () => {
+    expect(CODEBASE_WIKI_PACK.id).toBe('codebase-wiki');
+    expect(CODEBASE_WIKI_PACK.folders.map((f) => f.path)).toEqual([
+      'wiki/architecture',
+      'wiki/modules',
+      'wiki/flows',
+      'wiki/concepts',
+      'wiki/guides',
+    ]);
+  });
+
+  test('every folder path nests under wiki/ so it scaffolds without --root', () => {
+    for (const folder of CODEBASE_WIKI_PACK.folders) {
+      expect(
+        folder.path.startsWith('wiki/'),
+        `folder "${folder.path}" should nest under wiki/`,
+      ).toBe(true);
+    }
+  });
+
+  test('no defaultSubfolder — the nested paths already place everything under wiki/', () => {
+    expect(CODEBASE_WIKI_PACK.defaultSubfolder).toBeUndefined();
+  });
+
+  test('each section ships its named page template, resolvable in pack.templates', () => {
+    const expected: Record<string, string> = {
+      'wiki/architecture': 'architecture-page',
+      'wiki/modules': 'module-page',
+      'wiki/flows': 'flow-page',
+      'wiki/concepts': 'concept-page',
+      'wiki/guides': 'guide-page',
+    };
+    for (const folder of CODEBASE_WIKI_PACK.folders) {
+      expect(folder.starterTemplate).toBe(expected[folder.path]);
+      expect(CODEBASE_WIKI_PACK.templates[folder.starterTemplate]).toBeDefined();
+    }
+  });
+
+  test('ships OVERVIEW + log root files, both prefixed under wiki/', () => {
+    expect(Object.keys(CODEBASE_WIKI_PACK.rootFiles ?? {}).sort()).toEqual([
+      'wiki/OVERVIEW.md',
+      'wiki/log.md',
+    ]);
+  });
+
+  test('OVERVIEW stub carries the profile + source_commit freshness anchors', () => {
+    const overview = CODEBASE_WIKI_PACK.rootFiles?.['wiki/OVERVIEW.md'] ?? '';
+    expect(overview).toContain('profile:');
+    expect(overview).toContain('source_commit:');
   });
 });
 
@@ -422,5 +496,53 @@ describe('listStarterPacks() — wire-shape + entryCounts', () => {
     const plainNotes = listStarterPacks().find((p) => p.id === 'plain-notes');
     expect(plainNotes).toBeDefined();
     expect(plainNotes?.entryCounts).toEqual({ files: 2, folders: 2 });
+  });
+});
+
+describe('seeded content keeps illustrative example links out of the link graph', () => {
+  const EXAMPLE_TARGET_FRAGMENTS = [
+    'acme',
+    'jane-founder',
+    'jane-co',
+    'agent-runtime-observability',
+    'doc-a',
+    'doc-b',
+    'source-slug',
+    'another-concept',
+    'path/to',
+  ];
+
+  function extractedTargets(markdown: string): string[] {
+    return [
+      ...extractMarkdownLinksFromMarkdown(markdown, 'log').map((l) => l.target),
+      ...extractWikiLinksFromMarkdown(markdown).map((l) => l.target),
+    ];
+  }
+
+  function assertNoExampleLeak(where: string, body: string): void {
+    const targets = extractedTargets(body);
+    const leaked = targets.filter((t) => EXAMPLE_TARGET_FRAGMENTS.some((frag) => t.includes(frag)));
+    expect(leaked, `${where} leaks example link(s): ${leaked.join(', ')}`).toEqual([]);
+  }
+
+  test('no seeded rootFile or template body extracts an example placeholder link', () => {
+    for (const packId of STARTER_PACK_IDS) {
+      const pack = STARTER_PACKS[packId];
+      for (const [name, body] of Object.entries(pack.rootFiles ?? {})) {
+        assertNoExampleLeak(`${packId} rootFile ${name}`, body);
+      }
+      for (const [name, body] of Object.entries(pack.templates ?? {})) {
+        assertNoExampleLeak(`${packId} template ${name}`, parseTemplateFile(body).starterContent);
+      }
+    }
+  });
+
+  test('no pack SKILL.md leaks an example placeholder link', () => {
+    const packsDir = join(import.meta.dir, '..', '..', 'assets', 'skills', 'packs');
+    for (const packId of STARTER_PACK_IDS) {
+      const skillPath = join(packsDir, packId, 'SKILL.md');
+      expect(existsSync(skillPath), `${packId} pack is missing SKILL.md`).toBe(true);
+      assertNoExampleLeak(`${packId} SKILL.md`, readFileSync(skillPath, 'utf-8'));
+    }
   });
 });

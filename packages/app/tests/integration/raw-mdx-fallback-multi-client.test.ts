@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import * as Y from 'yjs';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
   createTestClient,
   createTestServer,
@@ -50,7 +51,7 @@ describe('rawMdxFallback multi-client Y.Item identity (US-011, M8, Q5)', () => {
 
   beforeAll(async () => {
     server = await createTestServer();
-  });
+  }, HARNESS_BOOT_TIMEOUT_MS);
 
   afterAll(async () => {
     await server.cleanup();

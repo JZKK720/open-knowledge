@@ -192,10 +192,12 @@ export const WikiLink = BaseWikiLink.extend<{ docName: string }>({
           return true;
         }
         if (classified.kind === 'asset') {
+          const cache = getPageListCache();
           const assetPath =
             resolveWikiLinkAssetTarget(
               classified.url,
-              getPageListCache()?.assetPaths ?? new Set<string>(),
+              cache?.assetPaths ?? new Set<string>(),
+              cache?.filePaths,
             ) ?? classified.url.replace(/^\//, '');
           if (newTab) {
             openHashHrefInNewTab(hashFromAssetPath(assetPath));

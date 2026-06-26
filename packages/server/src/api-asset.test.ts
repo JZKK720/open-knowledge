@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApiExtension } from './api-extension.ts';
 import type { ContentFilter } from './content-filter.ts';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 interface Harness {
   baseURL: string;
@@ -30,14 +31,10 @@ async function startHarness(contentDir: string, contentFilter?: ContentFilter): 
     ).onRequest({ request: req, response: res });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, resolve));
-  const address = server.address();
-  if (typeof address !== 'object' || address === null) {
-    throw new Error('server did not bind to a port');
-  }
+  const { baseUrl } = await listenOnLoopback(server);
 
   return {
-    baseURL: `http://127.0.0.1:${address.port}`,
+    baseURL: baseUrl,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
@@ -67,7 +64,12 @@ describe('GET /api/asset', () => {
     );
     writeFileSync(join(contentDir, 'docs', 'data.csv'), 'a,b\n1,2\n');
     writeFileSync(join(contentDir, 'docs', 'notes.txt'), 'not renderable');
-    writeFileSync(join(contentDir, 'docs', 'page.html'), '<h1>not admitted</h1>');
+    writeFileSync(
+      join(contentDir, 'docs', 'page.html'),
+      '<h1>trip viewer</h1><script>alert("x")</script>',
+    );
+    writeFileSync(join(contentDir, 'docs', 'legacy.htm'), '<h1>legacy</h1>');
+    writeFileSync(join(contentDir, 'docs', 'script.js'), 'alert(1)');
     mkdirSync(join(contentDir, 'docs', 'directory.png'));
     writeFileSync(join(tmpDir, 'outside.png'), 'outside');
     symlinkSync(join(tmpDir, 'outside.png'), join(contentDir, 'docs', 'escape.png'));
@@ -131,9 +133,24 @@ describe('GET /api/asset', () => {
   });
 
   test('rejects unsupported extensions even when they have a known content type', async () => {
-    const res = await fetch(assetUrl(harness.baseURL, 'docs/page.html'));
+    const res = await fetch(assetUrl(harness.baseURL, 'docs/script.js'));
 
     expect(res.status).toBe(415);
+  });
+
+  test.each([
+    'docs/page.html',
+    'docs/legacy.htm',
+  ])('serves %s inside a sandboxed opaque origin (scripts run, network blocked, isolated from OK)', async (assetPath) => {
+    const res = await fetch(assetUrl(harness.baseURL, assetPath));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
+    expect(res.headers.get('content-disposition')).toBe('inline');
+    expect(res.headers.get('content-security-policy')).toBe(
+      "sandbox allow-scripts; connect-src 'none'",
+    );
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   test('rejects traversal and symlink escapes', async () => {

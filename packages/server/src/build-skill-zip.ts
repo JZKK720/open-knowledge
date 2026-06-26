@@ -4,6 +4,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripFrontmatter, unwrapFrontmatterFences } from '@inkeep/open-knowledge-core';
 import yazl from 'yazl';
 
 /** Maximum uncompressed + compressed size. Catches accidental binary bloat.
@@ -39,7 +40,7 @@ export interface ResolveBundledSkillDirOptions {
   checkDesktop?: boolean;
 }
 
-const DESKTOP_SKILLS_REL = 'Open Knowledge.app/Contents/Resources/cli/dist/assets/skills';
+const DESKTOP_SKILLS_REL = 'OpenKnowledge.app/Contents/Resources/cli/dist/assets/skills';
 
 export function resolveBundledSkillDir(
   which: BundleId | (string & {}),
@@ -132,9 +133,9 @@ async function sha256OfFile(path: string): Promise<string> {
 }
 
 function extractMetadataVersion(markdown: string): string | undefined {
-  const frontmatterEnd = markdown.indexOf('\n---', 4);
-  if (!markdown.startsWith('---\n') || frontmatterEnd < 0) return undefined;
-  const frontmatter = markdown.slice(4, frontmatterEnd);
+  const { frontmatter: fenced } = stripFrontmatter(markdown);
+  if (fenced === '') return undefined;
+  const frontmatter = unwrapFrontmatterFences(fenced);
 
   const metaStart = frontmatter.search(/^metadata:/m);
   if (metaStart < 0) return undefined;

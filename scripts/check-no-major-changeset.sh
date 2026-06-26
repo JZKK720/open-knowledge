@@ -4,7 +4,7 @@
 # breaking changes ride as `minor`, and going to 1.0.0 is a deliberate team
 # decision — not something a single changeset should trigger. The release
 # math (scripts/compute-next-beta.mjs) would otherwise happily emit 1.0.0
-# from a stray `major` frontmatter. Mirrors check-instructions-drift.sh so
+# from a stray `major` frontmatter. Mirrors check-i18n-drift.sh so
 # `bun run check` catches it before push.
 #
 # Canonical policy: .changeset/README.md.

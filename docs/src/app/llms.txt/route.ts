@@ -7,7 +7,7 @@ export async function GET() {
   const pages = source.getPages();
   return new Response(
     [
-      '# Open Knowledge',
+      '# OpenKnowledge',
       '## Docs',
       ...pages.map((page) => `- [${page.data.title}](${SITE_URL}${page.url})`),
     ].join('\n\n'),

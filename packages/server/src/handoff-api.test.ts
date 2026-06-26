@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { AddressInfo } from 'node:net';
 import { setTimeout as wait } from 'node:timers/promises';
 import {
   createInstalledAgentsProbe,
@@ -11,6 +10,7 @@ import {
   type InstalledAgentScheme,
   isLocalWebHost,
 } from './handoff-api.ts';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 describe('createInstalledAgentsProbe', () => {
   test('returns a record with exactly claude/codex/cursor keys', async () => {
@@ -445,12 +445,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
 
     hocuspocus.configuration.extensions.push(ext);
 
-    port = await new Promise<number>((resolve) => {
-      server.listen(0, () => {
-        const addr = server.address();
-        resolve(addr && typeof addr === 'object' ? (addr as AddressInfo).port : 0);
-      });
-    });
+    ({ port } = await listenOnLoopback(server));
   });
 
   afterEach(async () => {
@@ -460,7 +455,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('GET returns 200 + flat boolean record matching injected probe', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`);
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
     const body = await res.json();
@@ -469,14 +464,14 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
 
   test('3 GETs within cache TTL trigger exactly 1 probe per scheme', async () => {
     for (let i = 0; i < 3; i++) {
-      const res = await fetch(`http://localhost:${port}/api/installed-agents`);
+      const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`);
       expect(res.status).toBe(200);
     }
     expect(probeCalls).toEqual({ claude: 1, codex: 1, cursor: 1 });
   });
 
   test('POST returns 405 + RFC 9457 problem+json with Allow: GET', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, { method: 'POST' });
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, { method: 'POST' });
     expect(res.status).toBe(405);
     expect(res.headers.get('Content-Type')).toBe('application/problem+json');
     expect(res.headers.get('Allow')).toBe('GET');
@@ -491,7 +486,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('rejects cross-origin requests (DNS-rebinding / malicious-page defense)', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
       headers: { Origin: 'https://evil.example.com' },
     });
     expect(res.status).toBe(403);
@@ -501,9 +496,9 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
     expect(body.status).toBe(403);
   });
 
-  test('accepts same-origin browser requests (Origin: http://localhost)', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, {
-      headers: { Origin: `http://localhost:${port}` },
+  test('accepts same-origin browser requests (Origin: http://127.0.0.1)', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
+      headers: { Origin: `http://127.0.0.1:${port}` },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -511,7 +506,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('remote-web (Host: example.com) → all-true and probe NOT called', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
       headers: {
         Host: 'example.com:5173',
       },
@@ -523,7 +518,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('remote-web (Host: 192.168.1.100) → all-true (LAN-bound dev server case)', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
       headers: { Host: '192.168.1.100:5173' },
     });
     expect(res.status).toBe(200);
@@ -532,7 +527,7 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('local-web Host: 127.0.0.1 → real probe results', async () => {
-    const res = await fetch(`http://localhost:${port}/api/installed-agents`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
       headers: { Host: `127.0.0.1:${port}` },
     });
     expect(res.status).toBe(200);
@@ -541,13 +536,13 @@ describe('GET /api/installed-agents (integration — real HTTP + real createApiE
   });
 
   test('remote-web requests are NOT cached against later local-web requests', async () => {
-    const remote = await fetch(`http://localhost:${port}/api/installed-agents`, {
+    const remote = await fetch(`http://127.0.0.1:${port}/api/installed-agents`, {
       headers: { Host: 'example.com:5173' },
     });
     expect(await remote.json()).toEqual({ claude: true, codex: true, cursor: true });
     expect(probeCalls).toEqual({});
 
-    const local = await fetch(`http://localhost:${port}/api/installed-agents`);
+    const local = await fetch(`http://127.0.0.1:${port}/api/installed-agents`);
     expect(await local.json()).toEqual({ claude: true, codex: false, cursor: true });
     expect(probeCalls).toEqual({ claude: 1, codex: 1, cursor: 1 });
   });

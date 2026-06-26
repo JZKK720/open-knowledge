@@ -198,7 +198,7 @@ export async function runMigrate(opts: MigrateRunOpts = {}): Promise<MigrateOutc
 
 export function configCommand(): Command {
   const cmd = new Command('config').description(
-    'Inspect and maintain Open Knowledge configuration files',
+    'Inspect and maintain OpenKnowledge configuration files',
   );
 
   cmd

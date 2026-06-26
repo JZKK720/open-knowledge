@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
   agentPatch,
   agentUndo,
@@ -23,7 +24,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -98,7 +99,7 @@ describe('orphan-hint response shape — L1 integration (US-003)', () => {
     timestamp: string;
     hints?: Array<{ type: string; parentCandidates: string[]; message: string }>;
   }> {
-    const res = await fetch(`http://localhost:${server.port}/api/agent-write-md`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/agent-write-md`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ markdown: body, position: 'replace', docName }),
@@ -164,7 +165,7 @@ describe('systemSubscriberCount response field — L1 integration (FR7a)', () =>
     subscriberCount?: number;
     systemSubscriberCount?: number;
   }> {
-    const res = await fetch(`http://localhost:${server.port}/api/agent-write-md`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/agent-write-md`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ markdown: body, position: 'replace', docName }),

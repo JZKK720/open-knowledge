@@ -1,3 +1,4 @@
+import { rewriteEmbedUrl } from '@inkeep/open-knowledge-core';
 import { useEffect, useRef } from 'react';
 import { useJsxComponentHost } from './jsx-host-context.tsx';
 import { ResizeHandles } from './ResizeHandles.tsx';
@@ -87,13 +88,16 @@ export function Embed({ src, title, width, height }: EmbedProps) {
     }
   };
 
+  const iframeSrc = rewriteEmbedUrl(src);
+  const referrerPolicy = iframeSrc !== src ? 'strict-origin-when-cross-origin' : 'no-referrer';
+
   return (
     <div className="ok-embed" style={initialStyle} ref={wrapperRef} contentEditable={false}>
       <iframe
         title={title || DEFAULT_TITLE}
-        src={src}
+        src={iframeSrc}
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
-        referrerPolicy="no-referrer"
+        referrerPolicy={referrerPolicy}
         loading="lazy"
         className="ok-embed-frame"
       />

@@ -172,7 +172,7 @@ append_jsonl_atomic() {
   fi
 }
 
-# ── jq + git pre-flight ────────────────────────────────────────────────────
+# ── jq pre-flight ──────────────────────────────────────────────────────────
 # Fail loud and early if the script's hard dependencies are missing. Keeps
 # the callers symmetric — neither has to reimplement the check.
 require_jq() {
@@ -183,11 +183,22 @@ require_jq() {
   fi
 }
 
+# ── OK workspace root ──────────────────────────────────────────────────────
+# Derive the workspace root structurally from this lib's own location
+# (packages/app/scripts → three levels up). git's toplevel is the wrong
+# oracle here: it coincides with the workspace root only in a standalone
+# clone — inside the agents-private monorepo the toplevel is the monorepo
+# root, one level above public/open-knowledge. Marker validation fails
+# loud if the derived directory is not an OK workspace (e.g. the lib was
+# copied somewhere with a different shape). The walk is physical
+# (`cd -P`/`pwd -P`) so a symlinked invocation path — including macOS's
+# /var → /private/var TMPDIR — resolves to one canonical root.
 resolve_repo_root() {
-  local root
-  root="$(git rev-parse --show-toplevel 2>/dev/null)"
-  if [[ -z "$root" ]]; then
-    echo "error: not inside a git repository" >&2
+  local lib_dir root
+  lib_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  root="$(cd -P "$lib_dir/../../.." && pwd -P)"
+  if [[ ! -d "$root/packages/app" || ! -f "$root/package.json" ]]; then
+    echo "error: derived workspace root $root lacks packages/app + package.json markers" >&2
     exit 4
   fi
   printf '%s\n' "$root"

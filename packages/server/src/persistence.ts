@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import type { Extension } from '@hocuspocus/server';
 import type { MarkdownManager } from '@inkeep/open-knowledge-core';
 import {
@@ -23,6 +23,7 @@ import {
 import type { JSONContent } from '@tiptap/core';
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
+import { LINEAGE_EPOCH_KEY } from './auth-token-schema.ts';
 import type { BacklinkIndex } from './backlink-index.ts';
 import { getMsSinceLastUserTx, isDocQuiescent } from './bridge-quiescence.ts';
 import { assertBridgeInvariant } from './bridge-watchdog.ts';
@@ -53,6 +54,7 @@ import {
   incrementPersistenceSanityCheckSerializeFailures,
   incrementPersistenceSkipNonQuiescent,
 } from './metrics.ts';
+import { isWithinDir, toPosix } from './path-utils.ts';
 import { classifyDuplication } from './persistence-tripwire.ts';
 import { backfillRenameLogCommitSha, getOrLoadRenameLogIndex } from './rename-log.ts';
 import { OBSERVER_SYNC_ORIGIN } from './server-observers.ts';
@@ -77,7 +79,7 @@ export class DocumentOpenSizeLimitError extends Error {
 
   constructor(docName: string, size: number, limit = DOCUMENT_OPEN_BYTE_LIMIT) {
     super(
-      `Document "${docName}" is ${formatFileSize(size)}; Open Knowledge opens documents up to ${formatFileSize(limit)}.`,
+      `Document "${docName}" is ${formatFileSize(size)}; OpenKnowledge opens documents up to ${formatFileSize(limit)}.`,
     );
     this.name = 'DocumentOpenSizeLimitError';
     this.docName = docName;
@@ -193,6 +195,7 @@ export interface PersistenceOptions {
   resolveSize?: (basename: string, sourcePath: string) => number | null;
   getPrincipal?: () => Principal | null;
   onAgentCommit?: () => void;
+  onFlushCommit?: () => void;
   onDiskFlush?: (
     docName: string,
     sv: Uint8Array,
@@ -203,6 +206,7 @@ export interface PersistenceOptions {
   configHomedirOverride?: string;
   onConfigRejected?: (docName: string, error: ConfigValidationError) => void;
   mdManager?: MarkdownManager;
+  ephemeral?: boolean;
 }
 
 export function captureDocSnapshotForPersistence(document: Y.Doc): {
@@ -221,14 +225,14 @@ export function safeContentPath(documentName: string, contentDir: string): strin
   }
   const ext = getDocExtension(documentName);
   const filePath = resolve(contentDir, `${documentName}${ext}`);
-  if (!filePath.startsWith(`${contentDir}/`)) {
+  if (!isWithinDir(filePath, contentDir)) {
     throw new Error(`Invalid document name: ${documentName}`);
   }
   return filePath;
 }
 
 export function isWithinContentDir(p: string, contentDir: string): boolean {
-  return p === contentDir || p.startsWith(contentDir + sep);
+  return isWithinDir(p, contentDir);
 }
 
 const reconciledBaseByBranch = new Map<string, Map<string, string>>();
@@ -259,6 +263,12 @@ export function setReconciledBase(docName: string, content: string): void {
 
 export function deleteReconciledBase(docName: string): void {
   reconciledBaseByBranch.get(activeBranch)?.delete(docName);
+}
+
+const inFlightFlushByDoc = new Map<string, string>();
+
+export function peekInFlightFlush(docName: string): string | undefined {
+  return inFlightFlushByDoc.get(docName);
 }
 
 let batchInProgress = false;
@@ -311,12 +321,14 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
   }
   const projectDir = options?.projectDir ?? process.cwd();
   const shadowRef = options?.shadowRef;
-  const contentRoot = options?.contentRoot ?? (relative(projectDir, contentDir) || '.');
+  const contentRoot = options?.contentRoot ?? (toPosix(relative(projectDir, contentDir)) || '.');
   const backlinkIndex = options?.backlinkIndex;
   const getPrincipal = options?.getPrincipal;
   const onAgentCommit = options?.onAgentCommit;
+  const onFlushCommit = options?.onFlushCommit;
   const onDiskFlush = options?.onDiskFlush;
   const mgr = options?.mdManager ?? mdManager;
+  const ephemeral = options?.ephemeral ?? false;
 
   const configLkgCache = new Map<string, string>();
   const configPersistenceCtx: ConfigPersistenceCtx = {
@@ -325,6 +337,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
     lkgCache: configLkgCache,
     homedirOverride: options?.configHomedirOverride,
     onConfigRejected: options?.onConfigRejected,
+    ephemeral,
   };
 
   const tripwireResetFailedDocs = new Set<string>();
@@ -471,6 +484,11 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         try {
           const sha = await commitWipFromTree(shadow, writer, treeSha, writerMessage, branch);
           anySuccess = true;
+          try {
+            onFlushCommit?.();
+          } catch (err) {
+            log.warn({ err }, '[persistence] onFlushCommit callback failed (non-fatal)');
+          }
           log.info(
             { sha: sha.slice(0, 8), writer: writerId, tree: treeSha.slice(0, 8) },
             `[persistence] Shadow WIP commit: ${sha.slice(0, 8)} on refs/wip/${writerId}`,
@@ -610,21 +628,41 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
     if (gitCommitTimer) {
       clearTimeout(gitCommitTimer);
       gitCommitTimer = null;
-      if (!commitInFlight) {
-        commitInFlight = commitToWipRef().finally(() => {
-          commitInFlight = null;
-          if (pendingAfterCommit) {
-            pendingAfterCommit = false;
-            scheduleGitCommit();
-          }
-        });
-      }
+      commitInFlight ||= commitToWipRef().finally(() => {
+        commitInFlight = null;
+        if (pendingAfterCommit) {
+          pendingAfterCommit = false;
+          scheduleGitCommit();
+        }
+      });
     }
     if (commitInFlight) await commitInFlight;
   }
 
   async function _awaitPendingCommit(): Promise<void> {
     if (commitInFlight) await commitInFlight;
+  }
+
+  function canonicalizeForEphemeralBaseline(rawBytes: string, documentName: string): string | null {
+    try {
+      const { frontmatter, body } = stripFrontmatter(rawBytes);
+      const parseOpts = options?.resolveEmbed
+        ? {
+            resolveEmbed: options.resolveEmbed,
+            resolveSize: options?.resolveSize,
+            sourcePath: documentName,
+          }
+        : undefined;
+      const json = mgr.parseWithFallback(body, parseOpts);
+      const canonicalBody = mgr.serialize(json);
+      return normalizeBridge(prependFrontmatter(frontmatter, canonicalBody));
+    } catch (err) {
+      log.debug(
+        { err, documentName },
+        '[g8] ephemeral canonical baseline failed; falling through to write',
+      );
+      return null;
+    }
   }
 
   function reconcileFragmentNow(document: Y.Doc, body: string, documentName: string): void {
@@ -683,6 +721,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
   }): Promise<void> {
     ensureHistograms();
     const started = Date.now();
+    let inFlightFlushValue: string | undefined;
     return withSpan(
       'persistence.onStoreDocument',
       { attributes: { 'doc.name': documentName } },
@@ -768,8 +807,15 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         }
 
         const currentBase = getReconciledBase(documentName);
-        const markdownSemanticallyUnchanged =
-          currentBase !== undefined && normalizeBridge(markdown) === normalizeBridge(currentBase);
+        const normalizedMarkdown = normalizeBridge(markdown);
+        let markdownSemanticallyUnchanged =
+          currentBase !== undefined && normalizedMarkdown === normalizeBridge(currentBase);
+        if (!markdownSemanticallyUnchanged && ephemeral && currentBase !== undefined) {
+          const canonicalBase = canonicalizeForEphemeralBaseline(currentBase, documentName);
+          if (canonicalBase !== null && normalizedMarkdown === canonicalBase) {
+            markdownSemanticallyUnchanged = true;
+          }
+        }
         if (markdownSemanticallyUnchanged) {
           if (contributorCount() > 0) scheduleGitCommit();
           persistenceDeferCounts.delete(documentName);
@@ -869,6 +915,9 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
             return;
           }
         }
+
+        inFlightFlushValue = normalizeBridge(markdown);
+        inFlightFlushByDoc.set(documentName, inFlightFlushValue);
 
         const requestedPath = safeContentPath(documentName, contentDir);
         await tracedMkdir(dirname(requestedPath), { recursive: true });
@@ -1016,6 +1065,12 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         scheduleGitCommit();
       },
     ).finally(() => {
+      if (
+        inFlightFlushValue !== undefined &&
+        inFlightFlushByDoc.get(documentName) === inFlightFlushValue
+      ) {
+        inFlightFlushByDoc.delete(documentName);
+      }
       storeDurationHist?.record((Date.now() - started) / 1000);
     });
   }
@@ -1183,6 +1238,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
                 documentName,
                 options?.resolveSize,
               );
+              document.getMap('lifecycle').set(LINEAGE_EPOCH_KEY, crypto.randomUUID());
             }, FILE_WATCHER_ORIGIN);
             log.info(
               { filePath, children: xmlFragment.length },

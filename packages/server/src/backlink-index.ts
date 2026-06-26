@@ -1,5 +1,5 @@
-import { type Dirent, existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { type Dirent, existsSync, mkdirSync } from 'node:fs';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
   classifyMarkdownHref,
@@ -15,6 +15,7 @@ import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import { getLocalDir } from './config/paths.ts';
 import type { ContentFilter } from './content-filter.ts';
 import { isSupportedDocFile, stripDocExtension } from './doc-extensions.ts';
+import { toPosix } from './path-utils.ts';
 
 const WIKI_LINK_RE = /\[\[([^\n#[\]|]+)(?:#([^\n[\]|]+))?(?:\|([^\n[\]]+))?\]\]/y;
 
@@ -1141,7 +1142,7 @@ export class BacklinkIndex {
     const state = createEmptyState();
     const mtimes = new Map<string, number>();
     const rawDocs: Array<{ docName: string; filePath: string }> = [];
-    this.walkForPaths(this.contentDir, rawDocs);
+    await this.walkForPaths(this.contentDir, rawDocs);
 
     const seen = new Set<string>();
     const allDocs = rawDocs.filter(({ docName }) => {
@@ -1216,10 +1217,13 @@ export class BacklinkIndex {
     this.mtimesByBranch.set(branch, mtimes);
   }
 
-  private walkForPaths(dir: string, results: Array<{ docName: string; filePath: string }>): void {
+  private async walkForPaths(
+    dir: string,
+    results: Array<{ docName: string; filePath: string }>,
+  ): Promise<void> {
     let entries: Dirent[];
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = await readdir(dir, { withFileTypes: true });
     } catch (err) {
       console.warn(`[backlinks] Failed to read directory ${dir}:`, err);
       return;
@@ -1227,11 +1231,11 @@ export class BacklinkIndex {
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
-        const relDir = relative(this.contentDir, fullPath);
+        const relDir = toPosix(relative(this.contentDir, fullPath));
         if (this.contentFilter && relDir && this.contentFilter.isDirExcluded(relDir)) continue;
-        this.walkForPaths(fullPath, results);
+        await this.walkForPaths(fullPath, results);
       } else if (entry.isFile() && isSupportedDocFile(entry.name)) {
-        const relPath = relative(this.contentDir, fullPath);
+        const relPath = toPosix(relative(this.contentDir, fullPath));
         if (this.contentFilter?.isExcluded(relPath)) continue;
         results.push({ docName: stripDocExtension(relPath), filePath: fullPath });
       }
@@ -1247,7 +1251,7 @@ export class BacklinkIndex {
 
     const storedMtimes = this.mtimesByBranch.get(branch) ?? new Map<string, number>();
     const rawDocs: Array<{ docName: string; filePath: string }> = [];
-    this.walkForPaths(this.contentDir, rawDocs);
+    await this.walkForPaths(this.contentDir, rawDocs);
 
     const seen = new Set<string>();
     const docs = rawDocs.filter(({ docName }) => {

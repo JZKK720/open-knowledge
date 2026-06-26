@@ -8,7 +8,7 @@ export function baseOptions({
 } = {}): BaseLayoutProps {
   return {
     nav: {
-      title: <OkWordmark aria-label="Open Knowledge" className={wordmarkClassName} />,
+      title: <OkWordmark aria-label="OpenKnowledge" className={wordmarkClassName} />,
     },
     githubUrl: 'https://github.com/inkeep/open-knowledge',
   };

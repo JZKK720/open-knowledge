@@ -5,9 +5,17 @@ import {
   type FrontmatterMap,
   type FrontmatterPatch,
   FrontmatterPatchSchema,
+  type FrontmatterValue,
+  frontmatterValuesEqual,
+  RESERVED_FRONTMATTER_KEY,
 } from '../frontmatter/schema.ts';
 import {
   applyPatchToFm,
+  applyPathDeleteToFm,
+  applyPathRenameToFm,
+  applyPathReorderSeqToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
   applyRenameToFm,
   applyReorderToFm,
   detectFmRegion,
@@ -23,8 +31,6 @@ export const FORM_WRITE_ORIGIN = Object.freeze({
   skipStoreHooks: false,
   context: Object.freeze({ origin: 'form-write' as const }),
 });
-
-const RESERVED_FRONTMATTER_KEY = 'frontmatter';
 
 export interface FrontmatterDocProvider {
   document: Y.Doc;
@@ -62,6 +68,15 @@ export type FrontmatterBindingReorderResult = Result<
   FrontmatterValidationError
 >;
 
+export interface FrontmatterBindingPathSuccess {
+  path: ReadonlyArray<string | number>;
+}
+
+export type FrontmatterBindingPathResult = Result<
+  FrontmatterBindingPathSuccess,
+  FrontmatterValidationError
+>;
+
 export type Unsubscribe = () => void;
 
 export interface FrontmatterSnapshot {
@@ -79,6 +94,24 @@ export interface FrontmatterBinding {
     options?: { allowDuplicate?: boolean },
   ): FrontmatterBindingRenameResult;
   reorder(orderedKeys: readonly string[]): FrontmatterBindingReorderResult;
+  patchPath(
+    path: ReadonlyArray<string | number>,
+    value: FrontmatterValue,
+  ): FrontmatterBindingPathResult;
+  deletePath(path: ReadonlyArray<string | number>): FrontmatterBindingPathResult;
+  renamePath(
+    path: ReadonlyArray<string | number>,
+    newKey: string,
+    options?: { allowDuplicate?: boolean },
+  ): FrontmatterBindingPathResult;
+  reorderPath(
+    path: ReadonlyArray<string | number>,
+    orderedKeys: readonly string[],
+  ): FrontmatterBindingPathResult;
+  reorderSeqPath(
+    path: ReadonlyArray<string | number>,
+    oldIndicesInNewOrder: readonly number[],
+  ): FrontmatterBindingPathResult;
   subscribe(listener: (snapshot: FrontmatterSnapshot) => void): Unsubscribe;
   dispose(): void;
 }
@@ -96,6 +129,10 @@ function okRename(value: FrontmatterBindingRenameSuccess): Ok<FrontmatterBinding
 }
 
 function okReorder(value: FrontmatterBindingReorderSuccess): Ok<FrontmatterBindingReorderSuccess> {
+  return { ok: true, ...value };
+}
+
+function okPath(value: FrontmatterBindingPathSuccess): Ok<FrontmatterBindingPathSuccess> {
   return { ok: true, ...value };
 }
 
@@ -154,6 +191,17 @@ function fmEditErrorToValidation(e: FmEditError): FrontmatterValidationError {
         code: 'WRITE_ERROR',
         detail: `Frontmatter YAML is malformed; fix in source mode to commit (${e.reason})`,
       };
+    case 'invalid_path':
+      return {
+        code: 'SCHEMA_INVALID',
+        issues: [
+          {
+            path: [...e.path],
+            message: e.reason,
+            issueCode: 'invalid_path',
+          },
+        ],
+      };
   }
 }
 
@@ -167,16 +215,6 @@ function snapshotsEqual(a: FrontmatterSnapshot, b: FrontmatterSnapshot): boolean
     if (!frontmatterValuesEqual(a.map[key], b.map[key])) return false;
   }
   return true;
-}
-
-function frontmatterValuesEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-    return true;
-  }
-  return false;
 }
 
 const FM_OPEN_FENCE_MIN_BYTES = 5;
@@ -193,7 +231,7 @@ function snapshotFromRaw(raw: string): FrontmatterSnapshot {
 }
 
 function detectOpenFencePrefix(raw: string): boolean {
-  return /^---\r?\n/.test(raw);
+  return raw.startsWith('---');
 }
 
 export function bindFrontmatterDoc(provider: FrontmatterDocProvider): FrontmatterBinding {
@@ -337,6 +375,80 @@ export function bindFrontmatterDoc(provider: FrontmatterDocProvider): Frontmatte
     return okReorder({ orderedKeys: [...orderedKeys] });
   }
 
+  function patchPathInner(
+    path: ReadonlyArray<string | number>,
+    value: FrontmatterValue,
+  ): FrontmatterBindingPathResult {
+    if (disposed) {
+      return err({ code: 'WRITE_ERROR', detail: 'FrontmatterBinding has been disposed' });
+    }
+    const result = commitFmEdit((currentFenced) => applyPathSetToFm(currentFenced, path, value));
+    if (!result.ok) {
+      return err(fmEditErrorToValidation(result.error));
+    }
+    return okPath({ path: [...path] });
+  }
+
+  function deletePathInner(path: ReadonlyArray<string | number>): FrontmatterBindingPathResult {
+    if (disposed) {
+      return err({ code: 'WRITE_ERROR', detail: 'FrontmatterBinding has been disposed' });
+    }
+    const result = commitFmEdit((currentFenced) => applyPathDeleteToFm(currentFenced, path));
+    if (!result.ok) {
+      return err(fmEditErrorToValidation(result.error));
+    }
+    return okPath({ path: [...path] });
+  }
+
+  function renamePathInner(
+    path: ReadonlyArray<string | number>,
+    newKey: string,
+    options: { allowDuplicate?: boolean } = {},
+  ): FrontmatterBindingPathResult {
+    if (disposed) {
+      return err({ code: 'WRITE_ERROR', detail: 'FrontmatterBinding has been disposed' });
+    }
+    const result = commitFmEdit((currentFenced) =>
+      applyPathRenameToFm(currentFenced, path, newKey, options),
+    );
+    if (!result.ok) {
+      return err(fmEditErrorToValidation(result.error));
+    }
+    return okPath({ path: [...path] });
+  }
+
+  function reorderPathInner(
+    path: ReadonlyArray<string | number>,
+    orderedKeys: readonly string[],
+  ): FrontmatterBindingPathResult {
+    if (disposed) {
+      return err({ code: 'WRITE_ERROR', detail: 'FrontmatterBinding has been disposed' });
+    }
+    const result = commitFmEdit((currentFenced) =>
+      applyPathReorderToFm(currentFenced, path, orderedKeys),
+    );
+    if (!result.ok) {
+      return err(fmEditErrorToValidation(result.error));
+    }
+    return okPath({ path: [...path] });
+  }
+
+  function reorderSeqPathInner(
+    path: ReadonlyArray<string | number>,
+    oldIndicesInNewOrder: readonly number[],
+  ): FrontmatterBindingPathResult {
+    if (disposed) {
+      return err({ code: 'WRITE_ERROR', detail: 'FrontmatterBinding has been disposed' });
+    }
+    const result = commitFmEdit((currentFenced) =>
+      applyPathReorderSeqToFm(currentFenced, path, oldIndicesInNewOrder),
+    );
+    if (!result.ok) {
+      return err(fmEditErrorToValidation(result.error));
+    }
+    return okPath({ path: [...path] });
+  }
+
   return {
     current(): FrontmatterSnapshot {
       return readSnapshotFromYText(ytext).snapshot;
@@ -356,6 +468,39 @@ export function bindFrontmatterDoc(provider: FrontmatterDocProvider): Frontmatte
 
     reorder(orderedKeys: readonly string[]): FrontmatterBindingReorderResult {
       return reorderInner(orderedKeys);
+    },
+
+    patchPath(
+      path: ReadonlyArray<string | number>,
+      value: FrontmatterValue,
+    ): FrontmatterBindingPathResult {
+      return patchPathInner(path, value);
+    },
+
+    deletePath(path: ReadonlyArray<string | number>): FrontmatterBindingPathResult {
+      return deletePathInner(path);
+    },
+
+    renamePath(
+      path: ReadonlyArray<string | number>,
+      newKey: string,
+      options?: { allowDuplicate?: boolean },
+    ): FrontmatterBindingPathResult {
+      return renamePathInner(path, newKey, options);
+    },
+
+    reorderPath(
+      path: ReadonlyArray<string | number>,
+      orderedKeys: readonly string[],
+    ): FrontmatterBindingPathResult {
+      return reorderPathInner(path, orderedKeys);
+    },
+
+    reorderSeqPath(
+      path: ReadonlyArray<string | number>,
+      oldIndicesInNewOrder: readonly number[],
+    ): FrontmatterBindingPathResult {
+      return reorderSeqPathInner(path, oldIndicesInNewOrder);
     },
 
     subscribe(listener: (snapshot: FrontmatterSnapshot) => void): Unsubscribe {

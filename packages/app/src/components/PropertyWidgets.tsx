@@ -1,4 +1,4 @@
-// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge-legacy/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
+// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 
 import {
   FRONTMATTER_TAG_GRAMMAR_HINT,
@@ -11,7 +11,16 @@ import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { format, parse, parseISO } from 'date-fns';
-import { Calendar as CalendarIcon, Hash, List, Pencil, SquareCheck, Type, X } from 'lucide-react';
+import {
+  Braces,
+  Calendar as CalendarIcon,
+  Hash,
+  List,
+  Pencil,
+  SquareCheck,
+  Type,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -29,14 +38,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { dispatchTagClickEvent } from '@/editor/extensions/tag-click-plugin';
 import { dispatchExternalLinkClick } from '@/lib/external-link';
 import { cn } from '@/lib/utils';
+import { PropertyInlineLinks } from './PropertyInlineLinks';
+import { hasInlineLinks } from './property-inline-link-tokens';
 
 export interface CommonWidgetProps<T extends FrontmatterValue> {
   keyName: string;
   value: T;
   onCommit: (next: T) => void;
+  onSubmit?: (next: T) => void;
 }
 
-export function TextWidget({ keyName, value, onCommit }: CommonWidgetProps<string>) {
+export function TextWidget({ keyName, value, onCommit, onSubmit }: CommonWidgetProps<string>) {
   const { t } = useLingui();
   const [draft, setDraft] = useState(value);
   const focusedRef = useRef(false);
@@ -55,8 +67,9 @@ export function TextWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
   }, [isEditing]);
 
   const trimmedValue = value.trim();
-  const isLinkValue = !isEditing && trimmedValue.length > 0 && /^https?:\/\//i.test(trimmedValue);
-  if (isLinkValue) {
+  const isPureUrl = !isEditing && trimmedValue.length > 0 && /^https?:\/\/\S+$/i.test(trimmedValue);
+  const hasMixedLinks = !isEditing && !isPureUrl && hasInlineLinks(value);
+  if (isPureUrl) {
     return (
       <div data-testid="link-widget" data-key={keyName} className="group flex items-center gap-1">
         <a
@@ -80,6 +93,35 @@ export function TextWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
           aria-label={t`Edit ${keyName}`}
           onClick={() => setIsEditing(true)}
           data-testid="link-widget-edit"
+          className="text-muted-foreground/0 hover:text-foreground focus-visible:text-muted-foreground group-hover:text-muted-foreground/60"
+        >
+          <Pencil className="size-3.5" aria-hidden />
+        </Button>
+      </div>
+    );
+  }
+
+  if (hasMixedLinks) {
+    return (
+      <div
+        data-testid="mixed-link-widget"
+        data-key={keyName}
+        className="group flex items-center gap-1"
+      >
+        <div
+          data-testid="mixed-link-widget-display"
+          title={value}
+          className="block min-w-0 flex-1 truncate px-2 py-1 text-sm leading-tight"
+        >
+          <PropertyInlineLinks text={value} />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t`Edit ${keyName}`}
+          onClick={() => setIsEditing(true)}
+          data-testid="mixed-link-widget-edit"
           className="text-muted-foreground/0 hover:text-foreground focus-visible:text-muted-foreground group-hover:text-muted-foreground/60"
         >
           <Pencil className="size-3.5" aria-hidden />
@@ -114,7 +156,8 @@ export function TextWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
         if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
           e.preventDefault();
           if (draft !== value) onCommit(draft);
-          (e.currentTarget as HTMLTextAreaElement).blur();
+          if (onSubmit) onSubmit(draft);
+          else (e.currentTarget as HTMLTextAreaElement).blur();
         } else if (e.key === 'Escape') {
           e.preventDefault();
           revertingRef.current = true;
@@ -127,7 +170,7 @@ export function TextWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
   );
 }
 
-export function NumberWidget({ keyName, value, onCommit }: CommonWidgetProps<number>) {
+export function NumberWidget({ keyName, value, onCommit, onSubmit }: CommonWidgetProps<number>) {
   const { t } = useLingui();
   const [draft, setDraft] = useState<string>(String(value));
   const focusedRef = useRef(false);
@@ -161,7 +204,14 @@ export function NumberWidget({ keyName, value, onCommit }: CommonWidgetProps<num
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          (e.currentTarget as HTMLInputElement).blur();
+          if (onSubmit) {
+            const parsed = Number.parseFloat(draft);
+            const next = Number.isFinite(parsed) ? parsed : 0;
+            if (next !== value) onCommit(next);
+            onSubmit(next);
+          } else {
+            (e.currentTarget as HTMLInputElement).blur();
+          }
         } else if (e.key === 'Escape') {
           e.preventDefault();
           revertingRef.current = true;
@@ -190,7 +240,7 @@ export function BooleanWidget({ keyName, value, onCommit }: CommonWidgetProps<bo
   );
 }
 
-export function DateWidget({ keyName, value, onCommit }: CommonWidgetProps<string>) {
+export function DateWidget({ keyName, value, onCommit, onSubmit }: CommonWidgetProps<string>) {
   const { t } = useLingui();
   const date = parseDate(value);
   const [inputValue, setInputValue] = useState(formatDateForInput(date));
@@ -207,17 +257,18 @@ export function DateWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
     }
   }, [value]);
 
-  function commitInput() {
+  function commitInput(): string | undefined {
     const parsed = parseFromInput(inputValue);
     if (parsed) {
       const iso = format(parsed, 'yyyy-MM-dd');
       if (iso !== value) onCommit(iso);
       setInputValue(formatDateForInput(parsed));
       setMonth(parsed);
-    } else {
-      setInputValue(formatDateForInput(date));
-      setMonth(date);
+      return iso;
     }
+    setInputValue(formatDateForInput(date));
+    setMonth(date);
+    return undefined;
   }
 
   function handleCalendarSelect(selected: Date | undefined) {
@@ -255,8 +306,12 @@ export function DateWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            commitInput();
-            (e.currentTarget as HTMLInputElement).blur();
+            const committed = commitInput();
+            if (onSubmit) {
+              if (committed !== undefined) onSubmit(committed);
+            } else {
+              (e.currentTarget as HTMLInputElement).blur();
+            }
           } else if (e.key === 'Escape') {
             e.preventDefault();
             revertingRef.current = true;
@@ -385,7 +440,7 @@ export function ListWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
                 #{chip}
               </button>
             ) : (
-              <span>{chip}</span>
+              <PropertyInlineLinks text={chip} />
             )}
             <button
               type="button"
@@ -471,6 +526,7 @@ export const TYPE_ICON: Record<FrontmatterType, typeof Type> = {
   boolean: SquareCheck,
   date: CalendarIcon,
   list: List,
+  object: Braces,
 };
 
 const TYPE_LABEL: Record<FrontmatterType, MessageDescriptor> = {
@@ -479,6 +535,7 @@ const TYPE_LABEL: Record<FrontmatterType, MessageDescriptor> = {
   boolean: msg`Checkbox`,
   date: msg`Date`,
   list: msg`List`,
+  object: msg`Object`,
 };
 
 export const DEFAULT_VALUE_FOR_TYPE: Record<FrontmatterType, FrontmatterValue> = {
@@ -487,6 +544,7 @@ export const DEFAULT_VALUE_FOR_TYPE: Record<FrontmatterType, FrontmatterValue> =
   boolean: false,
   date: '',
   list: [],
+  object: {},
 };
 
 interface TypeIconButtonProps {
@@ -552,20 +610,22 @@ export function TypeIconButton({
           value={type}
           onValueChange={(next) => onChangeType(next as FrontmatterType)}
         >
-          {(Object.keys(TYPE_ICON) as FrontmatterType[]).map((typeKey) => {
-            const ItemIcon = TYPE_ICON[typeKey];
-            return (
-              <DropdownMenuRadioItem
-                key={typeKey}
-                value={typeKey}
-                data-testid="type-picker-item"
-                data-type={typeKey}
-              >
-                <ItemIcon className="size-3.5 text-muted-foreground" />
-                <span>{t(TYPE_LABEL[typeKey])}</span>
-              </DropdownMenuRadioItem>
-            );
-          })}
+          {(Object.keys(TYPE_ICON) as FrontmatterType[])
+            .filter((typeKey) => typeKey !== 'object')
+            .map((typeKey) => {
+              const ItemIcon = TYPE_ICON[typeKey];
+              return (
+                <DropdownMenuRadioItem
+                  key={typeKey}
+                  value={typeKey}
+                  data-testid="type-picker-item"
+                  data-type={typeKey}
+                >
+                  <ItemIcon className="size-3.5 text-muted-foreground" />
+                  <span>{t(TYPE_LABEL[typeKey])}</span>
+                </DropdownMenuRadioItem>
+              );
+            })}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -576,19 +636,24 @@ export function coerceValue(value: FrontmatterValue, target: FrontmatterType): F
   switch (target) {
     case 'text': {
       if (Array.isArray(value)) return value.join(', ');
+      if (typeof value === 'object' && value !== null) return '';
       return String(value);
     }
     case 'number': {
       if (typeof value === 'number') return value;
-      const candidate = Array.isArray(value) ? value[0] : String(value);
-      const parsed = Number.parseFloat(candidate ?? '');
+      if (typeof value === 'object' && value !== null) return 0;
+      const head = Array.isArray(value) ? value[0] : value;
+      const candidate = typeof head === 'string' ? head : head == null ? '' : String(head);
+      const parsed = Number.parseFloat(candidate);
       return Number.isFinite(parsed) ? parsed : 0;
     }
     case 'boolean': {
       if (typeof value === 'boolean') return value;
       if (typeof value === 'number') return value !== 0;
-      const s = Array.isArray(value) ? value[0] : String(value);
-      return (s ?? '').toLowerCase() === 'true';
+      if (typeof value === 'object' && value !== null) return false;
+      const head = Array.isArray(value) ? value[0] : value;
+      const candidate = typeof head === 'string' ? head : head == null ? '' : String(head);
+      return candidate.toLowerCase() === 'true';
     }
     case 'date': {
       if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -597,8 +662,13 @@ export function coerceValue(value: FrontmatterValue, target: FrontmatterType): F
     }
     case 'list': {
       if (Array.isArray(value)) return value;
+      if (typeof value === 'object' && value !== null) return [];
       const s = String(value);
       return s ? [s] : [];
+    }
+    case 'object': {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value;
+      return {};
     }
   }
 }
@@ -608,7 +678,70 @@ export function resolveWidgetType(
   declared: FrontmatterType,
 ): FrontmatterType {
   if (Array.isArray(value)) return 'list';
+  if (typeof value === 'object' && value !== null) return 'object';
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number') return 'number';
-  return declared === 'list' ? 'text' : declared;
+  if (declared === 'list' || declared === 'object') return 'text';
+  return declared;
+}
+
+export function isComplexValue(value: FrontmatterValue): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => typeof entry === 'object' && entry !== null);
+  }
+  return typeof value === 'object' && value !== null;
+}
+
+export function isPlainObjectValue(
+  value: FrontmatterValue,
+): value is { [key: string]: FrontmatterValue } {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isArrayOfObjectsValue(
+  value: FrontmatterValue,
+): value is Array<{ [key: string]: FrontmatterValue }> {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((entry) => isPlainObjectValue(entry as FrontmatterValue));
+}
+
+interface ComplexValueWidgetProps {
+  keyName: string;
+  value: FrontmatterValue;
+}
+
+export function ComplexValueWidget({ keyName, value }: ComplexValueWidgetProps) {
+  const summary = summarizeComplexValue(value);
+  const isArray = Array.isArray(value);
+  return (
+    <div
+      data-testid="complex-value-widget"
+      data-key={keyName}
+      data-shape={isArray ? 'array' : 'object'}
+      className="flex min-h-7 w-full min-w-0 items-center px-2 py-1"
+    >
+      <span className="truncate font-mono text-xs text-muted-foreground" title={summary}>
+        {summary}
+      </span>
+      <span className="ml-2 shrink-0 text-2xs text-muted-foreground/70">
+        <Trans>(read-only — edit in source mode for now)</Trans>
+      </span>
+    </div>
+  );
+}
+
+const COMPLEX_PREVIEW_KEY_LIMIT = 4;
+
+function summarizeComplexValue(value: FrontmatterValue): string {
+  if (Array.isArray(value)) {
+    return value.length === 1 ? '[1 item]' : `[${value.length} items]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return '{}';
+    const head = keys.slice(0, COMPLEX_PREVIEW_KEY_LIMIT).join(', ');
+    const more = keys.length > COMPLEX_PREVIEW_KEY_LIMIT ? `, …` : '';
+    return `{${head}${more}}`;
+  }
+  return String(value);
 }

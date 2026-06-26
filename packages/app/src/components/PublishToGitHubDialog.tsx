@@ -24,13 +24,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import { docNameToMarkdownPath } from '@/lib/doc-paths';
@@ -41,6 +34,7 @@ import {
   fetchPublishNameCheck,
   fetchPublishOwners,
   type NameCheckStatus,
+  pickDefaultOwner,
   presentPublishError,
   resolveNameCheckStatus,
   sanitizeRepoName,
@@ -107,7 +101,7 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
       }
       setOwners(res.owners);
       if (res.owners.length > 0 && selectedOwner === '') {
-        setSelectedOwner(res.owners[0]?.login ?? '');
+        setSelectedOwner(pickDefaultOwner(res.owners));
       }
     } catch {
       setOwnersError(t`Couldn't reach GitHub. Try again?`);
@@ -133,7 +127,7 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
     if (owners === null) {
       void loadOwners();
     } else if (selectedOwner === '' && owners.length > 0) {
-      setSelectedOwner(owners[0]?.login ?? '');
+      setSelectedOwner(pickDefaultOwner(owners));
     }
   }, [open]);
 
@@ -309,7 +303,7 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
 
               <DialogBody className="flex flex-col gap-6">
                 <fieldset className="flex flex-col gap-2">
-                  <Label htmlFor="publish-owner">
+                  <Label id="publish-owner-label">
                     <Trans>Owner</Trans>
                   </Label>
                   {ownersLoading && owners === null ? (
@@ -330,39 +324,40 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
                       </Button>
                     </div>
                   ) : (
-                    <Select value={selectedOwner} onValueChange={setSelectedOwner}>
-                      <SelectTrigger
-                        id="publish-owner"
-                        data-testid="publish-owner-trigger"
-                        aria-label={t`Owner`}
-                      >
-                        <SelectValue placeholder={t`Pick an owner`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(owners ?? []).map((o) => (
-                          <SelectItem
-                            key={o.login}
-                            value={o.login}
-                            data-testid={`publish-owner-option-${o.login}`}
-                          >
-                            <span className="flex items-center gap-2">
-                              {o.avatarUrl ? (
-                                <img
-                                  src={o.avatarUrl}
-                                  alt=""
-                                  aria-hidden
-                                  className="size-4 rounded-full"
-                                />
-                              ) : null}
-                              <span>{o.login}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {o.kind === 'user' ? <Trans>you</Trans> : <Trans>org</Trans>}
-                              </span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <RadioGroup
+                      value={selectedOwner}
+                      onValueChange={setSelectedOwner}
+                      aria-labelledby="publish-owner-label"
+                      data-testid="publish-owner-radio"
+                    >
+                      {(owners ?? []).map((o) => {
+                        const itemId = `publish-owner-${o.login}`;
+                        return (
+                          <FieldLabel key={o.login} htmlFor={itemId}>
+                            <Field orientation="horizontal">
+                              <FieldContent>
+                                <FieldTitle>
+                                  {o.avatarUrl ? (
+                                    <img
+                                      src={o.avatarUrl}
+                                      alt=""
+                                      aria-hidden
+                                      className="size-4 rounded-full"
+                                    />
+                                  ) : null}
+                                  <span>{o.login}</span>
+                                </FieldTitle>
+                              </FieldContent>
+                              <RadioGroupItem
+                                value={o.login}
+                                id={itemId}
+                                data-testid={`publish-owner-option-${o.login}`}
+                              />
+                            </Field>
+                          </FieldLabel>
+                        );
+                      })}
+                    </RadioGroup>
                   )}
                 </fieldset>
 
@@ -401,7 +396,7 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
                 </fieldset>
 
                 <fieldset className="flex flex-col gap-2">
-                  <Label>
+                  <Label id="publish-visibility-label">
                     <Trans>Visibility</Trans>
                   </Label>
                   <RadioGroup
@@ -410,7 +405,7 @@ export function PublishToGitHubDialog({ open, onOpenChange }: PublishToGitHubDia
                       setVisibility(value === 'public' ? 'public' : 'private')
                     }
                     className="sm:flex"
-                    aria-label={t`Visibility`}
+                    aria-labelledby="publish-visibility-label"
                   >
                     <FieldLabel htmlFor="publish-visibility-private">
                       <Field orientation="horizontal">
@@ -587,6 +582,7 @@ function PublishSuccessView({
                 value={shareUrl}
                 onFocus={(e) => e.currentTarget.select()}
                 onClick={(e) => e.currentTarget.select()}
+                onContextMenu={(e) => e.currentTarget.select()}
                 className="font-mono text-xs"
               />
             ) : (

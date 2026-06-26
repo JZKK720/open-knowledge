@@ -187,9 +187,21 @@ describe('applyTemplateWrite', () => {
     if (!result.ok) return;
     const abs = join(projectDir, 'meetings', '.ok', 'templates', 'minimal.md');
     const content = readFileSync(abs, 'utf-8');
-    expect(content).toContain('---\ntitle: Minimal\n---');
+    expect(content).toContain('---\ntemplate:\n  title: Minimal\n---');
     expect(content).toContain('just body');
     expect(result.warnings.some((w) => w.match(/description is missing/))).toBe(true);
+  });
+
+  test('rejects body frontmatter containing the reserved template: key', () => {
+    const result = applyTemplateWrite({
+      projectDir,
+      folder: 'meetings',
+      name: 'bad-reserved',
+      body: '---\ntemplate:\n  title: Inner\nstatus: ok\n---\n# Body',
+      frontmatter: { title: 'My Template', description: 'desc' },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('TEMPLATE_RESERVED_KEY');
   });
 });
 

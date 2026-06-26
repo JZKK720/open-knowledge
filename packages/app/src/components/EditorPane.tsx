@@ -1,6 +1,5 @@
-import { useLingui } from '@lingui/react/macro';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import type { TerminalCli } from '@inkeep/open-knowledge-core';
+import { useEffect, useRef, useState } from 'react';
 import { TagDialog } from '@/editor/components/TagDialog';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import { RAW_MDX_NAV_EVENT, type RawMdxNavDetail } from '@/editor/extensions/raw-mdx-nav-event';
@@ -9,19 +8,21 @@ import { type EditorModeValue, useEditorMode } from '@/editor/use-editor-mode';
 import { useGitSyncStatus } from '@/hooks/use-git-sync-status';
 import { useNoPushPermissionToast } from '@/hooks/use-no-push-permission-toast';
 import { useConfigContext } from '@/lib/config-provider';
-import { useWorkspace } from '@/lib/use-workspace';
+import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
+import { recordTerminalOpened } from '@/lib/terminal-telemetry';
 import { AuthModal } from './AuthModal';
 import { AutoSyncOnboardingDialog } from './AutoSyncOnboardingDialog';
 import { shouldShowAutoSyncOnboarding } from './auto-sync-onboarding-gate';
 import { type PanelTab, TABS } from './DocPanel';
 import { EditorArea } from './EditorArea';
 import { EditorHeader } from './EditorHeader';
-import { OpenInAgentMenuRequestProvider } from './handoff/OpenInAgentMenuRequestContext';
-import {
-  buildHandoffInput,
-  buildSelectionHandoffInput,
-  type HandoffDispatchInput,
-} from './handoff/useHandoffDispatch';
+import { subscribeToTerminalLaunchRequests } from './handoff/terminal-launch-events';
+
+export interface TerminalLaunchIntent {
+  readonly prompt: string;
+  readonly cli: TerminalCli;
+  readonly nonce: number;
+}
 
 export type EditorMode = EditorModeValue;
 
@@ -30,22 +31,20 @@ interface EditorPaneProps {
 }
 
 export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
-  const { t } = useLingui();
   const [persistedMode, setPersistedMode] = useEditorMode();
   const [editorMode, setEditorMode] = useState<EditorMode>(persistedMode);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialStep, setAuthInitialStep] = useState<'auth' | 'identity'>('auth');
   const [activeTab, setActiveTab] = useState<PanelTab>(TABS[0].id);
-  const [saving, setSaving] = useState(false);
   const [autoSyncOnboardingDismissed, setAutoSyncOnboardingDismissed] = useState(false);
-  const [openInAgentMenuOpen, setOpenInAgentMenuOpen] = useState(false);
-  const [openInAgentMenuInput, setOpenInAgentMenuInput] = useState<HandoffDispatchInput | null>(
-    null,
-  );
+  const desktopBridge = typeof window !== 'undefined' ? (window.okDesktop ?? null) : null;
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalLaunch, setTerminalLaunch] = useState<TerminalLaunchIntent | null>(null);
+  const launchNonceRef = useRef(0);
 
   const syncStatus = useGitSyncStatus();
-  const { projectLocalConfig, projectLocalSynced } = useConfigContext();
-  const workspace = useWorkspace();
+  const { projectConfig, projectLocalConfig, projectLocalSynced, projectSynced } =
+    useConfigContext();
 
   const { activeDocName } = useDocumentContext();
 
@@ -53,7 +52,9 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     autoSyncOnboardingDismissed,
     hasRemote: syncStatus?.hasRemote,
     projectLocalSynced,
+    projectSynced,
     projectLocalConfig,
+    projectConfig,
     pushPermissionCheckStatus: syncStatus?.pushPermission?.checkStatus,
   });
 
@@ -69,6 +70,52 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     return () => window.removeEventListener(RAW_MDX_NAV_EVENT, onRawMdxNav);
   }, [activeDocName]);
 
+  useEffect(() => {
+    const bridge = window.okDesktop;
+    if (bridge == null) return;
+    return bridge.onMenuAction((action) => {
+      if (action === 'toggle-terminal') {
+        setTerminalVisible((visible) => !visible);
+      } else if (action === 'new-terminal') {
+        setTerminalVisible(true);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (window.okDesktop != null) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (matchesKeyboardShortcut(event, 'toggle-terminal-panel')) {
+        event.preventDefault();
+        setTerminalVisible((visible) => !visible);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, []);
+
+  useEffect(() => {
+    return subscribeToTerminalLaunchRequests((prompt, cli) => {
+      setTerminalVisible(true);
+      launchNonceRef.current += 1;
+      setTerminalLaunch({ prompt, cli, nonce: launchNonceRef.current });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!terminalVisible) setTerminalLaunch(null);
+  }, [terminalVisible]);
+
+  useEffect(() => {
+    if (window.okDesktop == null) return;
+    window.okDesktop.editor.notifyViewMenuStateChanged({ terminalVisible });
+  }, [terminalVisible]);
+
+  useEffect(() => {
+    if (window.okDesktop == null) return;
+    if (terminalVisible) recordTerminalOpened();
+  }, [terminalVisible]);
+
   useNoPushPermissionToast(syncStatus?.pausedReason);
 
   function handleModeChange(mode: EditorModeValue) {
@@ -76,77 +123,33 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     setPersistedMode(mode);
   }
 
-  async function handleSaveVersion() {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/save-version', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        toast.success(t`Version saved`);
-      } else {
-        console.error('[save-version] failed:', await res.text());
-        toast.error(t`Couldn't save version — try again`);
-      }
-    } catch (e) {
-      console.error('[save-version] failed:', e);
-      toast.error(t`Couldn't save version — try again`);
-    }
-    setSaving(false);
-  }
-
-  function handleOpenInAgentMenuOpenChange(open: boolean) {
-    setOpenInAgentMenuOpen(open);
-    if (!open) setOpenInAgentMenuInput(null);
-  }
-
   return (
     <>
-      <OpenInAgentMenuRequestProvider
-        value={{
-          openSelection(request) {
-            const input =
-              buildSelectionHandoffInput({
-                docName: request.docName,
-                workspace,
-                instruction: request.instruction,
-                selectionMarkdown: request.selectionMarkdown,
-              }) ?? buildHandoffInput({ docName: activeDocName, workspace });
-            if (input === null) {
-              toast.error(t`Couldn't send the selection — please try again.`);
-              return false;
-            }
-            setOpenInAgentMenuInput(input);
-            setOpenInAgentMenuOpen(true);
-            return true;
-          },
+      <EditorHeader
+        onSignIn={() => {
+          setAuthInitialStep('auth');
+          setAuthModalOpen(true);
         }}
-      >
-        <EditorHeader
-          onSignIn={() => {
-            setAuthInitialStep('auth');
-            setAuthModalOpen(true);
-          }}
-          onSetIdentity={() => {
-            setAuthInitialStep('identity');
-            setAuthModalOpen(true);
-          }}
-          onOpenSearch={onOpenSearch}
-          openInAgentMenuOpen={openInAgentMenuOpen}
-          openInAgentMenuInput={openInAgentMenuInput}
-          onOpenInAgentMenuOpenChange={handleOpenInAgentMenuOpenChange}
-        />
-        <EditorArea
-          editorMode={editorMode}
-          onModeChange={handleModeChange}
-          activeTab={activeTab}
-          onActiveTabChange={setActiveTab}
-          onSaveVersion={handleSaveVersion}
-          saving={saving}
-        />
-      </OpenInAgentMenuRequestProvider>
+        onSetIdentity={() => {
+          setAuthInitialStep('identity');
+          setAuthModalOpen(true);
+        }}
+        onOpenSearch={onOpenSearch}
+      />
+      {/* The terminal docks under the editor/file column only — EditorArea
+          nests the vertical split inside its horizontal editor↔doc-panel
+          split so the doc panel stays full-height beside the terminal. The
+          ⌘J/menu/telemetry state stays owned here and is threaded down. */}
+      <EditorArea
+        editorMode={editorMode}
+        onModeChange={handleModeChange}
+        activeTab={activeTab}
+        onActiveTabChange={setActiveTab}
+        terminalBridge={desktopBridge}
+        terminalVisible={terminalVisible}
+        onTerminalVisibleChange={setTerminalVisible}
+        terminalLaunch={terminalLaunch}
+      />
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}

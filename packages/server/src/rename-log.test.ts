@@ -230,7 +230,7 @@ describe('appendRenameLogEntry', () => {
   test('survives anonymous-actor entry (FR13 service-writer)', () => {
     const index = createEmptyIndex();
     const e = entry({
-      actor: { writerId: 'openknowledge-service', displayName: 'Open Knowledge (service)' },
+      actor: { writerId: 'openknowledge-service', displayName: 'OpenKnowledge (service)' },
     });
     appendRenameLogEntry(shadowDir, e, index);
     const reloaded = loadRenameLogIndex(shadowDir);
@@ -483,11 +483,23 @@ describe('rename-log read primitives (shadow-repo backed)', () => {
     return top;
   }
 
-  async function commit(text: string, file: string, msg: string): Promise<string> {
+  async function commit(text: string, file: string, msg: string, date?: string): Promise<string> {
     const path = resolve(contentRoot, file);
     mkdirSync(resolve(path, '..'), { recursive: true });
     writeFileSync(path, text);
-    return commitWip(shadow, writer, 'content', msg);
+    return commitWip(shadow, writer, 'content', msg, 'main', date ? { date } : undefined);
+  }
+
+  async function save(date?: string): Promise<unknown> {
+    return saveVersion(shadow, 'content', [writer], 'main', undefined, date ? { date } : undefined);
+  }
+
+  function makeTick(startIso = '2026-05-05T12:00:00.000Z') {
+    let t = Date.parse(startIso);
+    return () => {
+      t += 1000;
+      return new Date(t).toISOString();
+    };
   }
 
   beforeEach(async () => {
@@ -578,18 +590,16 @@ describe('rename-log read primitives (shadow-repo backed)', () => {
   });
 
   test('buildSeeds — checkpoint earlier than R → included; checkpoint later than R → excluded', async () => {
-    await commit('# A v1\n', 'a.md', 'WIP: a v1');
-    await saveVersion(shadow, 'content', [writer]);
+    const at = makeTick();
+
+    await commit('# A v1\n', 'a.md', 'WIP: a v1', at());
+    await save(at());
     const k1 = await checkpointSha('main');
 
-    await new Promise((r) => setTimeout(r, 1100));
+    const renameSha = await commit('# A v2 — rename\n', 'a.md', 'rename: a -> b', at());
 
-    const renameSha = await commit('# A v2 — rename\n', 'a.md', 'rename: a -> b');
-
-    await new Promise((r) => setTimeout(r, 1100));
-
-    await commit('# B v1\n', 'b.md', 'WIP: b');
-    await saveVersion(shadow, 'content', [writer]);
+    await commit('# B v1\n', 'b.md', 'WIP: b', at());
+    await save(at());
     const k2 = await checkpointSha('main');
 
     const seeds = await buildSeeds(shadow, renameSha, 'main');
@@ -648,12 +658,12 @@ describe('rename-log read primitives (shadow-repo backed)', () => {
   });
 
   test('resolveDocPathAtCommit — renamed doc, sha at predecessor name → returns historical path', async () => {
-    const commitA = await commit('# A pre-rename\n', 'a.md', 'WIP: a');
-    await saveVersion(shadow, 'content', [writer]);
+    const at = makeTick();
 
-    await new Promise((r) => setTimeout(r, 1100));
+    const commitA = await commit('# A pre-rename\n', 'a.md', 'WIP: a', at());
+    await save(at());
 
-    const renameCommit = await commit('# B post-rename\n', 'b.md', 'rename: a -> b');
+    const renameCommit = await commit('# B post-rename\n', 'b.md', 'rename: a -> b', at());
 
     const index = createEmptyIndex();
     appendRenameLogEntry(
@@ -674,18 +684,18 @@ describe('rename-log read primitives (shadow-repo backed)', () => {
   });
 
   test('resolveDocPathAtCommit — name-reuse contamination rejected by cycle bound', async () => {
-    await commit('# A old\n', 'a.md', 'WIP: a');
-    await saveVersion(shadow, 'content', [writer]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const at = makeTick();
+
+    await commit('# A old\n', 'a.md', 'WIP: a', at());
+    await save(at());
 
     rmSync(resolve(contentRoot, 'a.md'));
-    const renameCommit = await commit('# B fresh\n', 'b.md', 'rename: a -> b');
-    await saveVersion(shadow, 'content', [writer]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const renameCommit = await commit('# B fresh\n', 'b.md', 'rename: a -> b', at());
+    await save(at());
 
     rmSync(resolve(contentRoot, 'b.md'));
-    const newACommit = await commit('# A new (unrelated)\n', 'a.md', 'WIP: new-a');
-    await saveVersion(shadow, 'content', [writer]);
+    const newACommit = await commit('# A new (unrelated)\n', 'a.md', 'WIP: new-a', at());
+    await save(at());
 
     const index = createEmptyIndex();
     appendRenameLogEntry(

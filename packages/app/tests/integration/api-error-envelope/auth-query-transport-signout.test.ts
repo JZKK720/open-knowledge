@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { httpAuthQueryTransport } from '@/lib/transports/auth-query-transport';
+import { HARNESS_BOOT_TIMEOUT_MS } from '../harness-boot-timeout';
 import { createTestServer, type TestServer } from '../test-harness';
 
 type FetchFn = typeof globalThis.fetch;
@@ -17,7 +18,7 @@ beforeAll(async () => {
     const target = typeof input === 'string' && input.startsWith('/') ? origin + input : input;
     return originalFetch(target, init);
   }) as FetchFn;
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   globalThis.fetch = originalFetch;

@@ -10,6 +10,12 @@ export const TOAST_A_PROGRESS_BODY = 'Relaunching to install the update…';
 
 export const TOAST_A_ERROR_BODY = 'Relaunch failed — please restart manually';
 
+export function installFailedBody(version: string): string {
+  return `Update to ${version} didn't install.`;
+}
+export const INSTALL_FAILED_RETRY_ACTION = 'Retry';
+export const INSTALL_FAILED_DOWNLOAD_ACTION = 'Download manually';
+
 export const TOAST_E_ERROR_BODY = 'Recovery action failed — please try again';
 
 export function appendErrorDetail(base: string, err: unknown): string {
@@ -35,8 +41,9 @@ export interface UpdateNotice {
   action?: { label: string; onClick: () => void };
   secondaryAction?: { label: string; onClick: () => void };
   onDismiss?: () => void;
-  variant?: 'info' | 'error';
+  variant?: 'info' | 'error' | 'success';
   priority: number;
+  dismissible?: boolean;
 }
 
 const PRIORITY_SCHEMA_INCOMPATIBILITY = 0;
@@ -60,9 +67,11 @@ export function attachUpdateSubscribers(
   const unsubscribers: Array<() => void> = [];
   const autoDismissTimers = new Set<ReturnType<typeof setTimeout>>();
 
+  const downloadedNoticeId = 'update-downloaded';
+
   unsubscribers.push(
     bridge.onUpdateDownloaded(({ version }) => {
-      const noticeId = 'update-downloaded';
+      const noticeId = downloadedNoticeId;
 
       const armReadyNotice = () => {
         addNotice({
@@ -76,6 +85,7 @@ export function attachUpdateSubscribers(
                 id: noticeId,
                 body: TOAST_A_PROGRESS_BODY,
                 priority: PRIORITY_UPDATE_DOWNLOADED,
+                dismissible: false,
               });
               bridge.update.relaunchNow().then(
                 () => {
@@ -101,11 +111,67 @@ export function attachUpdateSubscribers(
   );
 
   unsubscribers.push(
+    bridge.onUpdateRelaunching(() => {
+      addNotice({
+        id: downloadedNoticeId,
+        body: TOAST_A_PROGRESS_BODY,
+        priority: PRIORITY_UPDATE_DOWNLOADED,
+        dismissible: false,
+      });
+    }),
+  );
+
+  unsubscribers.push(
+    bridge.onUpdateRelaunchFailed(({ version, message, downloadUrl }) => {
+      if (downloadUrl) {
+        const failedId = `install-failed-${version}`;
+        const armFailedNotice = (): void => {
+          addNotice({
+            id: failedId,
+            body: installFailedBody(version),
+            variant: 'error',
+            priority: PRIORITY_RELAUNCH_ERROR,
+            action: {
+              label: INSTALL_FAILED_RETRY_ACTION,
+              onClick: () => {
+                bridge.update.relaunchNow().then(
+                  () => {
+                    dismissNotice(failedId);
+                  },
+                  (err: unknown) => {
+                    console.warn('[update-notice] install-failed retry rejected', err);
+                    armFailedNotice();
+                  },
+                );
+              },
+            },
+            secondaryAction: {
+              label: INSTALL_FAILED_DOWNLOAD_ACTION,
+              onClick: () => {
+                void bridge.shell.openExternal(downloadUrl);
+              },
+            },
+          });
+        };
+        armFailedNotice();
+        return;
+      }
+      addNotice({
+        id: `relaunch-error-${version}`,
+        body: message ? `${TOAST_A_ERROR_BODY}: ${message}` : TOAST_A_ERROR_BODY,
+        variant: 'error',
+        priority: PRIORITY_RELAUNCH_ERROR,
+      });
+    }),
+  );
+
+  unsubscribers.push(
     bridge.onWhatsNew(({ version, releaseUrl }) => {
       const noticeId = `whats-new-${version}`;
       addNotice({
         id: noticeId,
         body: toastBBody(version),
+        variant: 'success',
         priority: PRIORITY_WHATS_NEW,
         action: {
           label: TOAST_B_ACTION,

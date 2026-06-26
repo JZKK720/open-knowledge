@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { toBroadcasterKey } from '@inkeep/open-knowledge-server';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { agentWriteMd, createTestServer, type TestServer } from './test-harness';
 
 let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -92,7 +93,7 @@ describe('multi-agent presence — Tier 1 regression gate (FR-8)', () => {
     const doc = `mp-simple-${crypto.randomUUID().slice(0, 8)}`;
     const uuid = `uuid-simple-${crypto.randomUUID().slice(0, 8)}`;
 
-    const res = await fetch(`http://localhost:${server.port}/api/agent-write`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/agent-write`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -126,7 +127,7 @@ describe('multi-agent presence — Tier 1 regression gate (FR-8)', () => {
       clientName: 'claude-code',
     });
 
-    const res = await fetch(`http://localhost:${server.port}/api/metrics/agent-presence`);
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/metrics/agent-presence`);
     expect(res.ok).toBe(true);
     const body = (await res.json()) as {
       presence: Record<

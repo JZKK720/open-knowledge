@@ -28,6 +28,27 @@ describe('validatePatchScopes', () => {
     expect(violation?.actualScope).toBe('user');
   });
 
+  test('returns null for autoSync.default (project) written by a project writer', () => {
+    expect(validatePatchScopes({ autoSync: { default: false } }, 'project')).toBeNull();
+    expect(validatePatchScopes({ autoSync: { default: true } }, 'project')).toBeNull();
+    expect(validatePatchScopes({ autoSync: { default: null } }, 'project')).toBeNull();
+  });
+
+  test('returns SCOPE_VIOLATION for autoSync.default written by a project-local writer', () => {
+    const violation = validatePatchScopes({ autoSync: { default: false } }, 'project-local');
+    expect(violation?.code).toBe('SCOPE_VIOLATION');
+    expect(violation?.path).toEqual(['autoSync', 'default']);
+    expect(violation?.expectedScope).toBe('project');
+    expect(violation?.actualScope).toBe('project-local');
+  });
+
+  test('returns SCOPE_VIOLATION for autoSync.default written by a user writer', () => {
+    const violation = validatePatchScopes({ autoSync: { default: true } }, 'user');
+    expect(violation?.code).toBe('SCOPE_VIOLATION');
+    expect(violation?.expectedScope).toBe('project');
+    expect(violation?.actualScope).toBe('user');
+  });
+
   test('returns SCOPE_VIOLATION for a user field written by a project writer', () => {
     const violation = validatePatchScopes({ appearance: { theme: 'dark' } }, 'project');
     expect(violation?.code).toBe('SCOPE_VIOLATION');

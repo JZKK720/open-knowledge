@@ -12,12 +12,14 @@ function makeCache(opts: {
   pages?: Iterable<string>;
   folderPaths?: Iterable<string>;
   assetPaths?: Iterable<string>;
+  filePaths?: Iterable<string>;
 }): PageListCacheSnapshot {
   const pages = new Set(opts.pages ?? []);
   return {
     pages,
     folderPaths: new Set(opts.folderPaths ?? []),
     assetPaths: opts.assetPaths === undefined ? undefined : new Set(opts.assetPaths),
+    filePaths: opts.filePaths === undefined ? undefined : new Set(opts.filePaths),
     pagesBySlug: buildPagesBySlugIndex(pages, toWikiLinkSlug),
   };
 }
@@ -119,6 +121,46 @@ describe('computeLinkResolutionState', () => {
   test('root-absolute asset href with cache, asset missing → unresolved', () => {
     const cache = makeCache({ pages: [], assetPaths: ['test/he.png'] });
     expect(computeLinkResolutionState('/test/nonexistent.png', 'README', cache)).toBe('unresolved');
+  });
+
+  test('.canvas href resolves to asset when index contains it', () => {
+    const cache = makeCache({ pages: [], assetPaths: ['vault/Board.canvas'] });
+    expect(computeLinkResolutionState('./Board.canvas', 'vault/note', cache)).toBe('asset');
+  });
+
+  test('.canvas href is unresolved when asset index lacks it', () => {
+    const cache = makeCache({ pages: [], assetPaths: [] });
+    expect(computeLinkResolutionState('./Board.canvas', 'vault/note', cache)).toBe('unresolved');
+  });
+
+  test('.base href resolves to asset when index contains it', () => {
+    const cache = makeCache({ pages: [], assetPaths: ['vault/Characters.base'] });
+    expect(computeLinkResolutionState('./Characters.base', 'vault/note', cache)).toBe('asset');
+  });
+
+  test('.base href is unresolved when asset index lacks it', () => {
+    const cache = makeCache({ pages: [], assetPaths: [] });
+    expect(computeLinkResolutionState('./Characters.base', 'vault/note', cache)).toBe('unresolved');
+  });
+
+  test('relative non-asset file href resolves against filePaths', () => {
+    const cache = makeCache({ pages: [], assetPaths: [], filePaths: ['data/example.csv'] });
+    expect(computeLinkResolutionState('./data/example.csv', 'README', cache)).toBe('asset');
+  });
+
+  test('relative non-asset file href that is missing renders unresolved', () => {
+    const cache = makeCache({ pages: [], assetPaths: [], filePaths: ['data/example.csv'] });
+    expect(computeLinkResolutionState('./data/missing.csv', 'README', cache)).toBe('unresolved');
+  });
+
+  test('non-asset file href stays optimistic when BOTH partitions absent (cold cache)', () => {
+    const cache = makeCache({ pages: [] });
+    expect(computeLinkResolutionState('./data/example.csv', 'README', cache)).toBe('asset');
+  });
+
+  test('non-asset file href is unresolved when only assetPaths is set (no filePaths) and target missing', () => {
+    const cache = makeCache({ pages: [], assetPaths: [] });
+    expect(computeLinkResolutionState('./data/example.csv', 'README', cache)).toBe('unresolved');
   });
 
   test('doc href with cache, target is folder → folder', () => {

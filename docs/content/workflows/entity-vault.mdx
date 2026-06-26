@@ -1,6 +1,6 @@
 ---
 title: Entity vault (GBrain-compatible) workflow
-description: A GBrain-compatible Markdown workflow for people, companies, meetings, and concepts. Open Knowledge is the cockpit/editor/review layer; Garry Tan's gbrain can import or sync the same vault for indexing and automation.
+description: A GBrain-compatible Markdown workflow for people, companies, meetings, and concepts. OpenKnowledge is the cockpit/editor/review layer; Garry Tan's gbrain can import or sync the same vault for indexing and automation.
 ---
 
 An **Entity vault (GBrain-compatible Markdown)** is a Markdown brain organized around typed dossiers: people, companies, meetings, concepts, originals, and media. Each durable dossier has two zones:
@@ -8,7 +8,7 @@ An **Entity vault (GBrain-compatible Markdown)** is a Markdown brain organized a
 1. **Compiled truth** — the current synthesis, rewritten as evidence changes.
 2. **Timeline** — append-only evidence bullets, dated and attributable.
 
-Open Knowledge scaffolds and edits that Markdown. Garry Tan's [`gbrain`](https://github.com/garrytan/gbrain), if you install it, can import/sync the same vault and add its DB-backed retrieval, graph extraction, embedding, and automation. OK does **not** replace `gbrain`; it gives GBrain-style Markdown brains a human cockpit for review, correction, attribution, and Git-visible edits.
+OpenKnowledge scaffolds and edits that Markdown. Garry Tan's [`gbrain`](https://github.com/garrytan/gbrain), if you install it, can import/sync the same vault and add its DB-backed retrieval, graph extraction, embedding, and automation. OK does **not** replace `gbrain`; it gives GBrain-style Markdown brains a human cockpit for review, correction, attribution, and Git-visible edits.
 
 ## Who this is for
 
@@ -19,7 +19,7 @@ Open Knowledge scaffolds and edits that Markdown. Garry Tan's [`gbrain`](https:/
 
 ## The division of labor
 
-| Layer | Open Knowledge | Garry Tan's `gbrain` |
+| Layer | OpenKnowledge | Garry Tan's `gbrain` |
 | --- | --- | --- |
 | Markdown files | Creates, edits, reviews, templates, folder guidance | Imports/syncs as source material |
 | Human correction | WYSIWYG/source editor, activity attribution, version checkpoints | Sees corrections after import/sync |
@@ -121,8 +121,7 @@ referenced person, company, and concept dossiers using the Entity vault (GBrain-
 ```
 
 4. Review the agent edits in OK. If the agent inferred something wrong, correct it in the editor.
-5. Save a version checkpoint before any risky enrichment pass.
-6. Commit the Markdown changes.
+5. Commit the Markdown changes.
 
 The core value is the correction loop: the durable memory is not hidden in a model context window or database row. It is a file you can inspect, edit, diff, and roll back.
 
@@ -154,7 +153,7 @@ For a GBrain-literate reviewer, the demo target is not "OK replaces GBrain." It 
 2. Let an agent write/update a dossier through OK MCP.
 3. Watch the edit land live with attribution.
 4. Correct a wrong claim by hand in OK.
-5. Save a checkpoint and commit.
+5. Commit the changes.
 6. Run `gbrain sync --repo <vault>`.
 7. Query/search in `gbrain` and see the corrected fact.
 

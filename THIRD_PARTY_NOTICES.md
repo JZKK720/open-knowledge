@@ -744,7 +744,7 @@ Homepage: https://github.com/oramasearch/orama
 
 Copyright 2023 OramaSearch Inc
 
-### `@pierre/trees@1.0.0-beta.3`
+### `@pierre/trees@1.0.0-beta.4`
 
 Copyright 2025 Pierre Computer Company
 
@@ -2524,6 +2524,16 @@ Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/v
 
 Copyright (c) Microsoft Corporation.
 
+### `@types/whatwg-mimetype@3.0.2`
+Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/whatwg-mimetype
+
+Copyright (c) Microsoft Corporation.
+
+### `@types/ws@8.18.1`
+Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ws
+
+Copyright (c) Microsoft Corporation.
+
 ### `@types/yargs@17.0.35`
 Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yargs
 
@@ -2558,6 +2568,31 @@ Copyright (c) 2013 Ben Frederickson Copyright (c) 2021 Samuel Gratzl
 Homepage: https://github.com/vimeo/player.js
 
 Copyright (c) 2016 [Vimeo](https://vimeo.com)
+
+### `@xterm/addon-fit@0.11.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-fit
+
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-unicode11@0.9.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-unicode11
+
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-web-links@0.12.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-web-links
+
+Copyright (c) 2017, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/addon-webgl@0.19.0`
+Homepage: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-webgl
+
+Copyright (c) 2018, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+
+### `@xterm/xterm@6.0.0`
+Homepage: https://github.com/xtermjs/xterm.js
+
+Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js) Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com) Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
 
 ### `accepts@2.0.0`
 Homepage: https://github.com/jshttp/accepts
@@ -2693,6 +2728,11 @@ Copyright (c) Feross Aboukhadijeh, and other contributors.
 Homepage: https://github.com/brianloveswords/buffer-crc32
 
 Copyright (c) 2013-2024 Brian J. Brennan
+
+### `buffer-image-size@0.6.4`
+Homepage: https://github.com/evidentpoint/buffer-image-size
+
+_(LICENSE file present but no auto-extractable copyright line; refer to the package source for canonical attribution.)_
 
 ### `builder-util-runtime@9.6.0`
 Homepage: https://github.com/electron-userland/electron-builder
@@ -3448,6 +3488,11 @@ Copyright (c) GraphQL Contributors
 Homepage: https://github.com/pshihn/hachure-fill#readme
 
 Copyright (c) 2023 Preet Shihn
+
+### `happy-dom@20.10.2`
+Homepage: https://github.com/capricorn86/happy-dom
+
+Copyright (c) 2019 David Ortner (capricorn86)
 
 ### `has-flag@4.0.0`
 Homepage: https://github.com/sindresorhus/has-flag
@@ -4370,6 +4415,13 @@ Homepage: https://github.com/prebuild/node-gyp-build
 
 Copyright (c) 2017 Mathias Buus
 
+### `node-pty@1.1.0`
+Homepage: https://github.com/microsoft/node-pty
+
+Copyright (c) 2012-2015, Christopher Jeffrey (https://github.com/chjj/)
+Copyright (c) 2016, Daniel Imms (http://www.growingwiththeweb.com)
+Copyright (c) 2018 - present Microsoft Corporation
+
 ### `node-releases@2.0.37`
 Homepage: https://github.com/chicoxyzzy/node-releases
 
@@ -5251,6 +5303,11 @@ Homepage: https://github.com/sindresorhus/tagged-tag
 
 Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
+### `tailwind-merge@3.6.0`
+Homepage: https://github.com/dcastil/tailwind-merge
+
+Copyright (c) 2021 Dany Castillo
+
 ### `tailwind-merge@3.5.0`
 Homepage: https://github.com/dcastil/tailwind-merge
 
@@ -5576,6 +5633,11 @@ Homepage: https://github.com/MattiasBuelens/web-streams-polyfill#readme
 
 Copyright (c) 2024 Mattias Buelens Copyright (c) 2016 Diwank Singh Tomer
 
+### `whatwg-mimetype@3.0.0`
+Homepage: https://github.com/jsdom/whatwg-mimetype
+
+_(LICENSE file present but no auto-extractable copyright line; refer to the package source for canonical attribution.)_
+
 ### `wrap-ansi@6.2.0`
 Homepage: https://github.com/chalk/wrap-ansi
 
@@ -5585,6 +5647,11 @@ Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
 Homepage: https://github.com/chalk/wrap-ansi
 
 Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+
+### `ws@8.21.0`
+Homepage: https://github.com/websockets/ws
+
+Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com> Copyright (c) 2013 Arnout Kazemier and contributors Copyright (c) 2016 Luigi Pinca and contributors
 
 ### `ws@8.20.0`
 Homepage: https://github.com/websockets/ws
@@ -6259,6 +6326,11 @@ Homepage: https://github.com/motdotla/dotenv#readme
 
 Copyright (c) 2015, Scott Motte
 
+### `entities@7.0.1`
+Homepage: https://github.com/fb55/entities
+
+Copyright (c) Felix Böhm
+
 ### `entities@6.0.1`
 Homepage: https://github.com/fb55/entities
 
@@ -6332,7 +6404,7 @@ The following MIT-licensed packages are patched in this repository via Bun's `pa
 | Package | Patch file |
 | --- | --- |
 | `@handlewithcare/remark-prosemirror@0.1.5` | `patches/@handlewithcare%2Fremark-prosemirror@0.1.5.patch` |
-| `@pierre/trees@1.0.0-beta.3` | `patches/@pierre%2Ftrees@1.0.0-beta.3.patch` |
+| `@pierre/trees@1.0.0-beta.4` | `patches/@pierre%2Ftrees@1.0.0-beta.4.patch` |
 | `@tiptap/extension-drag-handle@3.22.3` | `patches/@tiptap%2Fextension-drag-handle@3.22.3.patch` |
 | `@tiptap/y-tiptap@3.0.3` | `patches/@tiptap%2Fy-tiptap@3.0.3.patch` |
 | `react-medium-image-zoom@5.4.3` | `patches/react-medium-image-zoom@5.4.3.patch` |

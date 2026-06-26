@@ -170,6 +170,21 @@ describe("applyClaGate", () => {
     expect(gh.recorded.status).toBe("success");
   });
 
+  test("forceDraft holds a signed, ungated PR draft (conflict markers need manual resolution)", async () => {
+    const gh = fakeGh("success");
+    const gate = await applyClaGate({
+      gh,
+      publicPr: publicPr("outsider"),
+      internalPr,
+      forceDraft: true,
+    });
+    expect(gh.recorded.draft).toBe(true);
+    // The gate itself is not gated (CLA is signed); the draft is purely the
+    // conflict hold, so cla/verified still reports success.
+    expect(gate.gated).toBe(false);
+    expect(gh.recorded.status).toBe("success");
+  });
+
   test("a missing author is gated (no bot or member match, fails closed on status)", async () => {
     const gh = fakeGh(null);
     const gate = await applyClaGate({ gh, publicPr: { draft: false, head: { sha: "s" } }, internalPr });

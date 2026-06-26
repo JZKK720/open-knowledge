@@ -1,4 +1,9 @@
+import { existsSync } from 'node:fs';
 import type { KnipConfig } from 'knip';
+
+const fidelityOnlyAppDeps = existsSync('packages/app/tests/fidelity')
+  ? []
+  : ['fast-check', 'commonmark.json', 'remark-mdx', 'remark-parse'];
 
 export default {
   tags: ['-lintignore'],
@@ -7,15 +12,17 @@ export default {
     'husky',
     '@lingui/babel-plugin-lingui-macro',
     '@lingui/format-po',
+    'micromark',
   ],
   ignoreBinaries: ['printf'],
   ignoreIssues: {
     'packages/app/src/locales/**': ['files'],
     'packages/app/src/components/ui/*': ['exports'],
+    'docs/src/components/ui/*': ['exports'],
     'docs/source.config.ts': ['exports'],
     'packages/app/src/editor/extensions/internal-link.ts': ['exports', 'types'],
     'packages/app/src/editor/clipboard/serialize.ts': ['types'],
-    '{tech-probes,reports,specs}/**': ['files'],
+    '{tech-probes,reports,specs}/**': ['files', 'exports', 'types'],
     'tests/integration/**': ['files'],
     'packages/core/src/desktop-bridge.ts': ['files', 'types'],
     'packages/desktop/src/shared/ipc-events.ts': ['files'],
@@ -38,8 +45,13 @@ export default {
     'scripts/compute-next-beta.mjs': ['files'],
     'scripts/compute-next-beta.test.mjs': ['files'],
     'scripts/check-license-fields.test.mjs': ['files'],
+    'scripts/check-gate-catches-build-errors.test.mjs': ['files'],
     'scripts/bun-install-ci.test.mjs': ['files'],
+    'scripts/measure-scripts-contract.test.mjs': ['files'],
     'scripts/promote-stable-token.test.mjs': ['files'],
+    'scripts/assert-smoke-not-vacuous.mjs': ['files'],
+    'scripts/assert-smoke-not-vacuous.test.mjs': ['files'],
+    'scripts/check-no-ci-skip-in-e2e.test.mjs': ['files'],
     '.github/scripts/cla-gate.test.mjs': ['files'],
     '.github/scripts/cla-gate.mjs': ['exports'],
     '.github/scripts/bridge-public-pr-to-monorepo.test.mjs': ['files'],
@@ -60,8 +72,6 @@ export default {
     'packages/desktop/src/shared/ipc-channels.ts': ['types'],
     'packages/app/src/lib/desktop-bridge-types.ts': ['types'],
     'packages/server/src/share/git-context.ts': ['types'],
-    'docs/src/app/d/[encoded]/opengraph-image.test.ts': ['files'],
-    'docs/src/lib/share-splash.test.ts': ['files'],
     'packages/server/src/git-preflight.ts': ['exports'],
     'packages/cli/src/commands/diagnose-health.ts': ['exports'],
     'packages/cli/src/commands/diagnose-health-checks/git.ts': ['exports'],
@@ -84,6 +94,7 @@ export default {
         'fuzzysort', // installed by PR #361 (workspace omnibar search) ahead of the consumer wire-up; same idiom as @hookform/resolvers
         '@testing-library/jest-dom', // side-effect import (`import '@testing-library/jest-dom'`) registers matchers
         'highlight.js', // lowlight's peer dependency — never imported here directly, but lowlight's grammar registrations resolve through it
+        ...fidelityOnlyAppDeps,
       ],
       ignoreFiles: ['src/server/agent-sim.ts'],
     },
@@ -97,7 +108,7 @@ export default {
       project: 'src/**',
     },
     docs: {
-      entry: ['source.config.ts'],
+      entry: ['source.config.ts', 'src/**/*.test.{ts,tsx}'],
     },
     'packages/server': {
       entry: ['src/**/*.test.ts'],
@@ -114,12 +125,14 @@ export default {
         'src/main/index.ts',
         'src/preload/index.ts',
         'src/utility/server-entry.ts',
+        'src/utility/pty-host.ts',
         'src/**/*.test.ts',
         'electron.vite.config.ts',
         'scripts/*.mjs',
         'tests/**/*.test.ts',
         'tests/**/*.test.mjs',
       ],
+      ignoreUnresolved: [/utility\/pty-host\.js$/],
       project: 'src/**',
     },
   },

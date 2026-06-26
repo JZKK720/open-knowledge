@@ -174,9 +174,9 @@ describe('renderInventoryFooter (FR-1)', () => {
     expect(text).toContain('<TagName>');
   });
 
-  test('stays under 3KB at N=11 (NFR performance bound — extra ~600 bytes covers the fenced-code-block authoring guidance)', () => {
+  test('stays under 3.5KB at N=11 (NFR performance bound — extra ~600 bytes covers the fenced-code-block authoring guidance + the Embed→video-block steer for YouTube/Vimeo/Loom URLs added per PRD-7069)', () => {
     const text = renderInventoryFooter();
-    expect(text.length).toBeLessThan(3072);
+    expect(text.length).toBeLessThan(3584);
   });
 
   test('mentions the `html preview` fence affordance for interactive content', () => {

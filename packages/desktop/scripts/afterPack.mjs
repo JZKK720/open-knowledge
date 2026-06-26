@@ -2,6 +2,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { FuseV1Options, FuseVersion, flipFuses } from '@electron/fuses';
+import { ensureNodePtySpawnHelperExecutable } from './ensure-node-pty-exec.mjs';
 import { targetFuses } from './target-fuses.mjs';
 
 export default async function afterPack(context) {
@@ -67,13 +68,13 @@ export default async function afterPack(context) {
     `${appName}.app`,
     'Contents',
     'Frameworks',
-    'Open Knowledge Server.app',
+    'OpenKnowledge Server.app',
   );
   const serverHelperBinary = join(serverHelperBundleDir, 'Contents', 'MacOS', `${appName} Helper`);
   if (!existsSync(electronHelperStub)) {
     throw new Error(
       `[afterPack] Electron Helper stub not found at ${electronHelperStub}. ` +
-        `Cannot clone it into the Open Knowledge Server helper bundle.`,
+        `Cannot clone it into the OpenKnowledge Server helper bundle.`,
     );
   }
   const serverHelperMacOsDir = dirname(serverHelperBinary);
@@ -122,6 +123,10 @@ export default async function afterPack(context) {
     );
   }
   console.log(
-    `[afterPack] cloned Electron Helper stub into Open Knowledge Server.app MacOS slot at ${serverHelperBinary}`,
+    `[afterPack] cloned Electron Helper stub into OpenKnowledge Server.app MacOS slot at ${serverHelperBinary}`,
   );
+
+  const resourcesDir = join(appOutDir, `${appName}.app`, 'Contents', 'Resources');
+  const ptyHelpers = ensureNodePtySpawnHelperExecutable(resourcesDir);
+  console.log(`[afterPack] node-pty spawn-helper marked executable (${ptyHelpers.length} file(s))`);
 }

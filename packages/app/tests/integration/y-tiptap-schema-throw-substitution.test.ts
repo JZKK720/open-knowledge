@@ -12,9 +12,7 @@ interface YpsCounters {
 
 function readCounters(): YpsCounters {
   const host = globalThis as { __okYpsCounters?: YpsCounters };
-  if (!host.__okYpsCounters) {
-    host.__okYpsCounters = { block: 0, inline: 0 };
-  }
+  host.__okYpsCounters ||= { block: 0, inline: 0 };
   return { ...host.__okYpsCounters };
 }
 

@@ -3,6 +3,7 @@ import type { ShadowContributor } from '@inkeep/open-knowledge-core';
 import {
   getShadowRepoPath,
   getWipRefPattern,
+  parseOkActor,
   parseWriterId,
   readContributors,
   type WriterClassification,
@@ -99,6 +100,79 @@ async function logOnRef(
   return commits;
 }
 
+async function checkpointAncestryFallback(
+  sg: SimpleGit,
+  branch: string,
+  relPath: string,
+  need: number,
+  seen: Set<string>,
+): Promise<ShadowCommit[]> {
+  let latestCheckpoint = '';
+  try {
+    latestCheckpoint = (
+      await sg.raw(
+        'for-each-ref',
+        '--sort=-creatordate',
+        '--count=1',
+        '--format=%(objectname)',
+        `refs/checkpoints/${branch}/`,
+      )
+    ).trim();
+  } catch {
+    return [];
+  }
+  if (!latestCheckpoint) return [];
+
+  let out = '';
+  try {
+    out = await sg.raw(
+      'log',
+      latestCheckpoint,
+      `-${Math.max(need * 3, 20)}`,
+      '--format=%H%x00%aI%x00%an%x00%s%x00%B%x1e',
+      '--',
+      relPath,
+    );
+  } catch {
+    return [];
+  }
+
+  const commits: ShadowCommit[] = [];
+  for (const record of out.split('\x1e')) {
+    if (commits.length >= need) break;
+    const trimmed = record.trimStart();
+    if (!trimmed) continue;
+    const [hash = '', date = '', authorName = '', subject = '', rawBody = ''] =
+      trimmed.split('\x00');
+    const sha = hash.trim();
+    if (sha.length !== 40 || seen.has(sha)) continue;
+    if (
+      subject.startsWith('checkpoint:') ||
+      subject.startsWith('park:') ||
+      subject.startsWith('import:') ||
+      subject.startsWith('upstream:')
+    ) {
+      continue;
+    }
+    const actor = parseOkActor(rawBody);
+    const writerId = actor?.writer_id ?? '';
+    const parsed = parseWriterId(writerId);
+    seen.add(sha);
+    commits.push({
+      hash: sha,
+      date,
+      writerName: actor?.display_name ?? authorName,
+      message: subject,
+      contributors: readContributors(rawBody),
+      writerId,
+      isAgent: parsed.isAgent,
+      writerClassification: parsed.classification,
+      branch,
+    });
+  }
+  return commits;
+}
+
 export async function readShadowLog(
   projectDir: string,
   relPath: string,
@@ -122,13 +196,31 @@ export async function readShadowLog(
     .split('\n')
     .map((r) => r.trim())
     .filter(Boolean);
-  if (refs.length === 0) return { commits: [], source: 'shadow-repo' };
 
-  const perRef = await Promise.all(refs.map((ref) => logOnRef(sg, ref, relPath, branch, limit)));
-  const commits = perRef
+  const perRef =
+    refs.length === 0
+      ? []
+      : await Promise.all(refs.map((ref) => logOnRef(sg, ref, relPath, branch, limit)));
+  let commits = perRef
     .flat()
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, limit);
+
+  if (commits.length < limit) {
+    const seen = new Set(commits.map((c) => c.hash));
+    const fallback = await checkpointAncestryFallback(
+      sg,
+      branch,
+      relPath,
+      limit - commits.length,
+      seen,
+    );
+    if (fallback.length > 0) {
+      commits = [...commits, ...fallback]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, limit);
+    }
+  }
 
   return { commits, source: 'shadow-repo' };
 }

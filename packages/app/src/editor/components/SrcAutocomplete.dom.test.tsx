@@ -189,7 +189,7 @@ describe('SrcAutocomplete — keyboard handling', () => {
     expect(getOptions().length).toBe(0);
   });
 
-  test('Enter with no matching suggestions is a no-op (does NOT call onChange)', () => {
+  test('Enter with no matching suggestions does NOT call onChange (no phantom selection)', () => {
     const onChange = mock((_v: string) => {});
 
     render(
@@ -205,5 +205,66 @@ describe('SrcAutocomplete — keyboard handling', () => {
     fireEvent.focus(input);
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('Enter with no highlighted suggestion calls onSubmit (Tab rename Enter-commits-and-closes)', () => {
+    const onSubmit = mock(() => {});
+    render(
+      <SrcAutocomplete
+        id="prop-src"
+        value=""
+        onChange={() => {}}
+        onSubmit={onSubmit}
+        accept={ALLOWED_IMAGE_MIME_TYPES}
+      />,
+    );
+    const input = document.getElementById('prop-src') as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  test('Enter with a highlighted suggestion picks the suggestion, NOT onSubmit', () => {
+    stubAssetPaths.add('assets/photo.png');
+    const onChange = mock((_v: string) => {});
+    const onSubmit = mock(() => {});
+    render(
+      <SrcAutocomplete
+        id="prop-src"
+        value=""
+        onChange={onChange}
+        onSubmit={onSubmit}
+        accept={ALLOWED_IMAGE_MIME_TYPES}
+      />,
+    );
+    const input = document.getElementById('prop-src') as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith('/assets/photo.png');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('SrcAutocomplete — popover width tracks the trigger', () => {
+  test('PopoverContent uses the Tailwind v4 implicit-var width syntax (`w-(...)`, not `w-[...]`)', () => {
+    stubAssetPaths.add('assets/photo.png');
+    render(
+      <SrcAutocomplete
+        id="prop-src"
+        value=""
+        onChange={() => {}}
+        accept={ALLOWED_IMAGE_MIME_TYPES}
+      />,
+    );
+    const input = document.getElementById('prop-src') as HTMLInputElement;
+    fireEvent.focus(input);
+
+    const option = screen.getAllByTestId('src-autocomplete-option')[0];
+    expect(option).toBeDefined();
+    const content = option?.closest('[data-slot="popover-content"]') as HTMLElement | null;
+    expect(content).not.toBeNull();
+    const classes = content?.className ?? '';
+    expect(classes).toContain('w-(--radix-popover-trigger-width)');
+    expect(classes).not.toContain('w-[--radix-popover-trigger-width]');
   });
 });

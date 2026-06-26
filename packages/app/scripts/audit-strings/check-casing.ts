@@ -69,7 +69,7 @@ const PROPER_NOUNS = new Set([
 ]);
 
 const BRAND_PHRASES: string[] = [
-  'Open Knowledge',
+  'OpenKnowledge',
   'Claude Code',
   'Claude Desktop',
   'Claude Skill',

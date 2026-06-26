@@ -1,46 +1,104 @@
-import { ArrowRightIcon, DownloadIcon, ExternalLinkIcon } from 'lucide-react';
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { SplashButtonLabel, splashPrimaryButton } from './splash-buttons';
+import { SplashDownloadSplitButton } from './splash-download-split-button';
 
 interface SplashCtaClusterProps {
   downloadUrl: string;
   customSchemeUrl: string;
   githubUrl: string;
+  installCommand: string;
+  cloneCommand: string;
 }
+
+const FALLBACK_REVEAL_DELAY_MS = 2500;
 
 export function SplashCtaCluster({
   downloadUrl,
   customSchemeUrl,
   githubUrl,
+  installCommand,
+  cloneCommand,
 }: SplashCtaClusterProps) {
+  const [attempting, setAttempting] = useState(false);
+  const [handoffFailed, setHandoffFailed] = useState(false);
+  const attemptCleanupRef = useRef<(() => void) | null>(null);
+  const fallbackCtaRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => () => attemptCleanupRef.current?.(), []);
+
+  useEffect(() => {
+    if (handoffFailed) fallbackCtaRef.current?.focus();
+  }, [handoffFailed]);
+
+  const handleOpenClick = () => {
+    attemptCleanupRef.current?.();
+    setHandoffFailed(false);
+    setAttempting(true);
+
+    function cleanup() {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onHandoffSignal);
+      window.removeEventListener('blur', onHandoffSignal);
+      attemptCleanupRef.current = null;
+      setAttempting(false);
+    }
+
+    function onHandoffSignal() {
+      cleanup();
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') cleanup();
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onHandoffSignal);
+    window.addEventListener('blur', onHandoffSignal);
+
+    const timer = setTimeout(() => {
+      cleanup();
+      if (document.visibilityState === 'visible') setHandoffFailed(true);
+    }, FALLBACK_REVEAL_DELAY_MS);
+
+    attemptCleanupRef.current = cleanup;
+  };
+
   return (
-    <div className="mt-12 flex flex-wrap items-center gap-4">
-      <a
-        href={downloadUrl}
-        data-testid="splash-download-cta"
-        className="slide-btn-primary inline-flex items-center gap-2 rounded-lg px-6 py-3 text-sm font-medium transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slide-accent-strong)]"
-      >
-        <DownloadIcon className="size-4" aria-hidden="true" />
-        Download Open Knowledge for macOS
-      </a>
+    <div className="mt-12">
+      <div className="flex flex-wrap items-center gap-4">
+        <a
+          href={customSchemeUrl}
+          onClick={handleOpenClick}
+          data-testid="splash-open-cta"
+          className={cn(splashPrimaryButton, 'touch-manipulation')}
+        >
+          <SplashButtonLabel>{attempting ? 'Opening…' : 'Open in macOS app'}</SplashButtonLabel>
+        </a>
 
-      <a
-        href={customSchemeUrl}
-        data-testid="splash-open-cta"
-        className="slide-btn-outline inline-flex items-center gap-2 rounded-lg px-6 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slide-accent)]"
-      >
-        Open in Open Knowledge
-        <ArrowRightIcon className="size-4" aria-hidden="true" />
-      </a>
+        {/* Download + the secondary open-paths (copyable CLI commands, GitHub)
+            condensed into one segmented control. fallbackCtaRef lands focus on
+            the download segment when the deep-link handoff times out. */}
+        <SplashDownloadSplitButton
+          downloadUrl={downloadUrl}
+          githubUrl={githubUrl}
+          installCommand={installCommand}
+          cloneCommand={cloneCommand}
+          downloadRef={fallbackCtaRef}
+        />
+      </div>
 
-      <a
-        href={githubUrl}
-        data-testid="splash-github-cta"
-        rel="noopener noreferrer"
-        target="_blank"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--slide-muted)] transition-colors hover:text-[var(--slide-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slide-accent)] focus-visible:rounded"
-      >
-        View on GitHub
-        <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
-      </a>
+      <div aria-live="polite">
+        {handoffFailed ? (
+          <p className="mt-4 text-sm text-slide-muted" data-testid="splash-handoff-fallback">
+            Looks like the macOS app isn&rsquo;t installed yet — use{' '}
+            <span className="font-medium text-slide-text">Download the app</span> above.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

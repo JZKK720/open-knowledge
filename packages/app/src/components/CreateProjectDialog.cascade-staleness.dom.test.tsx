@@ -35,7 +35,7 @@ if (globalWithDomShims.ResizeObserver === undefined) {
 const ASYNC_TIMEOUT_MS = 2000;
 
 const PARENT = '/Users/test/Projects';
-const TARGET = `${PARENT}/Andrew Brain`;
+const PROJECT_NAME = 'Andrew Brain';
 const FIRST_GIT_RESULT: OkFindEnclosingGitRootResult = {
   gitRoot: '/Users/test',
   distance: 1,
@@ -45,7 +45,7 @@ interface ProgrammableBridgeStub {
   bridge: OkDesktopBridge;
   setEnclosingGitResult(result: OkFindEnclosingGitRootResult | null): void;
   setRemoveGitFolderImpl(impl: (gitRoot: string) => Promise<void>): void;
-  setPickedPath(picked: string | null): void;
+  setPickedParent(picked: string | null): void;
   setFindEnclosingProjectRootImpl(
     impl: (path: string) => Promise<OkFindEnclosingProjectRootResult | null>,
   ): void;
@@ -60,14 +60,14 @@ interface ProgrammableBridgeStub {
 
 function makeStubBridge(
   initialGit: OkFindEnclosingGitRootResult | null,
-  initialPicked: string | null,
+  initialPickedParent: string | null,
 ): ProgrammableBridgeStub {
   const findGitCalls: string[] = [];
   const folderStateCalls: string[] = [];
   const removeGitCalls: string[] = [];
   const openFolderCalls: number[] = [];
   let currentGitResult: OkFindEnclosingGitRootResult | null = initialGit;
-  let currentPicked: string | null = initialPicked;
+  let currentPickedParent: string | null = initialPickedParent;
   let removeGitImpl: (gitRoot: string) => Promise<void> = async () => undefined;
   let findEnclosingProjectImpl: (path: string) => Promise<OkFindEnclosingProjectRootResult | null> =
     async () => null;
@@ -95,7 +95,7 @@ function makeStubBridge(
     dialog: {
       openFolder: async (): Promise<string | null> => {
         openFolderCalls.push(openFolderCalls.length + 1);
-        return currentPicked;
+        return currentPickedParent;
       },
     },
     project: {
@@ -113,8 +113,8 @@ function makeStubBridge(
     setRemoveGitFolderImpl: (impl) => {
       removeGitImpl = impl;
     },
-    setPickedPath: (picked) => {
-      currentPicked = picked;
+    setPickedParent: (picked) => {
+      currentPickedParent = picked;
     },
     setFindEnclosingProjectRootImpl: (impl) => {
       findEnclosingProjectImpl = impl;
@@ -129,6 +129,19 @@ function makeStubBridge(
   };
 }
 
+async function typeName(value: string) {
+  fireEvent.change(screen.getByTestId('create-name'), { target: { value } });
+}
+
+async function waitForLocation(expected = PARENT) {
+  await waitFor(
+    () => {
+      expect(screen.getByTestId('create-location-display').textContent).toContain(expected);
+    },
+    { timeout: ASYNC_TIMEOUT_MS },
+  );
+}
+
 describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   let consoleWarnSpy: ReturnType<typeof spyOn>;
 
@@ -141,23 +154,18 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     consoleWarnSpy.mockRestore();
   });
 
-  test('S1: re-engaging Browse with the same target after an FS mutation produces a fresh probe', async () => {
-    const stub = makeStubBridge(FIRST_GIT_RESULT, TARGET);
+  test('S1: re-typing the same name after an FS mutation produces a fresh probe', async () => {
+    const stub = makeStubBridge(FIRST_GIT_RESULT, PARENT);
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
 
-    expect(screen.queryByTestId('create-name') !== null).toBe(false);
-
-    const browse = (await screen.findByTestId('create-browse', undefined, {
+    const nameInput = await screen.findByTestId('create-name', undefined, {
       timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
+    });
+    expect(nameInput.tagName).toBe('INPUT');
 
-    fireEvent.click(browse);
+    await waitForLocation();
+
+    await typeName(PROJECT_NAME);
     await waitFor(
       () => {
         expect(screen.queryByTestId('create-banner-git-confirm')).not.toBeNull();
@@ -167,12 +175,13 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
 
     stub.setEnclosingGitResult(null);
 
-    const probesBeforeReBrowse = stub.findGitCalls.length;
-    fireEvent.click(browse);
+    const probesBeforeRetype = stub.findGitCalls.length;
+    await typeName('');
+    await typeName(PROJECT_NAME);
 
     await waitFor(
       () => {
-        const delta = stub.findGitCalls.length - probesBeforeReBrowse;
+        const delta = stub.findGitCalls.length - probesBeforeRetype;
         expect(delta).toBeGreaterThanOrEqual(1);
       },
       { timeout: ASYNC_TIMEOUT_MS },
@@ -188,21 +197,12 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   });
 
   test('S2: window focus event triggers a re-probe — banner clears when FS resolves while dialog stays open', async () => {
-    const stub = makeStubBridge(FIRST_GIT_RESULT, TARGET);
+    const stub = makeStubBridge(FIRST_GIT_RESULT, PARENT);
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
 
-    expect(screen.queryByTestId('create-name') !== null).toBe(false);
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    fireEvent.click(browse);
+    await typeName(PROJECT_NAME);
     await waitFor(
       () => {
         expect(screen.queryByTestId('create-banner-git-confirm')).not.toBeNull();
@@ -232,23 +232,16 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   });
 
   test('S3: remove-.git button: confirm → IPC called → re-probe → banner clears (terminal case, no higher .git)', async () => {
-    const stub = makeStubBridge(FIRST_GIT_RESULT, TARGET);
+    const stub = makeStubBridge(FIRST_GIT_RESULT, PARENT);
     stub.setRemoveGitFolderImpl(async () => {
       stub.setEnclosingGitResult(null);
     });
 
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
-    expect(screen.queryByTestId('create-name') !== null).toBe(false);
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-    fireEvent.click(browse);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
+
+    await typeName(PROJECT_NAME);
     await waitFor(
       () => {
         expect(screen.queryByTestId('create-banner-git-confirm')).not.toBeNull();
@@ -287,7 +280,7 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     const FIRST = { gitRoot: '/Users/test', distance: 1 } as const;
     const HIGHER = { gitRoot: '/Users', distance: 2 } as const;
 
-    const stub = makeStubBridge(FIRST, TARGET);
+    const stub = makeStubBridge(FIRST, PARENT);
     stub.setRemoveGitFolderImpl(async (gitRoot) => {
       if (gitRoot === FIRST.gitRoot) {
         stub.setEnclosingGitResult(HIGHER);
@@ -297,17 +290,9 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     });
 
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
-    expect(screen.queryByTestId('create-name') !== null).toBe(false);
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-    fireEvent.click(browse);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
+    await typeName(PROJECT_NAME);
 
     await waitFor(
       () => {
@@ -369,24 +354,16 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     );
   });
 
-  test('S6: cascade probes folderState against the sanitized creation target, not the raw picked path', async () => {
-    const PICKED_RAW = '/Users/test/.hidden-notes';
-    const EXPECTED_SANITIZED_TARGET = '/Users/test/hidden-notes';
+  test('S6: cascade probes folderState against the sanitized creation target, not the raw typed name', async () => {
+    const RAW_NAME = '.hidden-notes';
+    const EXPECTED_SANITIZED_TARGET = `${PARENT}/hidden-notes`;
 
-    const stub = makeStubBridge(null, PICKED_RAW);
+    const stub = makeStubBridge(null, PARENT);
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
 
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    fireEvent.click(browse);
+    await typeName(RAW_NAME);
 
     await waitFor(
       () => {
@@ -396,27 +373,19 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     );
 
     expect(stub.folderStateCalls).toContain(EXPECTED_SANITIZED_TARGET);
-    expect(stub.folderStateCalls).not.toContain(PICKED_RAW);
+    expect(stub.folderStateCalls).not.toContain(`${PARENT}/${RAW_NAME}`);
   });
 
   test('S5: remove-.git button: IPC failure surfaces inline error, banner stays, retry path remains', async () => {
-    const stub = makeStubBridge(FIRST_GIT_RESULT, TARGET);
+    const stub = makeStubBridge(FIRST_GIT_RESULT, PARENT);
     stub.setRemoveGitFolderImpl(async () => {
       throw new Error('EACCES: permission denied');
     });
 
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
-    expect(screen.queryByTestId('create-name') !== null).toBe(false);
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-    fireEvent.click(browse);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
+    await typeName(PROJECT_NAME);
     await waitFor(
       () => {
         expect(screen.queryByTestId('create-banner-git-confirm')).not.toBeNull();
@@ -437,24 +406,16 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     expect(screen.queryByTestId('create-banner-git-remove')).not.toBeNull();
   });
 
-  test('PRD-6649: banner DOM identity is stable across consecutive Browse re-picks of the same target (verdict unchanged)', async () => {
-    const stub = makeStubBridge(null, TARGET);
+  test('PRD-6649: banner DOM identity is stable across name keystrokes that re-probe to the same verdict', async () => {
+    const stub = makeStubBridge(null, PARENT);
     const nestedRoot = '/Users/test/existing-project';
     stub.setFindEnclosingProjectRootImpl(async (_path) => ({ rootPath: nestedRoot }));
 
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
 
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    fireEvent.click(browse);
+    await typeName('Plant');
     const initialBanner = await screen.findByTestId('create-banner-nested', undefined, {
       timeout: ASYNC_TIMEOUT_MS,
     });
@@ -474,13 +435,13 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     // biome-ignore lint/style/noNonNullAssertion: asserted above
     observer.observe(bannerParent!, { childList: true, subtree: true });
 
-    const probesBeforeReBrowse = stub.findGitCalls.length;
+    const probesBefore = stub.findGitCalls.length;
 
-    fireEvent.click(browse);
+    await typeName('Plant Care Notes');
 
     await waitFor(
       () => {
-        const delta = stub.findGitCalls.length - probesBeforeReBrowse;
+        const delta = stub.findGitCalls.length - probesBefore;
         expect(delta).toBeGreaterThanOrEqual(1);
       },
       { timeout: ASYNC_TIMEOUT_MS },
@@ -501,20 +462,12 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   });
 
   test('PRD-6649: canSubmit is gated by probeLifecycle: disabled while a probe is in-flight, re-enabled when settled', async () => {
-    const stub = makeStubBridge(null, TARGET);
+    const stub = makeStubBridge(null, PARENT);
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
 
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    fireEvent.click(browse);
+    await typeName('Plant Care');
     const submitButton = screen.getByTestId('create-submit') as HTMLButtonElement;
     await waitFor(
       () => {
@@ -533,7 +486,7 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
     });
 
     const probesBefore = probeCallCount;
-    fireEvent.click(browse);
+    await typeName('Plant Care Notes');
 
     await waitFor(
       () => {
@@ -558,24 +511,16 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   });
 
   test('PRD-6649: 5 s polling skips probeNonce bump while a probe is in-flight (race-prevention gate)', async () => {
-    const stub = makeStubBridge(FIRST_GIT_RESULT, TARGET);
+    const stub = makeStubBridge(FIRST_GIT_RESULT, PARENT);
 
     const setIntervalSpy = spyOn(globalThis, 'setInterval');
 
     try {
       render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+      await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+      await waitForLocation();
 
-      const browse = (await screen.findByTestId('create-browse', undefined, {
-        timeout: ASYNC_TIMEOUT_MS,
-      })) as HTMLButtonElement;
-      await waitFor(
-        () => {
-          expect(browse.disabled).toBe(false);
-        },
-        { timeout: ASYNC_TIMEOUT_MS },
-      );
-
-      fireEvent.click(browse);
+      await typeName(PROJECT_NAME);
       await waitFor(
         () => {
           expect(screen.queryByTestId('create-banner-git-confirm')).not.toBeNull();
@@ -600,7 +545,7 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
         });
       });
 
-      fireEvent.click(browse);
+      await typeName(`${PROJECT_NAME} (v2)`);
       await waitFor(
         () => {
           expect(probeCallCount).toBeGreaterThanOrEqual(1);
@@ -641,23 +586,15 @@ describe('CreateProjectDialog cascade staleness (Tier-3 mount)', () => {
   });
 
   test('PRD-6649: probeLifecycle resets to idle on IPC-failure catch arm (canSubmit recovers after transient failure)', async () => {
-    const stub = makeStubBridge(null, TARGET);
+    const stub = makeStubBridge(null, PARENT);
     stub.setFindEnclosingGitRootImpl(async (_path) => {
       throw new Error('Simulated IPC failure');
     });
     render(<CreateProjectDialog open={true} onOpenChange={() => {}} bridge={stub.bridge} />);
+    await screen.findByTestId('create-name', undefined, { timeout: ASYNC_TIMEOUT_MS });
+    await waitForLocation();
 
-    const browse = (await screen.findByTestId('create-browse', undefined, {
-      timeout: ASYNC_TIMEOUT_MS,
-    })) as HTMLButtonElement;
-    await waitFor(
-      () => {
-        expect(browse.disabled).toBe(false);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    fireEvent.click(browse);
+    await typeName(PROJECT_NAME);
 
     const submitButton = screen.getByTestId('create-submit') as HTMLButtonElement;
 

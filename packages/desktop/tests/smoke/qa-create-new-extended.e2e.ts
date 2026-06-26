@@ -13,6 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { _electron as electron } from '@playwright/test';
+import { typeProjectName } from './_helpers/create-new-dialog';
 import { captureAppProcess, closeAppBounded } from './_helpers/electron-cleanup';
 import { expect, test } from './_helpers/smoke-test';
 
@@ -23,6 +24,12 @@ const SMOKE_ENABLED = process.env.OK_DESKTOP_E2E_SMOKE === '1';
 const DARWIN = process.platform === 'darwin';
 const BUILD_EXISTS = existsSync(MAIN_ENTRY);
 const DESKTOP_PRODUCT_NAME = '@inkeep/open-knowledge-desktop';
+
+async function expandCreateAdvanced(page: Page): Promise<void> {
+  const trigger = page.locator('[data-testid="create-advanced-trigger"]');
+  await expect(trigger).toBeVisible({ timeout: 15_000 });
+  await trigger.click();
+}
 
 function seedTmpHome(prefix: string, stateOverride?: Record<string, unknown>): string {
   const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), `ok-qa-${prefix}-`)));
@@ -44,7 +51,7 @@ function seedTmpHome(prefix: string, stateOverride?: Record<string, unknown>): s
 }
 
 interface LaunchOpts {
-  pickedPath?: string;
+  pickedParent?: string;
 }
 
 async function launchApp(tmpHome: string, opts: LaunchOpts = {}): Promise<ElectronApplication> {
@@ -56,7 +63,9 @@ async function launchApp(tmpHome: string, opts: LaunchOpts = {}): Promise<Electr
       ...process.env,
       HOME: tmpHome,
       OK_DESKTOP_E2E_SMOKE: '1',
-      ...(opts.pickedPath !== undefined ? { OK_DESKTOP_TEST_PICKED_PATH: opts.pickedPath } : {}),
+      ...(opts.pickedParent !== undefined
+        ? { OK_DESKTOP_TEST_PICKED_PATH: opts.pickedParent }
+        : {}),
     },
   });
 }
@@ -121,10 +130,11 @@ test.describe('QA extended create-new-project', () => {
     const tmpHome = seedTmpHome('editors');
     const parent = join(tmpHome, 'projects');
     mkdirSync(parent, { recursive: true });
-    const expected = join(parent, 'Customized');
+    const projectName = 'Customized';
+    const expected = join(parent, projectName);
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: expected });
+    const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
@@ -132,13 +142,20 @@ test.describe('QA extended create-new-project', () => {
       timeout: 15_000,
     });
 
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
 
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(expected, {
-      timeout: 15_000,
-    });
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      parent,
+      { timeout: 5_000 },
+    );
+    await typeProjectName(navigator, projectName);
+    await expect(navigator.locator('[data-testid="create-target-caption"]')).toContainText(
+      expected,
+      { timeout: 5_000 },
+    );
 
+    await expandCreateAdvanced(navigator);
     await navigator.locator('[data-testid="create-editor-cursor"]').click();
     await navigator.locator('[data-testid="create-editor-codex"]').click();
     await expect(navigator.locator('[data-testid="create-editor-claude"]')).toBeChecked();
@@ -162,35 +179,39 @@ test.describe('QA extended create-new-project', () => {
     expect(existsSync(join(expected, '.codex'))).toBe(false);
   });
 
-  test('QA-010 dialog UX — focus, caption, checkboxes, ARIA', async ({ captureStderrFor }) => {
+  test('QA-010 dialog UX — focus, location, checkboxes, ARIA', async ({ captureStderrFor }) => {
     const tmpHome = seedTmpHome('uxshape');
     const parent = join(tmpHome, 'projects');
     mkdirSync(parent, { recursive: true });
-    const pickedTarget = join(parent, 'Live Preview');
+    const projectName = 'Live Preview';
+    const expectedTarget = join(parent, projectName);
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     const dialog = navigator.locator('[data-testid="create-project-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
-    await expect(navigator.locator('[data-testid="create-browse"]')).toBeFocused();
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeFocused();
+
+    const locationDisplay = navigator.locator('[data-testid="create-location-display"]');
+    await expect(locationDisplay).toBeVisible();
 
     const caption = navigator.locator('[data-testid="create-target-caption"]');
-
     const ariaLive = await caption.getAttribute('aria-live');
     expect(ariaLive).toBe('polite');
 
+    await expandCreateAdvanced(navigator);
     await expect(navigator.locator('[data-testid="create-editor-claude"]')).toBeChecked();
     await expect(navigator.locator('[data-testid="create-editor-claude-desktop"]')).toBeChecked();
     await expect(navigator.locator('[data-testid="create-editor-cursor"]')).toBeChecked();
     await expect(navigator.locator('[data-testid="create-editor-codex"]')).toBeChecked();
 
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(caption).toHaveText(pickedTarget, { timeout: 15_000 });
+    await expect(caption).toContainText(expectedTarget, { timeout: 15_000 });
   });
 
   test('QA-011 + QA-016 — lastUsedProjectParent persists across opens; transient form state resets on reopen', async ({
@@ -203,10 +224,10 @@ test.describe('QA extended create-new-project', () => {
     const parent = join(tmpHome, 'projects-persist');
     mkdirSync(parent, { recursive: true });
     const userDataDir = join(tmpHome, 'Library', 'Application Support', DESKTOP_PRODUCT_NAME);
-    const pickedTarget = join(parent, 'First');
+    const projectName = 'First';
     trackForCleanup(tmpHome);
 
-    const app1 = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app1 = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app1);
     const app1Proc = captureAppProcess(app1);
     const navigator = await findWindowByMode(app1, 'navigator');
@@ -214,10 +235,11 @@ test.describe('QA extended create-new-project', () => {
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      parent,
       { timeout: 15_000 },
     );
     const submit = navigator.locator('[data-testid="create-submit"]');
@@ -253,24 +275,29 @@ test.describe('QA extended create-new-project', () => {
     await expect(navigator2.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator2.locator('[data-testid="create-name"]')).toHaveCount(0);
-    const caption2 = navigator2.locator('[data-testid="create-target-caption"]');
-    await expect(caption2).toContainText('Click Browse to pick or create a project folder', {
-      timeout: 5_000,
-    });
+    const nameInput = navigator2.locator('[data-testid="create-name"]');
+    await expect(nameInput).toBeVisible();
+    await expect(nameInput).toHaveValue('');
+    await expect(navigator2.locator('[data-testid="create-location-display"]')).toContainText(
+      persistedParent,
+      { timeout: 15_000 },
+    );
+    await expandCreateAdvanced(navigator2);
     await expect(navigator2.locator('[data-testid="create-editor-claude"]')).toBeChecked();
     await expect(navigator2.locator('[data-testid="create-editor-claude-desktop"]')).toBeChecked();
     await expect(navigator2.locator('[data-testid="create-editor-cursor"]')).toBeChecked();
     await expect(navigator2.locator('[data-testid="create-editor-codex"]')).toBeChecked();
   });
 
-  test('submit is disabled until Browse picks a target', async ({ captureStderrFor }) => {
-    const tmpHome = seedTmpHome('disabled-when-empty');
+  test('submit with no name does not create; typing the name enables creation', async ({
+    captureStderrFor,
+  }) => {
+    const tmpHome = seedTmpHome('toast-when-empty');
     const parent = join(tmpHome, 'projects-san');
     mkdirSync(parent, { recursive: true });
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: join(parent, 'AfterPick') });
+    const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
@@ -278,16 +305,22 @@ test.describe('QA extended create-new-project', () => {
       timeout: 15_000,
     });
 
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
-    await expect(navigator.locator('[data-testid="create-submit"]')).toBeDisabled();
+    const nameInput = navigator.locator('[data-testid="create-name"]');
+    await expect(nameInput).toHaveValue('');
+    const submit = navigator.locator('[data-testid="create-submit"]');
+    await expect(submit).toBeEnabled();
     const caption = navigator.locator('[data-testid="create-target-caption"]');
-    await expect(caption).toContainText('Click Browse to pick or create a project folder', {
-      timeout: 5_000,
-    });
+    await expect(caption).toHaveText('', { timeout: 5_000 });
 
+    await submit.click();
+    await navigator.waitForTimeout(2_000);
+    await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible();
+    expect(await countWindowsByMode(app, 'editor')).toBe(0);
+
+    await typeProjectName(navigator, 'AfterPick');
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(caption).toHaveText(join(parent, 'AfterPick'), { timeout: 15_000 });
-    await expect(navigator.locator('[data-testid="create-submit"]')).toBeEnabled();
+    await expect(caption).toContainText(join(parent, 'AfterPick'), { timeout: 15_000 });
+    await expect(submit).toBeEnabled();
   });
 
   test('QA-019 — double-click Create produces exactly one project', async ({
@@ -296,20 +329,21 @@ test.describe('QA extended create-new-project', () => {
     const tmpHome = seedTmpHome('dblclick');
     const parent = join(tmpHome, 'projects-dbl');
     mkdirSync(parent, { recursive: true });
-    const pickedTarget = join(parent, 'Unique');
+    const projectName = 'Unique';
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-target-caption"]')).toContainText(
+      join(parent, projectName),
       { timeout: 15_000 },
     );
 
@@ -327,7 +361,7 @@ test.describe('QA extended create-new-project', () => {
     await new Promise((r) => setTimeout(r, 2_000));
     const editorCount = await countWindowsByMode(app, 'editor');
     expect(editorCount).toBe(1);
-    expect(existsSync(join(parent, 'Unique', '.ok', 'config.yml'))).toBe(true);
+    expect(existsSync(join(parent, projectName, '.ok', 'config.yml'))).toBe(true);
   });
 
   test('QA-025 — banner ARIA roles per severity', async ({ captureStderrFor }) => {
@@ -337,20 +371,21 @@ test.describe('QA extended create-new-project', () => {
     writeFileSync(join(rootPath, '.ok', 'config.yml'), 'schemaVersion: 1\ncontent:\n  dir: "."\n');
     const subFolder = join(rootPath, 'sub');
     mkdirSync(subFolder, { recursive: true });
-    const pickedTarget = join(subFolder, 'Nested');
+    const projectName = 'Nested';
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent: subFolder });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      subFolder,
       { timeout: 15_000 },
     );
 
@@ -369,20 +404,21 @@ test.describe('QA extended create-new-project', () => {
     execSync('git init -q', { cwd: repoRoot });
     const pickedParent = join(repoRoot, 'notes');
     mkdirSync(pickedParent, { recursive: true });
-    const pickedTarget = join(pickedParent, 'MyProj');
+    const projectName = 'MyProj';
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      pickedParent,
       { timeout: 15_000 },
     );
 
@@ -398,20 +434,21 @@ test.describe('QA extended create-new-project', () => {
     const tmpHome = seedTmpHome('kbd');
     const parent = join(tmpHome, 'projects-kbd');
     mkdirSync(parent, { recursive: true });
-    const pickedTarget = join(parent, 'KbdSubmit');
+    const projectName = 'KbdSubmit';
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-target-caption"]')).toContainText(
+      join(parent, projectName),
       { timeout: 15_000 },
     );
 
@@ -424,7 +461,7 @@ test.describe('QA extended create-new-project', () => {
     await expect
       .poll(() => countWindowsByMode(app, 'editor'), { timeout: 30_000 })
       .toBeGreaterThanOrEqual(1);
-    expect(existsSync(join(pickedTarget, '.ok', 'config.yml'))).toBe(true);
+    expect(existsSync(join(parent, projectName, '.ok', 'config.yml'))).toBe(true);
   });
 
   test('QA-002 — clicking Open <basename> dispatches openProject and closes dialog', async ({
@@ -436,20 +473,21 @@ test.describe('QA extended create-new-project', () => {
     writeFileSync(join(rootPath, '.ok', 'config.yml'), 'schemaVersion: 1\ncontent:\n  dir: "."\n');
     const subFolder = join(rootPath, 'sub');
     mkdirSync(subFolder, { recursive: true });
-    const pickedTarget = join(subFolder, 'Anything');
+    const projectName = 'Anything';
     trackForCleanup(tmpHome);
 
-    const app = await launchApp(tmpHome, { pickedPath: pickedTarget });
+    const app = await launchApp(tmpHome, { pickedParent: subFolder });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
     await navigator.locator('[data-testid="nav-create-new"]').click();
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(navigator.locator('[data-testid="create-name"]')).toHaveCount(0);
+    await expect(navigator.locator('[data-testid="create-name"]')).toBeVisible();
+    await typeProjectName(navigator, projectName);
     await navigator.locator('[data-testid="create-browse"]').click();
-    await expect(navigator.locator('[data-testid="create-target-caption"]')).toHaveText(
-      pickedTarget,
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      subFolder,
       { timeout: 15_000 },
     );
 
@@ -467,5 +505,47 @@ test.describe('QA extended create-new-project', () => {
         timeout: 5_000,
       });
     }
+  });
+
+  test('PRD-7129 — name resolving to a non-empty folder shows inline name-taken error', async ({
+    captureStderrFor,
+  }) => {
+    const tmpHome = seedTmpHome('name-taken');
+    const parent = join(tmpHome, 'projects-taken');
+    mkdirSync(parent, { recursive: true });
+    const taken = join(parent, 'Notes');
+    mkdirSync(taken, { recursive: true });
+    writeFileSync(join(taken, 'existing.md'), '# existing\n');
+    trackForCleanup(tmpHome);
+
+    const app = await launchApp(tmpHome, { pickedParent: parent });
+    captureStderrFor(app);
+    const navigator = await findWindowByMode(app, 'navigator');
+    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await navigator.locator('[data-testid="create-browse"]').click();
+    await expect(navigator.locator('[data-testid="create-location-display"]')).toContainText(
+      parent,
+      { timeout: 15_000 },
+    );
+
+    await typeProjectName(navigator, 'Notes');
+
+    await expect(navigator.locator('[data-testid="create-name-error-taken"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(navigator.locator('[data-testid="create-submit"]')).toBeDisabled();
+    await expect(navigator.locator('[data-testid="create-subfolder-rescue"]')).toHaveCount(0);
+
+    await typeProjectName(navigator, 'FreshNotes');
+    await expect(navigator.locator('[data-testid="create-name-error-taken"]')).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await expect(navigator.locator('[data-testid="create-submit"]')).toBeEnabled({
+      timeout: 15_000,
+    });
   });
 });

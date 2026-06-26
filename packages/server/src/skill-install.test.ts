@@ -11,6 +11,7 @@ import {
   buildAndOpenSkill,
   type InstallUserSkillOptions,
   installUserSkill,
+  quoteForWindowsShell,
   type SkillInstallLogger,
   type SpawnLike,
 } from './skill-install.ts';
@@ -170,6 +171,46 @@ function readInstallEvents(home: string): Array<Record<string, unknown>> {
     .filter((l) => l.trim().length > 0)
     .map((l) => JSON.parse(l) as Record<string, unknown>);
 }
+
+describe('quoteForWindowsShell', () => {
+  test('quotes whitespace-bearing args, escaping inner double-quotes', () => {
+    expect(quoteForWindowsShell('C:\\Users\\John Doe\\skills\\discovery')).toBe(
+      '"C:\\Users\\John Doe\\skills\\discovery"',
+    );
+    expect(quoteForWindowsShell('a "b" c')).toBe('"a \\"b\\" c"');
+  });
+
+  test('passes whitespace-free args through untouched (flags + the literal *)', () => {
+    expect(quoteForWindowsShell('*')).toBe('*');
+    expect(quoteForWindowsShell('--agent')).toBe('--agent');
+    expect(quoteForWindowsShell('C:\\Users\\mike\\skills\\discovery')).toBe(
+      'C:\\Users\\mike\\skills\\discovery',
+    );
+  });
+});
+
+describe('installUserSkill — Windows npx.cmd shim', () => {
+  test('platform "win32" spawns npx with shell:true', async () => {
+    const home = freshHome();
+    const { spawn, calls } = makeSpawnFake({ outcome: { kind: 'exit', code: 0 } });
+
+    const result = await installUserSkill({ home, spawn, platform: 'win32' });
+
+    expect(result).toBe('installed');
+    expect(calls[0]?.command).toBe('npx');
+    expect(calls[0]?.opts.shell).toBe(true);
+    expect(calls[0]?.args).toContain('*');
+  });
+
+  test('non-Windows platform spawns without a shell', async () => {
+    const home = freshHome();
+    const { spawn, calls } = makeSpawnFake({ outcome: { kind: 'exit', code: 0 } });
+
+    await installUserSkill({ home, spawn, platform: 'linux' });
+
+    expect(calls[0]?.opts.shell ?? false).toBe(false);
+  });
+});
 
 describe('installUserSkill — fresh install', () => {
   test('no sidecar + subprocess exits 0 → adds discovery, returns "installed"', async () => {

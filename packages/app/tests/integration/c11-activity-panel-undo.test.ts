@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { setTimeout as wait } from 'node:timers/promises';
 import { listAgentActivity } from '../../../../packages/server/src/agent-activity.ts';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import type { TestServer } from './test-harness';
 import { agentUndo, agentWriteMd, createTestServer } from './test-harness';
 
@@ -8,7 +9,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

@@ -53,6 +53,7 @@ interface PopAssetMenuDeps {
 }
 
 export function popAssetMenu(deps: PopAssetMenuDeps, params: BuildAssetMenuTemplateParams): void {
+  if (deps.window.isDestroyed()) return;
   const template = buildAssetMenuTemplate(params);
   deps.Menu.buildFromTemplate(template).popup({ window: deps.window });
 }

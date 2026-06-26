@@ -40,7 +40,7 @@ export async function consumeShowAllStream(res: Response): Promise<ShowAllStream
     try {
       parsed = JSON.parse(line);
     } catch {
-      console.warn('[show-all-stream] dropping unparseable NDJSON line');
+      console.warn('[show-all-stream] dropping unparseable NDJSON line:', line.slice(0, 200));
       return false;
     }
     if (isControlEvent(parsed)) {

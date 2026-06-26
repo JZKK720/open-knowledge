@@ -27,6 +27,7 @@ export interface AppState {
   recentProjects: RecentProject[];
   lastOpenedProject: string | null;
   versionPendingInstall: string | null;
+  attemptedInstall: string | null;
   lastSeenVersion: string | null;
   lastSuccessfulCheckAt: string | null;
   stuckHintShown: boolean;
@@ -35,6 +36,7 @@ export interface AppState {
   schemaVersion: number;
   lastUsedProjectParent: string | null;
   pendingWindowRestore: string[] | null;
+  spellCheckEnabled: boolean;
 }
 
 const RECENT_CAP = 20;
@@ -44,6 +46,7 @@ export function emptyState(): AppState {
     recentProjects: [],
     lastOpenedProject: null,
     versionPendingInstall: null,
+    attemptedInstall: null,
     lastSeenVersion: null,
     lastSuccessfulCheckAt: null,
     stuckHintShown: false,
@@ -52,11 +55,16 @@ export function emptyState(): AppState {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     lastUsedProjectParent: null,
     pendingWindowRestore: null,
+    spellCheckEnabled: true,
   };
 }
 
 export function setLastUsedProjectParent(state: AppState, parent: string): AppState {
   return { ...state, lastUsedProjectParent: parent };
+}
+
+export function setSpellCheckEnabled(state: AppState, enabled: boolean): AppState {
+  return { ...state, spellCheckEnabled: enabled };
 }
 
 function emptyProjectSessionState(): ProjectSessionState {
@@ -285,6 +293,7 @@ export function parseAppState(raw: unknown): AppState | null {
     typeof obj.lastOpenedProject === 'string' ? obj.lastOpenedProject : null;
   const versionPendingInstall =
     typeof obj.versionPendingInstall === 'string' ? obj.versionPendingInstall : null;
+  const attemptedInstall = typeof obj.attemptedInstall === 'string' ? obj.attemptedInstall : null;
   const lastSeenVersion = typeof obj.lastSeenVersion === 'string' ? obj.lastSeenVersion : null;
   const lastSuccessfulCheckAt =
     typeof obj.lastSuccessfulCheckAt === 'string' ? obj.lastSuccessfulCheckAt : null;
@@ -303,10 +312,13 @@ export function parseAppState(raw: unknown): AppState | null {
   const pendingWindowRestore = Array.isArray(obj.pendingWindowRestore)
     ? sanitizeStringArray(obj.pendingWindowRestore)
     : null;
+  const spellCheckEnabled =
+    typeof obj.spellCheckEnabled === 'boolean' ? obj.spellCheckEnabled : true;
   return {
     recentProjects,
     lastOpenedProject,
     versionPendingInstall,
+    attemptedInstall,
     lastSeenVersion,
     lastSuccessfulCheckAt,
     stuckHintShown,
@@ -315,5 +327,6 @@ export function parseAppState(raw: unknown): AppState | null {
     schemaVersion,
     lastUsedProjectParent,
     pendingWindowRestore,
+    spellCheckEnabled,
   };
 }

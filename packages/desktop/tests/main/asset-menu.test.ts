@@ -101,7 +101,7 @@ describe('popAssetMenu', () => {
     const popup = mock((_: unknown) => {});
     const menuInstance = { popup } as unknown as ReturnType<typeof Menu.buildFromTemplate>;
     const buildFromTemplate = mock((_: MenuItemConstructorOptions[]) => menuInstance);
-    const fakeWindow = { id: 42 } as unknown as BrowserWindow;
+    const fakeWindow = { id: 42, isDestroyed: () => false } as unknown as BrowserWindow;
 
     popAssetMenu(
       {
@@ -121,5 +121,31 @@ describe('popAssetMenu', () => {
 
     expect(buildFromTemplate).toHaveBeenCalledTimes(1);
     expect(popup).toHaveBeenCalledWith({ window: fakeWindow });
+  });
+
+  test('destroyed window → no build, no popup (right-click racing window close)', () => {
+    const popup = mock((_: unknown) => {});
+    const menuInstance = { popup } as unknown as ReturnType<typeof Menu.buildFromTemplate>;
+    const buildFromTemplate = mock((_: MenuItemConstructorOptions[]) => menuInstance);
+    const fakeWindow = { id: 42, isDestroyed: () => true } as unknown as BrowserWindow;
+
+    popAssetMenu(
+      {
+        Menu: { buildFromTemplate },
+        window: fakeWindow,
+      },
+      {
+        kind: 'asset',
+        platform: 'darwin',
+        actions: {
+          reveal: () => {},
+          openInDefault: () => {},
+          copyLink: () => {},
+        },
+      },
+    );
+
+    expect(buildFromTemplate).not.toHaveBeenCalled();
+    expect(popup).not.toHaveBeenCalled();
   });
 });

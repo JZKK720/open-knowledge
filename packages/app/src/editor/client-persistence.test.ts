@@ -7,6 +7,7 @@ import {
   computeUnsyncedUpdate,
   createClientPersistence,
   mergeStateVectors,
+  peekStoredLineageEpoch,
 } from './client-persistence';
 
 function uniqueDocName(prefix = 'cp-test'): string {
@@ -56,6 +57,39 @@ async function countPersistedUpdates(
         }
         reject(err);
       }
+    };
+  });
+}
+
+async function readPersistedUpdates(
+  branch: string,
+  serverInstanceId: string,
+  docName: string,
+): Promise<unknown[]> {
+  const dbName = `ok-ydoc:${branch}:${serverInstanceId}:${docName}`;
+  const dbs = await indexedDB.databases();
+  if (!dbs.some((d) => d.name === dbName)) return [];
+
+  return new Promise<unknown[]>((resolve, reject) => {
+    const req = indexedDB.open(dbName);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('updates')) {
+        db.close();
+        resolve([]);
+        return;
+      }
+      const tx = db.transaction('updates', 'readonly');
+      const getAll = tx.objectStore('updates').getAll();
+      getAll.onsuccess = () => {
+        db.close();
+        resolve(getAll.result as unknown[]);
+      };
+      getAll.onerror = () => {
+        db.close();
+        reject(getAll.error);
+      };
     };
   });
 }
@@ -383,6 +417,277 @@ describe('createClientPersistence', () => {
   });
 });
 
+describe('peekStoredLineageEpoch', () => {
+  test('returns null when no database exists, without breaking a later attach', async () => {
+    const docName = uniqueDocName('cp-peek-absent');
+    const peeked = await peekStoredLineageEpoch({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+    });
+    expect(peeked).toBeNull();
+
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getText('t').insert(0, 'post-peek attach works');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await provider.destroy();
+    doc.destroy();
+
+    const docB = new Y.Doc();
+    const providerB = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc: docB,
+    });
+    await providerB.whenSynced;
+    expect(docB.getText('t').toString()).toBe('post-peek attach works');
+    await providerB.destroy();
+    docB.destroy();
+  });
+
+  test('reads the epoch carried in-band by the stored rows', async () => {
+    const docName = uniqueDocName('cp-peek-epoch');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getMap('lifecycle').set('epoch', 'epoch-stored');
+    doc.getText('source').insert(0, 'content under epoch-stored');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await provider.destroy();
+    doc.destroy();
+
+    const peeked = await peekStoredLineageEpoch({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+    });
+    expect(peeked).toBe('epoch-stored');
+  });
+
+  test('returns null for rows that carry no epoch (pre-epoch writer)', async () => {
+    const docName = uniqueDocName('cp-peek-noepoch');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getText('source').insert(0, 'offline-first content, no lifecycle epoch');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await provider.destroy();
+    doc.destroy();
+
+    const peeked = await peekStoredLineageEpoch({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+    });
+    expect(peeked).toBeNull();
+  });
+
+  test('does not mutate the stored rows (read-only contract)', async () => {
+    const docName = uniqueDocName('cp-peek-readonly');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getMap('lifecycle').set('epoch', 'epoch-ro');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await provider.destroy();
+    doc.destroy();
+
+    const before = await countPersistedUpdates(TEST_BRANCH, TEST_SERVER_INSTANCE_ID, docName);
+    await peekStoredLineageEpoch({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+    });
+    const after = await countPersistedUpdates(TEST_BRANCH, TEST_SERVER_INSTANCE_ID, docName);
+    expect(after).toBe(before);
+  });
+});
+
+describe('flushFullState', () => {
+  test('persists content the incremental listener never saw (post-sync attach gap-fill)', async () => {
+    const docName = uniqueDocName('cp-flush');
+    const doc = new Y.Doc();
+    doc.getText('source').insert(0, 'delivered before attach');
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    await provider.flushFullState?.();
+    await provider.destroy();
+    doc.destroy();
+
+    const docB = new Y.Doc();
+    const providerB = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc: docB,
+    });
+    await providerB.whenSynced;
+    expect(docB.getText('source').toString()).toBe('delivered before attach');
+    await providerB.destroy();
+    docB.destroy();
+  });
+
+  test('resolves only after the full-state row is committed and superseded rows are trimmed', async () => {
+    const docName = uniqueDocName('cp-flush-durable');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getText('source').insert(0, 'a');
+    doc.getText('source').insert(1, 'b');
+
+    await provider.flushFullState();
+
+    const rows = await readPersistedUpdates(TEST_BRANCH, TEST_SERVER_INSTANCE_ID, docName);
+    expect(rows.length).toBe(1);
+    const fresh = new Y.Doc();
+    Y.applyUpdate(fresh, rows[0] as Uint8Array);
+    expect(fresh.getText('source').toString()).toBe('ab');
+    fresh.destroy();
+
+    await provider.destroy();
+    doc.destroy();
+  });
+
+  test('rejects instead of hanging when a stored row is malformed', async () => {
+    const docName = uniqueDocName('cp-flush-malformed');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      doc,
+      docName,
+    });
+    await provider.whenSynced;
+    doc.getText('source').insert(0, 'healthy');
+    const dbName = `ok-ydoc:${TEST_BRANCH}:${TEST_SERVER_INSTANCE_ID}:${docName}`;
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open(dbName);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction('updates', 'readwrite');
+        tx.objectStore('updates').add(new Uint8Array([255, 255, 255]));
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onabort = () => {
+          db.close();
+          reject(tx.error);
+        };
+      };
+    });
+
+    await expect(provider.flushFullState()).rejects.toThrow();
+
+    await provider.destroy();
+    doc.destroy();
+  });
+});
+
+describe('peekStoredLineageEpoch without indexedDB.databases()', () => {
+  async function withoutDatabasesEnumeration(run: () => Promise<void>): Promise<void> {
+    const factory = indexedDB as unknown as Record<string, unknown>;
+    const original = factory.databases;
+    factory.databases = undefined;
+    try {
+      await run();
+    } finally {
+      factory.databases = original;
+    }
+  }
+
+  test('peek of a never-persisted doc returns null', async () => {
+    await withoutDatabasesEnumeration(async () => {
+      const docName = uniqueDocName('cp-peek-nodbs-null');
+      const epoch = await peekStoredLineageEpoch({
+        branch: TEST_BRANCH,
+        serverInstanceId: TEST_SERVER_INSTANCE_ID,
+        docName,
+      });
+      expect(epoch).toBeNull();
+    });
+  });
+
+  test('a peek-created DB does not break the later real attach, and a second peek reads its rows', async () => {
+    await withoutDatabasesEnumeration(async () => {
+      const docName = uniqueDocName('cp-peek-nodbs-attach');
+      const first = await peekStoredLineageEpoch({
+        branch: TEST_BRANCH,
+        serverInstanceId: TEST_SERVER_INSTANCE_ID,
+        docName,
+      });
+      expect(first).toBeNull();
+
+      const doc = new Y.Doc();
+      const provider = createClientPersistence({
+        branch: TEST_BRANCH,
+        serverInstanceId: TEST_SERVER_INSTANCE_ID,
+        docName,
+        doc,
+      });
+      await provider.whenSynced;
+      doc.getText('source').insert(0, 'written after peek-created DB');
+      doc.getMap('lifecycle').set('epoch', 'epoch-nodbs');
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await provider.destroy();
+      doc.destroy();
+
+      const docB = new Y.Doc();
+      const providerB = createClientPersistence({
+        branch: TEST_BRANCH,
+        serverInstanceId: TEST_SERVER_INSTANCE_ID,
+        docName,
+        doc: docB,
+      });
+      await providerB.whenSynced;
+      expect(docB.getText('source').toString()).toBe('written after peek-created DB');
+      await providerB.destroy();
+      docB.destroy();
+
+      const second = await peekStoredLineageEpoch({
+        branch: TEST_BRANCH,
+        serverInstanceId: TEST_SERVER_INSTANCE_ID,
+        docName,
+      });
+      expect(second).toBe('epoch-nodbs');
+    });
+  });
+});
+
 describe('captureStateVector', () => {
   test('returns a non-empty Uint8Array for a non-empty doc', () => {
     const doc = new Y.Doc();
@@ -515,5 +820,57 @@ describe('mergeStateVectors', () => {
     const sv = Y.encodeStateVector(doc);
     doc.destroy();
     expect(mergeStateVectors(sv, sv)).toEqual(sv);
+  });
+});
+
+describe('flushFullState cross-tab fold', () => {
+  test('folds cross-tab rows into the full state instead of trimming them away', async () => {
+    const docName = uniqueDocName('cp-flush-crosstab');
+    const doc = new Y.Doc();
+    const provider = createClientPersistence({
+      branch: TEST_BRANCH,
+      serverInstanceId: TEST_SERVER_INSTANCE_ID,
+      docName,
+      doc,
+    });
+    await provider.whenSynced;
+    doc.getText('source').insert(0, 'tab-a edit\n');
+
+    const otherTab = new Y.Doc();
+    otherTab.getText('other').insert(0, 'tab-b edit not yet synced');
+    const otherTabRow = Y.encodeStateAsUpdate(otherTab);
+    otherTab.destroy();
+    const dbName = `ok-ydoc:${TEST_BRANCH}:${TEST_SERVER_INSTANCE_ID}:${docName}`;
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open(dbName);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction('updates', 'readwrite');
+        tx.objectStore('updates').add(otherTabRow);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onabort = () => {
+          db.close();
+          reject(tx.error);
+        };
+      };
+    });
+
+    await provider.flushFullState();
+
+    const rows = await readPersistedUpdates(TEST_BRANCH, TEST_SERVER_INSTANCE_ID, docName);
+    expect(rows.length).toBe(1);
+    const fresh = new Y.Doc();
+    Y.applyUpdate(fresh, rows[0] as Uint8Array);
+    expect(fresh.getText('source').toString()).toBe('tab-a edit\n');
+    expect(fresh.getText('other').toString()).toBe('tab-b edit not yet synced');
+    fresh.destroy();
+    expect(doc.getText('other').toString()).toBe('tab-b edit not yet synced');
+
+    await provider.destroy();
+    doc.destroy();
   });
 });

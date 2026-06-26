@@ -1,3 +1,4 @@
+import type { Compartment } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type { RenamedDocMapping } from '@inkeep/open-knowledge-core';
@@ -62,6 +63,14 @@ export interface CmCacheEntry {
   ydoc: Y.Doc;
   ytext: Y.Text;
   provider: HocuspocusProvider;
+  themeCompartment: Compartment;
+  /** Word-wrap compartment embedded in `view`. Same per-entry rationale as
+   * `themeCompartment` — a per-component compartment goes stale on reattach
+   * after the global word-wrap setting changes while the doc is backgrounded. */
+  wordWrapCompartment: Compartment;
+  /** Placeholder compartment embedded in `view`. Same per-entry rationale as
+   * `themeCompartment` (lowest impact — placeholder only shows on empty docs). */
+  placeholderCompartment: Compartment;
   scrollTop: number;
   hadFocus: boolean;
   activeMountKey: string | null;
@@ -89,6 +98,9 @@ interface CmFactoryResult {
   ydoc: Y.Doc;
   ytext: Y.Text;
   provider: HocuspocusProvider;
+  themeCompartment: Compartment;
+  wordWrapCompartment: Compartment;
+  placeholderCompartment: Compartment;
 }
 
 type CmFactory = (container: HTMLElement) => CmFactoryResult;
@@ -382,9 +394,7 @@ export function parkTiptapEditor(entry: TiptapCacheEntry): void {
     if (parent) {
       parent.removeChild(view.dom);
     }
-    if (!entry.parkingNode) {
-      entry.parkingNode = tryCreateParkingNode();
-    }
+    entry.parkingNode ||= tryCreateParkingNode();
     if (entry.parkingNode) {
       entry.parkingNode.appendChild(view.dom);
     }
@@ -459,6 +469,9 @@ export function mountCmEditor(params: MountCmParams): CmCacheEntry {
       ydoc: fresh.ydoc,
       ytext: fresh.ytext,
       provider: fresh.provider,
+      themeCompartment: fresh.themeCompartment,
+      wordWrapCompartment: fresh.wordWrapCompartment,
+      placeholderCompartment: fresh.placeholderCompartment,
       scrollTop: 0,
       hadFocus: false,
       activeMountKey: docName,
@@ -518,6 +531,9 @@ export function mountCmEditor(params: MountCmParams): CmCacheEntry {
     ydoc: fresh.ydoc,
     ytext: fresh.ytext,
     provider: fresh.provider,
+    themeCompartment: fresh.themeCompartment,
+    wordWrapCompartment: fresh.wordWrapCompartment,
+    placeholderCompartment: fresh.placeholderCompartment,
     scrollTop: 0,
     hadFocus: false,
     activeMountKey: docName,
@@ -569,9 +585,7 @@ export function parkCmEditor(entry: CmCacheEntry): void {
   if (parent) {
     parent.removeChild(dom);
   }
-  if (!entry.parkingNode) {
-    entry.parkingNode = tryCreateParkingNode();
-  }
+  entry.parkingNode ||= tryCreateParkingNode();
   if (entry.parkingNode) {
     entry.parkingNode.appendChild(dom);
   }

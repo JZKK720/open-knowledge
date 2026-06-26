@@ -1,5 +1,11 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { handleChipLinkClick, toInternalHashHref } from './internal-link-helpers';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
+import {
+  activateAssetLink,
+  handleChipLinkClick,
+  toInternalHashHref,
+} from './internal-link-helpers';
+
+const originalWindow = globalThis.window;
 
 describe('handleChipLinkClick', () => {
   function makeEvent(overrides: Partial<{ metaKey: boolean; ctrlKey: boolean }> = {}) {
@@ -47,6 +53,65 @@ describe('handleChipLinkClick', () => {
     expect(onNavigate).toHaveBeenCalledWith(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('activateAssetLink', () => {
+  const params = {
+    url: './report.html',
+    projectRelPath: 'docs/report.html',
+    ext: 'html',
+    title: 'report.html',
+  };
+
+  it('bare click navigates to the asset preview and does NOT OS-delegate', () => {
+    const navigate = mock((_assetPath: string) => {});
+    const dispatch = mock(async () => {});
+
+    activateAssetLink({ ...params, newTab: false }, { navigate, dispatch });
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('docs/report.html');
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('Cmd/Ctrl/middle-click OS-delegates (forceOsDelegation) and does NOT navigate', () => {
+    const navigate = mock((_assetPath: string) => {});
+    const dispatch = mock(async () => {});
+
+    activateAssetLink({ ...params, newTab: true }, { navigate, dispatch });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith({
+      url: './report.html',
+      projectRelPath: 'docs/report.html',
+      ext: 'html',
+      title: 'report.html',
+      forceOsDelegation: true,
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: originalWindow,
+      writable: true,
+    });
+  });
+
+  it('bare click with no injected deps assigns the canonical asset hash via the default navigate', () => {
+    const assign = mock((_url: string) => {});
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { location: { assign } },
+      writable: true,
+    });
+
+    activateAssetLink({ ...params, newTab: false });
+
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('#/__asset__/docs/report.html');
   });
 });
 

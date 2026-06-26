@@ -1,6 +1,7 @@
 import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { ConfigSharingInfoTooltip } from '@/components/ConfigSharingInfoTooltip';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +24,7 @@ function SharingSectionUnsupported() {
         </h3>
         <p className="text-1sm text-muted-foreground">
           <Trans>
-            Available in the Open Knowledge desktop app. From a terminal, use
+            Available in the OpenKnowledge desktop app. From a terminal, use
             <code> ok config-sharing status</code> / <code>share</code> / <code>unshare</code>.
           </Trans>
         </p>
@@ -113,14 +114,16 @@ function SharingSectionBody() {
   return (
     <section aria-labelledby={TITLE_ID} className="space-y-4" data-testid="settings-sharing">
       <div className="space-y-1">
-        <h3 id={TITLE_ID} className="text-base font-semibold">
-          <Trans>Config sharing</Trans>
-        </h3>
+        <div className="flex items-center gap-1.5">
+          <h3 id={TITLE_ID} className="text-base font-semibold">
+            <Trans>Config sharing</Trans>
+          </h3>
+          <ConfigSharingInfoTooltip />
+        </div>
         <p className="text-1sm text-muted-foreground">
           <Trans>
-            Choose whether to commit <code>.ok/</code>, <code>.mcp.json</code> (and per-editor
-            variants), project skills, and <code>.claude/launch.json</code> alongside content — or
-            keep them on this machine only via <code>.git/info/exclude</code>.
+            Choose whether this project's OpenKnowledge setup, including its AI-tool connections, is
+            saved with the project so teammates get it too, or kept only on your computer.
           </Trans>
         </p>
       </div>
@@ -154,10 +157,10 @@ function SharingSectionBody() {
             />
             <span>
               <span className="font-medium">
-                <Trans>Share with my team</Trans>
+                <Trans>Shared</Trans>
               </span>
               <span className="block text-1sm text-muted-foreground">
-                <Trans>OK config is committed alongside content (default).</Trans>
+                <Trans>Saved with the project for your team.</Trans>
               </span>
             </span>
           </label>
@@ -170,13 +173,10 @@ function SharingSectionBody() {
             />
             <span>
               <span className="font-medium">
-                <Trans>Local only on this machine</Trans>
+                <Trans>Local only</Trans>
               </span>
               <span className="block text-1sm text-muted-foreground">
-                <Trans>
-                  OK config stays on this machine via <code>.git/info/exclude</code>
-                  (per-clone, not committed).
-                </Trans>
+                <Trans>Stays on this computer.</Trans>
               </span>
             </span>
           </label>

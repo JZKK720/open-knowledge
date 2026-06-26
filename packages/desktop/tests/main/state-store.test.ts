@@ -13,6 +13,7 @@ import {
   saveAppStateToDir,
   setLastUsedProjectParent,
   setProjectSessionState,
+  setSpellCheckEnabled,
 } from '../../src/main/state-store.ts';
 
 describe('state-store (recent projects + LRU)', () => {
@@ -469,5 +470,47 @@ describe('state-store (pendingWindowRestore — post-update window restore)', ()
     expect(
       parseAppState({ recentProjects: [], pendingWindowRestore: null })?.pendingWindowRestore,
     ).toBeNull();
+  });
+});
+
+describe('state-store (spellCheckEnabled — app-wide spell-check toggle)', () => {
+  test('defaults to true on a fresh state', () => {
+    expect(emptyState().spellCheckEnabled).toBe(true);
+  });
+
+  test('setSpellCheckEnabled immutably updates the flag', () => {
+    const original = emptyState();
+    const disabled = setSpellCheckEnabled(original, false);
+    expect(disabled.spellCheckEnabled).toBe(false);
+    expect(disabled.recentProjects).toEqual([]);
+    expect(disabled.schemaVersion).toBe(1);
+    expect(original.spellCheckEnabled).toBe(true);
+  });
+
+  test('setSpellCheckEnabled can re-enable a disabled flag', () => {
+    const reenabled = setSpellCheckEnabled(setSpellCheckEnabled(emptyState(), false), true);
+    expect(reenabled.spellCheckEnabled).toBe(true);
+  });
+
+  test('parseAppState coerces a missing spellCheckEnabled to true (legacy state.json)', () => {
+    const parsed = parseAppState({ recentProjects: [], lastOpenedProject: null });
+    expect(parsed?.spellCheckEnabled).toBe(true);
+  });
+
+  test('parseAppState coerces a non-boolean spellCheckEnabled to true', () => {
+    const parsed = parseAppState({ recentProjects: [], spellCheckEnabled: 'nope' });
+    expect(parsed?.spellCheckEnabled).toBe(true);
+  });
+
+  test('parseAppState preserves an explicit false across a round-trip', () => {
+    const state = setSpellCheckEnabled(emptyState(), false);
+    const reparsed = parseAppState(JSON.parse(JSON.stringify(state)));
+    expect(reparsed?.spellCheckEnabled).toBe(false);
+  });
+
+  test('parseAppState preserves an explicit true across a round-trip', () => {
+    const state = setSpellCheckEnabled(emptyState(), true);
+    const reparsed = parseAppState(JSON.parse(JSON.stringify(state)));
+    expect(reparsed?.spellCheckEnabled).toBe(true);
   });
 });

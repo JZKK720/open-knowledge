@@ -45,7 +45,7 @@ type PreviewAttachWarning =
 const START_UI_MESSAGE =
   'No UI is running for this project. Start one to see the preview: `ok ui` (terminal), `preview_start("open-knowledge-ui")` (Claude Code Desktop), or open the project in OK Electron.';
 const ATTACH_PREVIEW_ONCE_MESSAGE =
-  'No browser is attached to the preview. Open it with preview_start, or call preview_url for the URL.';
+  "No browser is attached to the preview. Open it in your host's surface: `preview_start` (Claude Code Desktop pane), or `preview_url` then navigate your in-app browser to the url (Cursor's `Navigate` / Codex desktop `@Browser`); on the Claude Code CLI, `ok open <doc>`.";
 
 export function buildPreviewAttachWarning(
   preview: { url: string } | null,
@@ -95,6 +95,19 @@ export function resolveUiInfo(ctx: PreviewUrlContext): UiInfo {
     );
   }
   return { baseUrl: null };
+}
+
+export async function awaitUiBaseUrl(
+  ctx: PreviewUrlContext,
+  opts: { timeoutMs: number; pollIntervalMs: number },
+): Promise<string | null> {
+  const deadline = Date.now() + opts.timeoutMs;
+  while (true) {
+    const { baseUrl } = resolveUiInfo(ctx);
+    if (baseUrl !== null) return baseUrl;
+    if (Date.now() >= deadline) return null;
+    await new Promise<void>((resolveSleep) => setTimeout(resolveSleep, opts.pollIntervalMs));
+  }
 }
 
 export async function buildListResolver(

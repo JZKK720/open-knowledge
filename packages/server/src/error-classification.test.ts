@@ -97,6 +97,13 @@ describe('classifyGitError', () => {
       expect(r.retryable).toBe(false);
     });
 
+    test('reversed "expired token" wording → unknown-auth, not 401 (delegation preserves output)', () => {
+      const r = classifyGitError(mkErr('expired token'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+      expect(r.retryable).toBe(false);
+    });
+
     test('permission denied (publickey)', () => {
       const r = classifyGitError(mkErr('Permission denied (publickey).'));
       expect(r.class).toBe('auth');
@@ -108,6 +115,75 @@ describe('classifyGitError', () => {
       expect(r.class).toBe('auth');
       expect(r.subclass).toBe('scope-mismatch');
       expect(r.retryable).toBe(false);
+    });
+
+    test('no credential — "could not read Username … Device not configured" (no GIT_TERMINAL_PROMPT)', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal: could not read Username',
+          "fatal: could not read Username for 'https://github.com': Device not configured",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+      expect(r.retryable).toBe(false);
+      expect(r.userFacingCode).toBe('auth-no-credential');
+    });
+
+    test('no credential — "terminal prompts disabled" (with GIT_TERMINAL_PROMPT=0)', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal: could not read Username',
+          "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+      expect(r.retryable).toBe(false);
+      expect(r.userFacingCode).toBe('auth-no-credential');
+    });
+
+    test('no credential — could not read Password', () => {
+      const r = classifyGitError(
+        mkErr(
+          'fatal',
+          "could not read Password for 'https://github.com': terminal prompts disabled",
+        ),
+      );
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('no-credential');
+    });
+
+    test('deriveUserFacingCode maps auth/no-credential', () => {
+      expect(deriveUserFacingCode('auth', 'no-credential')).toBe('auth-no-credential');
+    });
+
+    test('unknown-auth subclass — "Authentication failed" without 401/403 signal', () => {
+      const r = classifyGitError(mkErr('Authentication failed for remote'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+      expect(r.retryable).toBe(false);
+      expect(r.message).toBe('Authentication failed');
+    });
+
+    test('unknown-auth subclass — bad credentials without 401/403 signal', () => {
+      const r = classifyGitError(mkErr('remote: Bad credentials'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('unknown-auth');
+    });
+
+    test('ssh-auth subclass — SSH publickey denied (delegation preserves output)', () => {
+      const r = classifyGitError(mkErr('Permission denied (publickey).'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('ssh-auth');
+      expect(r.retryable).toBe(false);
+      expect(r.message).toBe('SSH authentication failed — check your SSH key or host-key trust');
+    });
+
+    test('ssh-auth subclass — host key verification failed', () => {
+      const r = classifyGitError(mkErr('Host key verification failed.'));
+      expect(r.class).toBe('auth');
+      expect(r.subclass).toBe('ssh-auth');
     });
   });
 
@@ -276,8 +352,8 @@ describe('classifyGitError', () => {
       expect(r.retryable).toBe(true);
     });
 
-    test('ENOSPC', () => {
-      const r = classifyGitError(mkErr('ENOSPC: no space left on device'));
+    test('bare ENOSPC (case-insensitive, no "no space left" text to fall back on)', () => {
+      const r = classifyGitError(mkErr('fatal: write error: ENOSPC'));
       expect(r.class).toBe('local');
       expect(r.subclass).toBe('disk-full');
       expect(r.retryable).toBe(true);
@@ -400,11 +476,13 @@ describe('classifyGitError', () => {
         'auth-403',
         'auth-401',
         'auth-scope-mismatch',
+        'auth-no-credential',
         'semantic-protected-branch',
       ]);
       const samples = [
         mkErr('Could not resolve host: github.com'),
         mkErr('HTTP 403: forbidden'),
+        mkErr("fatal: could not read Username for 'https://github.com': terminal prompts disabled"),
         mkErr('CONFLICT'),
         mkErr('lfs storage quota exceeded'),
         mkErr('Unknown error'),

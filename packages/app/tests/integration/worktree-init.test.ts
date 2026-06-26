@@ -49,6 +49,7 @@ describe('initContent in a linked worktree (FR4 / D7)', () => {
     initContent(handle.worktreePath);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: handle.worktreePath,
       port: 0,

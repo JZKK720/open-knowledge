@@ -19,7 +19,7 @@ import {
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as wait } from 'node:timers/promises';
 import type { Document, Extension, Hocuspocus } from '@hocuspocus/server';
@@ -60,7 +60,6 @@ import {
   DeadLinksSuccessSchema,
   DeletePathRequestSchema,
   DeletePathSuccessSchema,
-  DiffSuccessSchema,
   type DiskEditReconciledWarning,
   type DocumentListEntry,
   DocumentListSuccessSchema,
@@ -87,22 +86,22 @@ import {
   type InlineAssetMediaKind,
   InstallSkillRequestSchema,
   InstallSkillSuccessSchema,
+  instantiateDoc,
+  isHiddenDocName,
+  LINKABLE_ASSET_EXTENSIONS,
   type LifecycleStatus,
   LinkGraphSuccessSchema,
   LocalOpAuthEmptySuccessSchema,
   type LocalOpAuthHostRequest,
   LocalOpAuthHostRequestSchema,
-  LocalOpAuthIdentitySuccessSchema,
-  LocalOpAuthPatRequestSchema,
-  LocalOpAuthPatSuccessSchema,
   LocalOpAuthSetIdentityRequestSchema,
   LocalOpAuthStatusSuccessSchema,
   type LocalOpCloneRequest,
   LocalOpCloneRequestSchema,
+  LocalOpEmbeddingsMutationSuccessSchema,
+  LocalOpEmbeddingsSetKeyRequestSchema,
   LocalOpOkInitRequestSchema,
   LocalOpOkInitResponseSchema,
-  LocalOpOpenRequestSchema,
-  LocalOpOpenSuccessSchema,
   MetricsAgentPresenceSuccessSchema,
   MetricsParseHealthSuccessSchema,
   MetricsReconciliationSuccessSchema,
@@ -113,6 +112,7 @@ import {
   type Principal,
   PrincipalSuccessSchema,
   type ProblemType,
+  parseTemplateFile,
   prependFrontmatter,
   RenamePathRequestSchema,
   RenamePathSuccessSchema,
@@ -122,14 +122,20 @@ import {
   RollbackRequestSchema,
   RollbackSuccessSchema,
   readFmMap,
+  SANDBOXED_HTML_CSP,
+  SANDBOXED_HTML_EXTENSIONS,
   SaveVersionRequestSchema,
   SaveVersionSuccessSchema,
   SearchRequestSchema,
+  type SearchSemanticStatus,
+  type SearchSource,
+  type SearchSuccess,
   SearchSuccessSchema,
   SeedApplyRequestSchema,
   SeedApplySuccessSchema,
   SeedListPacksSuccessSchema,
   SeedPlanSuccessSchema,
+  SemanticIndexStatusSchema,
   ServerInfoSuccessSchema,
   ShareConstructUrlRequestSchema,
   ShareConstructUrlResponseSchema,
@@ -140,7 +146,6 @@ import {
   SkillInstallStateSuccessSchema,
   SuggestLinksSuccessSchema,
   SYSTEM_DOC_NAME,
-  SyncAbortMergeSuccessSchema,
   SyncConflictContentSuccessSchema,
   SyncConflictsSuccessSchema,
   SyncResolveConflictRequestSchema,
@@ -159,6 +164,7 @@ import {
   TemplatePutRequestSchema,
   TemplatePutSuccessSchema,
   TemplatesListSuccessSchema,
+  TestFlushGitSuccessSchema,
   TestRescanBacklinksSuccessSchema,
   TestRescanFilesSuccessSchema,
   TestResetSuccessSchema,
@@ -169,7 +175,10 @@ import {
   type WorkspaceSearchCorpus,
   type WorkspaceSearchDocument,
   type WorkspaceSearchIntent,
+  type WorkspaceSearchRanking,
+  type WorkspaceSearchResult,
   type WorkspaceSearchScope,
+  type WorkspaceSemanticInput,
   WorkspaceSuccessSchema,
 } from '@inkeep/open-knowledge-core';
 import {
@@ -178,7 +187,6 @@ import {
   resolveGitDirDetailed,
 } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import busboy from 'busboy';
-import { diffLines } from 'diff';
 import { fileTypeFromFile } from 'file-type';
 import { parse as parseYaml } from 'yaml';
 import { captureEffect } from './activity-log.ts';
@@ -220,6 +228,17 @@ import {
 import { recordContributor } from './contributor-tracker.ts';
 import { deriveDetection, embedProbeRing, recordEmbedProbe } from './embed-probe.ts';
 import {
+  recordSemanticQuery,
+  type SemanticQueryOutcome,
+} from './embeddings/embeddings-telemetry.ts';
+import {
+  clearEmbeddingsKeyFromAllBackends,
+  EMBEDDINGS_API_KEY_ENV,
+  FileEmbeddingsBackend,
+  SEMANTIC_MIN_QUERY_LENGTH,
+  type SemanticSearchService,
+} from './embeddings/index.ts';
+import {
   FrontmatterMalformedError,
   respondFrontmatterMalformed,
 } from './frontmatter-malformed-error.ts';
@@ -231,6 +250,7 @@ import {
 } from './handoff-api.ts';
 import { handleHandoffDispatch } from './handoff-dispatch-api.ts';
 import { findHubCandidates } from './hub-candidates.ts';
+import { validateMermaidFences } from './mermaid-validator.ts';
 import {
   extractPageIcon,
   extractPageTitle,
@@ -332,6 +352,7 @@ import {
 import { extractActorIdentity } from './extract-actor-identity.ts';
 import {
   contentHash,
+  type DiskEvent,
   type FileIndexEntry,
   type FolderIndexEntry,
   registerWrite,
@@ -360,7 +381,7 @@ import {
 } from './git-branch-info.ts';
 import { CHECKOUT_HANDLER_TAG, runCheckoutFlow } from './git-checkout.ts';
 import { withParentLock } from './git-handle.ts';
-import { resolveGitIdentity, writeGitIdentity } from './git-identity.ts';
+import { writeGitIdentity } from './git-identity.ts';
 import {
   createStreamingErrorWriter,
   errorResponse,
@@ -397,6 +418,7 @@ import {
   incrementSummariesProvided,
   incrementSummariesTruncated,
 } from './metrics.ts';
+import { isWithinDir, toPosix } from './path-utils.ts';
 import {
   deleteReconciledBase,
   getActiveBranch,
@@ -424,6 +446,7 @@ import {
 } from './seed/index.ts';
 import type { PairedWriteOrigin } from './server-observers.ts';
 import {
+  enumerateWipChains,
   listRescueCheckpoints,
   SERVICE_WRITER,
   type ShadowRef,
@@ -433,46 +456,42 @@ import {
   type TimelineRescueEntry,
   type WriterIdentity,
 } from './shadow-repo.ts';
+import { createSingleFlight } from './single-flight.ts';
 import { SuggestLinksTargetNotFoundError, suggestLinks } from './suggest-links.ts';
 import type { SyncEngine } from './sync-engine.ts';
 import type { TagIndex } from './tag-index.ts';
 import { getMeter, getTracer, withSpan, withSpanSync } from './telemetry.ts';
 import { getDocumentHistory, getFolderTimeline } from './timeline-query.ts';
+import { recordTimelineCoalesced } from './timeline-telemetry.ts';
 
 let _httpDurationHist: ReturnType<ReturnType<typeof getMeter>['createHistogram']> | null = null;
 function httpDurationHist(): ReturnType<ReturnType<typeof getMeter>['createHistogram']> {
-  if (!_httpDurationHist) {
-    _httpDurationHist = getMeter().createHistogram('http.server.request.duration', {
-      description: 'HTTP server request duration in seconds',
-      unit: 's',
-    });
-  }
+  _httpDurationHist ||= getMeter().createHistogram('http.server.request.duration', {
+    description: 'HTTP server request duration in seconds',
+    unit: 's',
+  });
   return _httpDurationHist;
 }
 
 let _hintEmittedCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null = null;
 function hintEmittedCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
-  if (!_hintEmittedCounter) {
-    _hintEmittedCounter = getMeter().createCounter('ok.preview_attach.hint_emitted', {
-      description:
-        'Count of preview-attach hints emitted on write-tool responses when no editor is attached to __system__. Covers both attach-preview-once (URL exists, no browser) and start-ui (no UI running anywhere) variants — the tool side disambiguates via the warning action; the metric name is retained as-is so existing dashboards keep working.',
-    });
-  }
+  _hintEmittedCounter ||= getMeter().createCounter('ok.preview_attach.hint_emitted', {
+    description:
+      'Count of preview-attach hints emitted on write-tool responses when no editor is attached to __system__. Covers both attach-preview-once (URL exists, no browser) and start-ui (no UI running anywhere) variants — the tool side disambiguates via the warning action; the metric name is retained as-is so existing dashboards keep working.',
+  });
   return _hintEmittedCounter;
 }
 
 let _agentPatchFmTouchCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
   null;
 function agentPatchFmTouchCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
-  if (!_agentPatchFmTouchCounter) {
-    _agentPatchFmTouchCounter = getMeter().createCounter(
-      'ok.frontmatter.agent_patch_fm_touch_total',
-      {
-        description:
-          'Count of agent-patch calls whose find string targets the frontmatter region. Measures incidence during the soft-deprecation window before agent-patch FM-intersecting calls are enforced as 400. Bounded label: result ∈ {rejected, pre_deprecation_passthrough}.',
-      },
-    );
-  }
+  _agentPatchFmTouchCounter ||= getMeter().createCounter(
+    'ok.frontmatter.agent_patch_fm_touch_total',
+    {
+      description:
+        'Count of agent-patch calls whose find string targets the frontmatter region. Measures incidence during the soft-deprecation window before agent-patch FM-intersecting calls are enforced as 400. Bounded label: result ∈ {rejected, pre_deprecation_passthrough}.',
+    },
+  );
   return _agentPatchFmTouchCounter;
 }
 
@@ -485,24 +504,20 @@ function findLooksLikeFrontmatter(find: string): boolean {
 let _renameAttributionCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
   null;
 function renameAttributionCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
-  if (!_renameAttributionCounter) {
-    _renameAttributionCounter = getMeter().createCounter('ok.rename.attribution_kind', {
-      description:
-        'Count of rename and rollback handler dispatches by attribution kind (agent | principal | anonymous)',
-    });
-  }
+  _renameAttributionCounter ||= getMeter().createCounter('ok.rename.attribution_kind', {
+    description:
+      'Count of rename and rollback handler dispatches by attribution kind (agent | principal | anonymous)',
+  });
   return _renameAttributionCounter;
 }
 
 let _agentWriteGateFiredCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
   null;
 function agentWriteGateFiredCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
-  if (!_agentWriteGateFiredCounter) {
-    _agentWriteGateFiredCounter = getMeter().createCounter('ok.agent_write.gate_fired_total', {
-      description:
-        'Count of agent writes that ran the Site A content-divergence gate (denominator for the divergence rate). Bounded label: handler ∈ {agent-write-md, agent-patch, rollback}.',
-    });
-  }
+  _agentWriteGateFiredCounter ||= getMeter().createCounter('ok.agent_write.gate_fired_total', {
+    description:
+      'Count of agent writes that ran the Site A content-divergence gate (denominator for the divergence rate). Bounded label: handler ∈ {agent-write-md, agent-patch, rollback}.',
+  });
   return _agentWriteGateFiredCounter;
 }
 
@@ -512,16 +527,24 @@ let _agentWriteContentDivergenceCounter: ReturnType<
 function agentWriteContentDivergenceCounter(): ReturnType<
   ReturnType<typeof getMeter>['createCounter']
 > {
-  if (!_agentWriteContentDivergenceCounter) {
-    _agentWriteContentDivergenceCounter = getMeter().createCounter(
-      'ok.agent_write.content_divergence_total',
-      {
-        description:
-          'Count of agent writes whose converged Y.Text diverged from the composed intent (numerator for the divergence rate). Bounded labels: handler ∈ {agent-write-md, agent-patch, rollback}, divergence_type.',
-      },
-    );
-  }
+  _agentWriteContentDivergenceCounter ||= getMeter().createCounter(
+    'ok.agent_write.content_divergence_total',
+    {
+      description:
+        'Count of agent writes whose converged Y.Text diverged from the composed intent (numerator for the divergence rate). Bounded labels: handler ∈ {agent-write-md, agent-patch, rollback}, divergence_type.',
+    },
+  );
   return _agentWriteContentDivergenceCounter;
+}
+
+let _searchCorpusTruncatedCounter: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
+  null;
+function searchCorpusTruncatedCounter(): ReturnType<ReturnType<typeof getMeter>['createCounter']> {
+  _searchCorpusTruncatedCounter ||= getMeter().createCounter('ok.search.corpus_truncated_total', {
+    description:
+      'Count of search-corpus rebuilds where the name-only file tier hit OK_SEARCH_MAX_ENTRIES and dropped deepest-tail paths. One increment per truncated build; non-truncated builds do not increment.',
+  });
+  return _searchCorpusTruncatedCounter;
 }
 
 type DivergenceHandler = 'agent-write-md' | 'agent-patch' | 'rollback';
@@ -541,6 +564,16 @@ function recordContentDivergenceGate(
 
 export function __resetRenameTelemetryForTesting(): void {
   _renameAttributionCounter = null;
+}
+
+export function resumeSyncOnAuthEvent(
+  event: AuthEvent,
+  getSyncEngine?: () => SyncEngine | null,
+): void {
+  if (event.type !== 'complete') return;
+  void getSyncEngine?.()
+    ?.notifyCredentialsChanged()
+    .catch(() => {});
 }
 
 export const ROLLBACK_ORIGIN = {
@@ -824,7 +857,7 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
 
 export function safeSubdir(baseDir: string, subdir: string): string {
   const resolved = resolve(baseDir, subdir);
-  if (resolved !== baseDir && !resolved.startsWith(`${baseDir}/`)) {
+  if (!isWithinDir(resolved, baseDir)) {
     throw new Error(`Invalid directory: ${subdir}`);
   }
   return resolved;
@@ -843,6 +876,14 @@ export function getShowAllMaxEntries(): number {
   if (raw === undefined) return DEFAULT_SHOWALL_MAX_ENTRIES;
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SHOWALL_MAX_ENTRIES;
+}
+
+export const DEFAULT_SEARCH_MAX_ENTRIES = 50_000;
+export function getSearchMaxEntries(): number {
+  const raw = process.env.OK_SEARCH_MAX_ENTRIES;
+  if (raw === undefined) return DEFAULT_SEARCH_MAX_ENTRIES;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SEARCH_MAX_ENTRIES;
 }
 
 let showAllWalkInvocations = 0;
@@ -895,10 +936,8 @@ export async function* streamShowAllEntries(
   } catch {
     contentDirCanonical = contentDir;
   }
-  const isInsideContentDir = (resolved: string): boolean => {
-    if (resolved === contentDirCanonical) return true;
-    return resolved.startsWith(`${contentDirCanonical}/`);
-  };
+  const isInsideContentDir = (resolved: string): boolean =>
+    isWithinDir(resolved, contentDirCanonical);
 
   async function probeHasChildren(absDir: string, relDir: string): Promise<boolean> {
     let entries: import('node:fs').Dirent[];
@@ -913,9 +952,13 @@ export async function* streamShowAllEntries(
       if (entry.isDirectory()) {
         if (contentFilter.isDirExcluded(relPath, { bypassFilters: true })) continue;
         try {
-          const childCanonical = await realpath(`${absDir}/${entry.name}`);
+          const childCanonical = await realpath(join(absDir, entry.name));
           if (!isInsideContentDir(childCanonical)) continue;
-        } catch {
+        } catch (err) {
+          console.warn(
+            `[document-list][showAll] probe realpath failed for ${absDir}/${entry.name}:`,
+            err,
+          );
           continue;
         }
         return true;
@@ -928,128 +971,217 @@ export async function* streamShowAllEntries(
   }
 
   async function* walk(
-    absDir: string,
-    relDir: string,
-    depth: number,
+    startAbsDir: string,
+    startRelDir: string,
+    startDepth: number,
   ): AsyncGenerator<DocumentListEntry> {
-    let entries: import('node:fs').Dirent[];
-    try {
-      entries = await readdir(absDir, { withFileTypes: true });
-    } catch (err) {
-      console.warn(`[document-list][showAll] readdir failed for ${absDir}:`, err);
-      return;
-    }
-
-    for (const entry of entries) {
+    const queue: Array<{ absDir: string; relDir: string; depth: number }> = [
+      { absDir: startAbsDir, relDir: startRelDir, depth: startDepth },
+    ];
+    for (let head = 0; head < queue.length; head++) {
       if (signal?.aborted) {
         aborted = true;
         return;
       }
-      if (emitted >= maxEntries) {
-        truncated = true;
-        return;
+      const { absDir, relDir, depth } = queue[head];
+      let entries: import('node:fs').Dirent[];
+      try {
+        entries = await readdir(absDir, { withFileTypes: true });
+      } catch (err) {
+        console.warn(`[document-list][showAll] readdir failed for ${absDir}:`, err);
+        continue;
       }
-      const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
 
-      if (entry.isDirectory()) {
-        if (contentFilter.isDirExcluded(relPath, { bypassFilters: true })) continue;
-
-        const dirAbsRaw = `${absDir}/${entry.name}`;
-        let dirCanonical: string;
-        try {
-          dirCanonical = await realpath(dirAbsRaw);
-        } catch (err) {
-          console.warn(`[document-list][showAll] realpath failed for ${dirAbsRaw}:`, err);
-          continue;
+      for (const entry of entries) {
+        if (signal?.aborted) {
+          aborted = true;
+          return;
         }
-        if (!isInsideContentDir(dirCanonical)) {
-          console.warn(
-            `[document-list][showAll] refusing symlink-escape ${dirAbsRaw} -> ${dirCanonical}`,
-          );
-          continue;
+        if (emitted >= maxEntries) {
+          truncated = true;
+          return;
         }
+        const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
 
-        if (passesDirFilter(relPath)) {
-          let folderStat: import('node:fs').Stats | null = null;
+        if (entry.isDirectory()) {
+          if (contentFilter.isDirExcluded(relPath, { bypassFilters: true })) continue;
+
+          const dirAbsRaw = join(absDir, entry.name);
+          let dirCanonical: string;
           try {
-            folderStat = await stat(dirAbsRaw);
+            dirCanonical = await realpath(dirAbsRaw);
           } catch (err) {
-            console.warn(`[document-list][showAll] stat failed for ${dirAbsRaw}:`, err);
+            console.warn(`[document-list][showAll] realpath failed for ${dirAbsRaw}:`, err);
+            continue;
           }
+          if (!isInsideContentDir(dirCanonical)) {
+            console.warn(
+              `[document-list][showAll] refusing symlink-escape ${dirAbsRaw} -> ${dirCanonical}`,
+            );
+            continue;
+          }
+
+          if (passesDirFilter(relPath)) {
+            let folderStat: import('node:fs').Stats | null = null;
+            try {
+              folderStat = await stat(dirAbsRaw);
+            } catch (err) {
+              console.warn(`[document-list][showAll] stat failed for ${dirAbsRaw}:`, err);
+            }
+            emitted += 1;
+            const atLeafDepth = depth >= maxDepth;
+            const hasChildren = atLeafDepth
+              ? await probeHasChildren(dirAbsRaw, relPath)
+              : undefined;
+            yield {
+              kind: 'folder',
+              path: relPath,
+              size: 0,
+              modified: folderStat ? folderStat.mtime.toISOString() : '',
+              docExt: '.md',
+              isSymlink: false,
+              canonicalDocName: null,
+              targetPath: null,
+              ...(hasChildren === undefined ? {} : { hasChildren }),
+            };
+          }
+
+          if (depth < maxDepth) {
+            queue.push({ absDir: dirAbsRaw, relDir: relPath, depth: depth + 1 });
+          }
+          continue;
+        }
+
+        if (entry.isSymbolicLink()) {
+          const linkAbs = join(absDir, entry.name);
+          let canonical: string;
+          try {
+            canonical = await realpath(linkAbs);
+          } catch (err) {
+            console.warn(`[document-list][showAll] symlink realpath failed for ${linkAbs}:`, err);
+            continue;
+          }
+          if (!isInsideContentDir(canonical)) {
+            console.warn(
+              `[document-list][showAll] refusing symlink-escape ${linkAbs} -> ${canonical}`,
+            );
+            continue;
+          }
+          let canonStat: import('node:fs').Stats;
+          try {
+            canonStat = await stat(canonical);
+          } catch (err) {
+            console.warn(
+              `[document-list][showAll] symlink target stat failed for ${linkAbs}:`,
+              err,
+            );
+            continue;
+          }
+          const targetRel = toPosix(relative(contentDir, canonical));
+          if (canonStat.isDirectory()) {
+            if (contentFilter.isDirExcluded(relPath, { bypassFilters: true })) continue;
+            if (!passesDirFilter(relPath)) continue;
+            emitted += 1;
+            yield {
+              kind: 'folder',
+              path: relPath,
+              size: 0,
+              modified: canonStat.mtime.toISOString(),
+              docExt: '.md',
+              isSymlink: true,
+              canonicalDocName: targetRel,
+              targetPath: targetRel,
+              hasChildren: await probeHasChildren(canonical, relPath),
+            };
+            continue;
+          }
+          if (!canonStat.isFile()) continue;
+          if (contentFilter.isExcluded(relPath, { bypassFilters: true })) continue;
+          if (!passesDirFilter(relPath)) continue;
           emitted += 1;
-          const atLeafDepth = depth >= maxDepth;
-          const hasChildren = atLeafDepth ? await probeHasChildren(dirAbsRaw, relPath) : undefined;
+          if (isSupportedDocFile(entry.name)) {
+            const docName = relPath.replace(/\.(md|mdx)$/i, '');
+            yield {
+              kind: 'document',
+              docName,
+              docExt: getDocExtension(docName),
+              size: canonStat.size,
+              modified: canonStat.mtime.toISOString(),
+              isSymlink: true,
+              canonicalDocName: targetRel.replace(/\.(md|mdx)$/i, ''),
+              targetPath: targetRel,
+            };
+          } else {
+            const assetExt = synthesizeShowAllAssetExt(entry.name);
+            yield {
+              kind: 'asset',
+              docName: relPath,
+              docExt: assetExt,
+              path: relPath,
+              assetExt,
+              mediaKind: mediaKindForSidebarAssetExtension(assetExt),
+              referencedBy: [],
+              size: canonStat.size,
+              modified: canonStat.mtime.toISOString(),
+              isSymlink: true,
+              canonicalDocName: null,
+              targetPath: targetRel,
+            };
+          }
+          continue;
+        }
+
+        if (!entry.isFile()) continue;
+        if (contentFilter.isExcluded(relPath, { bypassFilters: true })) continue;
+        if (!passesDirFilter(relPath)) continue;
+
+        let fileStat: import('node:fs').Stats | null = null;
+        try {
+          fileStat = await stat(join(absDir, entry.name));
+        } catch (err) {
+          console.warn(`[document-list][showAll] stat failed for ${absDir}/${entry.name}:`, err);
+          continue;
+        }
+
+        if (isSupportedDocFile(entry.name)) {
+          const docName = relPath.replace(/\.(md|mdx)$/i, '');
+          const docExt = getDocExtension(docName);
+          emitted += 1;
           yield {
-            kind: 'folder',
-            path: relPath,
-            size: 0,
-            modified: folderStat ? folderStat.mtime.toISOString() : '',
-            docExt: '.md',
+            kind: 'document',
+            docName,
+            docExt,
+            size: fileStat.size,
+            modified: fileStat.mtime.toISOString(),
             isSymlink: false,
             canonicalDocName: null,
             targetPath: null,
-            ...(hasChildren === undefined ? {} : { hasChildren }),
           };
+          continue;
         }
 
-        if (depth < maxDepth) {
-          yield* walk(dirAbsRaw, relPath, depth + 1);
-        }
-        continue;
-      }
-
-      if (!entry.isFile()) continue;
-      if (contentFilter.isExcluded(relPath, { bypassFilters: true })) continue;
-      if (!passesDirFilter(relPath)) continue;
-
-      let fileStat: import('node:fs').Stats | null = null;
-      try {
-        fileStat = await stat(`${absDir}/${entry.name}`);
-      } catch (err) {
-        console.warn(`[document-list][showAll] stat failed for ${absDir}/${entry.name}:`, err);
-        continue;
-      }
-
-      if (isSupportedDocFile(entry.name)) {
-        const docName = relPath.replace(/\.(md|mdx)$/i, '');
-        const docExt = getDocExtension(docName);
+        const assetExt = synthesizeShowAllAssetExt(entry.name);
+        const mediaKind: InlineAssetMediaKind | null = mediaKindForSidebarAssetExtension(assetExt);
         emitted += 1;
         yield {
-          kind: 'document',
-          docName,
-          docExt,
+          kind: 'asset',
+          docName: relPath,
+          docExt: assetExt,
+          path: relPath,
+          assetExt,
+          mediaKind,
+          referencedBy: [],
           size: fileStat.size,
           modified: fileStat.mtime.toISOString(),
           isSymlink: false,
           canonicalDocName: null,
           targetPath: null,
         };
-        continue;
       }
-
-      const assetExt = synthesizeShowAllAssetExt(entry.name);
-      const mediaKind: InlineAssetMediaKind | null = ASSET_EXTENSIONS.has(assetExt)
-        ? mediaKindForSidebarAssetExtension(assetExt)
-        : null;
-      emitted += 1;
-      yield {
-        kind: 'asset',
-        docName: relPath,
-        docExt: assetExt,
-        path: relPath,
-        assetExt,
-        mediaKind,
-        referencedBy: [],
-        size: fileStat.size,
-        modified: fileStat.mtime.toISOString(),
-        isSymlink: false,
-        canonicalDocName: null,
-        targetPath: null,
-      };
     }
   }
 
-  const startAbs = dirFilter ? `${contentDir}/${dirFilter}` : contentDir;
+  const startAbs = dirFilter ? join(contentDir, dirFilter) : contentDir;
   const startRel = dirFilter ?? '';
   yield* walk(startAbs, startRel, 1);
   if (aborted) showAllWalkAborts += 1;
@@ -1374,6 +1506,17 @@ function collectFolderPaths(contentDir: string, folderPath: string): string[] {
 function probeAndRegisterSourceFileExtension(contentDir: string, fromPath: string): void {
   if (!isValidRelativeContentPath(fromPath)) return;
   const resolvedContentDir = resolve(contentDir);
+  if (isSupportedDocFile(fromPath)) {
+    const candidate = resolve(resolvedContentDir, fromPath);
+    if (
+      candidate !== resolvedContentDir &&
+      candidate.startsWith(`${resolvedContentDir}${sep}`) &&
+      existsSync(candidate)
+    ) {
+      registerDocExtension(stripDocExtension(fromPath), extname(fromPath));
+    }
+    return;
+  }
   for (const ext of SUPPORTED_DOC_EXTENSIONS) {
     const candidate = resolve(resolvedContentDir, `${fromPath}${ext}`);
     if (candidate !== resolvedContentDir && !candidate.startsWith(`${resolvedContentDir}${sep}`)) {
@@ -1426,6 +1569,12 @@ function createCaseOnlyRenameTempPath(sourcePath: string): string {
     if (!existsSync(candidate)) return candidate;
   }
   throw new Error('Unable to allocate temporary path for case-only rename');
+}
+
+function writeFileIfContentDiffers(filePath: string, content: string): void {
+  const current = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : null;
+  if (current === content) return;
+  tracedWriteFileSync(filePath, content, 'utf-8');
 }
 
 function renamePathOnDisk(sourcePath: string, destinationPath: string): void {
@@ -1519,12 +1668,17 @@ export interface ApiExtensionOptions {
   hocuspocus: Hocuspocus;
   sessionManager: AgentSessionManager;
   contentDir: string;
+  ephemeral?: boolean;
   serverInstanceId: string;
   getFileIndex: () => ReadonlyMap<string, FileIndexEntry>;
+  getAllFilesIndex?: () => ReadonlyMap<string, FileIndexEntry>;
+  getFileIndexGeneration?: () => number;
+  mutateFileIndex?: (event: DiskEvent) => void;
   getFolderIndex?: () => ReadonlyMap<string, FolderIndexEntry>;
   onReferencedAssetsCacheInvalidator?: (invalidate: () => void) => void;
   getAliasMap?: () => ReadonlyMap<string, string>;
-  rescanFiles?: () => void;
+  getFolderAliasIndex?: () => ReadonlyMap<string, string>;
+  rescanFiles?: () => void | Promise<void>;
   enableTestRoutes?: boolean;
   shadowRef?: ShadowRef;
   flushGitCommit?: () => Promise<void>;
@@ -1552,24 +1706,22 @@ export interface ApiExtensionOptions {
   ready?: Promise<void>;
   recentlyRemovedDocs?: RecentlyRemovedDocs;
   serializeDoc?: (docName: string) => string | null;
+  semanticSearch?: SemanticSearchService;
+  getSemanticSimilarityFloor?: () => number | undefined;
+  embeddingsSecretsFile?: string;
 }
 
 interface WorkspaceSearchCacheEntry {
   fingerprint: string;
   corpus?: WorkspaceSearchCorpus;
-  pending?: Promise<WorkspaceSearchCorpus>;
+  truncated?: boolean;
+  pending?: Promise<{ corpus: WorkspaceSearchCorpus; truncated: boolean }>;
 }
 
 const workspaceSearchCaches = new Map<string, WorkspaceSearchCacheEntry>();
 
 export function extractHeadings(content: string): HeadingEntry[] {
-  let body = content;
-  if (content.startsWith('---\n') || content.startsWith('---\r\n')) {
-    const closingIdx = content.indexOf('\n---', 3);
-    if (closingIdx !== -1) {
-      body = content.slice(closingIdx + 4);
-    }
-  }
+  const { body } = stripFrontmatter(content);
 
   const headings: HeadingEntry[] = [];
   const slugCounts = new Map<string, number>();
@@ -1595,6 +1747,16 @@ export function isSafeDocName(docName: string): boolean {
   );
 }
 
+function applyDiskEventToLiveAllFilesIndex(
+  event: DiskEvent,
+  getAllFilesIndex: () => ReadonlyMap<string, FileIndexEntry>,
+): void {
+  const live = getAllFilesIndex();
+  if (live instanceof Map) {
+    updateFileIndex(event, live);
+  }
+}
+
 export function createApiExtension(options: ApiExtensionOptions): Extension {
   const {
     hocuspocus,
@@ -1602,9 +1764,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     contentDir,
     serverInstanceId,
     getFileIndex,
+    getAllFilesIndex = getFileIndex,
+    mutateFileIndex = (event: DiskEvent) =>
+      applyDiskEventToLiveAllFilesIndex(event, getAllFilesIndex),
+    getFileIndexGeneration,
     getFolderIndex,
     onReferencedAssetsCacheInvalidator,
     getAliasMap,
+    getFolderAliasIndex,
     rescanFiles,
     enableTestRoutes = false,
     shadowRef,
@@ -1632,11 +1799,17 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     ready,
     recentlyRemovedDocs,
     serializeDoc,
+    semanticSearch,
+    getSemanticSimilarityFloor,
+    embeddingsSecretsFile,
+    ephemeral = false,
   } = options;
 
   const localOpGuard = createConcurrencyGuard();
 
   const showAllInflight = new Map<string, InflightShowAllWalk>();
+
+  const historyInflight = createSingleFlight<Awaited<ReturnType<typeof getDocumentHistory>>>();
   let referencedAssetsCache: {
     signature: string;
     assets: ReturnType<typeof collectReferencedAssets>;
@@ -1718,7 +1891,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     if (!isSafeDocName(docName)) return null;
     const resolvedContentDir = resolve(contentDir);
     const filePath = resolve(resolvedContentDir, `${docName}${getDocExtension(docName)}`);
-    if (!filePath.startsWith(`${resolvedContentDir}/`) && filePath !== resolvedContentDir) {
+    if (!isWithinDir(filePath, resolvedContentDir)) {
       return null;
     }
     return filePath;
@@ -1755,7 +1928,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           const category = typeof map.category === 'string' ? map.category : undefined;
           let tags: string[] | undefined;
           if (Array.isArray(map.tags)) {
-            tags = map.tags.length > 0 ? map.tags : undefined;
+            const stringTags = map.tags.filter(
+              (entry): entry is string => typeof entry === 'string',
+            );
+            tags = stringTags.length > 0 ? stringTags : undefined;
           } else if (typeof map.tags === 'string' && map.tags) {
             tags = [map.tags];
           }
@@ -1894,7 +2070,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       intendedBytes: reconcile.baseBytes,
       actualBytes: reconcile.diskBytes,
       byteDelta: reconcile.diskBytes - reconcile.baseBytes,
-      hint: 'An out-of-band edit was reconciled into this document before your edit was applied on top; the document now reflects that edit plus yours. Re-read it (e.g. `exec("cat <path>")`) to see the combined result before continuing.',
+      ...(reconcile.mergeOutcome ? { mergeOutcome: reconcile.mergeOutcome } : {}),
+      hint:
+        reconcile.mergeOutcome === 'merged'
+          ? 'An out-of-band edit was three-way merged into this document before your edit was applied on top; the merge may have interleaved content blocks. Re-read it (e.g. `exec("cat <path>")`) and review the combined result carefully before continuing.'
+          : 'An out-of-band edit was reconciled into this document before your edit was applied on top; the document now reflects that edit plus yours. Re-read it (e.g. `exec("cat <path>")`) to see the combined result before continuing.',
     };
   }
 
@@ -2031,7 +2211,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const filePath = safeContentPath(toDocName, contentDir);
       const liveContent = liveContents.get(fromDocName);
       if (typeof liveContent === 'string') {
-        tracedWriteFileSync(filePath, liveContent, 'utf-8');
+        writeFileIfContentDiffers(filePath, liveContent);
       }
 
       const finalContent =
@@ -2085,17 +2265,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
   function writeManagedRenameDocumentToDisk(docName: string, markdown: string): void {
     const filePath = resolveContentEntryPath(contentDir, 'file', docName);
     tracedMkdirSync(dirname(filePath), { recursive: true });
-    tracedWriteFileSync(filePath, markdown, 'utf-8');
+    writeFileIfContentDiffers(filePath, markdown);
     registerWrite(filePath, contentHash(markdown));
     setReconciledBase(docName, markdown);
 
-    const fileIndex = getFileIndex();
-    if (fileIndex instanceof Map) {
-      updateFileIndex(
-        { kind: 'update', path: filePath, docName, content: markdown },
-        fileIndex as Map<string, FileIndexEntry>,
-      );
-    }
+    mutateFileIndex?.({ kind: 'update', path: filePath, docName, content: markdown });
   }
 
   function applyManagedRenameMapToLoadedDocument(
@@ -2256,7 +2430,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     const candidates = entries
       .filter((entry) => entry.isFile() && entry.name.startsWith(`${stem}.`))
       .map((entry) => (parent ? `${parent}/${entry.name}` : entry.name))
-      .filter((candidate) => isSupportedAssetFile(candidate, ASSET_EXTENSIONS));
+      .filter((candidate) => isSupportedAssetFile(candidate, LINKABLE_ASSET_EXTENSIONS));
 
     if (candidates.length === 1) return { path: candidates[0], ambiguous: false };
     return { path: assetPath, ambiguous: candidates.length > 1 };
@@ -2349,19 +2523,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             throw new BacklinkIndexRequiredError();
           }
           const destinationAssetPath = extname(toPath) ? toPath : `${toPath}${extname(fromPath)}`;
-          if (isSupportedDocFile(fromPath) || isSupportedDocFile(destinationAssetPath)) {
-            throw new ManagedRenameInvalidRequestError(
-              'Asset operations do not support markdown documents.',
-            );
-          }
-          if (
-            !isSupportedAssetFile(fromPath, ASSET_EXTENSIONS) ||
-            !isSupportedAssetFile(destinationAssetPath, ASSET_EXTENSIONS)
-          ) {
-            throw new ManagedRenameInvalidRequestError(
-              'Asset operations require supported asset extensions.',
-            );
-          }
           if (
             isReservedProjectStatePath(fromPath) ||
             isReservedProjectStatePath(destinationAssetPath)
@@ -2435,6 +2596,147 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             renamedAssets,
             rewrittenDocs,
           };
+        },
+      ),
+    );
+  }
+
+  async function _performDocumentToFileRename(
+    fromPath: string,
+    toPath: string,
+  ): Promise<{ renamedAssets: RenamedAssetMapping[]; rewrittenDocs: ManagedRenameRewrittenDoc[] }> {
+    return runSerialized(async () =>
+      withSpan(
+        'rename.executeDocumentToFileRewrites',
+        {
+          attributes: {
+            'rename.kind': 'asset',
+            'rename.transition': 'document-to-file',
+          },
+        },
+        async (span) => {
+          if (!backlinkIndex) {
+            throw new BacklinkIndexRequiredError();
+          }
+          if (!isSupportedDocFile(fromPath) || isSupportedDocFile(toPath)) {
+            throw new ManagedRenameInvalidRequestError(
+              'Document-to-file rename requires a markdown source and non-markdown destination.',
+            );
+          }
+          const sourceDocName = stripDocExtension(fromPath);
+          if (isSystemDoc(sourceDocName) || isConfigDoc(sourceDocName)) {
+            throw new ManagedRenameReservedPathError('Reserved document names cannot be renamed.');
+          }
+          if (isReservedProjectStatePath(fromPath) || isReservedProjectStatePath(toPath)) {
+            throw new ManagedRenameReservedPathError('.ok and .git are reserved directories.');
+          }
+          if (contentFilter?.isPathIgnored(toPath)) {
+            throw new ManagedRenameInvalidRequestError(
+              'Destination file is excluded by the project content config.',
+            );
+          }
+
+          const sourcePath = resolveContentEntryPath(contentDir, 'folder', fromPath);
+          const destinationPath = resolveContentEntryPath(contentDir, 'folder', toPath);
+          if (sourcePath === destinationPath) {
+            return { renamedAssets: [], rewrittenDocs: [] };
+          }
+          if (stringsDifferOnlyByCase(fromPath, toPath)) {
+            throw new ManagedRenameInvalidRequestError('Case-only renames are not supported.');
+          }
+          if (!existsSync(sourcePath)) {
+            throw new ManagedRenameSourceNotFoundError('file');
+          }
+          if (existsSync(destinationPath)) {
+            throw new ManagedRenameDestinationExistsError();
+          }
+          const sourceStat = statSync(sourcePath);
+          if (!sourceStat.isFile()) {
+            throw new ManagedRenameSourceTypeMismatchError(
+              'file',
+              'Source path is not a document file.',
+            );
+          }
+
+          const renameEngine = getSyncEngine?.();
+          const trackedFiles = new Set(
+            renameEngine ? renameEngine.getConflicts().map((c) => c.file) : [],
+          );
+          const sourceDoc = hocuspocus.documents.get(sourceDocName);
+          if (
+            (sourceDoc !== undefined && isDocInConflict(sourceDoc)) ||
+            trackedFiles.has(fromPath)
+          ) {
+            throw new DocInConflictError({ file: fromPath });
+          }
+
+          const renamedAssets = [{ fromPath, toPath }];
+          const pendingRewrites = collectAssetReferenceRewritesForMappings(renamedAssets).filter(
+            (entry) => entry.docName !== sourceDocName,
+          );
+          span.setAttribute('rename.rewrite_candidates', pendingRewrites.length);
+          assertRewriteTargetsNotConflicted(pendingRewrites.map((entry) => entry.docName));
+
+          reconcileDiskBeforeAgentWrite(hocuspocus, sourceDocName, contentDir);
+          if (recentlyRemovedDocs && !isSystemDoc(sourceDocName) && !isConfigDoc(sourceDocName)) {
+            recentlyRemovedDocs.setDeleted(sourceDocName);
+          }
+          const liveContents = await captureAndCloseDocuments([sourceDocName]);
+          const liveContent = liveContents.get(sourceDocName);
+          const sourceContent =
+            typeof liveContent === 'string' ? liveContent : readFileSync(sourcePath, 'utf-8');
+          const recoveryJournal = createManagedRenameRecoveryJournal({
+            fromPath,
+            toPath,
+            affectedDocs: [{ from: sourceDocName, to: sourceDocName }],
+            snapshots: [{ docName: sourceDocName, content: sourceContent }],
+            cleanupPaths: [toPath],
+          });
+          let rewrittenDocs: ManagedRenameRewrittenDoc[] = [];
+          await withManagedRenameRecovery(projectDir ?? contentDir, recoveryJournal, async () => {
+            writeFileIfContentDiffers(sourcePath, sourceContent);
+            registerWrite(sourcePath, contentHash(sourceContent));
+
+            const renamedWithGit = await renameTrackedPathInGit(
+              projectDir,
+              sourcePath,
+              destinationPath,
+            );
+            if (!renamedWithGit) {
+              renamePathOnDisk(sourcePath, destinationPath);
+            }
+
+            backlinkIndex.deleteDocument(sourceDocName);
+            forgetDocExtension(sourceDocName);
+            mutateFileIndex?.({ kind: 'delete', path: sourcePath, docName: sourceDocName });
+            const destinationStat = statSync(destinationPath);
+            mutateFileIndex?.({
+              kind: 'file-create',
+              path: destinationPath,
+              relativePath: toPath,
+              size: destinationStat.size,
+              modifiedTs: destinationStat.mtimeMs,
+              inode: destinationStat.ino,
+            });
+
+            rewrittenDocs = applyPendingAssetReferenceRewrites(pendingRewrites, renamedAssets);
+
+            void backlinkIndex.saveToDisk().catch((err) => {
+              console.warn(
+                `[backlinks] Failed to persist document-to-file rename cache for ${fromPath} -> ${toPath}:`,
+                err,
+              );
+            });
+            signalChannel?.('files');
+            if (rewrittenDocs.length > 0) {
+              signalChannel?.('backlinks');
+              signalChannel?.('graph');
+            }
+          });
+
+          rewrittenDocs.sort((a, b) => a.docName.localeCompare(b.docName));
+          span.setAttribute('rename.rewrite_count', rewrittenDocs.length);
+          return { renamedAssets, rewrittenDocs };
         },
       ),
     );
@@ -2701,58 +3003,65 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
             if (shadowRef?.current) {
               const shadow = shadowRef.current;
-              withSpanSync('rename.appendLog', { attributes: { 'rename.kind': kind } }, (span) => {
-                const groupId = randomUUID();
-                const at = new Date().toISOString();
-                const branch = getCurrentBranch?.() ?? 'main';
-                const renameLogIndex = getOrLoadRenameLogIndex(shadow.gitDir);
-                const actorWriter = options?.actor
-                  ? {
-                      writerId: options.actor.writerId,
-                      displayName: options.actor.displayName,
+              const loggableAffectedDocs = affectedDocs.filter(({ from, to }) => from !== to);
+              if (loggableAffectedDocs.length > 0) {
+                withSpanSync(
+                  'rename.appendLog',
+                  { attributes: { 'rename.kind': kind } },
+                  (span) => {
+                    const groupId = randomUUID();
+                    const at = new Date().toISOString();
+                    const branch = getCurrentBranch?.() ?? 'main';
+                    const renameLogIndex = getOrLoadRenameLogIndex(shadow.gitDir);
+                    const actorWriter = options?.actor
+                      ? {
+                          writerId: options.actor.writerId,
+                          displayName: options.actor.displayName,
+                        }
+                      : { writerId: SERVICE_WRITER.id, displayName: SERVICE_WRITER.name };
+                    let entriesAppended = 0;
+                    for (const { from, to } of loggableAffectedDocs) {
+                      const logEntry: RenameLogEntry = {
+                        v: 1,
+                        from,
+                        to,
+                        at,
+                        commitSha: '',
+                        branch,
+                        groupId,
+                        kind,
+                        actor: actorWriter,
+                      };
+                      appendRenameLogEntry(shadow.gitDir, logEntry, renameLogIndex, shadow);
+                      entriesAppended += 1;
+                      if (options?.actor) {
+                        recordContributor(
+                          to,
+                          options.actor.writerId,
+                          options.actor.displayName,
+                          options.actor.colorSeed,
+                          formatRenameSubject(from, to),
+                          options.actor.actorMetadata,
+                          undefined,
+                          [{ from, to }],
+                        );
+                      } else {
+                        recordContributor(
+                          to,
+                          SERVICE_WRITER.id,
+                          SERVICE_WRITER.name,
+                          SERVICE_WRITER.id,
+                          formatRenameSubject(from, to),
+                          undefined,
+                          undefined,
+                          [{ from, to }],
+                        );
+                      }
                     }
-                  : { writerId: SERVICE_WRITER.id, displayName: SERVICE_WRITER.name };
-                let entriesAppended = 0;
-                for (const { from, to } of affectedDocs) {
-                  const logEntry: RenameLogEntry = {
-                    v: 1,
-                    from,
-                    to,
-                    at,
-                    commitSha: '',
-                    branch,
-                    groupId,
-                    kind,
-                    actor: actorWriter,
-                  };
-                  appendRenameLogEntry(shadow.gitDir, logEntry, renameLogIndex, shadow);
-                  entriesAppended += 1;
-                  if (options?.actor) {
-                    recordContributor(
-                      to,
-                      options.actor.writerId,
-                      options.actor.displayName,
-                      options.actor.colorSeed,
-                      formatRenameSubject(from, to),
-                      options.actor.actorMetadata,
-                      undefined,
-                      [{ from, to }],
-                    );
-                  } else {
-                    recordContributor(
-                      to,
-                      SERVICE_WRITER.id,
-                      SERVICE_WRITER.name,
-                      SERVICE_WRITER.id,
-                      formatRenameSubject(from, to),
-                      undefined,
-                      undefined,
-                      [{ from, to }],
-                    );
-                  }
-                }
-                span.setAttribute('rename.entries_appended', entriesAppended);
-              });
+                    span.setAttribute('rename.entries_appended', entriesAppended);
+                  },
+                );
+              }
             }
 
             const explicitDestExt: string | null =
@@ -2786,20 +3095,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               );
               setReconciledBase(toDocName, renamedSource.markdown);
 
-              const fileIndex = getFileIndex();
-              if (fileIndex instanceof Map) {
-                updateFileIndex(
-                  {
-                    kind: 'rename',
-                    oldPath: sourcePath,
-                    newPath: destinationPath,
-                    oldDocName: fromDocName,
-                    newDocName: toDocName,
-                    content: renamedSource.markdown,
-                  },
-                  fileIndex as Map<string, FileIndexEntry>,
-                );
-              }
+              mutateFileIndex?.({
+                kind: 'rename',
+                oldPath: sourcePath,
+                newPath: destinationPath,
+                oldDocName: fromDocName,
+                newDocName: toDocName,
+                content: renamedSource.markdown,
+              });
 
               backlinkIndex.renameDocument(fromDocName, toDocName, renamedSource.markdown);
               if (renamedSource.rewrites > 0) {
@@ -3137,7 +3440,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           {
             timestamp,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(agentWriteWarning ? { warning: agentWriteWarning } : {}),
+            ...(agentWriteWarning
+              ? { warning: agentWriteWarning, warnings: [agentWriteWarning] }
+              : {}),
           },
           { handler: 'agent-write' },
         );
@@ -3302,6 +3607,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const hints = computeOrphanHints(resolvedDocName);
 
+        const renderWarnings = await validateMermaidFences(
+          session.dc.document.getText('source').toString(),
+          resolvedDocName,
+        );
+
         const subscriberCount = getSubscriberCount(resolvedDocName);
         const systemSubscriberCount = getSystemSubscriberCount();
 
@@ -3313,6 +3623,13 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         const writeMdWarning = buildReconcileWarning(writeMdReconcile);
+        const writeMdDivergenceEntry =
+          writeDivergence !== undefined ? toContentDivergenceWarning(writeDivergence) : undefined;
+        const writeMdAdvisories = [
+          ...(writeMdDivergenceEntry ? [writeMdDivergenceEntry] : []),
+          ...(writeMdWarning ? [writeMdWarning] : []),
+          ...(renderWarnings ?? []),
+        ];
         successResponse(
           res,
           200,
@@ -3323,11 +3640,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             systemSubscriberCount,
             ...(hints ? { hints } : {}),
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(writeDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(writeDivergence) }
+            ...(writeMdDivergenceEntry
+              ? { warning: writeMdDivergenceEntry }
               : writeMdWarning
                 ? { warning: writeMdWarning }
                 : {}),
+            ...(writeMdAdvisories.length > 0 ? { warnings: writeMdAdvisories } : {}),
           },
           { handler: 'agent-write-md' },
         );
@@ -3489,6 +3807,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             case 'parse_failed':
               fieldErrors = { __region__: `frontmatter region unparseable: ${editError.reason}` };
               break;
+            case 'invalid_path':
+              fieldErrors = {
+                [editError.path.map(String).join('.') || '__path__']: editError.reason,
+              };
+              break;
             default: {
               const _exhaustive: never = editError;
               fieldErrors = {
@@ -3561,7 +3884,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             systemSubscriberCount,
             appliedKeys,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(fmWarning ? { warning: fmWarning } : {}),
+            ...(fmWarning ? { warning: fmWarning, warnings: [fmWarning] } : {}),
           },
           { handler: 'frontmatter-patch' },
         );
@@ -3863,6 +4186,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         const index = getFileIndex();
+        const allFiles = getAllFilesIndex();
         const folderIndex = getFolderIndex?.() ?? new Map<string, FolderIndexEntry>();
         const documents: DocumentListEntry[] = [];
 
@@ -3878,38 +4202,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             canonicalDocName: null,
             targetPath: null,
           });
-        }
-
-        for (const [docName, entry] of index) {
-          if (dir && !docName.startsWith(`${dir}/`) && docName !== dir) continue;
-
-          const docExt = getDocExtension(docName);
-
-          documents.push({
-            kind: 'document',
-            docName,
-            docExt,
-            size: entry.size,
-            modified: entry.modified,
-            isSymlink: false,
-            canonicalDocName: null,
-            targetPath: null,
-          });
-
-          for (const alias of entry.aliases) {
-            if (dir && !alias.startsWith(`${dir}/`) && alias !== dir) continue;
-            const targetRelPath = relative(contentDir, entry.canonicalPath);
-            documents.push({
-              kind: 'document',
-              docName: alias,
-              docExt,
-              size: entry.size,
-              modified: entry.modified,
-              isSymlink: true,
-              canonicalDocName: docName,
-              targetPath: targetRelPath,
-            });
-          }
         }
 
         let assets: ReturnType<typeof collectReferencedAssets> = [];
@@ -3937,8 +4229,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           referencedAssetsCache = null;
           console.warn('[document-list] asset collection failed; returning documents only:', err);
         }
+
+        const assetPaths = new Set<string>();
         for (const asset of assets) {
           if (dir && !asset.path.startsWith(`${dir}/`) && asset.path !== dir) continue;
+          assetPaths.add(asset.path);
           documents.push({
             kind: 'asset',
             docName: asset.path,
@@ -3953,6 +4248,167 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             canonicalDocName: null,
             targetPath: null,
           });
+        }
+
+        for (const [docName, entry] of allFiles) {
+          if (entry.kind === 'markdown') {
+            if (dir && !docName.startsWith(`${dir}/`) && docName !== dir) continue;
+
+            const docExt = getDocExtension(docName);
+
+            documents.push({
+              kind: 'document',
+              docName,
+              docExt,
+              size: entry.size,
+              modified: entry.modified,
+              isSymlink: false,
+              canonicalDocName: null,
+              targetPath: null,
+            });
+
+            for (const alias of entry.aliases) {
+              if (dir && !alias.startsWith(`${dir}/`) && alias !== dir) continue;
+              const targetRelPath = toPosix(relative(contentDir, entry.canonicalPath));
+              documents.push({
+                kind: 'document',
+                docName: alias,
+                docExt,
+                size: entry.size,
+                modified: entry.modified,
+                isSymlink: true,
+                canonicalDocName: docName,
+                targetPath: targetRelPath,
+              });
+            }
+            continue;
+          }
+
+          const passesDir = !dir || docName === dir || docName.startsWith(`${dir}/`);
+          if (passesDir && !assetPaths.has(docName)) {
+            const assetExt = synthesizeShowAllAssetExt(docName);
+            documents.push({
+              kind: 'file',
+              docName,
+              path: docName,
+              docExt: `.${assetExt}`,
+              assetExt,
+              size: entry.size,
+              modified: entry.modified,
+              isSymlink: false,
+              canonicalDocName: null,
+              targetPath: null,
+            });
+          }
+          for (const alias of entry.aliases) {
+            const aliasPassesDir = !dir || alias === dir || alias.startsWith(`${dir}/`);
+            if (!aliasPassesDir || assetPaths.has(alias)) continue;
+            const targetRelPath = toPosix(relative(contentDir, entry.canonicalPath));
+            const assetExt = synthesizeShowAllAssetExt(alias);
+            documents.push({
+              kind: 'file',
+              docName: alias,
+              path: alias,
+              docExt: `.${assetExt}`,
+              assetExt,
+              size: entry.size,
+              modified: entry.modified,
+              isSymlink: true,
+              canonicalDocName: docName,
+              targetPath: targetRelPath,
+            });
+          }
+        }
+
+        const folderAliasIndex = getFolderAliasIndex?.() ?? new Map<string, string>();
+        if (folderAliasIndex.size > 0) {
+          const passesDirFilter = (p: string): boolean =>
+            !dir || p === dir || p.startsWith(`${dir}/`);
+          const aliasesByCanonical = new Map<string, string[]>();
+          for (const [aliasPrefix, canonicalPrefix] of folderAliasIndex) {
+            const arr = aliasesByCanonical.get(canonicalPrefix);
+            if (arr) arr.push(aliasPrefix);
+            else aliasesByCanonical.set(canonicalPrefix, [aliasPrefix]);
+          }
+          for (const [canonicalPrefix, aliasPrefixes] of aliasesByCanonical) {
+            const canonRoot = folderIndex.get(canonicalPrefix);
+            const rootTarget = canonRoot
+              ? toPosix(relative(contentDir, canonRoot.canonicalPath))
+              : canonicalPrefix;
+            for (const aliasPrefix of aliasPrefixes) {
+              if (!passesDirFilter(aliasPrefix)) continue;
+              documents.push({
+                kind: 'folder',
+                path: aliasPrefix,
+                size: 0,
+                modified: canonRoot?.modified ?? '1970-01-01T00:00:00.000Z',
+                docExt: '.md',
+                isSymlink: true,
+                canonicalDocName: canonicalPrefix,
+                targetPath: rootTarget,
+              });
+            }
+          }
+          const projectChild = (name: string, emit: (aliasName: string) => void): void => {
+            for (
+              let slash = name.indexOf('/');
+              slash !== -1;
+              slash = name.indexOf('/', slash + 1)
+            ) {
+              const aliasPrefixes = aliasesByCanonical.get(name.slice(0, slash));
+              if (!aliasPrefixes) continue;
+              const rest = name.slice(slash);
+              for (const aliasPrefix of aliasPrefixes) {
+                const aliasName = `${aliasPrefix}${rest}`;
+                if (passesDirFilter(aliasName)) emit(aliasName);
+              }
+            }
+          };
+          for (const [folderPath, fEntry] of folderIndex) {
+            projectChild(folderPath, (aliasName) => {
+              documents.push({
+                kind: 'folder',
+                path: aliasName,
+                size: 0,
+                modified: fEntry.modified,
+                docExt: '.md',
+                isSymlink: true,
+                canonicalDocName: folderPath,
+                targetPath: toPosix(relative(contentDir, fEntry.canonicalPath)),
+              });
+            });
+          }
+          for (const [docName, dEntry] of allFiles) {
+            projectChild(docName, (aliasName) => {
+              const targetRelPath = toPosix(relative(contentDir, dEntry.canonicalPath));
+              if (dEntry.kind === 'markdown') {
+                documents.push({
+                  kind: 'document',
+                  docName: aliasName,
+                  docExt: getDocExtension(docName),
+                  size: dEntry.size,
+                  modified: dEntry.modified,
+                  isSymlink: true,
+                  canonicalDocName: docName,
+                  targetPath: targetRelPath,
+                });
+              } else {
+                const assetExt = synthesizeShowAllAssetExt(aliasName);
+                documents.push({
+                  kind: 'file',
+                  docName: aliasName,
+                  path: aliasName,
+                  docExt: `.${assetExt}`,
+                  assetExt,
+                  size: dEntry.size,
+                  modified: dEntry.modified,
+                  isSymlink: true,
+                  canonicalDocName: docName,
+                  targetPath: targetRelPath,
+                });
+              }
+            });
+          }
         }
 
         documents.sort((a, b) => {
@@ -4601,7 +5057,19 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const { response: summaryResponse } = summaryResponseFields(normalizedSummary);
 
+        const renderWarnings = await validateMermaidFences(
+          session.dc.document.getText('source').toString(),
+          docName,
+        );
+
         const patchWarning = buildReconcileWarning(patchReconcile);
+        const patchDivergenceEntry =
+          patchDivergence !== undefined ? toContentDivergenceWarning(patchDivergence) : undefined;
+        const patchAdvisories = [
+          ...(patchDivergenceEntry ? [patchDivergenceEntry] : []),
+          ...(patchWarning ? [patchWarning] : []),
+          ...(renderWarnings ?? []),
+        ];
         successResponse(
           res,
           200,
@@ -4611,11 +5079,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             subscriberCount,
             systemSubscriberCount,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(patchDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(patchDivergence) }
+            ...(patchDivergenceEntry
+              ? { warning: patchDivergenceEntry }
               : patchWarning
                 ? { warning: patchWarning }
                 : {}),
+            ...(patchAdvisories.length > 0 ? { warnings: patchAdvisories } : {}),
           },
           { handler: 'agent-patch' },
         );
@@ -4900,6 +5369,23 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     { handler: 'agent-burst-diff', method: 'GET', skipBodyParse: true },
   );
 
+  const handleTestFlushGit = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      try {
+        await flushGitCommit?.();
+        successResponse(res, 200, TestFlushGitSuccessSchema, {}, { handler: 'test-flush-git' });
+      } catch (e) {
+        log.error({ err: e }, '[test-flush-git] flush failed');
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
+          handler: 'test-flush-git',
+          cause: e,
+        });
+      }
+    },
+    { handler: 'test-flush-git', method: 'POST', skipBodyParse: true },
+  );
+
   const handleTestReset = withValidation(
     EmptyRequestSchema,
     async (req, res) => {
@@ -5029,7 +5515,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           );
           return;
         }
-        rescanFiles();
+        await rescanFiles();
         signalChannel?.('files');
         successResponse(
           res,
@@ -5074,6 +5560,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
         let writers: WriterIdentity[] = [];
+        let foldEnumeratedAll = false;
 
         if (Array.isArray(body.writers)) {
           try {
@@ -5100,6 +5587,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           }
         }
 
+        const saveVersionBranch = getCurrentBranch?.() ?? 'main';
+
         if (writers.length === 0) {
           if (svRawAgentId !== undefined) {
             const displayName = svClientName ? `${svAgentName} (${svClientName})` : svAgentName;
@@ -5107,7 +5596,17 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               { id: svAgentId, name: displayName, email: `${svAgentId}@openknowledge.local` },
             ];
           } else {
-            writers = [SERVICE_WRITER];
+            const chains = await enumerateWipChains(shadow, saveVersionBranch);
+            const foldable = chains.filter((c) => !c.isPark);
+            writers =
+              foldable.length > 0
+                ? foldable.map((c) => ({
+                    id: c.writerId,
+                    name: c.writerId,
+                    email: `${c.writerId}@openknowledge.local`,
+                  }))
+                : [SERVICE_WRITER];
+            foldEnumeratedAll = true;
           }
         }
 
@@ -5119,8 +5618,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           shadow,
           resolvedContentRoot,
           writers,
-          'main',
+          saveVersionBranch,
           checkpointSummary.kind === 'value' ? checkpointSummary.value : undefined,
+          foldEnumeratedAll ? { includeUpstream: false } : undefined,
         );
 
         getLogger('history').info({ checkpointRef: result.checkpointRef }, 'checkpoint');
@@ -5195,11 +5695,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const folderLimit = Math.min(200, Number.isFinite(rawFolderLimit) ? rawFolderLimit : 50);
         const rawFolderOffset = Number(url.searchParams.get('offset') ?? '0');
         const folderOffset = Math.max(0, Number.isFinite(rawFolderOffset) ? rawFolderOffset : 0);
-        const result = await getFolderTimeline(shadow, validated.folderRel, contentRoot ?? '.', {
-          branch,
-          limit: folderLimit,
-          offset: folderOffset,
-        });
+        const folderKey = `folder\0${branch}\0${validated.folderRel}\0${folderLimit}\0${folderOffset}`;
+        const { promise, coalesced } = historyInflight.run(folderKey, () =>
+          getFolderTimeline(shadow, validated.folderRel, contentRoot ?? '.', {
+            branch,
+            limit: folderLimit,
+            offset: folderOffset,
+          }),
+        );
+        if (coalesced) recordTimelineCoalesced('folder');
+        const result = await promise;
         successResponse(res, 200, HistorySuccessSchema, { ...result }, { handler: 'history' });
         return;
       }
@@ -5220,22 +5725,30 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const type = url.searchParams.get('type') ?? undefined;
       const author = url.searchParams.get('author') ?? undefined;
       const excludeAuthor = url.searchParams.get('excludeAuthor') ?? undefined;
+      const includeAutoCheckpoints = url.searchParams.get('includeAutoCheckpoints') === 'true';
+
+      const docKey = `doc\0${branch}\0${docName}\0${limit}\0${offset}\0${type ?? ''}\0${author ?? ''}\0${excludeAuthor ?? ''}\0${includeAutoCheckpoints ? '1' : '0'}`;
 
       const t0 = Date.now();
       try {
-        const result = await getDocumentHistory(
-          shadow,
-          {
-            docName,
-            branch,
-            limit,
-            offset,
-            type,
-            author,
-            excludeAuthor,
-          },
-          resolvedContentRoot,
+        const { promise, coalesced } = historyInflight.run(docKey, () =>
+          getDocumentHistory(
+            shadow,
+            {
+              docName,
+              branch,
+              limit,
+              offset,
+              type,
+              author,
+              excludeAuthor,
+              includeAutoCheckpoints,
+            },
+            resolvedContentRoot,
+          ),
         );
+        if (coalesced) recordTimelineCoalesced('doc');
+        const result = await promise;
 
         const duration = Date.now() - t0;
         getLogger('timeline').info(
@@ -5341,148 +5854,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       });
     }
   }
-
-  const handleDiff = withValidation(
-    EmptyRequestSchema,
-    async (req, res) => {
-      const shadow = shadowRef?.current;
-      if (!shadow) {
-        errorResponse(
-          res,
-          503,
-          'urn:ok:error:shadow-not-configured',
-          'Shadow repo not configured.',
-          { handler: 'diff' },
-        );
-        return;
-      }
-
-      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-      const docName = url.searchParams.get('docName') ?? '';
-      const from = url.searchParams.get('from') ?? '';
-      const to = url.searchParams.get('to') ?? '';
-
-      if (!to || !/^[0-9a-f]{40}$/i.test(to)) {
-        errorResponse(
-          res,
-          400,
-          'urn:ok:error:invalid-request',
-          "'to' must be a valid 40-char commit SHA.",
-          { handler: 'diff' },
-        );
-        return;
-      }
-
-      const resolvedContentRoot = contentRoot ?? '.';
-      const pathResult = safeDocPath(docName, resolvedContentRoot);
-      if ('error' in pathResult) {
-        errorResponse(res, 400, 'urn:ok:error:invalid-request', pathResult.error, {
-          handler: 'diff',
-        });
-        return;
-      }
-      const sg = shadowGit(shadow);
-      const branch = getCurrentBranch?.() ?? 'main';
-
-      const renameLogIndex = getOrLoadRenameLogIndex(shadow.gitDir);
-      const ancestorCache = createAncestorShaSetCache();
-      const pathFor = (name: string): string => {
-        const p = safeDocPath(name, resolvedContentRoot);
-        return 'error' in p ? `${name}.md` : p.path;
-      };
-
-      try {
-        const toHistoricalPath = await resolveDocPathAtCommit(
-          shadow,
-          docName,
-          to,
-          branch,
-          renameLogIndex,
-          pathFor,
-          ancestorCache,
-        );
-        if (toHistoricalPath === null) {
-          errorResponse(
-            res,
-            404,
-            'urn:ok:error:doc-not-found',
-            'Document did not exist at the target version.',
-            { handler: 'diff' },
-          );
-          return;
-        }
-        const toContent = await sg.raw('show', `${to}:${toHistoricalPath}`);
-
-        let fromContent: string;
-        if (from && /^[0-9a-f]{40}$/i.test(from)) {
-          const fromHistoricalPath = await resolveDocPathAtCommit(
-            shadow,
-            docName,
-            from,
-            branch,
-            renameLogIndex,
-            pathFor,
-            ancestorCache,
-          );
-          if (fromHistoricalPath === null) {
-            errorResponse(
-              res,
-              404,
-              'urn:ok:error:doc-not-found',
-              'Document did not exist at the source version.',
-              { handler: 'diff' },
-            );
-            return;
-          }
-          fromContent = await sg.raw('show', `${from}:${fromHistoricalPath}`);
-        } else {
-          const doc = hocuspocus.documents.get(docName);
-          if (!doc) {
-            errorResponse(
-              res,
-              409,
-              'urn:ok:error:doc-not-open',
-              'Document is not currently open — open it in the editor first.',
-              { handler: 'diff' },
-            );
-            return;
-          }
-          fromContent = doc.getText('source').toString();
-        }
-
-        const fromBody = stripFrontmatter(fromContent).body;
-        const toBody = stripFrontmatter(toContent).body;
-        const changes = diffLines(fromBody, toBody);
-
-        const lines: { type: 'added' | 'removed' | 'unchanged'; text: string }[] = [];
-        let additions = 0;
-        let deletions = 0;
-        for (const change of changes) {
-          const changeLines = change.value.replace(/\n$/, '').split('\n');
-          const type = change.added ? 'added' : change.removed ? 'removed' : 'unchanged';
-          for (const text of changeLines) {
-            lines.push({ type, text });
-          }
-          if (change.added) additions += changeLines.length;
-          if (change.removed) deletions += changeLines.length;
-        }
-
-        successResponse(
-          res,
-          200,
-          DiffSuccessSchema,
-          { lines, additions, deletions },
-          { handler: 'diff' },
-        );
-      } catch (e) {
-        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
-          handler: 'diff',
-          cause: e,
-        });
-      }
-    },
-    { handler: 'diff', method: 'GET', skipBodyParse: true },
-  );
 
   const handleRollback = withValidation(
     RollbackRequestSchema,
@@ -5691,6 +6062,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
         }
 
+        const rollbackDivergenceEntry =
+          rollbackDivergence !== undefined
+            ? toContentDivergenceWarning(rollbackDivergence)
+            : undefined;
         successResponse(
           res,
           200,
@@ -5699,8 +6074,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             restoredFrom: commitSha,
             timestamp,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(rollbackDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(rollbackDivergence) }
+            ...(rollbackDivergenceEntry
+              ? { warning: rollbackDivergenceEntry, warnings: [rollbackDivergenceEntry] }
               : {}),
           },
           { handler: 'rollback' },
@@ -6027,18 +6402,20 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
           return;
         }
+        const isSandboxedHtml = SANDBOXED_HTML_EXTENSIONS.has(assetExt);
         const headers: Record<string, string> = {
           'Content-Type': contentType,
           'Content-Length': String(stat.size),
           'X-Content-Type-Options': 'nosniff',
-          'Content-Disposition': INLINE_RENDERABLE_EXTENSIONS.has(assetExt)
-            ? 'inline'
-            : 'attachment',
+          'Content-Disposition':
+            INLINE_RENDERABLE_EXTENSIONS.has(assetExt) || isSandboxedHtml ? 'inline' : 'attachment',
           'Cache-Control': 'no-store',
         };
         if (assetExt === 'svg') {
           headers['Content-Security-Policy'] =
             "sandbox; default-src 'none'; style-src 'unsafe-inline'";
+        } else if (isSandboxedHtml) {
+          headers['Content-Security-Policy'] = SANDBOXED_HTML_CSP;
         }
         res.writeHead(200, headers);
         try {
@@ -6215,79 +6592,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     { handler: 'rescue-list', method: 'GET', skipBodyParse: true },
   );
 
-  async function handleRescueGet(
-    req: IncomingMessage,
-    res: ServerResponse,
-    docName: string,
-  ): Promise<void> {
-    if (req.method !== 'GET') {
-      errorResponse(res, 405, 'urn:ok:error:method-not-allowed', 'Method not allowed.', {
-        handler: 'rescue-get',
-        extraHeaders: { Allow: 'GET' },
-      });
-      return;
-    }
-    if (!shadowRef?.current) {
-      errorResponse(res, 503, 'urn:ok:error:shadow-not-configured', 'Shadow repo not configured.', {
-        handler: 'rescue-get',
-      });
-      return;
-    }
-
-    const rescueBase = resolve(shadowRef.current.gitDir, 'rescue');
-    const filePath = resolve(rescueBase, `${docName}${getDocExtension(docName)}`);
-    if (!filePath.startsWith(`${rescueBase}/`)) {
-      errorResponse(res, 400, 'urn:ok:error:invalid-request', 'Invalid document name.', {
-        handler: 'rescue-get',
-      });
-      return;
-    }
-    if (existsSync(filePath)) {
-      const stat = statSync(filePath);
-      if (Date.now() - stat.mtimeMs > RESCUE_MAX_AGE_MS) {
-        try {
-          unlinkSync(filePath);
-        } catch {}
-      } else {
-        const content = readFileSync(filePath, 'utf-8');
-        res.writeHead(200, {
-          'Content-Type': 'text/markdown',
-          'X-Content-Type-Options': 'nosniff',
-        });
-        res.end(content);
-        return;
-      }
-    }
-
-    try {
-      const branch = getCurrentBranch?.() ?? 'main';
-      const timelineEntries = await listRescueCheckpoints(shadowRef.current, branch);
-      const match = timelineEntries
-        .filter((e) => e.docName === docName)
-        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-      if (match) {
-        const sg = shadowGit(shadowRef.current);
-        const tree = (await sg.raw('ls-tree', '-r', match.sha)).trim();
-        const firstLine = tree.split('\n')[0] ?? '';
-        const parts = firstLine.split(/\s+/);
-        const blobSha = parts[2];
-        if (blobSha) {
-          const content = await sg.raw('cat-file', '-p', blobSha);
-          res.writeHead(200, {
-            'Content-Type': 'text/markdown',
-            'X-Content-Type-Options': 'nosniff',
-          });
-          res.end(content);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('[rescue] timeline-ref fallback failed:', e);
-    }
-
-    errorResponse(res, 404, 'urn:ok:error:not-found', 'Not found.', { handler: 'rescue-get' });
-  }
-
   const handleCreatePage = withValidation(
     CreatePageRequestSchema,
     async (_req, res, body) => {
@@ -6326,7 +6630,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
         const resolvedContentDir = resolve(contentDir);
         const fullPath = resolve(resolvedContentDir, filePath);
-        if (!fullPath.startsWith(`${resolvedContentDir}/`) && fullPath !== resolvedContentDir) {
+        if (!isWithinDir(fullPath, resolvedContentDir)) {
           errorResponse(
             res,
             400,
@@ -6397,10 +6701,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             );
             return;
           }
-          const { body: templateBody } = stripFrontmatter(templateRaw);
+          const templateStarter = instantiateDoc(templateRaw);
           const userDisplayName =
             actor.kind === 'agent' || actor.kind === 'principal' ? (actor.displayName ?? '') : '';
-          initialContent = applySubstitution(templateBody, {
+          initialContent = applySubstitution(templateStarter, {
             date: todayIsoUtc(),
             user: userDisplayName,
           });
@@ -6447,13 +6751,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             );
           }
         }
-        const fileIndex = typeof getFileIndex === 'function' ? getFileIndex() : null;
-        if (fileIndex instanceof Map) {
-          updateFileIndex(
-            { kind: 'create', path: fullPath, docName, content: initialContent },
-            fileIndex as Map<string, FileIndexEntry>,
-          );
-        }
+        mutateFileIndex?.({ kind: 'create', path: fullPath, docName, content: initialContent });
         if (backlinkIndex) {
           backlinkIndex.updateDocumentFromMarkdown(docName, initialContent);
           void backlinkIndex.saveToDisk().catch((err) => {
@@ -6653,7 +6951,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           }
         }
 
-        const fileIndex = typeof getFileIndex === 'function' ? getFileIndex() : null;
         let duplicatedPath: string;
         let duplicatedDocNames: string[] = [];
 
@@ -6721,12 +7018,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               didIncrementMdDir = true;
             }
             registerWrite(destinationPath, contentHash(content));
-            if (fileIndex instanceof Map) {
-              updateFileIndex(
-                { kind: 'create', path: destinationPath, docName: duplicatedPath, content },
-                fileIndex as Map<string, FileIndexEntry>,
-              );
-            }
+            mutateFileIndex?.({
+              kind: 'create',
+              path: destinationPath,
+              docName: duplicatedPath,
+              content,
+            });
             backlinkIndex?.updateDocumentFromMarkdown(duplicatedPath, content);
             duplicatedDocNames = [duplicatedPath];
           } catch (err) {
@@ -6742,12 +7039,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             if (contentFilter && didIncrementMdDir) {
               contentFilter.decrementMdDir(dirname(duplicatedPath));
             }
-            if (fileIndex instanceof Map) {
-              updateFileIndex(
-                { kind: 'delete', path: destinationPath, docName: duplicatedPath },
-                fileIndex as Map<string, FileIndexEntry>,
-              );
-            }
+            mutateFileIndex?.({
+              kind: 'delete',
+              path: destinationPath,
+              docName: duplicatedPath,
+            });
             throw err;
           }
         } else {
@@ -6797,17 +7093,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
                 contentFilter.incrementMdDir(dirname(doc.docName));
               }
               registerWrite(doc.fullPath, contentHash(doc.content));
-              if (fileIndex instanceof Map) {
-                updateFileIndex(
-                  {
-                    kind: 'create',
-                    path: doc.fullPath,
-                    docName: doc.docName,
-                    content: doc.content,
-                  },
-                  fileIndex as Map<string, FileIndexEntry>,
-                );
-              }
+              mutateFileIndex?.({
+                kind: 'create',
+                path: doc.fullPath,
+                docName: doc.docName,
+                content: doc.content,
+              });
               backlinkIndex?.updateDocumentFromMarkdown(doc.docName, doc.content);
             }
           } catch (err) {
@@ -7013,13 +7304,20 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           );
           return;
         }
-        if (kind === 'asset') {
+        const operationKind =
+          kind === 'asset' && isSupportedDocFile(fromPath) && isSupportedDocFile(toPath)
+            ? 'file'
+            : kind;
+        if (operationKind === 'asset') {
           let result: {
             renamedAssets: RenamedAssetMapping[];
             rewrittenDocs: ManagedRenameRewrittenDoc[];
           };
           try {
-            result = await _performAssetRename(fromPath, toPath);
+            result =
+              isSupportedDocFile(fromPath) && !isSupportedDocFile(toPath)
+                ? await _performDocumentToFileRename(fromPath, toPath)
+                : await _performAssetRename(fromPath, toPath);
           } catch (err) {
             if (err instanceof DocInConflictError) {
               respondDocInConflict(res, err, 'rename-path');
@@ -7031,6 +7329,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               cause: err,
             });
             return;
+          }
+
+          if (result.renamedAssets.length > 0) {
+            invalidateReferencedAssetsCache();
           }
 
           let summaryResponse: SummaryResponse | undefined;
@@ -7088,7 +7390,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           return;
         }
         const renameAffectedDocNames =
-          kind === 'file'
+          operationKind === 'file'
             ? [stripDocExtension(fromPath)]
             : listManagedDocNamesUnderFolderFromDisk(
                 resolveContentEntryPath(contentDir, 'folder', fromPath),
@@ -7101,7 +7403,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           const affectedDocName = stripDocExtension(affected);
           const doc = hocuspocus.documents.get(affectedDocName);
           const filePath =
-            kind === 'file' ? fromPath : `${affectedDocName}${getDocExtension(affected)}`;
+            operationKind === 'file' ? fromPath : `${affectedDocName}${getDocExtension(affected)}`;
           const conflictedByLifecycle = doc !== undefined && isDocInConflict(doc);
           const conflictedByStore = renameTrackedFiles.has(filePath);
           if (conflictedByLifecycle || conflictedByStore) {
@@ -7109,13 +7411,13 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             return;
           }
         }
-        if (kind === 'file') {
+        if (operationKind === 'file') {
           probeAndRegisterSourceFileExtension(contentDir, fromPath);
         }
 
         if (contentFilter) {
           const excluded =
-            kind === 'file'
+            operationKind === 'file'
               ? contentFilter.isExcluded(
                   isSupportedDocFile(toPath) ? toPath : `${toPath}${getDocExtension(fromPath)}`,
                 )
@@ -7125,7 +7427,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               res,
               400,
               'urn:ok:error:invalid-request',
-              `Destination ${kind === 'file' ? 'document' : 'folder'} is excluded by the project content config.`,
+              `Destination ${operationKind === 'file' ? 'document' : 'folder'} is excluded by the project content config.`,
               { handler: 'rename-path' },
             );
             return;
@@ -7151,7 +7453,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           result = await _performManagedRenameForDocs(
             fromPath,
             toPath,
-            kind,
+            operationKind,
             renameActor ? { actor: renameActor } : {},
           );
         } catch (err) {
@@ -7182,11 +7484,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         let summaryResponse: SummaryResponse | undefined;
-        if (result.renamed.length > 0) {
+        const logicalRenames = result.renamed.filter(
+          ({ fromDocName, toDocName }) => fromDocName !== toDocName,
+        );
+        if (logicalRenames.length > 0) {
           summaryResponse = attributeRenameWriteToActor(
             actor,
             `Renamed ${fromPath} → ${toPath}`,
-            result.renamed.map(({ fromDocName, toDocName }) => ({
+            logicalRenames.map(({ fromDocName, toDocName }) => ({
               docName: toDocName,
               subject: formatRenameSubject(fromDocName, toDocName),
             })),
@@ -7201,7 +7506,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             },
           );
         }
-        renameAttributionCounter().add(1, { kind: `rename-${kind}`, attribution_kind: actor.kind });
+        renameAttributionCounter().add(1, {
+          kind: `rename-${operationKind}`,
+          attribution_kind: actor.kind,
+        });
 
         if (flushContributors) {
           try {
@@ -7266,54 +7574,61 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           return;
         }
         const operationPath = assetResolution.path;
-        if (
-          kind === 'asset' &&
-          (isSupportedDocFile(operationPath) || isReservedProjectStatePath(operationPath))
-        ) {
+        const operationKind = kind === 'asset' && isSupportedDocFile(operationPath) ? 'file' : kind;
+        if (operationKind === 'file') {
+          probeAndRegisterSourceFileExtension(contentDir, operationPath);
+        }
+        if (operationKind === 'asset' && isReservedProjectStatePath(operationPath)) {
           errorResponse(
             res,
             400,
-            isReservedProjectStatePath(operationPath)
-              ? 'urn:ok:error:reserved-doc-name'
-              : 'urn:ok:error:invalid-request',
-            isReservedProjectStatePath(operationPath)
-              ? '.ok and .git are reserved directories.'
-              : 'Asset operations do not support markdown documents.',
+            'urn:ok:error:reserved-doc-name',
+            '.ok and .git are reserved directories.',
             { handler: 'delete-path' },
           );
           return;
         }
 
         const targetPath =
-          kind === 'asset'
+          operationKind === 'asset'
             ? resolveContentEntryPath(contentDir, 'folder', operationPath)
-            : resolveContentEntryPath(contentDir, kind, operationPath);
+            : resolveContentEntryPath(contentDir, operationKind, operationPath);
         if (!existsSync(targetPath)) {
-          errorResponse(res, 404, 'urn:ok:error:doc-not-found', `${kind} does not exist.`, {
-            handler: 'delete-path',
-          });
+          errorResponse(
+            res,
+            404,
+            'urn:ok:error:doc-not-found',
+            `${operationKind} does not exist.`,
+            {
+              handler: 'delete-path',
+            },
+          );
           return;
         }
 
         const targetStat = statSync(targetPath);
         if (
-          (kind === 'file' && !targetStat.isFile()) ||
-          (kind === 'asset' && !targetStat.isFile()) ||
-          (kind === 'folder' && !targetStat.isDirectory())
+          (operationKind === 'file' && !targetStat.isFile()) ||
+          (operationKind === 'asset' && !targetStat.isFile()) ||
+          (operationKind === 'folder' && !targetStat.isDirectory())
         ) {
-          errorResponse(res, 400, 'urn:ok:error:invalid-request', `Target path is not a ${kind}.`, {
-            handler: 'delete-path',
-          });
+          errorResponse(
+            res,
+            400,
+            'urn:ok:error:invalid-request',
+            `Target path is not a ${operationKind}.`,
+            { handler: 'delete-path' },
+          );
           return;
         }
 
         const deletedDocNames =
-          kind === 'asset'
+          operationKind === 'asset'
             ? []
-            : kind === 'file'
-              ? [path]
+            : operationKind === 'file'
+              ? [stripDocExtension(operationPath)]
               : listManagedDocNamesUnderFolderFromDisk(
-                  resolveContentEntryPath(contentDir, 'folder', path),
+                  resolveContentEntryPath(contentDir, 'folder', operationPath),
                 );
 
         const deleteEngine = getSyncEngine?.();
@@ -7324,7 +7639,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           const affectedDocName = stripDocExtension(affected);
           const doc = hocuspocus.documents.get(affectedDocName);
           const filePath =
-            kind === 'file' ? affected : `${affectedDocName}${getDocExtension(affectedDocName)}`;
+            operationKind === 'file'
+              ? isSupportedDocFile(operationPath)
+                ? operationPath
+                : `${affectedDocName}${getDocExtension(affectedDocName)}`
+              : `${affectedDocName}${getDocExtension(affectedDocName)}`;
           const conflictedByLifecycle = doc !== undefined && isDocInConflict(doc);
           const conflictedByStore = deleteTrackedFiles.has(filePath);
           if (conflictedByLifecycle || conflictedByStore) {
@@ -7350,26 +7669,20 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           }
         }
 
-        if (kind === 'file' || kind === 'asset') {
+        if (operationKind === 'file' || operationKind === 'asset') {
           tracedUnlinkSync(targetPath);
         } else {
           tracedRmSync(targetPath, { recursive: true, force: false });
-          removeFolderIndexEntries(path);
+          removeFolderIndexEntries(operationPath);
         }
         invalidateReferencedAssetsCache();
 
-        const fileIndex = getFileIndex();
-        if (fileIndex instanceof Map) {
-          for (const docName of deletedDocNames) {
-            updateFileIndex(
-              {
-                kind: 'delete',
-                path: resolve(contentDir, `${docName}${getDocExtension(docName)}`),
-                docName,
-              },
-              fileIndex as Map<string, FileIndexEntry>,
-            );
-          }
+        for (const docName of deletedDocNames) {
+          mutateFileIndex?.({
+            kind: 'delete',
+            path: resolve(contentDir, `${docName}${getDocExtension(docName)}`),
+            docName,
+          });
         }
 
         signalChannel?.('files');
@@ -7423,27 +7736,30 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               );
               return;
             }
-            const isReservedFolder = kind === 'folder' && isReservedSyntheticFolderPath(path);
-            const isReservedAsset = kind === 'asset' && isReservedProjectStatePath(path);
-            const isInvalidAsset = kind === 'asset' && isSupportedDocFile(path);
+            const operationKind = kind === 'asset' && isSupportedDocFile(path) ? 'file' : kind;
+            const operationDocName = stripDocExtension(path);
+            if (operationKind === 'file') {
+              probeAndRegisterSourceFileExtension(contentDir, path);
+            }
+            const isReservedFolder =
+              operationKind === 'folder' && isReservedSyntheticFolderPath(path);
+            const isReservedAsset = operationKind === 'asset' && isReservedProjectStatePath(path);
             if (
-              (kind === 'file' && (isSystemDoc(path) || isConfigDoc(path))) ||
+              (operationKind === 'file' &&
+                (isSystemDoc(operationDocName) || isConfigDoc(operationDocName))) ||
               isReservedFolder ||
-              isReservedAsset ||
-              isInvalidAsset
+              isReservedAsset
             ) {
               errorResponse(
                 res,
                 400,
-                isInvalidAsset ? 'urn:ok:error:invalid-request' : 'urn:ok:error:reserved-doc-name',
-                isInvalidAsset
-                  ? 'Asset operations do not support markdown documents.'
-                  : `'${path}' is a reserved document name.`,
+                'urn:ok:error:reserved-doc-name',
+                `'${path}' is a reserved document name.`,
                 { handler: 'trash-cleanup' },
               );
               return;
             }
-            if (kind === 'asset') {
+            if (operationKind === 'asset') {
               invalidateReferencedAssetsCache();
               signalChannel?.('files');
               successResponse(
@@ -7458,11 +7774,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
             const initialIndex = getFileIndex();
             const deletedDocNames =
-              kind === 'file'
-                ? initialIndex.has(path)
-                  ? [path]
+              operationKind === 'file'
+                ? initialIndex.has(operationDocName)
+                  ? [operationDocName]
                   : []
-                : listAffectedDocNames(initialIndex, kind, path);
+                : listAffectedDocNames(initialIndex, operationKind, path);
 
             invalidateReferencedAssetsCache();
 
@@ -7494,20 +7810,14 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               }
             }
 
-            const fileIndex = getFileIndex();
-            if (fileIndex instanceof Map) {
-              for (const docName of deletedDocNames) {
-                updateFileIndex(
-                  {
-                    kind: 'delete',
-                    path: resolve(contentDir, `${docName}${getDocExtension(docName)}`),
-                    docName,
-                  },
-                  fileIndex as Map<string, FileIndexEntry>,
-                );
-              }
+            for (const docName of deletedDocNames) {
+              mutateFileIndex?.({
+                kind: 'delete',
+                path: resolve(contentDir, `${docName}${getDocExtension(docName)}`),
+                docName,
+              });
             }
-            if (kind === 'folder') {
+            if (operationKind === 'folder') {
               removeFolderIndexEntries(path);
             }
 
@@ -7792,7 +8102,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const existing = await findDuplicateAsset(destDir, sha, byteLength);
       if (existing) {
         cleanupTempfile();
-        const relPath = relative(contentDir, resolve(destDir, existing));
+        const relPath = toPosix(relative(contentDir, resolve(destDir, existing)));
         log.info(
           {
             event: 'upload',
@@ -7836,7 +8146,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
     try {
       const destFilename = linkTempToFinalWithCollisionRetry(tempPath, destDir, finalFilename);
-      const relPath = relative(contentDir, resolve(destDir, destFilename));
+      const relPath = toPosix(relative(contentDir, resolve(destDir, destFilename)));
       log.info(
         {
           event: 'upload',
@@ -7883,7 +8193,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
   }
 
   const LOCAL_OP_CLONE_KEY = '/api/local-op/clone';
-  const LOCAL_OP_OPEN_KEY = '/api/local-op/open';
   const LOCAL_OP_OK_INIT_KEY = '/api/local-op/ok-init';
   const LOCAL_OP_TIMEOUT_MS = 10 * 60 * 1000;
   const LOCAL_OP_OPEN_TIMEOUT_MS = 45_000;
@@ -8062,7 +8371,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         stderrChunks.push(chunk);
         log.warn(
           { cwd: absDir, cliCmd, msg: chunk.toString('utf-8').trim() },
-          '[local-op/open] child stderr',
+          '[local-op/clone] child stderr',
         );
       });
 
@@ -8078,7 +8387,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         earlyExitCode = -1;
         log.error(
           { cwd: absDir, cliCmd, err: err.message },
-          '[local-op/open] failed to spawn child',
+          '[local-op/clone] failed to spawn child',
         );
       });
 
@@ -8127,64 +8436,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     if ('port' in result) return result;
     return { error: result.error };
   }
-
-  const HANDLE_LOCAL_OP_OPEN = 'local-op-open';
-  const handleLocalOpOpen = withValidation(
-    LocalOpOpenRequestSchema,
-    async (_req, res, body) => {
-      const { dir, port } = body;
-
-      if (!isSafeLocalPath(dir)) {
-        errorResponse(
-          res,
-          400,
-          'urn:ok:error:dir-outside-home',
-          'dir must be within the user home directory.',
-          { handler: HANDLE_LOCAL_OP_OPEN, cause: new Error(`dir=${dir}`) },
-        );
-        return;
-      }
-
-      if (!localOpGuard.tryAcquire(LOCAL_OP_OPEN_KEY)) {
-        errorResponse(
-          res,
-          429,
-          'urn:ok:error:concurrent-operation',
-          'A server-open operation is already in progress.',
-          { handler: HANDLE_LOCAL_OP_OPEN, extraHeaders: { 'Retry-After': '5' } },
-        );
-        return;
-      }
-
-      try {
-        const result = await startServerAtDirAndGetPort(dir, port);
-        if ('port' in result) {
-          successResponse(
-            res,
-            200,
-            LocalOpOpenSuccessSchema,
-            { port: result.port },
-            { handler: HANDLE_LOCAL_OP_OPEN },
-          );
-        } else {
-          errorResponse(
-            res,
-            504,
-            'urn:ok:error:server-open-failed',
-            'Failed to open project server.',
-            { handler: HANDLE_LOCAL_OP_OPEN, cause: new Error(result.error) },
-          );
-        }
-      } finally {
-        localOpGuard.release(LOCAL_OP_OPEN_KEY);
-      }
-    },
-    {
-      handler: HANDLE_LOCAL_OP_OPEN,
-      method: 'POST',
-      preBodyGate: (req, res) => checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_OPEN }),
-    },
-  );
 
   const HANDLE_LOCAL_OP_OK_INIT = 'local-op-ok-init';
   const handleLocalOpOkInit = withValidation(
@@ -8322,7 +8573,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
   const LOCAL_OP_AUTH_STATUS_KEY = '/api/local-op/auth/status';
   const LOCAL_OP_AUTH_REPOS_KEY = '/api/local-op/auth/repos';
   const LOCAL_OP_AUTH_SIGNOUT_KEY = '/api/local-op/auth/signout';
-  const LOCAL_OP_AUTH_PAT_KEY = '/api/local-op/auth/pat';
 
   let authLoginInFlight: ReturnType<typeof runDeviceFlowSubprocess> | null = null;
 
@@ -8394,6 +8644,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
           return;
         }
+        resumeSyncOnAuthEvent(event, getSyncEngine);
         if (!res.writableEnded && !res.destroyed) {
           try {
             res.write(`${JSON.stringify(event)}\n`);
@@ -8705,136 +8956,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_AUTH_SIGNOUT }),
     },
   );
-
-  const HANDLE_LOCAL_OP_AUTH_PAT = 'local-op-auth-pat';
-  const handleLocalOpAuthPat = withValidation(
-    LocalOpAuthPatRequestSchema,
-    async (_req, res, body) => {
-      const { pat, host: hostInput } = body;
-      const host = hostInput ?? 'github.com';
-
-      if (!localOpGuard.tryAcquire(LOCAL_OP_AUTH_PAT_KEY)) {
-        errorResponse(
-          res,
-          429,
-          'urn:ok:error:concurrent-operation',
-          'An auth pat operation is already in progress.',
-          { handler: HANDLE_LOCAL_OP_AUTH_PAT, extraHeaders: { 'Retry-After': '5' } },
-        );
-        return;
-      }
-
-      try {
-        const [cmd, ...baseArgs] = localOpCliArgs;
-        const spawnArgs = [...baseArgs, 'auth', 'pat', '--json', '--host', host];
-
-        const output = await new Promise<string>((resolve, reject) => {
-          const child = spawn(cmd, spawnArgs, {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env },
-          });
-          const killTimer = setTimeout(() => {
-            child.kill('SIGTERM');
-          }, 30_000);
-          child.stdin.write(`${pat}\n`);
-          child.stdin.end();
-
-          const chunks: Buffer[] = [];
-          child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-          child.on('close', (code) => {
-            clearTimeout(killTimer);
-            if (code !== 0) {
-              reject(new Error(`auth pat exited with code ${code}`));
-            } else {
-              resolve(Buffer.concat(chunks).toString('utf-8'));
-            }
-          });
-          child.on('error', (err) => {
-            clearTimeout(killTimer);
-            reject(err);
-          });
-        });
-
-        const lines = output
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean);
-        let parsed: unknown = null;
-        for (let i = lines.length - 1; i >= 0; i--) {
-          try {
-            parsed = JSON.parse(lines[i] as string);
-            break;
-          } catch {}
-        }
-        if (parsed !== null) {
-          successResponse(res, 200, LocalOpAuthPatSuccessSchema, parsed, {
-            handler: HANDLE_LOCAL_OP_AUTH_PAT,
-          });
-        } else {
-          successResponse(
-            res,
-            200,
-            LocalOpAuthPatSuccessSchema,
-            {},
-            {
-              handler: HANDLE_LOCAL_OP_AUTH_PAT,
-            },
-          );
-        }
-      } catch (err) {
-        errorResponse(res, 500, 'urn:ok:error:auth-failed', 'Auth pat failed.', {
-          handler: HANDLE_LOCAL_OP_AUTH_PAT,
-          cause: err,
-        });
-      } finally {
-        localOpGuard.release(LOCAL_OP_AUTH_PAT_KEY);
-      }
-    },
-    {
-      handler: HANDLE_LOCAL_OP_AUTH_PAT,
-      method: 'POST',
-      preBodyGate: (req, res) =>
-        checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_AUTH_PAT }),
-    },
-  );
-
-  const HANDLE_LOCAL_OP_AUTH_IDENTITY = 'local-op-auth-identity';
-  async function handleLocalOpAuthIdentity(
-    req: IncomingMessage,
-    res: ServerResponse,
-  ): Promise<void> {
-    if (!checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_AUTH_IDENTITY })) return;
-    if (req.method !== 'GET') {
-      errorResponse(res, 405, 'urn:ok:error:method-not-allowed', 'Method not allowed.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        extraHeaders: { Allow: 'GET' },
-      });
-      return;
-    }
-    if (!projectDir) {
-      errorResponse(res, 503, 'urn:ok:error:no-project-dir', 'No project directory configured.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-      });
-      return;
-    }
-    try {
-      const identity = await resolveGitIdentity(projectDir);
-      successResponse(
-        res,
-        200,
-        LocalOpAuthIdentitySuccessSchema,
-        { identity },
-        {
-          handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        },
-      );
-    } catch (err) {
-      errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Identity resolution failed.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        cause: err,
-      });
-    }
-  }
 
   const LOCAL_OP_AUTH_SET_IDENTITY_KEY = '/api/local-op/auth/set-identity';
 
@@ -9370,41 +9491,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     }
   }
 
-  async function handleSyncAbortMerge(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!checkLocalOpSecurity(req, res, { handler: 'sync-abort-merge' })) return;
-    if (req.method !== 'POST') {
-      errorResponse(res, 405, 'urn:ok:error:method-not-allowed', 'Method not allowed.', {
-        handler: 'sync-abort-merge',
-        extraHeaders: { Allow: 'POST' },
-      });
-      return;
-    }
-    const engine = getSyncEngine?.();
-    if (!engine) {
-      errorResponse(res, 503, 'urn:ok:error:sync-not-active', 'Sync engine not active.', {
-        handler: 'sync-abort-merge',
-      });
-      return;
-    }
-    try {
-      await engine.abortMerge();
-      successResponse(
-        res,
-        200,
-        SyncAbortMergeSuccessSchema,
-        {},
-        {
-          handler: 'sync-abort-merge',
-        },
-      );
-    } catch (e) {
-      errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Failed to abort merge.', {
-        handler: 'sync-abort-merge',
-        cause: e,
-      });
-    }
-  }
-
   const handleTagsList = withValidation(
     EmptyRequestSchema,
     async (_req, res) => {
@@ -9654,6 +9740,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     FolderConfigPutRequestSchema,
     async (_req, res, body) => {
       try {
+        if (ephemeral) {
+          errorResponse(
+            res,
+            403,
+            'urn:ok:error:single-file-mode',
+            'Folder configuration is not available in single-file mode.',
+            { handler: 'folder-config-put' },
+          );
+          return;
+        }
         const actor = extractActorIdentity(
           body as unknown as Record<string, unknown>,
           getPrincipal,
@@ -9784,25 +9880,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     });
   }
 
-  const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
-  const parseTemplateFile = (
-    raw: string,
-  ): { frontmatter: Record<string, unknown>; body: string } => {
-    const match = raw.match(FRONTMATTER_RE);
-    let frontmatter: Record<string, unknown> = {};
-    let body = raw;
-    if (match) {
-      try {
-        const parsed = parseYaml(match[1] ?? '');
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          frontmatter = parsed as Record<string, unknown>;
-        }
-      } catch {}
-      body = raw.slice(match[0].length);
-    }
-    return { frontmatter, body };
-  };
-
   const handleTemplateGet = withValidation(
     EmptyRequestSchema,
     async (req, res) => {
@@ -9831,7 +9908,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const { abs: foundAbs, folder: foundFolder, scope: foundScope } = found;
 
         const raw = await readFile(foundAbs, 'utf-8');
-        const { frontmatter, body } = parseTemplateFile(raw);
+        const model = parseTemplateFile(raw);
+        const frontmatter = model.identity as Record<string, unknown>;
+        const body = model.starterContent;
 
         const relPath = relative(resolvedContentDir, foundAbs)
           .split(/[\\/]/)
@@ -9868,6 +9947,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     TemplatePutRequestSchema,
     async (_req, res, body) => {
       try {
+        if (ephemeral) {
+          errorResponse(
+            res,
+            403,
+            'urn:ok:error:single-file-mode',
+            'Templates are not available in single-file mode.',
+            { handler: 'template-put' },
+          );
+          return;
+        }
         const actor = extractActorIdentity(
           body as unknown as Record<string, unknown>,
           getPrincipal,
@@ -10116,9 +10205,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             writeBody = body.body;
           } else {
             try {
-              writeBody = parseTemplateFile(
+              writeBody = instantiateDoc(
                 readFileSync(resolve(toValidated.resolvedContentDir, result.toPath), 'utf-8'),
-              ).body;
+              );
             } catch {
               writeBody = null;
             }
@@ -10221,74 +10310,330 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     return 'omnibar';
   }
 
+  function parseSearchRanking(value: unknown): WorkspaceSearchRanking | undefined {
+    return value === 'navigation' || value === 'relevance' ? value : undefined;
+  }
+
   function parseSearchScopes(value: unknown): WorkspaceSearchScope[] | undefined {
     const rawScopes =
       typeof value === 'string' ? value.split(',') : Array.isArray(value) ? value : undefined;
     if (!rawScopes) return undefined;
     const scopes = rawScopes.filter(
       (scope): scope is WorkspaceSearchScope =>
-        scope === 'page' || scope === 'folder' || scope === 'content',
+        scope === 'page' || scope === 'folder' || scope === 'content' || scope === 'file',
     );
     return scopes.length > 0 ? scopes : undefined;
   }
 
-  async function buildWorkspaceSearchDocumentsFromIndex(): Promise<WorkspaceSearchDocument[]> {
+  function parseSemanticParam(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return undefined;
+  }
+
+  function parseSearchSource(value: unknown): SearchSource {
+    return value === 'omnibar' || value === 'mcp' || value === 'http' ? value : 'http';
+  }
+
+  interface SemanticResolution {
+    input?: WorkspaceSemanticInput;
+    status?: SearchSemanticStatus;
+    queryEmbedMs: number | null;
+    pageTotal: number;
+    capable: boolean;
+  }
+
+  async function resolveSemantic(
+    query: string,
+    intent: WorkspaceSearchIntent,
+    semanticParam: boolean | undefined,
+    corpus: WorkspaceSearchCorpus,
+  ): Promise<SemanticResolution> {
+    const embeddableDocs = corpus.documents.filter((d) => !isHiddenDocName(d.path));
+    const pageTotal = embeddableDocs.reduce((n, d) => n + (d.kind === 'page' ? 1 : 0), 0);
+    if (!semanticSearch?.isEnabled() || semanticParam !== true) {
+      return { queryEmbedMs: null, pageTotal, capable: false };
+    }
+
+    void semanticSearch.embedCorpus(embeddableDocs);
+
+    let input: WorkspaceSemanticInput | undefined;
+    let queryEmbedMs: number | null = null;
+    if (intent === 'full_text' && query.trim().length >= SEMANTIC_MIN_QUERY_LENGTH) {
+      const startedAt = performance.now();
+      const scores = await semanticSearch.queryScores(query, embeddableDocs);
+      queryEmbedMs = performance.now() - startedAt;
+      if (scores && scores.size > 0) {
+        const similarityFloor = getSemanticSimilarityFloor?.();
+        input = similarityFloor !== undefined ? { scores, similarityFloor } : { scores };
+      }
+    }
+
+    const status = semanticSearch.getStatus();
+    return {
+      input,
+      status: {
+        capable: status.capable,
+        applied: false, // finalized post-ranking (did any result carry a vector)
+        coverage: { embedded: status.embeddedCount, total: pageTotal },
+      },
+      queryEmbedMs,
+      pageTotal,
+      capable: status.capable,
+    };
+  }
+
+  function toSearchResultEntry(
+    result: ReturnType<typeof searchWorkspaceCorpus>[number],
+    query: string,
+  ): {
+    kind: WorkspaceSearchScope;
+    path: string;
+    title: string;
+    score: number;
+    signals: WorkspaceSearchResult['signals'];
+    snippet?: string;
+  } {
+    return {
+      kind: result.document.kind,
+      path: result.document.path,
+      title: result.document.title,
+      score: result.score,
+      signals: result.signals,
+      snippet:
+        result.document.kind === 'page'
+          ? buildSearchSnippet(result.document.content, query)
+          : undefined,
+    };
+  }
+
+  async function buildSearchResponse(params: {
+    query: string;
+    intent: WorkspaceSearchIntent;
+    ranking: WorkspaceSearchRanking | undefined;
+    scopes: WorkspaceSearchScope[] | undefined;
+    limit: number | undefined;
+    semanticParam: boolean | undefined;
+    source: SearchSource;
+  }): Promise<SearchSuccess> {
+    const startedAt = performance.now();
+    if (isSearchCorpusWarming()) {
+      return {
+        query: params.query,
+        intent: params.intent,
+        results: [],
+        elapsedMs: Math.max(0, performance.now() - startedAt),
+        ready: false,
+      };
+    }
+    const { corpus, truncated } = await getWorkspaceSearchCorpus();
+    const semantic = await resolveSemantic(
+      params.query,
+      params.intent,
+      params.semanticParam,
+      corpus,
+    );
+    const results = searchWorkspaceCorpus(corpus, params.query, {
+      intent: params.intent,
+      ranking: params.ranking,
+      scopes: params.scopes,
+      limit: params.limit,
+      semantic: semantic.input,
+    });
+    const entries = results.map((r) => toSearchResultEntry(r, params.query));
+
+    let semanticStatus: SearchSemanticStatus | undefined;
+    if (semantic.status) {
+      const vectorContributors = entries.reduce(
+        (n, e) => n + (e.signals.vector !== undefined ? 1 : 0),
+        0,
+      );
+      const applied = vectorContributors > 0;
+      semanticStatus = { ...semantic.status, applied };
+      const outcome: SemanticQueryOutcome = !semantic.capable
+        ? 'incapable'
+        : applied
+          ? 'applied'
+          : semantic.status.coverage.embedded === 0
+            ? 'warming'
+            : 'no_match';
+      recordSemanticQuery({
+        outcome,
+        source: params.source,
+        capable: semantic.capable,
+        embedded: semantic.status.coverage.embedded,
+        total: semantic.pageTotal,
+        queryEmbedMs: semantic.queryEmbedMs,
+        vectorContributors,
+      });
+    }
+
+    return {
+      query: params.query,
+      intent: params.intent,
+      results: entries,
+      elapsedMs: Math.max(0, performance.now() - startedAt),
+      ready: true,
+      ...(semanticStatus ? { semantic: semanticStatus } : {}),
+      ...(truncated ? { truncated: true } : {}),
+    };
+  }
+
+  function entrySearchKey(entry: FileIndexEntry): string {
+    return `${entry.modified}\0${entry.size}\0${entry.canonicalPath}\0${entry.inode}\0${entry.aliases.join('\0')}`;
+  }
+
+  const pageDocCache = new Map<string, { key: string; doc: WorkspaceSearchDocument }>();
+
+  async function buildWorkspaceSearchDocumentsFromIndex(): Promise<{
+    documents: WorkspaceSearchDocument[];
+    truncated: boolean;
+  }> {
     const pages: WorkspaceSearchDocument[] = [];
-    for (const [docName, entry] of getFileIndex()) {
+    const files: WorkspaceSearchDocument[] = [];
+    const seenPages: Set<string> = new Set();
+    for (const [docName, entry] of getAllFilesIndex()) {
       if (isSystemDoc(docName) || isConfigDoc(docName)) continue;
+      if (entry.kind === 'file') {
+        files.push(
+          createWorkspaceSearchDocument({
+            kind: 'file',
+            path: docName,
+            modifiedTs: Date.parse(entry.modified),
+            aliases: entry.aliases,
+          }),
+        );
+        continue;
+      }
+      seenPages.add(docName);
+      const entryKey = entrySearchKey(entry);
+      const cached = pageDocCache.get(docName);
+      if (cached && cached.key === entryKey) {
+        pages.push(cached.doc);
+        continue;
+      }
       let content = '';
       let title = docName;
+      let readFailed = false;
       try {
         content = await readFile(entry.canonicalPath, 'utf-8');
-        title = extractPageTitle(content, docName);
       } catch (err) {
-        console.warn(`[search] Failed to index ${docName}:`, err);
+        readFailed = true;
+        console.warn(`[search] Failed to read ${docName}:`, err);
       }
-      pages.push(
-        createWorkspaceSearchDocument({
-          kind: 'page',
-          path: docName,
-          title,
-          content,
-          modifiedTs: Date.parse(entry.modified),
-        }),
-      );
+      if (!readFailed) {
+        try {
+          title = extractPageTitle(content, docName);
+        } catch (err) {
+          console.warn(`[search] Failed to extract title for ${docName}:`, err);
+        }
+      }
+      const doc = createWorkspaceSearchDocument({
+        kind: 'page',
+        path: docName,
+        title,
+        content,
+        modifiedTs: Date.parse(entry.modified),
+        aliases: entry.aliases,
+      });
+      if (!readFailed) pageDocCache.set(docName, { key: entryKey, doc });
+      pages.push(doc);
     }
-    return [...pages, ...deriveFolderSearchDocuments(pages)];
+    for (const docName of pageDocCache.keys()) {
+      if (!seenPages.has(docName)) pageDocCache.delete(docName);
+    }
+    const maxFiles = getSearchMaxEntries();
+    let admittedFiles = files;
+    let truncated = false;
+    if (files.length > maxFiles) {
+      truncated = true;
+      admittedFiles = [...files]
+        .sort((a, b) => {
+          const depthA = a.path.split('/').length;
+          const depthB = b.path.split('/').length;
+          return depthA - depthB || a.path.localeCompare(b.path);
+        })
+        .slice(0, maxFiles);
+      getLogger('search').warn(
+        {
+          dropped: files.length - admittedFiles.length,
+          retained: admittedFiles.length,
+          limit: maxFiles,
+        },
+        '[search] corpus name-only file tier truncated at OK_SEARCH_MAX_ENTRIES',
+      );
+      searchCorpusTruncatedCounter().add(1);
+    }
+    const documents = [
+      ...pages,
+      ...admittedFiles,
+      ...deriveFolderSearchDocuments([...pages, ...admittedFiles]),
+    ];
+    return { documents, truncated };
   }
 
   function workspaceSearchFingerprint(): string {
-    return [...getFileIndex()]
+    if (getFileIndexGeneration) {
+      return `gen:${getFileIndexGeneration()}`;
+    }
+    return [...getAllFilesIndex()]
       .filter(([docName]) => !isSystemDoc(docName) && !isConfigDoc(docName))
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(
-        ([docName, entry]) =>
-          `${docName} ${entry.modified} ${entry.size} ${entry.canonicalPath} ${entry.inode} ${entry.aliases.join(',')}`,
-      )
+      .map(([docName, entry]) => `${docName}\0${entrySearchKey(entry)}`)
       .join('');
   }
 
-  async function getWorkspaceSearchCorpus(): Promise<WorkspaceSearchCorpus> {
+  let bootIndexReady = ready === undefined;
+  ready?.then(
+    () => {
+      bootIndexReady = true;
+    },
+    (err: unknown) => {
+      bootIndexReady = true;
+      log.warn(
+        { err, handler: 'search' },
+        '[api] ready gate rejected — search serves the partial index',
+      );
+    },
+  );
+
+  function isSearchCorpusWarming(): boolean {
+    return !bootIndexReady;
+  }
+
+  async function getWorkspaceSearchCorpus(): Promise<{
+    corpus: WorkspaceSearchCorpus;
+    truncated: boolean;
+  }> {
     const cacheKey = `${contentDir} ${projectDir ?? ''}`;
     const fingerprint = workspaceSearchFingerprint();
     const workspaceSearchCache = workspaceSearchCaches.get(cacheKey);
     if (workspaceSearchCache?.fingerprint === fingerprint && workspaceSearchCache.corpus) {
-      return workspaceSearchCache.corpus;
+      return {
+        corpus: workspaceSearchCache.corpus,
+        truncated: workspaceSearchCache.truncated ?? false,
+      };
     }
     if (workspaceSearchCache?.fingerprint === fingerprint && workspaceSearchCache.pending) {
       return workspaceSearchCache.pending;
     }
 
-    const pending = buildWorkspaceSearchDocumentsFromIndex().then((documents) =>
-      createWorkspaceSearchCorpus(documents),
-    );
+    const pending = buildWorkspaceSearchDocumentsFromIndex().then(({ documents, truncated }) => ({
+      corpus: createWorkspaceSearchCorpus(documents),
+      truncated,
+    }));
     workspaceSearchCaches.set(cacheKey, { fingerprint, pending });
     try {
-      const corpus = await pending;
+      const result = await pending;
       if (workspaceSearchCaches.get(cacheKey)?.pending === pending) {
-        workspaceSearchCaches.set(cacheKey, { fingerprint, corpus });
+        workspaceSearchCaches.set(cacheKey, {
+          fingerprint,
+          corpus: result.corpus,
+          truncated: result.truncated,
+        });
       }
-      return corpus;
+      return result;
     } catch (err) {
       if (workspaceSearchCaches.get(cacheKey)?.pending === pending) {
         workspaceSearchCaches.delete(cacheKey);
@@ -10330,9 +10675,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const limit = url.searchParams.get('limit');
       const query = url.searchParams.get('query') ?? '';
       const intent = parseSearchIntent(url.searchParams.get('intent'));
+      const ranking = parseSearchRanking(url.searchParams.get('ranking'));
       const scopes = parseSearchScopes(
         url.searchParams.get('scope') ?? url.searchParams.get('scopes'),
       );
+      const semanticParam = parseSemanticParam(url.searchParams.get('semantic'));
+      const source = parseSearchSource(url.searchParams.get('source'));
       const limitNum = limit === null ? undefined : Number(limit);
 
       if (query.length > 200) {
@@ -10346,35 +10694,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         return;
       }
       try {
-        const startedAt = performance.now();
-        const corpus = await getWorkspaceSearchCorpus();
-        const results = searchWorkspaceCorpus(corpus, query, {
+        const body = await buildSearchResponse({
+          query,
           intent,
+          ranking,
           scopes,
           limit: limitNum,
+          semanticParam,
+          source,
         });
-        successResponse(
-          res,
-          200,
-          SearchSuccessSchema,
-          {
-            query,
-            intent,
-            results: results.map((result) => ({
-              kind: result.document.kind,
-              path: result.document.path,
-              title: result.document.title,
-              score: result.score,
-              signals: result.signals,
-              snippet:
-                result.document.kind === 'page'
-                  ? buildSearchSnippet(result.document.content, query)
-                  : undefined,
-            })),
-            elapsedMs: Math.max(0, performance.now() - startedAt),
-          },
-          { handler: 'search-get' },
-        );
+        successResponse(res, 200, SearchSuccessSchema, body, { handler: 'search-get' });
       } catch (e) {
         errorResponse(
           res,
@@ -10393,8 +10722,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     async (_req, res, body) => {
       const query = typeof body.query === 'string' ? body.query : '';
       const intent = parseSearchIntent(body.intent);
+      const ranking = parseSearchRanking(body.ranking);
       const scopes = parseSearchScopes(body.scopes ?? body.scope);
       const limit = typeof body.limit === 'number' ? body.limit : undefined;
+      const semanticParam = parseSemanticParam(body.semantic);
+      const source = parseSearchSource(body.source);
 
       if (query.length > 200) {
         errorResponse(
@@ -10407,35 +10739,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         return;
       }
       try {
-        const startedAt = performance.now();
-        const corpus = await getWorkspaceSearchCorpus();
-        const results = searchWorkspaceCorpus(corpus, query, {
+        const responseBody = await buildSearchResponse({
+          query,
           intent,
+          ranking,
           scopes,
           limit,
+          semanticParam,
+          source,
         });
-        successResponse(
-          res,
-          200,
-          SearchSuccessSchema,
-          {
-            query,
-            intent,
-            results: results.map((result) => ({
-              kind: result.document.kind,
-              path: result.document.path,
-              title: result.document.title,
-              score: result.score,
-              signals: result.signals,
-              snippet:
-                result.document.kind === 'page'
-                  ? buildSearchSnippet(result.document.content, query)
-                  : undefined,
-            })),
-            elapsedMs: Math.max(0, performance.now() - startedAt),
-          },
-          { handler: 'search-post' },
-        );
+        successResponse(res, 200, SearchSuccessSchema, responseBody, { handler: 'search-post' });
       } catch (e) {
         errorResponse(
           res,
@@ -11047,7 +11360,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const collabUrl = host ? `ws://${host}/collab` : null;
         const port = paneTargetLockDir ? (readServerLock(paneTargetLockDir)?.port ?? 0) : 0;
         const paneTarget = paneTargetLockDir ? readArmedPaneTarget(paneTargetLockDir) : null;
-        const payload = { collabUrl, previewUrl: null, port, paneTarget };
+        const payload = { collabUrl, previewUrl: null, port, paneTarget, singleFile: ephemeral };
         if (req.method === 'HEAD') {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
@@ -11074,6 +11387,138 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     });
   }
 
+  const HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY = 'local-op-embeddings-set-key';
+  const HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY = 'local-op-embeddings-clear-key';
+  const LOCAL_OP_EMBEDDINGS_GUARD = '/api/local-op/embeddings';
+
+  const handleLocalOpEmbeddingsSetKey = withValidation(
+    LocalOpEmbeddingsSetKeyRequestSchema,
+    async (_req, res, body) => {
+      if (!localOpGuard.tryAcquire(LOCAL_OP_EMBEDDINGS_GUARD)) {
+        errorResponse(
+          res,
+          429,
+          'urn:ok:error:concurrent-operation',
+          'An embeddings key operation is already in progress.',
+          { handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY, extraHeaders: { 'Retry-After': '5' } },
+        );
+        return;
+      }
+      try {
+        await new FileEmbeddingsBackend(embeddingsSecretsFile).set(body.key);
+        successResponse(
+          res,
+          200,
+          LocalOpEmbeddingsMutationSuccessSchema,
+          { keyPresent: true },
+          {
+            handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+            extraHeaders: { 'Cache-Control': 'no-store' },
+          },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Failed to store the key.', {
+          handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+          cause: e,
+        });
+      } finally {
+        localOpGuard.release(LOCAL_OP_EMBEDDINGS_GUARD);
+      }
+    },
+    {
+      handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY,
+      method: 'POST',
+      preBodyGate: (req, res) =>
+        checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_EMBEDDINGS_SET_KEY }),
+    },
+  );
+
+  const handleLocalOpEmbeddingsClearKey = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      if (!localOpGuard.tryAcquire(LOCAL_OP_EMBEDDINGS_GUARD)) {
+        errorResponse(
+          res,
+          429,
+          'urn:ok:error:concurrent-operation',
+          'An embeddings key operation is already in progress.',
+          { handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY, extraHeaders: { 'Retry-After': '5' } },
+        );
+        return;
+      }
+      try {
+        await clearEmbeddingsKeyFromAllBackends(embeddingsSecretsFile);
+        successResponse(
+          res,
+          200,
+          LocalOpEmbeddingsMutationSuccessSchema,
+          { keyPresent: false },
+          {
+            handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+            extraHeaders: { 'Cache-Control': 'no-store' },
+          },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Failed to clear the key.', {
+          handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+          cause: e,
+        });
+      } finally {
+        localOpGuard.release(LOCAL_OP_EMBEDDINGS_GUARD);
+      }
+    },
+    {
+      handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY,
+      method: 'POST',
+      preBodyGate: (req, res) =>
+        checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_EMBEDDINGS_CLEAR_KEY }),
+    },
+  );
+
+  const handleSemanticStatus = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      try {
+        let enabled = false;
+        let ready = false;
+        let capable = false;
+        let embedded = 0;
+        if (semanticSearch) {
+          const status = semanticSearch.getStatus();
+          enabled = status.enabled;
+          ready = status.ready;
+          capable = status.capable;
+          embedded = status.embeddedCount;
+        }
+        const storedKey = await new FileEmbeddingsBackend(embeddingsSecretsFile).get();
+        const envKey = process.env[EMBEDDINGS_API_KEY_ENV] ?? null;
+        const keySource: 'file' | 'env' | null = storedKey ? 'file' : envKey ? 'env' : null;
+        const keyPresent = keySource !== null;
+        const resolvedKey = storedKey ?? envKey;
+        const keyHint = resolvedKey && resolvedKey.length >= 8 ? resolvedKey.slice(-4) : null;
+        let total = 0;
+        for (const [docName] of getFileIndex()) {
+          if (!isSystemDoc(docName) && !isConfigDoc(docName) && !isHiddenDocName(docName)) {
+            total += 1;
+          }
+        }
+        successResponse(
+          res,
+          200,
+          SemanticIndexStatusSchema,
+          { enabled, keyPresent, keySource, keyHint, ready, capable, embedded, total },
+          { handler: 'semantic-status', extraHeaders: { 'Cache-Control': 'no-store' } },
+        );
+      } catch (e) {
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
+          handler: 'semantic-status',
+          cause: e,
+        });
+      }
+    },
+    { handler: 'semantic-status', method: 'GET', skipBodyParse: true },
+  );
+
   const routes: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
     '/api/config': handleApiConfig,
     '/api/asset': handleAsset,
@@ -11093,6 +11538,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/template': handleTemplate,
     '/api/templates': handleTemplatesList,
     '/api/search': handleSearch,
+    '/api/semantic-status': handleSemanticStatus,
     '/api/suggest-links': handleSuggestLinks,
     '/api/page-headings': handlePageHeadings,
     '/api/create-page': handleCreatePage,
@@ -11111,7 +11557,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/agent-burst-diff': handleAgentBurstDiff,
     '/api/save-version': handleSaveVersion,
     '/api/history': handleHistory,
-    '/api/diff': handleDiff,
     '/api/rollback': handleRollback,
     '/api/metrics/reconciliation': handleMetricsReconciliation,
     '/api/metrics/parse-health': handleMetricsParseHealth,
@@ -11132,17 +11577,15 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/sync/conflicts': handleSyncConflicts,
     '/api/sync/conflict-content': handleSyncConflictContent,
     '/api/sync/resolve-conflict': handleSyncResolveConflict,
-    '/api/sync/abort-merge': handleSyncAbortMerge,
     '/api/local-op/clone': handleLocalOpClone,
-    '/api/local-op/open': handleLocalOpOpen,
     '/api/local-op/ok-init': handleLocalOpOkInit,
     '/api/local-op/auth/login': handleLocalOpAuthLogin,
     '/api/local-op/auth/status': handleLocalOpAuthStatus,
     '/api/local-op/auth/repos': handleLocalOpAuthRepos,
     '/api/local-op/auth/signout': handleLocalOpAuthSignout,
-    '/api/local-op/auth/pat': handleLocalOpAuthPat,
-    '/api/local-op/auth/identity': handleLocalOpAuthIdentity,
     '/api/local-op/auth/set-identity': handleLocalOpAuthSetIdentity,
+    '/api/local-op/embeddings/set-key': handleLocalOpEmbeddingsSetKey,
+    '/api/local-op/embeddings/clear-key': handleLocalOpEmbeddingsClearKey,
     '/api/installed-agents': handleInstalledAgentsRoute,
     '/api/spawn-cursor': handleSpawnCursorRoute,
     '/api/handoff': handleHandoffDispatchRoute,
@@ -11156,6 +11599,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
   if (enableTestRoutes) {
     routes['/api/test-reset'] = handleTestReset;
+    routes['/api/test-flush-git'] = handleTestFlushGit;
     routes['/api/test-rescan-backlinks'] = handleTestRescanBacklinks;
     routes['/api/test-rescan-files'] = handleTestRescanFiles;
   }
@@ -11177,9 +11621,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/rollback',
     '/api/sync/trigger',
     '/api/sync/resolve-conflict',
-    '/api/sync/abort-merge',
     '/api/git/checkout',
     '/api/test-reset',
+    '/api/test-flush-git',
     '/api/test-rescan-backlinks',
     '/api/test-rescan-files',
     '/api/install-skill',
@@ -11265,13 +11709,34 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
       }
 
+      if (ephemeral && url.startsWith('/api/')) {
+        const peerAddress = request.socket?.remoteAddress;
+        if (peerAddress !== undefined && !isLoopbackAddress(peerAddress)) {
+          errorResponse(response, 403, 'urn:ok:error:loopback-required', 'Loopback required.', {
+            handler: 'api-ephemeral-gate',
+          });
+          return;
+        }
+        if (!isAllowedWorkspaceHostHeader(request.headers.host)) {
+          errorResponse(
+            response,
+            403,
+            'urn:ok:error:host-not-allowed',
+            'Host header not allowed.',
+            {
+              handler: 'api-ephemeral-gate',
+            },
+          );
+          return;
+        }
+      }
+
       if (!url.startsWith('/api/')) return;
 
       const extractedCtx = propagation.extract(context.active(), request.headers);
       const method = request.method ?? 'GET';
       let routeTemplate = url;
-      if (url.startsWith('/api/rescue/')) routeTemplate = '/api/rescue/:docName';
-      else if (url.startsWith('/api/history/')) routeTemplate = '/api/history/:sha';
+      if (url.startsWith('/api/history/')) routeTemplate = '/api/history/:sha';
       else if (url.startsWith('/api/tags/')) routeTemplate = '/api/tags/:name';
       else if (!routes[url]) routeTemplate = '/api/*';
 
@@ -11297,12 +11762,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               if (handler) {
                 dispatched = true;
                 await handler(request, response);
-              } else if (url.startsWith('/api/rescue/')) {
-                const docName = decodeURIComponent(url.slice('/api/rescue/'.length));
-                if (docName) {
-                  dispatched = true;
-                  await handleRescueGet(request, response, docName);
-                }
               } else if (url.startsWith('/api/history/')) {
                 const sha = decodeURIComponent(url.slice('/api/history/'.length));
                 if (sha) {

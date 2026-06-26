@@ -121,7 +121,7 @@ export function createFileLogger(opts: FileLoggerOptions): PinoLoggerInstance {
   const scheduleTimer = opts._setTimeout ?? setTimeout;
   scheduleTimer(() => pruneLogsDir(OK_LOGS_DIR), 5000).unref();
 
-  const dest = pino.destination({ dest: filePath, append: true, sync: false });
+  const dest = pino.destination({ dest: filePath, append: true, sync: true });
 
   const level = resolveLogLevel();
 
@@ -143,6 +143,57 @@ export function createFileLogger(opts: FileLoggerOptions): PinoLoggerInstance {
   );
 
   return logger;
+}
+
+interface FlushableStream {
+  fd?: number;
+  flushSync?: () => void;
+  once?: (event: string, cb: () => void) => void;
+}
+
+export function flushFileLogger(
+  logger: PinoLoggerInstance | undefined,
+  timeoutMs = 250,
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (!logger) {
+      resolve();
+      return;
+    }
+    const stream = (logger as unknown as Record<symbol, unknown>)[pino.symbols.streamSym] as
+      | FlushableStream
+      | undefined;
+    let settled = false;
+    const done = (): void => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    if (!stream || typeof stream.flushSync !== 'function') {
+      done();
+      return;
+    }
+    const flushAndDone = (): void => {
+      try {
+        stream.flushSync?.();
+      } catch {}
+      done();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    if (typeof stream.fd === 'number' && stream.fd >= 0) {
+      clearTimeout(timer);
+      flushAndDone();
+    } else if (typeof stream.once === 'function') {
+      stream.once('ready', () => {
+        clearTimeout(timer);
+        flushAndDone();
+      });
+    } else {
+      clearTimeout(timer);
+      flushAndDone();
+    }
+  });
 }
 
 export function getLogFilePath(name: string): string {

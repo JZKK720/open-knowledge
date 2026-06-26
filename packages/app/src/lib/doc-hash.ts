@@ -39,6 +39,12 @@ export function hashFromDocName(docName: string, anchor?: string | null): string
   return anchor ? `${base}#${encodeURIComponent(anchor)}` : base;
 }
 
+export function replaceHashWithoutNavigation(hash: string): void {
+  if (window.location.hash === hash) return;
+  const { pathname, search } = window.location;
+  window.history.replaceState(null, '', `${pathname}${search}${hash}`);
+}
+
 export function filePathToDocName(filePath: string): string {
   if (filePath.endsWith('.mdx')) return filePath.slice(0, -4);
   if (filePath.endsWith('.md')) return filePath.slice(0, -3);

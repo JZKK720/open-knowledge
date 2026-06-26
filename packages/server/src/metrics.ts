@@ -1,5 +1,11 @@
 import type { BridgeToleranceClass, CC1Channel } from '@inkeep/open-knowledge-core';
 
+export type MapDrivenSpliceFallbackReason =
+  | 'text-mismatch'
+  | 'synthetic-doc'
+  | 'parse-error'
+  | 'missing-position';
+
 export interface ReconciliationMetrics {
   reconcileCount: number;
   conflictCount: number;
@@ -159,6 +165,58 @@ export interface ReconciliationMetrics {
    *  Path-B rate via `actual_rate = observerAPathBFires +
    *  observerAPathBFiresSuppressed`. */
   observerAPathBFiresSuppressed: number;
+  /** Count of Observer A drains where the map-driven block-aligned splice
+   *  computed and applied — the byte-preserving default path that keeps
+   *  untouched blocks byte-identical in Y.Text. The companion
+   *  `mapDrivenSpliceFallback` records every drain the splice could NOT
+   *  serve, keyed by reason; `splice_rate = applied / (applied + Σfallback)`
+   *  is the health signal for the default fidelity path. */
+  mapDrivenSpliceApplied: number;
+  /** Companion to `mapDrivenSpliceApplied` — count of Observer A drains
+   *  that fell back off the map-driven splice, keyed by reason:
+   *  `text-mismatch` (Y.Text diverged from baseline → Path B; expected
+   *  under concurrent edits), `synthetic-doc` (system/config docs never
+   *  use the splice; expected), `parse-error` (parse/serialize threw
+   *  inside the splice computation — a sustained non-zero here means a
+   *  serializer/parser regression is silently routing every edit through
+   *  the lossier incremental-diff fallback), and `missing-position` (a
+   *  top-level mdast block lacked byte offsets). Keys are a closed
+   *  4-value union, mirroring `bridgeToleranceApplied`'s compile-time
+   *  bounded-cardinality guard. */
+  mapDrivenSpliceFallback: Partial<Record<MapDrivenSpliceFallbackReason, number>>;
+  /** Y.Text-is-truth contract — count of Observer A in-sync canonical-base
+   *  residual merges: the byte-preserving slow path on docs whose settled
+   *  bytes sit beyond `normalizeBridge` tolerance of the canonical witness.
+   *  NOT a Path B fire — `observerAPathBFires`/`...Suppressed` stay scoped
+   *  to real divergence. Increments on every run with no rate-limiter
+   *  (there is no per-fire console event to flood), so growth on every
+   *  WYSIWYG-edit drain of a beyond-tolerance doc is expected — this is the
+   *  "merge machinery is hot on this doc class" volume signal operators
+   *  need when triaging editor latency, which the divergence-scoped Path B
+   *  counters deliberately exclude. */
+  observerAResidualMergeRuns: number;
+  /** Y.Text-is-truth contract (precedent #38) — count of Observer A
+   *  settlement checks that detected a drain settling split-brain (Y.Text
+   *  vs serialize(fragment) divergence beyond `normalizeBridge` tolerance)
+   *  and enqueued a same-drain Observer B re-derive, that escaped the
+   *  per-(site, doc) rate-limiter and emitted a structured
+   *  `bridge-split-brain-rederive` event. No organic input produces this
+   *  divergence at HEAD — producers were narrowed to dependency/plugin
+   *  drift — so this firing in production is itself the drift alert: a
+   *  new divergent fallback producer has appeared. Also the operator
+   *  signal for a doc stuck re-deriving its fragment on every edit (the
+   *  divergence is structural and persists by design; the re-derive cost
+   *  recurs per drain). Counter increments only on emit; the companion
+   *  suppressed counter preserves `actual_rate = fires + suppressed`. */
+  bridgeSplitBrainRederives: number;
+  /** Companion to `bridgeSplitBrainRederives` — count of split-brain
+   *  re-derive detections the rate-limiter suppressed within the
+   *  per-(site, doc) debounce window. On an irreducibly-divergent doc the
+   *  check fires on every Observer A drain (every WYSIWYG keystroke), so
+   *  the unsuppressed `console.warn` would drown the very drift signal
+   *  operators need. Incremented only on suppress, mirroring
+   *  `observerAPathBFiresSuppressed`. */
+  bridgeSplitBrainRederivesSuppressed: number;
   /** Y.Text-is-truth contract — count of best-effort
    *  fragment-reconciliation attempts (`reconcileFragmentNow`) that
    *  threw inside persistence's pre-write sanity-check recovery path. The
@@ -183,6 +241,16 @@ export interface ReconciliationMetrics {
    *  indicates `parseWithFallback`'s paragraph fallback isn't catching some
    *  malformed-bytes class. */
   externalChangeHandlerErrors: number;
+  /** Disk-reconcile guard outcomes inside the server's own flush-commit
+   *  window. `reconcileOwnFlushSkips` counts agent writes where disk matched
+   *  the in-flight flush snapshot (guard skipped; the flush continuation owns
+   *  the base advance). `reconcileInFlightFallthroughs` counts the rare case
+   *  where a flush was in flight but disk held OTHER bytes — a genuinely
+   *  foreign edit landing inside the window, routed to the three-way merge.
+   *  Both bounded; growth in fallthroughs under zero external editors would
+   *  indicate the own-write discrimination is mis-matching. */
+  reconcileOwnFlushSkips: number;
+  reconcileInFlightFallthroughs: number;
   /** Y.Text-is-truth contract — count of persistence pre-write
    *  sanity-check cycles where `mdManager.serialize` itself threw, blocking
    *  the bridge invariant assertion from running. Distinct from
@@ -252,6 +320,28 @@ export interface ReconciliationMetrics {
    *  non-zero indicates a cache populator is producing inconsistent
    *  rename pairs and the defense is silently degrading. */
   removalRedirectChainCycles: number;
+  /** Count of WebSocket connections rejected by `docLineageGuard` with the
+   *  `'doc-lineage-mismatch'` reason — a client claimed a lineage epoch that
+   *  doesn't match the live doc (or claimed against an unloaded doc, stale
+   *  by construction). Each rejection is one prevented union-merge of a dead
+   *  materialization, at the cost of a client close → clearIDB → reopen
+   *  round-trip. Steady-state near-zero with bursts after external
+   *  delete/recreate or rename; a high steady rate means the epoch minting
+   *  or the client's record bookkeeping has drifted and every connection is
+   *  paying the recovery round-trip. Lifetime total: the operator signal is
+   *  the growth rate computed at the metrics consumer (burst = expected;
+   *  sustained = drifted bookkeeping), not the absolute value. */
+  authDocLineageMismatchCount: number;
+  /** Count of `docLineageGuard` invocations that fell through to admit via
+   *  the defensive try/catch — same fail-open philosophy and observability
+   *  rationale as `authRemovalGuardErrors`: each fall-through silently
+   *  disables the stale-lineage fence for that connection, so non-zero
+   *  growth (correlated with `doc-lineage-guard-error` warns) means the
+   *  corruption class the fence exists to prevent can reach docs unnoticed.
+   *  Lifetime total with no built-in threshold: alert on sustained growth
+   *  rate at the metrics consumer — a one-time blip is a transient, a
+   *  climbing rate means the fence is silently disabled under live traffic. */
+  authDocLineageGuardErrors: number;
 }
 
 const counters: ReconciliationMetrics = {
@@ -292,8 +382,15 @@ const counters: ReconciliationMetrics = {
   bridgeToleranceApplied: {},
   observerAPathBFires: 0,
   observerAPathBFiresSuppressed: 0,
+  mapDrivenSpliceApplied: 0,
+  mapDrivenSpliceFallback: {},
+  observerAResidualMergeRuns: 0,
+  bridgeSplitBrainRederives: 0,
+  bridgeSplitBrainRederivesSuppressed: 0,
   persistenceReconciliationFailures: 0,
   externalChangeHandlerErrors: 0,
+  reconcileOwnFlushSkips: 0,
+  reconcileInFlightFallthroughs: 0,
   persistenceSanityCheckSerializeFailures: 0,
   deferredStoreFailures: 0,
   authRenameRedirectCount: 0,
@@ -302,6 +399,8 @@ const counters: ReconciliationMetrics = {
   recentlyRemovedDocsSize: 0,
   authRemovalGuardErrors: 0,
   removalRedirectChainCycles: 0,
+  authDocLineageMismatchCount: 0,
+  authDocLineageGuardErrors: 0,
 };
 
 export function incrementReconcile(): void {
@@ -419,12 +518,40 @@ export function incrementObserverAPathBFiresSuppressed(): void {
   counters.observerAPathBFiresSuppressed++;
 }
 
+export function incrementMapDrivenSpliceApplied(): void {
+  counters.mapDrivenSpliceApplied++;
+}
+
+export function incrementMapDrivenSpliceFallback(reason: MapDrivenSpliceFallbackReason): void {
+  counters.mapDrivenSpliceFallback[reason] = (counters.mapDrivenSpliceFallback[reason] ?? 0) + 1;
+}
+
+export function incrementObserverAResidualMergeRuns(): void {
+  counters.observerAResidualMergeRuns++;
+}
+
+export function incrementBridgeSplitBrainRederives(): void {
+  counters.bridgeSplitBrainRederives++;
+}
+
+export function incrementBridgeSplitBrainRederivesSuppressed(): void {
+  counters.bridgeSplitBrainRederivesSuppressed++;
+}
+
 export function incrementPersistenceReconciliationFailures(): void {
   counters.persistenceReconciliationFailures++;
 }
 
 export function incrementExternalChangeHandlerErrors(): void {
   counters.externalChangeHandlerErrors++;
+}
+
+export function incrementReconcileOwnFlushSkips(): void {
+  counters.reconcileOwnFlushSkips++;
+}
+
+export function incrementReconcileInFlightFallthroughs(): void {
+  counters.reconcileInFlightFallthroughs++;
 }
 
 export function incrementPersistenceSanityCheckSerializeFailures(): void {
@@ -457,6 +584,14 @@ export function incrementAuthRemovalGuardError(): void {
 
 export function incrementRemovalRedirectChainCycle(): void {
   counters.removalRedirectChainCycles++;
+}
+
+export function incrementAuthDocLineageMismatch(): void {
+  counters.authDocLineageMismatchCount++;
+}
+
+export function incrementAuthDocLineageGuardError(): void {
+  counters.authDocLineageGuardErrors++;
 }
 
 export function incrementCollabSocketFilteredError(code: 'EPIPE' | 'ECONNRESET'): void {
@@ -497,6 +632,7 @@ export function getMetrics(): ReconciliationMetrics {
     ...counters,
     cc1LastSeq: { ...counters.cc1LastSeq },
     bridgeToleranceApplied: { ...counters.bridgeToleranceApplied },
+    mapDrivenSpliceFallback: { ...counters.mapDrivenSpliceFallback },
   };
 }
 
@@ -538,8 +674,15 @@ export function resetMetrics(): void {
   counters.bridgeToleranceApplied = {};
   counters.observerAPathBFires = 0;
   counters.observerAPathBFiresSuppressed = 0;
+  counters.mapDrivenSpliceApplied = 0;
+  counters.mapDrivenSpliceFallback = {};
+  counters.observerAResidualMergeRuns = 0;
+  counters.bridgeSplitBrainRederives = 0;
+  counters.bridgeSplitBrainRederivesSuppressed = 0;
   counters.persistenceReconciliationFailures = 0;
   counters.externalChangeHandlerErrors = 0;
+  counters.reconcileOwnFlushSkips = 0;
+  counters.reconcileInFlightFallthroughs = 0;
   counters.persistenceSanityCheckSerializeFailures = 0;
   counters.deferredStoreFailures = 0;
   counters.authRenameRedirectCount = 0;
@@ -548,4 +691,6 @@ export function resetMetrics(): void {
   counters.recentlyRemovedDocsSize = 0;
   counters.authRemovalGuardErrors = 0;
   counters.removalRedirectChainCycles = 0;
+  counters.authDocLineageMismatchCount = 0;
+  counters.authDocLineageGuardErrors = 0;
 }

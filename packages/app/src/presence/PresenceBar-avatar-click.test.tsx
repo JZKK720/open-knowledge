@@ -2,7 +2,11 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { AgentPresenceEntry } from '@inkeep/open-knowledge-core';
 import { renderToString } from 'react-dom/server';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import * as actualDocumentContext from '@/editor/DocumentContext';
 import type { AgentParticipant } from './use-presence';
+import * as actualUsePresence from './use-presence';
+import * as actualUseSyncStatus from './use-sync-status';
+import * as actualUseSyncToasts from './use-sync-toasts';
 
 const openActivityPanelCalls: Array<[string, string | null]> = [];
 const openActivityPanel = (connectionId: string, targetDoc: string | null): void => {
@@ -14,6 +18,7 @@ let crossDocAgents: AgentParticipant[] = [];
 let mockActiveDocName: string | null = null;
 
 mock.module('@/editor/DocumentContext', () => ({
+  ...actualDocumentContext,
   useDocumentContext: () => ({
     activeProvider: null,
     activeDocName: mockActiveDocName,
@@ -27,14 +32,17 @@ mock.module('@/editor/DocumentContext', () => ({
 }));
 
 mock.module('./use-presence', () => ({
+  ...actualUsePresence,
   usePresence: () => ({ current: currentAgents, crossDoc: crossDocAgents }),
 }));
 
 mock.module('./use-sync-status', () => ({
+  ...actualUseSyncStatus,
   useSyncStatus: () => ({ state: 'clean' }),
 }));
 
 mock.module('./use-sync-toasts', () => ({
+  ...actualUseSyncToasts,
   useSyncToasts: () => {},
 }));
 

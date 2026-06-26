@@ -24,6 +24,7 @@ import type { LocalTransactionOrigin } from '@hocuspocus/server';
 import {
   MarkdownManager,
   normalizeBridge,
+  prependFrontmatter,
   readFmMap,
   sharedExtensions,
   stripFrontmatter,
@@ -33,6 +34,7 @@ import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-ti
 import * as Y from 'yjs';
 import { AGENT_WRITE_ORIGIN } from './agent-sessions.ts';
 import { MANAGED_RENAME_ORIGIN, ROLLBACK_ORIGIN } from './api-extension.ts';
+import { composeAndWriteRawBody } from './bridge-intake.ts';
 import { __resetBridgeWatchdogForTests } from './bridge-watchdog.ts';
 import { FILE_WATCHER_ORIGIN } from './external-change.ts';
 import { getMetrics, resetMetrics } from './metrics.ts';
@@ -882,6 +884,62 @@ describe('Server Observer B — error recovery paths', () => {
 
     cleanup();
   });
+
+  test('outer-catch recovery on a beyond-tolerance doc clears witness coherence: next in-sync fragment edit does not run a cross-generation residual merge', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const ngRaw =
+      '---\ntitle: NG recovery fixture\n---\n\n# Hello\n\n> Lazy quote\nstays lazy.\n\nBody text stays.\n';
+    const doc = new Y.Doc();
+    const xmlFragment = doc.getXmlFragment('default');
+    const ytext = doc.getText('source');
+    doc.transact(() => {
+      composeAndWriteRawBody(doc, ngRaw, 'file-watcher');
+    }, FILE_WATCHER_ORIGIN);
+
+    const stub = createMdManagerStub();
+    const recorder = createDispatchRecorder();
+    const cleanup = setupServerObservers(
+      setupOpts({
+        doc,
+        xmlFragment,
+        ytext,
+        recorder,
+        mdManager: stub.mdManager,
+        docName: 'recovery-ng-coherence',
+      }),
+    );
+    expect(ytext.toString()).toBe(ngRaw);
+
+    const originalConsoleError = console.error;
+    console.error = () => {};
+    stub.setParseThrow(new Error('unexpected parse failure'));
+    doc.transact(() => {
+      ytext.insert(ytext.length, '\nUnabsorbed line.\n');
+    });
+    stub.setParseThrow(null);
+    console.error = originalConsoleError;
+
+    doc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, ngRaw);
+    }, OBSERVER_SYNC_ORIGIN);
+    expect(ytext.toString()).toBe(ngRaw);
+
+    const body = mdManager.serialize(
+      yXmlFragmentToProseMirrorRootNode(xmlFragment, schema).toJSON(),
+    );
+    populateFragment(doc, xmlFragment, `${body}\nPost-recovery edit.\n`);
+
+    expect(getMetrics().observerAResidualMergeRuns).toBe(0);
+    expect(getMetrics().observerAPathBFires + getMetrics().observerAPathBFiresSuppressed).toBe(0);
+    const finalText = ytext.toString();
+    expect(finalText).toContain('Post-recovery edit.');
+    expect(finalText).not.toContain('Unabsorbed line.');
+
+    cleanup();
+  });
 });
 
 describe('Server Observer B — Y.Text-is-truth contract (FR-31)', () => {
@@ -975,6 +1033,429 @@ describe('Server Observer B — Y.Text-is-truth contract (FR-31)', () => {
 
     expect(ytext.toString()).toBe('[[Page\n');
     expect(ytext.toString()).not.toContain('\\[');
+
+    cleanup();
+  });
+});
+
+describe('Observer A routing — Path B fires iff Y.Text holds unabsorbed changes (FR-3)', () => {
+  const RESIDUAL_RAW = '---\ntitle: Routing fixture\n---\n\n# Hello   \n\nBody text stays.\n';
+
+  function canonicalOf(raw: string): string {
+    const { frontmatter, body } = stripFrontmatter(raw);
+    return prependFrontmatter(frontmatter, mdManager.serialize(mdManager.parseWithFallback(body)));
+  }
+
+  function seedThenAttach(raw: string, docName: string) {
+    const doc = new Y.Doc();
+    const xmlFragment = doc.getXmlFragment('default');
+    const ytext = doc.getText('source');
+    doc.transact(() => {
+      composeAndWriteRawBody(doc, raw, 'file-watcher');
+    }, FILE_WATCHER_ORIGIN);
+    const recorder = createDispatchRecorder();
+    const cleanup = setupServerObservers(setupOpts({ doc, xmlFragment, ytext, recorder, docName }));
+    return { doc, xmlFragment, ytext, recorder, cleanup };
+  }
+
+  function serializeFragmentBody(xmlFragment: Y.XmlFragment): string {
+    return mdManager.serialize(yXmlFragmentToProseMirrorRootNode(xmlFragment, schema).toJSON());
+  }
+
+  function capturePathBEvents(fn: () => void): Record<string, unknown>[] {
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      fn();
+    } finally {
+      console.warn = originalWarn;
+    }
+    return warnings
+      .map((w) => {
+        try {
+          return JSON.parse(w);
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is Record<string, unknown> => e !== null)
+      .filter((e) => e.event === 'observer-a-path-b-fired');
+  }
+
+  /** Total Path B fires — emit-gated counter + suppressed counter covers
+   *  every fire even when the per-doc rate-limiter closes. */
+  const totalPathBFires = (): number =>
+    getMetrics().observerAPathBFires + getMetrics().observerAPathBFiresSuppressed;
+
+  test('residual-bearing doc seeded production-order: first fragment change does not fire Path B and converges', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    expect(canonicalOf(RESIDUAL_RAW)).not.toBe(RESIDUAL_RAW);
+    expect(normalizeBridge(canonicalOf(RESIDUAL_RAW))).toBe(normalizeBridge(RESIDUAL_RAW));
+
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(
+      RESIDUAL_RAW,
+      'routing-residual-first-edit',
+    );
+    expect(ytext.toString()).toBe(RESIDUAL_RAW);
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nUser WYSIWYG edit.\n`,
+      );
+    });
+
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('User WYSIWYG edit.');
+    expect(finalText).toContain('Body text stays.');
+    expect(finalText).toContain('# Hello');
+    expect(finalText).toContain('title: Routing fixture');
+
+    cleanup();
+  });
+
+  test('after Observer B fully absorbs a raw-form source edit, the next fragment change does not fire Path B', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const canon = canonicalOf(RESIDUAL_RAW);
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(canon, 'routing-post-absorb');
+
+    doc.transact(() => {
+      ytext.insert(ytext.length, '## Added via source\n');
+    });
+    expect(serializeFragmentBody(xmlFragment)).toContain('Added via source');
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nWysiwyg paragraph.\n`,
+      );
+    });
+
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('Added via source');
+    expect(finalText).toContain('Wysiwyg paragraph.');
+    expect(finalText).toContain('Body text stays.');
+
+    cleanup();
+  });
+
+  test('control: parse-invisible source edit is real unabsorbed divergence — next fragment change MUST fire Path B', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const canon = canonicalOf(RESIDUAL_RAW);
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(canon, 'routing-real-divergence');
+
+    const spaceAt = canon.indexOf('# Hello') + '# Hello'.length;
+    doc.transact(() => {
+      ytext.insert(spaceAt, ' ');
+    });
+    expect(ytext.toString()).toContain('# Hello \n');
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nAnother wysiwyg edit.\n`,
+      );
+    });
+
+    expect(totalPathBFires()).toBeGreaterThan(firesBefore);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('# Hello \n');
+    expect(finalText).toContain('Another wysiwyg edit.');
+
+    cleanup();
+  });
+
+  test('gate 1: serialization-neutral fragment event on a residual doc settles with zero observer writes', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const { doc, xmlFragment, ytext, recorder, cleanup } = seedThenAttach(
+      RESIDUAL_RAW,
+      'routing-gate1-neutral',
+    );
+    expect(ytext.toString()).toBe(RESIDUAL_RAW);
+    const bodyBefore = serializeFragmentBody(xmlFragment);
+
+    let observerWrites = 0;
+    doc.on('afterTransaction', (tx: Y.Transaction) => {
+      if (tx.origin === OBSERVER_SYNC_ORIGIN) observerWrites++;
+    });
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      doc.transact(() => {
+        const replacement = new Y.XmlElement('paragraph');
+        const text = new Y.XmlText();
+        text.insert(0, 'Body text stays.');
+        replacement.insert(0, [text]);
+        xmlFragment.insert(xmlFragment.length, [replacement]);
+        xmlFragment.delete(xmlFragment.length - 2, 1);
+      });
+    });
+
+    expect(recorder.dispatches).toContain('a');
+    expect(serializeFragmentBody(xmlFragment)).toBe(bodyBefore);
+
+    expect(observerWrites).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+    expect(ytext.toString()).toBe(RESIDUAL_RAW);
+
+    cleanup();
+  });
+
+  test('gate 1: stale canonical witness after a paired-write reset does NOT short-circuit a fragment edit that re-matches it (CB-CONTRACT-10 regression)', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const IMG = '<img src="x.png" alt="x" />\n';
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(IMG, 'gate1-stale-canonical');
+
+    const emptyRaw = '\n';
+    const emptyJson = mdManager.parse(emptyRaw);
+    const emptyNode = schema.nodeFromJSON(emptyJson);
+    doc.transact(() => {
+      const meta = { mapping: new Map(), isOMark: new Map() };
+      updateYFragment(doc, xmlFragment, emptyNode, meta);
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, mdManager.serialize(emptyJson));
+    }, AGENT_WRITE_ORIGIN);
+    expect(ytext.toString().includes('<img')).toBe(false);
+
+    populateFragment(doc, xmlFragment, IMG);
+
+    expect(ytext.toString()).toContain('<img');
+    expect(ytext.toString()).toContain('src="x.png"');
+
+    cleanup();
+  });
+
+  test('control: round-trip-stable doc seeded production-order — first fragment change does not fire Path B', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const canon = canonicalOf(RESIDUAL_RAW);
+    expect(canonicalOf(canon)).toBe(canon);
+
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(canon, 'routing-stable-control');
+    expect(ytext.toString()).toBe(canon);
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nPlain wysiwyg edit.\n`,
+      );
+    });
+
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('Plain wysiwyg edit.');
+    expect(finalText).toContain('Body text stays.');
+
+    cleanup();
+  });
+
+  const NG_RAW =
+    '---\ntitle: NG routing fixture\n---\n\n# Hello\n\n> Lazy quote\nstays lazy.\n\nBody text stays.\n';
+
+  test('in-sync doc with beyond-tolerance residual: fragment change preserves NG bytes without a Path B fire', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    expect(canonicalOf(NG_RAW)).not.toBe(NG_RAW);
+    expect(normalizeBridge(canonicalOf(NG_RAW))).not.toBe(normalizeBridge(NG_RAW));
+
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(NG_RAW, 'routing-ng-in-sync');
+    expect(ytext.toString()).toBe(NG_RAW);
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nUser WYSIWYG edit.\n`,
+      );
+    });
+
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+    expect(getMetrics().observerAResidualMergeRuns).toBe(1);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('User WYSIWYG edit.');
+    expect(finalText).toContain('> Lazy quote\nstays lazy.');
+    expect(finalText).not.toContain('> stays lazy.');
+    expect(finalText).toContain('Body text stays.');
+
+    cleanup();
+  });
+
+  test('control: real divergence on a beyond-tolerance doc fires Path B — divergence beats the residual merge', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(NG_RAW, 'routing-ng-divergence');
+
+    const spaceAt = NG_RAW.indexOf('# Hello') + '# Hello'.length;
+    doc.transact(() => {
+      ytext.insert(spaceAt, ' ');
+    });
+    expect(ytext.toString()).toContain('# Hello \n');
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nAnother wysiwyg edit.\n`,
+      );
+    });
+
+    expect(totalPathBFires()).toBeGreaterThan(firesBefore);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('# Hello \n');
+    expect(finalText).toContain('Another wysiwyg edit.');
+
+    cleanup();
+  });
+
+  test('consecutive in-sync fragment edits on a beyond-tolerance doc each run the residual merge: the post-merge settlement restores coherence', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    expect(normalizeBridge(canonicalOf(NG_RAW))).not.toBe(normalizeBridge(NG_RAW));
+
+    const { doc, xmlFragment, ytext, cleanup } = seedThenAttach(NG_RAW, 'routing-ng-consecutive');
+    expect(ytext.toString()).toBe(NG_RAW);
+
+    const firesBefore = totalPathBFires();
+
+    const events1 = capturePathBEvents(() => {
+      populateFragment(doc, xmlFragment, `${serializeFragmentBody(xmlFragment)}\nFirst edit.\n`);
+    });
+    expect(events1).toHaveLength(0);
+    expect(getMetrics().observerAResidualMergeRuns).toBe(1);
+    expect(ytext.toString()).toContain('> Lazy quote\nstays lazy.');
+    expect(ytext.toString()).not.toContain('> stays lazy.');
+
+    const events2 = capturePathBEvents(() => {
+      populateFragment(doc, xmlFragment, `${serializeFragmentBody(xmlFragment)}\nSecond edit.\n`);
+    });
+    expect(events2).toHaveLength(0);
+    expect(getMetrics().observerAResidualMergeRuns).toBe(2);
+    expect(totalPathBFires()).toBe(firesBefore);
+
+    const finalText = ytext.toString();
+    expect(finalText).toContain('First edit.');
+    expect(finalText).toContain('Second edit.');
+    expect(finalText).toContain('> Lazy quote\nstays lazy.');
+    expect(finalText).not.toContain('> stays lazy.');
+
+    cleanup();
+  });
+
+  test('paired write on a beyond-tolerance doc clears coherence: the next in-sync fragment edit takes the Path-A fallback, not the residual merge', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const { doc, xmlFragment, ytext, recorder, cleanup } = seedThenAttach(
+      NG_RAW,
+      'routing-ng-paired-clears-coherence',
+    );
+    expect(ytext.toString()).toBe(NG_RAW);
+
+    const pairedRaw =
+      '---\ntitle: NG routing fixture\n---\n\n# Hello\n\n> Lazy quote\nstays lazy.\n\nPaired body.\n';
+    expect(normalizeBridge(canonicalOf(pairedRaw))).not.toBe(normalizeBridge(pairedRaw));
+    const pairedJson = mdManager.parse(stripFrontmatter(pairedRaw).body);
+    const pairedNode = schema.nodeFromJSON(pairedJson);
+    doc.transact(() => {
+      const meta = { mapping: new Map(), isOMark: new Map() };
+      updateYFragment(doc, xmlFragment, pairedNode, meta);
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, pairedRaw);
+    }, AGENT_WRITE_ORIGIN);
+    expect(recorder.dispatches.filter((k) => k !== 'none')).toHaveLength(0);
+    expect(ytext.toString()).toBe(pairedRaw);
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nPost-paired edit.\n`,
+      );
+    });
+
+    expect(getMetrics().observerAResidualMergeRuns).toBe(0);
+    expect(events).toHaveLength(0);
+    expect(totalPathBFires()).toBe(firesBefore);
+    expect(ytext.toString()).toContain('Post-paired edit.');
+
+    cleanup();
+  });
+
+  test('diverged attach: next fragment change routes Path B against the fragment-canonical base and Y.Text-only content survives exactly once', () => {
+    __resetBridgeWatchdogForTests();
+    resetMetrics();
+
+    const doc = new Y.Doc();
+    const xmlFragment = doc.getXmlFragment('default');
+    const ytext = doc.getText('source');
+    populateFragment(doc, xmlFragment, '# Hello\n\nFragment body.\n');
+    doc.transact(() => {
+      ytext.insert(0, '# Hello\n\nYtext-only line.\n\nFragment body.\n');
+    });
+    const recorder = createDispatchRecorder();
+    const cleanup = setupServerObservers(
+      setupOpts({ doc, xmlFragment, ytext, recorder, docName: 'routing-diverged-attach' }),
+    );
+
+    const firesBefore = totalPathBFires();
+    const events = capturePathBEvents(() => {
+      populateFragment(
+        doc,
+        xmlFragment,
+        `${serializeFragmentBody(xmlFragment)}\nUser WYSIWYG edit.\n`,
+      );
+    });
+
+    expect(totalPathBFires()).toBeGreaterThan(firesBefore);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+
+    const finalText = ytext.toString();
+    expect(finalText.split('Ytext-only line.').length).toBe(2);
+    expect(finalText).toContain('User WYSIWYG edit.');
+    expect(finalText).toContain('Fragment body.');
 
     cleanup();
   });

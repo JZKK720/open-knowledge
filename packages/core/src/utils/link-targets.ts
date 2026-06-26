@@ -163,9 +163,7 @@ export function buildRelativeMarkdownHref(
   const downSegments = targetSegments.slice(commonPrefixLength);
   let relativePath = [...upSegments, ...downSegments].join('/');
 
-  if (!relativePath) {
-    relativePath = targetSegments.at(-1) ?? targetDocName;
-  }
+  relativePath ||= targetSegments.at(-1) ?? targetDocName;
 
   if (!relativePath.startsWith('./') && !relativePath.startsWith('../')) {
     relativePath = `./${relativePath}`;

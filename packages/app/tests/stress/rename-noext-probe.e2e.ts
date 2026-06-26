@@ -23,7 +23,7 @@ test.describe('PROBE: sidebar rename — no-extension typed', () => {
     api,
     workerServer,
   }) => {
-    const baseURL = `http://localhost:${workerServer.port}`;
+    const baseURL = `http://127.0.0.1:${workerServer.port}`;
     const suffix = randomUUID().slice(0, 8);
     const srcName = `probe-src-${suffix}`;
     const dstName = `probe-dst-${suffix}`;

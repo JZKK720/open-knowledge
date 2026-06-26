@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOCAL_DIR } from '@inkeep/open-knowledge-core';
 import simpleGit from 'simple-git';
+import { classifyGitError } from './error-classification.ts';
+import type { DetectGhFn } from './github-permissions.ts';
 import type { SyncState } from './sync-engine.ts';
 import { SyncEngine } from './sync-engine.ts';
 
@@ -1349,5 +1351,174 @@ describe('SyncEngine getStatus() with restored state', () => {
     expect(status.lastSyncUtc).toBe(now);
     expect(status.lastFetchUtc).toBe(now);
     expect(status.lastPushedSha).toBe('abc123');
+  });
+});
+
+interface InternalState {
+  state: SyncState;
+  pausedReason?: string;
+  pushError?: string;
+  pullError?: string;
+  pushErrorCode?: string;
+  pullErrorCode?: string;
+  gitHandle: () => unknown;
+  handleError: (classified: ReturnType<typeof classifyGitError>, op: 'push' | 'pull') => void;
+}
+
+describe('SyncEngine auth-error recovery', () => {
+  const statePath = () => join(okDir, 'sync-state.json');
+
+  test('does not restore a persisted auth-error pausedReason (re-attempts on restart)', async () => {
+    writeFileSync(
+      statePath(),
+      JSON.stringify({
+        version: 1,
+        lastSyncUtc: null,
+        lastFetchUtc: null,
+        lastPushedSha: null,
+        consecutiveFailures: 0,
+        inflightConflicts: [],
+        pausedReason: 'auth-error',
+      }),
+      'utf-8',
+    );
+    const engine = makeEngine({ syncEnabled: false });
+    await engine.start();
+    expect(engine.getStatus().pausedReason).toBeUndefined();
+  });
+
+  test('saveStateNow does not persist auth-error when set in-memory', async () => {
+    const engine = makeEngine({ syncEnabled: true });
+    const internal = engine as unknown as InternalState;
+    internal.state = 'auth-error';
+    internal.pausedReason = 'auth-error';
+
+    await engine.destroy(); // saveStateNow flushes the in-memory pausedReason
+
+    const reloaded = JSON.parse(readFileSync(statePath(), 'utf-8')) as { pausedReason?: string };
+    expect(reloaded.pausedReason).toBeUndefined();
+  });
+
+  test('notifyCredentialsChanged clears auth-error and re-evaluates', async () => {
+    const engine = makeEngine({ syncEnabled: true });
+    const internal = engine as unknown as InternalState;
+    internal.state = 'auth-error';
+    internal.pausedReason = 'auth-error';
+    internal.pushError = 'no credential';
+    internal.pullError = 'no credential';
+    internal.pushErrorCode = 'auth-no-credential';
+    internal.pullErrorCode = 'auth-no-credential';
+    expect(engine.getStatus().state).toBe('auth-error');
+
+    await engine.notifyCredentialsChanged();
+
+    const status = engine.getStatus();
+    expect(status.state).not.toBe('auth-error');
+    expect(status.pausedReason).toBeUndefined();
+    expect(status.pushError).toBeUndefined();
+    expect(status.pullError).toBeUndefined();
+    expect(status.pushErrorCode).toBeUndefined();
+    expect(status.pullErrorCode).toBeUndefined();
+    expect(status.state).toBe('dormant');
+    await engine.destroy();
+  });
+
+  test('notifyCredentialsChanged is a no-op when sync is disabled', async () => {
+    const engine = makeEngine({ syncEnabled: false });
+    (engine as unknown as InternalState).pausedReason = 'auth-error';
+    await engine.notifyCredentialsChanged();
+    expect(engine.getStatus().pausedReason).toBe('auth-error');
+  });
+
+  test('notifyCredentialsChanged is a no-op when not parked on auth-error', async () => {
+    const engine = makeEngine({ syncEnabled: true });
+    const before = engine.getStatus().state;
+    await engine.notifyCredentialsChanged();
+    expect(engine.getStatus().state).toBe(before);
+  });
+});
+
+function recordDetectGh(result: ReturnType<DetectGhFn>): {
+  fn: DetectGhFn;
+  calls: () => number;
+  lastHost: () => string | undefined;
+} {
+  let calls = 0;
+  let lastHost: string | undefined;
+  return {
+    fn: (host?: string) => {
+      calls++;
+      lastHost = host;
+      return result;
+    },
+    calls: () => calls,
+    lastHost: () => lastHost,
+  };
+}
+
+describe('SyncEngine gh-token credential relay', () => {
+  test('threads the resolved gh token through git handles during a real push cycle', async () => {
+    const git = simpleGit(projectDir);
+    await git.init(['--initial-branch=main']);
+    await git.raw('config', 'user.name', 'Test');
+    await git.raw('config', 'user.email', 'test@test.com');
+    writeFileSync(join(projectDir, 'README.md'), '# Test\n');
+    await git.add('.');
+    await git.commit('Initial');
+
+    const bareDir = join(tmpDir, 'bare.git');
+    mkdirSync(bareDir, { recursive: true });
+    await simpleGit(bareDir).init(true);
+    await git.addRemote('origin', bareDir);
+    await git.push(['--set-upstream', 'origin', 'main']);
+
+    writeFileSync(join(projectDir, 'README.md'), '# Test\n\nchange\n');
+    await git.add('.');
+    await git.commit('local commit');
+
+    const detect = recordDetectGh({ available: true, token: 'gho_relayed' });
+    const engine = new SyncEngine({
+      projectDir,
+      contentDir,
+      contentFilter: stubContentFilter,
+      syncEnabled: true,
+      detectGh: detect.fn,
+    });
+    try {
+      await engine.start();
+      await engine.trigger('push');
+
+      expect(detect.calls()).toBeGreaterThan(0);
+      expect(detect.lastHost()).toBe('github.com');
+    } finally {
+      await engine.destroy();
+    }
+  });
+
+  test('caches the gh token across handles, then re-resolves after an auth error', () => {
+    const detect = recordDetectGh({ available: true, token: 'gho_relayed' });
+    const engine = new SyncEngine({
+      projectDir,
+      contentDir,
+      contentFilter: stubContentFilter,
+      syncEnabled: true,
+      detectGh: detect.fn,
+    });
+    const internal = engine as unknown as InternalState;
+
+    internal.gitHandle();
+    internal.gitHandle();
+    expect(detect.calls()).toBe(1);
+
+    internal.handleError(
+      classifyGitError(
+        new Error(
+          'fatal: could not read Username for https://github.com: terminal prompts disabled',
+        ),
+      ),
+      'push',
+    );
+    internal.gitHandle();
+    expect(detect.calls()).toBe(2);
   });
 });

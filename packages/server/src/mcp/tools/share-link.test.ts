@@ -69,6 +69,7 @@ let mockRawResponse: Response | null = null;
 beforeAll(() => {
   testServer = Bun.serve({
     port: 0,
+    hostname: '127.0.0.1',
     async fetch(req) {
       const url = new URL(req.url);
       const body = req.method === 'POST' ? ((await req.json()) as Record<string, unknown>) : {};
@@ -83,7 +84,7 @@ beforeAll(() => {
       return new Response('Not found', { status: 404 });
     },
   });
-  baseUrl = `http://localhost:${testServer.port}`;
+  baseUrl = `http://127.0.0.1:${testServer.port}`;
 });
 
 afterAll(() => {

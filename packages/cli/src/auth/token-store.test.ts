@@ -14,6 +14,7 @@ interface SetPasswordCall extends KeyringCall {
 const keyringMockState = {
   throwOnImport: false,
   throwOnConstruct: false,
+  throwOnGetPassword: false,
   setPasswordCalls: [] as SetPasswordCall[],
   deletePasswordCalls: [] as KeyringCall[],
   getPasswordCalls: [] as KeyringCall[],
@@ -23,6 +24,7 @@ const keyringMockState = {
 function resetKeyringMockState(): void {
   keyringMockState.throwOnImport = false;
   keyringMockState.throwOnConstruct = false;
+  keyringMockState.throwOnGetPassword = false;
   keyringMockState.setPasswordCalls = [];
   keyringMockState.deletePasswordCalls = [];
   keyringMockState.getPasswordCalls = [];
@@ -52,6 +54,9 @@ class MockKeyringEntry {
       service: this.service,
       account: this.account,
     });
+    if (keyringMockState.throwOnGetPassword) {
+      throw new Error('keychain read denied');
+    }
     return keyringMockState.getPasswordReturns.get(`${this.service}:${this.account}`) ?? null;
   }
   deletePassword(): void {
@@ -187,6 +192,106 @@ describe('createTokenStore', () => {
     expect(typeof store.get).toBe('function');
     expect(typeof store.set).toBe('function');
     expect(typeof store.clear).toBe('function');
+  });
+});
+
+describe('createTokenStore diagnostics', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    resetKeyringMockState();
+    tmpDir = mkdtempSync(join(tmpdir(), 'ok-ts-diag-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('onBackendSelected reports keyring when the native module loads', async () => {
+    const { createTokenStore } = await import('./token-store.ts');
+    const selected: Array<{ backend: string; reason?: string }> = [];
+    await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onBackendSelected: (info) => selected.push(info),
+    });
+    expect(selected).toEqual([{ backend: 'keyring' }]);
+  });
+
+  test('onBackendSelected reports file + reason when keyring is unavailable', async () => {
+    keyringMockState.throwOnImport = true;
+    const { createTokenStore } = await import('./token-store.ts');
+    const selected: Array<{ backend: string; reason?: string }> = [];
+    await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onBackendSelected: (info) => selected.push(info),
+    });
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.backend).toBe('file');
+    expect(selected[0]?.reason).toContain('keyring unavailable');
+  });
+
+  test('onKeychainRead reports absent when no credential is stored', async () => {
+    const { createTokenStore } = await import('./token-store.ts');
+    const reads: Array<{ kind: string; host: string; error?: string }> = [];
+    const store = await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onKeychainRead: (info) => reads.push(info),
+    });
+    const entry = await store.get('github.com');
+    expect(entry).toBeNull();
+    expect(reads).toEqual([{ kind: 'absent', host: 'github.com' }]);
+  });
+
+  test('onKeychainRead reports read-error with the error NAME only when getPassword throws', async () => {
+    keyringMockState.throwOnGetPassword = true;
+    const { createTokenStore } = await import('./token-store.ts');
+    const reads: Array<{ kind: string; host: string; error?: string }> = [];
+    const store = await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onKeychainRead: (info) => reads.push(info),
+    });
+    const entry = await store.get('github.com');
+    expect(entry).toBeNull();
+    expect(reads).toHaveLength(1);
+    expect(reads[0]?.kind).toBe('read-error');
+    expect(reads[0]?.host).toBe('github.com');
+    expect(reads[0]?.error).toBe('Error');
+    expect(JSON.stringify(reads)).not.toContain('keychain read denied');
+  });
+
+  test('onKeychainRead reports corrupt-entry (no stored bytes) when JSON.parse fails', async () => {
+    const TOKEN_BYTES = 'gho_corrupt_secret_value_xyz';
+    keyringMockState.getPasswordReturns.set(`open-knowledge:github.com`, TOKEN_BYTES);
+    const { createTokenStore } = await import('./token-store.ts');
+    const reads: Array<{ kind: string; host: string; error?: string }> = [];
+    const store = await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onKeychainRead: (info) => reads.push(info),
+    });
+    const entry = await store.get('github.com');
+    expect(entry).toBeNull();
+    expect(reads).toHaveLength(1);
+    expect(reads[0]?.kind).toBe('corrupt-entry');
+    expect(reads[0]?.host).toBe('github.com');
+    expect(reads[0]?.error).toBe('corrupt-entry');
+    expect(JSON.stringify(reads)).not.toContain(TOKEN_BYTES);
+  });
+
+  test('a throwing onKeychainRead callback never breaks the lookup', async () => {
+    const { createTokenStore } = await import('./token-store.ts');
+    const store = await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onKeychainRead: () => {
+        throw new Error('diagnostic boom');
+      },
+    });
+    const miss = await store.get('github.com');
+    expect(miss).toBeNull();
+  });
+
+  test('a throwing onKeychainRead callback never breaks the read-error path', async () => {
+    keyringMockState.throwOnGetPassword = true;
+    const { createTokenStore } = await import('./token-store.ts');
+    const store = await createTokenStore(join(tmpDir, 'auth.yml'), {
+      onKeychainRead: () => {
+        throw new Error('diagnostic boom');
+      },
+    });
+    expect(await store.get('github.com')).toBeNull();
   });
 });
 

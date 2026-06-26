@@ -3,6 +3,11 @@ export {
   applyFastDiff,
   applyIncrementalDiff,
   applyPatchToFm,
+  applyPathDeleteToFm,
+  applyPathRenameToFm,
+  applyPathReorderSeqToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
   applyRenameToFm,
   applyReorderToFm,
   assertContentPreservation,
@@ -18,17 +23,22 @@ export {
   type BridgeMergeContentLossWhich,
   type BridgeToleranceClass,
   bindFrontmatterDoc,
+  classifySeverity,
   type DiffChange,
+  type DocBoundarySplit,
   defaultScheduler,
   detectAppliedToleranceClasses,
   detectFmRegion,
   diffLinesFast,
+  emitToleranceFire,
   type FmEditError,
   type FmEditResult,
   FORM_WRITE_ORIGIN,
   type FrontmatterBinding,
   type FrontmatterBindingPatchResult,
   type FrontmatterBindingPatchSuccess,
+  type FrontmatterBindingPathResult,
+  type FrontmatterBindingPathSuccess,
   type FrontmatterBindingRenameResult,
   type FrontmatterBindingRenameSuccess,
   type FrontmatterBindingReorderResult,
@@ -36,6 +46,7 @@ export {
   type FrontmatterBindingUnsubscribe,
   type FrontmatterDocProvider,
   type FrontmatterSnapshot,
+  findFirstDivergenceIndex,
   fnv1aDigest,
   type InvariantViolation,
   MAX_FM_REGION_BYTES,
@@ -44,10 +55,17 @@ export {
   type ParsedFmRegion,
   parseFencedFmRegion,
   parseFmRegion,
+  projectMergeBoundarySpace,
   readFmKeys,
   readFmMap,
   readFmRegionWithError,
+  reattachLeadingDocBoundary,
   type Scheduler,
+  setToleranceTelemetryHook,
+  splitLeadingDocBoundary,
+  type ToleranceClassSeverity,
+  type ToleranceFireRecord,
+  type ToleranceTelemetryHook,
   toBridgeInvariantLog,
 } from './bridge/index.ts';
 export {
@@ -119,6 +137,8 @@ export {
   type Config,
   type ConfigPatch,
   ConfigSchema,
+  DEFAULT_EMBEDDINGS_BASE_URL,
+  DEFAULT_EMBEDDINGS_MODEL,
   DEFAULT_LOGS_MAX_BYTES,
   DEFAULT_SPANS_MAX_BYTES,
   DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST,
@@ -154,11 +174,23 @@ export {
   type ConfigDocName,
   SYSTEM_DOC_NAME,
 } from './constants/cc1.ts';
+export {
+  CODE_FILE_BARE_NAMES_TO_LANGUAGE,
+  CODE_FILE_EXTENSIONS_TO_LANGUAGE,
+  codeLanguageForBareFilename,
+  codeLanguageForExtension,
+} from './constants/code-languages.ts';
 export type { CreateNewBannerKind } from './constants/create-new-banner.ts';
 export {
   CREATE_NEW_PROJECT_FAILURE_REASONS,
   type CreateNewProjectFailureReason,
 } from './constants/create-new-project-reason.ts';
+export {
+  DEFAULT_DOC_EXTENSION,
+  type DocExtension,
+  SUPPORTED_DOC_EXTENSIONS,
+} from './constants/doc-extensions.ts';
+export { LINEAGE_EPOCH_KEY } from './constants/doc-lifecycle.ts';
 export {
   DOCUMENT_OPEN_BYTE_LIMIT,
   isDocumentOverOpenByteLimit,
@@ -182,7 +214,8 @@ export {
   DEFAULT_SIGTERM_POLL_MS,
   SPAWN_ERROR_LOG,
 } from './constants/lifecycle.ts';
-export { GREP_MAX_RESULTS, READ_DOCUMENT_HISTORY_DEPTH } from './constants/mcp.ts';
+export { GREP_MAX_RESULTS, MCP_SERVER_NAME, READ_DOCUMENT_HISTORY_DEPTH } from './constants/mcp.ts';
+export { MENU_LABELS, type MenuLabelKey } from './constants/menu-labels.ts';
 export { LOCAL_DIR, OK_DIR, OK_PROJECT_MARKER } from './constants/ok-dir.ts';
 export {
   PREVIEW_EMBED_STARTERS,
@@ -193,6 +226,7 @@ export {
   PREVIEW_THEME_TOKENS,
   type PreviewThemeToken,
 } from './constants/preview-theme-tokens.ts';
+export { PRODUCT_NAME } from './constants/product.ts';
 export { DEFAULT_SERVER_HOST } from './constants/server.ts';
 export {
   ALLOWED_AUDIO_MIME_TYPES,
@@ -201,6 +235,7 @@ export {
   ALLOWED_VIDEO_MIME_TYPES,
   ASSET_EXTENSIONS,
   AUDIO_EXTENSIONS,
+  CODE_FILE_EXTENSIONS,
   DEFAULT_ATTACHMENT_FOLDER_PATH,
   DEFAULT_DEDUP_MODE,
   DEFAULT_DEDUP_UI,
@@ -213,14 +248,18 @@ export {
   IMAGE_EXTENSIONS,
   INLINE_RENDERABLE_EXTENSIONS,
   type InlineAssetMediaKind,
+  LINKABLE_ASSET_EXTENSIONS,
   mediaKindForSidebarAssetExtension,
   PDF_EXTENSIONS,
+  SANDBOXED_HTML_CSP,
+  SANDBOXED_HTML_EXTENSIONS,
   SIDEBAR_AUDIO_ASSET_EXTENSIONS,
   SIDEBAR_IMAGE_ASSET_EXTENSIONS,
   SIDEBAR_PDF_ASSET_EXTENSIONS,
   SIDEBAR_RENDERABLE_ASSET_EXTENSIONS,
   SIDEBAR_TEXT_ASSET_EXTENSIONS,
   SIDEBAR_VIDEO_ASSET_EXTENSIONS,
+  TEXT_VIEWER_FALLBACK_EXTENSIONS,
   VIDEO_EXTENSIONS,
   WIKI_EMBED_EXTENSIONS,
 } from './constants/upload.ts';
@@ -235,6 +274,7 @@ export {
   nextFootnoteIdentifier,
 } from './extensions/footnote-reference.ts';
 export {
+  FM_FENCE_LINE_RE,
   FRONTMATTER_RE,
   prependFrontmatter,
   stripFrontmatter,
@@ -284,9 +324,11 @@ export {
   FrontmatterTypeSchema,
   type FrontmatterValue,
   FrontmatterValueSchema,
+  frontmatterValuesEqual,
   inferType,
   isFrontmatterValueEmpty,
   isIsoDateString,
+  RESERVED_FRONTMATTER_KEY,
 } from './frontmatter/schema.ts';
 export {
   extractFrontmatterTags,
@@ -307,15 +349,24 @@ export {
   parseWorktreeListPorcelain,
 } from './git/worktree-list-parser.ts';
 export {
+  type AssembleHandoffPromptInput,
+  assembleHandoffPrompt,
   assertNeverUrnIpcLookup,
-  buildClaudeAiWebUrl,
+  buildClaudeLaunchCommand,
   buildClaudeUrl,
+  buildCliLaunchCommand,
   buildCodexUrl,
   buildCursorUrl,
+  type ComposeSelection,
+  type CreateScenario,
+  composeAskProjectPrompt,
+  composeAskPrompt,
+  composeCreatePrompt,
   composeEmptySpacePrompt,
   composeFilePrompt,
   composeFolderPrompt,
   composeSelectionPrompt,
+  composeTerminalBareLaunchPrompt,
   type DocContext,
   type HandoffFailureReason,
   type HandoffOutcome,
@@ -326,10 +377,18 @@ export {
   type IpcChannelReason,
   type IpcChannelWithUrn,
   lookupUrnInRegistry,
+  OK_PROJECT_SKILL_POINTER,
+  OK_TERMINAL_SURFACE_PREAMBLE,
+  shellSingleQuote,
   type TargetData,
+  TERMINAL_CLI_IDS,
+  TERMINAL_CLIS,
+  type TerminalCli,
+  type TerminalCliInfo,
   URN_HTTP_ONLY,
   URN_IPC_REGISTRY,
   type UrnIpcLookup,
+  withSkillPointer,
 } from './handoff/index.ts';
 export type {
   BundleManifest,
@@ -368,6 +427,7 @@ export {
 } from './markdown/safe-url.ts';
 export {
   createTagInTextRegex,
+  INLINE_TAG_VALUE_RE,
   TAG_IN_TEXT_PATTERN_SOURCE,
 } from './markdown/tag-promotion.ts';
 export {
@@ -426,6 +486,9 @@ export {
   ActivityBurstSchema,
   type ActivityFile,
   ActivityFileSchema,
+  type AdvisoryWarning,
+  AdvisoryWarningSchema,
+  AdvisoryWarningsSchema,
   type AgentActivitySuccess,
   AgentActivitySuccessSchema,
   type AgentBurstDiffSuccess,
@@ -465,6 +528,7 @@ export {
   CheckoutRequestSchema,
   type CheckoutResponse,
   CheckoutResponseSchema,
+  type ClassifiedGitAuthError,
   type ClientLogEntry,
   ClientLogEntrySchema,
   type ClientLogsRequest,
@@ -485,6 +549,7 @@ export {
   CreatePageRequestSchema,
   type CreatePageSuccess,
   CreatePageSuccessSchema,
+  classifyGitAuthError,
   type DeadLinkEntry,
   DeadLinkEntrySchema,
   type DeadLinkSource,
@@ -495,10 +560,6 @@ export {
   DeletePathRequestSchema,
   type DeletePathSuccess,
   DeletePathSuccessSchema,
-  type DiffLine as ApiDiffLine,
-  DiffLineSchema,
-  type DiffSuccess,
-  DiffSuccessSchema,
   type DiskEditReconciledWarning,
   DiskEditReconciledWarningSchema,
   type DocumentListEntry,
@@ -537,6 +598,7 @@ export {
   FrontmatterPatchRequestSchema,
   type FrontmatterPatchSuccess,
   FrontmatterPatchSuccessSchema,
+  type GitAuthFailureSubclass,
   type HeadingEntry as PageHeadingEntry,
   HeadingEntrySchema as PageHeadingEntrySchema,
   type HistoryEntry,
@@ -558,6 +620,7 @@ export {
   type InstallSkillSuccess,
   InstallSkillSuccessSchema,
   isBranchNotFoundGitError,
+  isLoginFixableGitAuthError,
   isValidBranchName,
   type LifecycleStatus,
   LifecycleStatusSchema,
@@ -575,30 +638,22 @@ export {
   LocalOpAuthEmptySuccessSchema,
   type LocalOpAuthHostRequest,
   LocalOpAuthHostRequestSchema,
-  type LocalOpAuthIdentity,
-  LocalOpAuthIdentitySchema,
-  type LocalOpAuthIdentitySuccess,
-  LocalOpAuthIdentitySuccessSchema,
-  type LocalOpAuthPatRequest,
-  LocalOpAuthPatRequestSchema,
-  type LocalOpAuthPatSuccess,
-  LocalOpAuthPatSuccessSchema,
   type LocalOpAuthSetIdentityRequest,
   LocalOpAuthSetIdentityRequestSchema,
   type LocalOpAuthStatusSuccess,
   LocalOpAuthStatusSuccessSchema,
   type LocalOpCloneRequest,
   LocalOpCloneRequestSchema,
+  type LocalOpEmbeddingsMutationSuccess,
+  LocalOpEmbeddingsMutationSuccessSchema,
+  type LocalOpEmbeddingsSetKeyRequest,
+  LocalOpEmbeddingsSetKeyRequestSchema,
   type LocalOpOkInitFailureReason,
   LocalOpOkInitFailureReasonSchema,
   type LocalOpOkInitRequest,
   LocalOpOkInitRequestSchema,
   type LocalOpOkInitResponse,
   LocalOpOkInitResponseSchema,
-  type LocalOpOpenRequest,
-  LocalOpOpenRequestSchema,
-  type LocalOpOpenSuccess,
-  LocalOpOpenSuccessSchema,
   type MetricsAgentPresenceSuccess,
   MetricsAgentPresenceSuccessSchema,
   type MetricsParseHealthSuccess,
@@ -635,6 +690,8 @@ export {
   RenamePathSuccessSchema,
   type RenameRewrittenDoc,
   RenameRewrittenDocSchema,
+  type RenderWarning,
+  RenderWarningSchema,
   type RescueEntryFlat,
   RescueEntryFlatSchema,
   type RescueEntryTimeline,
@@ -655,6 +712,9 @@ export {
   SearchRequestSchema,
   type SearchResultEntry,
   SearchResultEntrySchema,
+  type SearchSemanticStatus,
+  SearchSemanticStatusSchema,
+  type SearchSource,
   type SearchSuccess,
   SearchSuccessSchema,
   type SeedApplyRequest,
@@ -671,6 +731,8 @@ export {
   SeedPackInfoSchema,
   type SeedPlanSuccess,
   SeedPlanSuccessSchema,
+  type SemanticIndexStatus,
+  SemanticIndexStatusSchema,
   type ServerInfoSuccess,
   ServerInfoSuccessSchema,
   type ShareConstructUrlErrorCode,
@@ -716,8 +778,6 @@ export {
   type SummaryResponseField,
   SummaryResponseFieldSchema,
   SYNC_ERROR_CODES,
-  type SyncAbortMergeSuccess,
-  SyncAbortMergeSuccessSchema,
   type SyncConflictContentSuccess,
   SyncConflictContentSuccessSchema,
   type SyncConflictsSuccess,
@@ -766,6 +826,8 @@ export {
   TemplatesListEntrySchema,
   type TemplatesListSuccess,
   TemplatesListSuccessSchema,
+  type TestFlushGitSuccess,
+  TestFlushGitSuccessSchema,
   type TestRescanBacklinksSuccess,
   TestRescanBacklinksSuccessSchema,
   type TestRescanFilesSuccess,
@@ -810,6 +872,9 @@ export {
 export {
   createWorkspaceSearchCorpus,
   createWorkspaceSearchDocument,
+  DEFAULT_RRF_K,
+  DEFAULT_VECTOR_CANDIDATE_LIMIT,
+  DEFAULT_VECTOR_SIMILARITY_FLOOR,
   DEFAULT_WORKSPACE_SEARCH_LIMIT,
   MAX_WORKSPACE_SEARCH_LIMIT,
   searchWorkspaceCorpus,
@@ -819,8 +884,10 @@ export {
   type WorkspaceSearchIntent,
   type WorkspaceSearchKind,
   type WorkspaceSearchOptions,
+  type WorkspaceSearchRanking,
   type WorkspaceSearchResult,
   type WorkspaceSearchScope,
+  type WorkspaceSemanticInput,
   workspaceSearchBasename,
   workspaceSearchPathSegments,
 } from './search/workspace-search.ts';
@@ -858,6 +925,14 @@ export {
   type SkillStateTarget,
   type SkillStateTargetEntry,
 } from './skill-state/schema.ts';
+export {
+  composeTemplateFile,
+  instantiateDoc,
+  parseTemplateFile,
+  TEMPLATE_IDENTITY_KEY,
+  type TemplateIdentity,
+  type TemplateModel,
+} from './templates/template-format.ts';
 export type { Actor, PrincipalId, SessionId } from './types/actor.ts';
 export type {
   AgentFlashEntry,
@@ -869,17 +944,21 @@ export type {
 export type { Identity } from './types/identity.ts';
 export type { Principal } from './types/principal.ts';
 export type {
-  DiffLine,
-  DiffLineType,
   EntryType,
   ShadowContributor,
   TimelineEntry,
 } from './types/timeline.ts';
-export { isValidDocName, validateDocName } from './util/doc-name.ts';
+export {
+  HIDDEN_CONFIG_BASENAMES,
+  isHiddenDocName,
+  isValidDocName,
+  validateDocName,
+} from './util/doc-name.ts';
 export { applyByPrefixSuffix } from './utils/apply-by-prefix-suffix.ts';
 export { toDesktopAssetHref } from './utils/asset-href.ts';
 export { ChunkedInsertError, chunkedYTextInsert } from './utils/chunked-insert.ts';
 export { createCodeFenceTracker } from './utils/code-fence-tracker.ts';
+export { isEmbedUrlRewritable, rewriteEmbedUrl } from './utils/embed-url-rewrite.ts';
 export { extensionOf } from './utils/extension.ts';
 export { formatFileSize } from './utils/file-size.ts';
 export {

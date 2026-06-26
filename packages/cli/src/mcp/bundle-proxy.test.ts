@@ -7,8 +7,8 @@ import {
   shouldProxyToBundle,
 } from './bundle-proxy.ts';
 
-const userBundle = '/Users/alice/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh';
-const systemBundle = '/Applications/Open Knowledge.app/Contents/Resources/cli/bin/ok.sh';
+const userBundle = '/Users/alice/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
+const systemBundle = '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
 
 describe('findBundledOkPath', () => {
   test('returns the user-local bundle before /Applications', () => {
@@ -51,7 +51,7 @@ describe('shouldProxyToBundle', () => {
     expect(
       shouldProxyToBundle(
         {},
-        ['node', '/Applications/Open Knowledge.app/Contents/Resources/cli/dist/cli.mjs', 'mcp'],
+        ['node', '/Applications/OpenKnowledge.app/Contents/Resources/cli/dist/cli.mjs', 'mcp'],
         'darwin',
       ),
     ).toEqual({ proxy: false, suppressedBy: 'self' });

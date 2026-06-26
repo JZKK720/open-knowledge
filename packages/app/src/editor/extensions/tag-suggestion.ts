@@ -110,9 +110,7 @@ export function configureTagSuggestion(editor: Editor) {
 
     items: async ({ query }) => {
       if (!tagsLoaded) {
-        if (!tagsPromise) {
-          tagsPromise = fetchTags();
-        }
+        tagsPromise ||= fetchTags();
         try {
           cachedTags = await tagsPromise;
           fetchError = null;

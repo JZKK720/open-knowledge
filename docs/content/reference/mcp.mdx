@@ -1,9 +1,9 @@
 ---
 title: MCP
-description: Tools the Open Knowledge MCP server exposes to AI agents.
+description: Tools the OpenKnowledge MCP server exposes to AI agents.
 ---
 
-The MCP server gives AI agents structured access to your knowledge base. Two reads are server-free: `exec` (shell-style reads, fs-direct against the disk) and `preview_url` (reads `ui.lock` directly) both work even when the editor is down. Every other read tool (`search`, `links`, `history`, etc.) and all write tools route through the Hocuspocus server, which Open Knowledge starts for you on the first write.
+The MCP server gives AI agents structured access to your knowledge base. Two reads are server-free: `exec` (shell-style reads, fs-direct against the disk) and `preview_url` (reads `ui.lock` directly) both work even when the editor is down. Every other read tool (`search`, `links`, `history`, etc.) and all write tools route through the Hocuspocus server, which OpenKnowledge starts for you on the first write.
 
 The surface is **17 tools**. Three of the four write verbs — `write`, `edit`, `delete` — are native CRUD operations polymorphic over a target (`document`, `folder`, `template`, `asset`): per-target fields nest inside the address key (`write({ document: { path, content } })`), and you pass exactly one target per call. `move` is the fourth write verb but takes flat `from`/`to` paths and auto-detects whether the path is a document, folder, or asset (no `template` target).
 
@@ -12,7 +12,7 @@ The surface is **17 tools**. Three of the four write verbs — `write`, `edit`, 
 | Tool | Purpose |
 | --- | --- |
 | `exec` | Read-only shell (`cat`, `ls`, `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut`); reads return frontmatter, backlinks, and recent history. Fs-direct; works without the server. |
-| `search` | Ranked workspace search (title boost + body BM25 + recency; same engine the cmd-K palette uses) |
+| `search` | Ranked workspace search (title boost + body BM25 + recency; same engine the cmd-K palette uses). When [semantic search](/docs/reference/configuration#semantic-search) is enabled, an embeddings signal is additionally fused into `full_text` ranking (opt-in, content egress) — pass `semantic: false` to force pure-lexical. |
 | `links` | Wiki-link graph. `kind` selects: `backlinks`, `forward`, `dead`, `orphans`, `hubs`, or `suggest`. Accepts an array (e.g. `["dead", "orphans", "hubs"]`) to fetch several views in one call; each view nests under its own key in the response |
 | `history` | Version timeline for a doc. Each entry carries a `version` (commit SHA) you pass to `restore_version` |
 | `config` | Read the effective merged config (`config({ key: "appearance.theme" })` for a sub-tree; omit `key` for the whole config) |
@@ -64,6 +64,6 @@ To detect conflict state proactively without waiting for a 409, call `conflicts(
 
 ## Preview links
 
-Read and write tools return a `previewUrl` for any doc they touched, but **those are route-only** (`/#/<doc>` with no host:port), meant to identify the doc, not to be opened as-is. Hosts that want to open the editor (Claude Code Desktop's `preview_start`, terminal `open <url>`) call `preview_url` to resolve the full URL once per session. The editor refocuses automatically on subsequent writes.
+Read and write tools return a `previewUrl` for any doc they touched, but **those are route-only** (`/#/<doc>` with no host:port), meant to identify the doc, not to be opened as-is. Hosts that want to open the editor (Claude Code Desktop's `preview_start`, terminal `open <url>`) call `preview_url` to resolve the full URL once per session.
 
 `preview_url` always carries an `autoOpen` boolean (top-level on its response) reflecting the user's [`appearance.preview.autoOpen`](/docs/reference/configuration) preference. The write tools (`write`, `edit`) carry the same boolean on the `warning` object, which fires only when no browser is attached to the preview. In the common case (a browser is attached), the write response has no `warning` and no `autoOpen` field. Agents honor `autoOpen` before navigating: `true` (default) follows the host-capability routing in the bundled skill; `false` means the user is managing their own preview window, so the agent surfaces the URL on request but does not open or refresh anything. The value is resolved fresh on every tool call, so a mid-session toggle propagates within 0–1 calls, with no client restart.

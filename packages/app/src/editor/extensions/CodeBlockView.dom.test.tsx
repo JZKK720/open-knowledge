@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { Config } from '@inkeep/open-knowledge-core';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { NodeViewProps } from '@tiptap/core';
 import { ConfigContext, type ConfigContextValue } from '@/lib/config-context';
 import { CodeBlockView } from './CodeBlockView';
-import { PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST } from './preview-iframe-header';
 
 function makeConfigValue(merged: Config | null): ConfigContextValue {
   return {
@@ -17,6 +16,7 @@ function makeConfigValue(merged: Config | null): ConfigContextValue {
     userConfig: null,
     projectConfig: null,
     projectLocalConfig: null,
+    projectSynced: false,
     projectLocalSynced: false,
     merged,
   };
@@ -48,9 +48,9 @@ function makeProps(): NodeViewProps {
   } as unknown as NodeViewProps;
 }
 
-function renderSrcdoc(merged: Config | null): string {
+function renderSrcdoc(): string {
   const { container } = render(
-    <ConfigContext value={makeConfigValue(merged)}>
+    <ConfigContext value={makeConfigValue(null)}>
       <CodeBlockView {...makeProps()} />
     </ConfigContext>,
   );
@@ -64,27 +64,14 @@ describe('CodeBlockView preview-CSP wiring', () => {
     cleanup();
   });
 
-  test('inline-only config produces a strict script-src with no CDN origins', () => {
-    const srcdoc = renderSrcdoc({ preview: { scriptSrc: 'inline-only' } } as Config);
-    expect(srcdoc).toContain("script-src 'unsafe-inline'");
-    for (const origin of PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST) {
-      expect(srcdoc).not.toContain(origin);
-    }
+  test('renders the fixed open-network CSP in the iframe srcdoc', () => {
+    const srcdoc = renderSrcdoc();
+    expect(srcdoc).toContain("script-src 'unsafe-inline' https:");
+    expect(srcdoc).toContain('connect-src https:');
+    expect(srcdoc).toContain('img-src https:');
+    expect(srcdoc).not.toContain("connect-src 'none'");
+    expect(srcdoc).not.toContain("'unsafe-eval'");
     expect(srcdoc).toContain('<div id="probe">hello</div>');
-  });
-
-  test('cdn-allowlist config admits every allowlisted CDN origin', () => {
-    const srcdoc = renderSrcdoc({ preview: { scriptSrc: 'cdn-allowlist' } } as Config);
-    for (const origin of PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST) {
-      expect(srcdoc).toContain(origin);
-    }
-  });
-
-  test('falls back to cdn-allowlist when merged config is null (pre-sync)', () => {
-    const srcdoc = renderSrcdoc(null);
-    for (const origin of PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST) {
-      expect(srcdoc).toContain(origin);
-    }
   });
 });
 
@@ -95,7 +82,7 @@ describe('CodeBlockView edit-source modal language wiring', () => {
 
   test('html-preview fence opens edit-source modal with language="html"', () => {
     const { container } = render(
-      <ConfigContext value={makeConfigValue({ preview: { scriptSrc: 'inline-only' } } as Config)}>
+      <ConfigContext value={makeConfigValue(null)}>
         <CodeBlockView {...makeProps()} />
       </ConfigContext>,
     );
@@ -107,5 +94,83 @@ describe('CodeBlockView edit-source modal language wiring', () => {
     const sourceHost = document.querySelector('[data-testid="ok-code-preview-edit-modal-source"]');
     expect(sourceHost).toBeTruthy();
     expect(sourceHost?.getAttribute('data-language')).toBe('html');
+  });
+});
+
+describe('CodeBlockView CSP-violation notice wiring', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderPreview() {
+    const utils = render(
+      <ConfigContext value={makeConfigValue(null)}>
+        <CodeBlockView {...makeProps()} />
+      </ConfigContext>,
+    );
+    const iframe = utils.container.querySelector('iframe') as HTMLIFrameElement;
+    expect(iframe).toBeTruthy();
+    return { ...utils, iframe };
+  }
+
+  function cspReport(source: unknown) {
+    const evt = new Event('message');
+    Object.defineProperty(evt, 'source', { value: source, configurable: true });
+    Object.defineProperty(evt, 'data', {
+      value: {
+        okPreviewCspViolation: {
+          blocked: [{ directive: 'img-src', uri: 'http://insecure.example/tile.png' }],
+          truncated: false,
+        },
+      },
+      configurable: true,
+    });
+    return evt;
+  }
+
+  test('shows no notice before any CSP report arrives', () => {
+    const { container } = renderPreview();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  test('a CSP report from this iframe surfaces the blocked-request notice', () => {
+    const { iframe, container } = renderPreview();
+    act(() => {
+      window.dispatchEvent(cspReport(iframe.contentWindow));
+    });
+    const notice = container.querySelector('[role="status"]');
+    expect(notice).toBeTruthy();
+    expect(notice?.textContent).toContain('http://insecure.example/tile.png');
+  });
+
+  test('reloading the iframe clears the notice (re-evaluated policy)', () => {
+    const { iframe, container } = renderPreview();
+    act(() => {
+      window.dispatchEvent(cspReport(iframe.contentWindow));
+    });
+    expect(container.querySelector('[role="status"]')).toBeTruthy();
+    fireEvent.load(iframe);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  test('a report from a different window is ignored', () => {
+    const { container } = renderPreview();
+    act(() => {
+      window.dispatchEvent(cspReport(window));
+    });
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  test('dismissing the notice removes it', () => {
+    const { iframe, container } = renderPreview();
+    act(() => {
+      window.dispatchEvent(cspReport(iframe.contentWindow));
+    });
+    const dismiss = container.querySelector(
+      'button[aria-label="Dismiss notice"]',
+    ) as HTMLButtonElement | null;
+    expect(dismiss).toBeTruthy();
+    fireEvent.click(dismiss as HTMLButtonElement);
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 });

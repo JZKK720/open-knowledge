@@ -11,7 +11,6 @@ import {
   MCP_CONNECTION_ID_HEADER,
   sanitizeClientName,
 } from './mcp/agent-identity.ts';
-import { buildInstructions } from './mcp/instructions.ts';
 import { installPrettyZodErrors } from './mcp/pretty-zod-errors.ts';
 import { registerAllTools } from './mcp/tools/index.ts';
 import { resolveWithinRoot } from './mcp/tools/path-safety.ts';
@@ -59,15 +58,10 @@ function createSessionServer(
   forwardedConnectionId: string | undefined,
 ): McpHttpSession {
   const config = opts.config;
-  const server = new McpServer(
-    {
-      name: MCP_SERVER_NAME,
-      version: RUNTIME_VERSION,
-    },
-    {
-      instructions: buildInstructions(config.content),
-    },
-  );
+  const server = new McpServer({
+    name: MCP_SERVER_NAME,
+    version: RUNTIME_VERSION,
+  });
   installPrettyZodErrors(server);
 
   const connectionId = forwardedConnectionId ?? randomUUID();

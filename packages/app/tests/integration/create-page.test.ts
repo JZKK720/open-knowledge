@@ -2,13 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestServer, type TestServer } from './test-harness';
 
 let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -153,6 +154,24 @@ describe('/api/create-page — template seeding', () => {
     expect(created).not.toContain('title: Meeting');
     expect(created).not.toContain('{{date}}');
     expect(created).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  test('single-block template: strips `template:` identity, keeps doc-frontmatter, substitutes tokens', async () => {
+    seedRootTemplate(
+      'research-tpl',
+      '---\ntemplate:\n  title: Research Log\n  description: provisional\ntype: research-note\nstatus: provisional\ncreated: {{date}}\ntags: [research]\n---\n\n## Question\n',
+    );
+    const { status } = await createPageWithTemplate('from-single-block.md', 'research-tpl');
+    expect(status).toBe(200);
+
+    const created = readFileSync(join(server.contentDir, 'from-single-block.md'), 'utf-8');
+    expect(created).toContain('type: research-note');
+    expect(created).toContain('status: provisional');
+    expect(created).toContain('## Question');
+    expect(created).not.toContain('template:');
+    expect(created).not.toContain('title: Research Log');
+    expect(created).not.toContain('{{date}}');
+    expect(created).toMatch(/created: \d{4}-\d{2}-\d{2}/);
   });
 
   test('returns 400 when the template name does not resolve', async () => {

@@ -116,24 +116,25 @@ export function FolderPropertiesCard({ folderPath, state, onChange }: Props) {
     setAdding((prev) => (prev ? { ...prev, name, error: null } : prev));
   }
 
-  async function commitAdd() {
+  async function commitAdd(valueOverride?: FrontmatterValue) {
     if (!adding) return;
+    const value = valueOverride ?? adding.value;
     const trimmed = adding.name.trim();
     if (!trimmed) {
-      setAdding({ ...adding, error: t`Name is required` });
+      setAdding({ ...adding, value, error: t`Name is required` });
       return;
     }
-    if (isFrontmatterValueEmpty(adding.value)) {
-      setAdding({ ...adding, error: t`Value is required` });
+    if (isFrontmatterValueEmpty(value)) {
+      setAdding({ ...adding, value, error: t`Value is required` });
       return;
     }
     if (Object.hasOwn(own, trimmed)) {
-      setAdding({ ...adding, error: t`"${trimmed}" already exists here` });
+      setAdding({ ...adding, value, error: t`"${trimmed}" already exists here` });
       return;
     }
-    const result = await saveFolderConfig(folderPath, { [trimmed]: adding.value });
+    const result = await saveFolderConfig(folderPath, { [trimmed]: value });
     if (!result.ok) {
-      setAdding({ ...adding, error: result.error });
+      setAdding({ ...adding, value, error: result.error });
       return;
     }
     setAdding(null);
@@ -248,7 +249,7 @@ export function FolderPropertiesCard({ folderPath, state, onChange }: Props) {
                 onChangeName={changeAddName}
                 onChangeType={changeAddType}
                 onChangeValue={changeAddValue}
-                onCommit={() => void commitAdd()}
+                onCommit={(v) => void commitAdd(v)}
                 onCancel={() => setAdding(null)}
               />
             ) : (

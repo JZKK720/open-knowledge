@@ -12,14 +12,13 @@ import {
   type OkignoreBinding,
   type WriteScope,
 } from '@inkeep/open-knowledge-core';
-import { useTheme } from 'next-themes';
 import { type ReactNode, useEffect, useState } from 'react';
 import * as Y from 'yjs';
-import { useDocumentContext } from '@/editor/DocumentContext';
-import { buildAuthToken } from '@/editor/provider-pool';
 import { useThemeBridge } from '@/hooks/use-theme-bridge';
+import { buildAuthToken } from './auth-token';
 import { ConfigContext, type ConfigContextValue } from './config-context';
 import { useServerInstanceId } from './server-instance-store';
+import { useApplyConfigTheme } from './use-apply-config-theme';
 
 export { useConfigContext } from './config-context';
 
@@ -98,8 +97,13 @@ function makeOkignoreBinding(collabUrl: string, serverInstanceId: string | null)
   return { binding, provider, cleanup };
 }
 
-export function ConfigProvider({ children }: { children: ReactNode }) {
-  const { collabUrl } = useDocumentContext();
+export function ConfigProvider({
+  collabUrl,
+  children,
+}: {
+  collabUrl: string | null;
+  children: ReactNode;
+}) {
   const serverInstanceId = useServerInstanceId();
   const [userState, setUserState] = useState<{
     binding: ConfigBinding;
@@ -109,6 +113,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [projectState, setProjectState] = useState<{
     binding: ConfigBinding;
     config: Config;
+    synced: boolean;
   } | null>(null);
   const [projectLocalState, setProjectLocalState] = useState<{
     binding: ConfigBinding;
@@ -141,7 +146,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       config: userScoped.config,
       synced: userScoped.binding.hasSynced(),
     });
-    setProjectState({ binding: projectScoped.binding, config: projectScoped.config });
+    setProjectState({
+      binding: projectScoped.binding,
+      config: projectScoped.config,
+      synced: projectScoped.binding.hasSynced(),
+    });
     setProjectLocalState({
       binding: projectLocalScoped.binding,
       config: projectLocalScoped.config,
@@ -162,6 +171,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     const unsubProject = projectScoped.binding.subscribe((next) => {
       setProjectState((prev) =>
         prev?.binding === projectScoped.binding ? { ...prev, config: next } : prev,
+      );
+    });
+    const unsubProjectSynced = projectScoped.binding.subscribeSynced(() => {
+      setProjectState((prev) =>
+        prev?.binding === projectScoped.binding ? { ...prev, synced: true } : prev,
       );
     });
     const unsubProjectLocal = projectLocalScoped.binding.subscribe((next) => {
@@ -185,6 +199,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       unsubUser();
       unsubUserSynced();
       unsubProject();
+      unsubProjectSynced();
       unsubProjectLocal();
       unsubProjectLocalSynced();
       okignoreScoped.provider.off('synced', handleOkignoreSynced);
@@ -209,13 +224,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       ? mergeLayered(userState.config, projectState.config, projectLocalState?.config)
       : null;
 
-  const { setTheme } = useTheme();
   const themeValue = merged?.appearance?.theme;
-  useEffect(() => {
-    if (themeValue === 'light' || themeValue === 'dark' || themeValue === 'system') {
-      setTheme(themeValue);
-    }
-  }, [themeValue, setTheme]);
+  useApplyConfigTheme(themeValue);
 
   useThemeBridge(
     typeof window !== 'undefined' ? window.okDesktop : undefined,
@@ -231,6 +241,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     okignoreSynced: okignoreState?.synced ?? false,
     userConfig: userState?.config ?? null,
     projectConfig: projectState?.config ?? null,
+    projectSynced: projectState?.synced ?? false,
     projectLocalConfig: projectLocalState?.config ?? null,
     projectLocalSynced: projectLocalState?.synced ?? false,
     merged,

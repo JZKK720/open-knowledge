@@ -1,6 +1,8 @@
 import {
   createWorkspaceSearchCorpus,
   createWorkspaceSearchDocument,
+  type InlineAssetMediaKind,
+  mediaKindForSidebarAssetExtension,
   searchWorkspaceCorpus,
   type WorkspaceSearchCorpus,
   type WorkspaceSearchDocument,
@@ -15,6 +17,21 @@ export interface WorkspaceEntry {
   name: string;
   title?: string;
   modifiedTs?: number;
+  bodyIndexed?: boolean;
+  assetExt?: string;
+  mediaKind?: InlineAssetMediaKind | null;
+}
+
+function fileIconFields(path: string): {
+  assetExt?: string;
+  mediaKind?: InlineAssetMediaKind | null;
+} {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  if (dot <= slash + 1) return {};
+  const assetExt = path.slice(dot + 1).toLowerCase();
+  if (assetExt === '') return {};
+  return { assetExt, mediaKind: mediaKindForSidebarAssetExtension(assetExt) };
 }
 
 export interface WorkspaceSearchEntry extends WorkspaceEntry {
@@ -36,7 +53,8 @@ interface WorkspaceEntrySearchCorpus {
 
 export const EMPTY_QUERY_NAV_LIMIT = 20;
 const MATCH_QUERY_NAV_LIMIT = 50;
-const API_SEARCH_LIMIT = 30;
+const API_SEARCH_LIMIT = 50;
+export const SEMANTIC_RESULT_LIMIT = 30;
 
 let cachedEntriesFingerprint = '';
 let cachedEntrySearchCorpus: WorkspaceEntrySearchCorpus | null = null;
@@ -60,10 +78,13 @@ export function buildWorkspaceEntries(
   folderPaths: ReadonlySet<string>,
   pageTitles: ReadonlyMap<string, string> = new Map(),
   pageMeta: ReadonlyMap<string, PageMeta> = new Map(),
+  filePaths: ReadonlySet<string> = new Set(),
 ): WorkspaceEntry[] {
   const entries: WorkspaceEntry[] = [];
+  const seenFilePaths = new Set<string>();
 
   for (const path of pages) {
+    seenFilePaths.add(path);
     const modified = pageMeta.get(path)?.modified;
     const title = pageTitles.get(path);
     entries.push({
@@ -72,6 +93,17 @@ export function buildWorkspaceEntries(
       name: workspaceSearchBasename(path),
       ...(title ? { title } : {}),
       ...(modified ? { modifiedTs: Date.parse(modified) } : {}),
+    });
+  }
+  for (const path of filePaths) {
+    if (seenFilePaths.has(path)) continue;
+    seenFilePaths.add(path);
+    entries.push({
+      kind: 'file',
+      path,
+      name: workspaceSearchBasename(path),
+      bodyIndexed: false,
+      ...fileIconFields(path),
     });
   }
   for (const path of folderPaths) {
@@ -89,8 +121,10 @@ export function buildWorkspaceEntries(
 }
 
 function toSearchDocument(entry: WorkspaceEntry): WorkspaceSearchDocument {
+  const searchKind: 'page' | 'folder' | 'file' =
+    entry.kind === 'folder' ? 'folder' : entry.bodyIndexed === false ? 'file' : 'page';
   return createWorkspaceSearchDocument({
-    kind: entry.kind === 'file' ? 'page' : 'folder',
+    kind: searchKind,
     path: entry.path,
     title: entry.title ?? entry.name,
     modifiedTs: entry.modifiedTs ?? 0,
@@ -101,7 +135,11 @@ function buildWorkspaceEntrySearchCorpus(
   entries: readonly WorkspaceEntry[],
 ): WorkspaceEntrySearchCorpus {
   const byId = new Map(
-    entries.map((entry) => [`${entry.kind === 'file' ? 'page' : 'folder'}:${entry.path}`, entry]),
+    entries.map((entry) => {
+      const searchKind: 'page' | 'folder' | 'file' =
+        entry.kind === 'folder' ? 'folder' : entry.bodyIndexed === false ? 'file' : 'page';
+      return [`${searchKind}:${entry.path}`, entry];
+    }),
   );
   return {
     entries,
@@ -114,7 +152,7 @@ function workspaceEntriesFingerprint(entries: readonly WorkspaceEntry[]): string
   return entries
     .map(
       (entry) =>
-        `${entry.kind}\u0000${entry.path}\u0000${entry.title ?? ''}\u0000${entry.modifiedTs ?? 0}`,
+        `${entry.kind}\u0000${entry.path}\u0000${entry.title ?? ''}\u0000${entry.modifiedTs ?? 0} ${entry.bodyIndexed === false ? '0' : '1'}`,
     )
     .join('\u0001');
 }
@@ -152,7 +190,7 @@ function searchWorkspaceEntryCorpus(
   return searchWorkspaceCorpus(entryCorpus.corpus, normalizedQuery, {
     intent: 'omnibar',
     limit,
-    scopes: ['page', 'folder'],
+    scopes: ['page', 'folder', 'file'],
   })
     .map((result) => entryCorpus.byId.get(result.document.id))
     .filter((entry): entry is WorkspaceEntry => entry !== undefined);
@@ -187,29 +225,45 @@ interface WorkspaceSearchApiResponse {
     snippet?: string;
     score?: number;
   }>;
+  truncated?: boolean;
+  ready?: boolean;
+}
+
+export interface WorkspaceSearchFetchResult {
+  entries: WorkspaceSearchEntry[];
+  truncated: boolean;
+  ready: boolean;
 }
 
 function toWorkspaceSearchEntry(
   row: NonNullable<WorkspaceSearchApiResponse['results']>[number],
 ): WorkspaceSearchEntry | null {
-  if ((row.kind !== 'page' && row.kind !== 'folder') || typeof row.path !== 'string') return null;
+  if (
+    (row.kind !== 'page' && row.kind !== 'folder' && row.kind !== 'file') ||
+    typeof row.path !== 'string'
+  ) {
+    return null;
+  }
   const name = workspaceSearchBasename(row.path);
+  const kind = row.kind === 'folder' ? 'folder' : 'file';
+  const iconFields = row.kind === 'file' ? fileIconFields(row.path) : {};
   return {
-    kind: row.kind === 'page' ? 'file' : 'folder',
+    kind,
     path: row.path,
     name,
     ...(row.title && { title: row.title }),
     ...(row.snippet && { snippet: row.snippet }),
     ...(typeof row.score === 'number' && { score: row.score }),
+    ...iconFields,
   };
 }
 
 export async function fetchWorkspaceSearchEntries(
   query: string,
-  options: { signal?: AbortSignal; limit?: number } = {},
-): Promise<WorkspaceSearchEntry[]> {
+  options: { signal?: AbortSignal; limit?: number; semantic?: boolean } = {},
+): Promise<WorkspaceSearchFetchResult> {
   const normalizedQuery = query.trim();
-  if (!normalizedQuery) return [];
+  if (!normalizedQuery) return { entries: [], truncated: false, ready: true };
 
   const response = await fetch('/api/search', {
     method: 'POST',
@@ -217,8 +271,11 @@ export async function fetchWorkspaceSearchEntries(
     body: JSON.stringify({
       query: normalizedQuery,
       intent: 'full_text',
-      scopes: ['page', 'folder', 'content'],
+      ranking: options.semantic ? 'relevance' : 'navigation',
+      scopes: ['page', 'folder', 'content', 'file'],
       limit: options.limit ?? API_SEARCH_LIMIT,
+      source: 'omnibar',
+      ...(options.semantic ? { semantic: true } : {}),
     }),
     signal: options.signal,
   });
@@ -228,8 +285,9 @@ export async function fetchWorkspaceSearchEntries(
   }
 
   const payload = (await response.json()) as WorkspaceSearchApiResponse;
+  const entries = (payload.results ?? []).map(toWorkspaceSearchEntry).filter((entry) => !!entry);
 
-  return (payload.results ?? []).map(toWorkspaceSearchEntry).filter((entry) => !!entry);
+  return { entries, truncated: payload.truncated === true, ready: payload.ready !== false };
 }
 
 export function matchesCommandQuery(
@@ -241,4 +299,22 @@ export function matchesCommandQuery(
   if (!normalizedQuery) return true;
   const haystack = normalize([label, ...keywords].join(' '));
   return haystack.includes(normalizedQuery);
+}
+
+export type OmnibarSearchHintMode = 'idle' | 'content' | 'name-only' | 'empty' | 'truncated';
+
+export function classifyOmnibarSearchHint(
+  query: string,
+  visibleResults: readonly (WorkspaceEntry | WorkspaceSearchEntry)[],
+  options: { truncated?: boolean } = {},
+): OmnibarSearchHintMode {
+  if (query.trim() === '') return 'idle';
+  if (visibleResults.length === 0) return 'empty';
+  if (options.truncated) return 'truncated';
+  for (const entry of visibleResults) {
+    if ('snippet' in entry && typeof entry.snippet === 'string' && entry.snippet.length > 0) {
+      return 'content';
+    }
+  }
+  return 'name-only';
 }

@@ -115,9 +115,6 @@ function summarizeStructuredContentForLog(
   if ('previewUrlSource' in structured) {
     summary.previewUrlSource = structured.previewUrlSource;
   }
-  if (typeof structured.stdout === 'string') {
-    summary.stdoutChars = structured.stdout.length;
-  }
   if (Array.isArray(structured.warnings)) {
     summary.warningsCount = structured.warnings.length;
   }

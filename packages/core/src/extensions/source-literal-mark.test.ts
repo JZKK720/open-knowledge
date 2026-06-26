@@ -81,3 +81,48 @@ describe('isValidSourceLiteralRaw — rejects hidden injections', () => {
     expect(isValidSourceLiteralRaw(raw, visible)).toBe(false);
   });
 });
+
+describe('isValidSourceLiteralRaw — inline-whitespace numeric char-ref divergence class', () => {
+  test('accepts a whitespace numeric ref whose decoded char is the visible text', () => {
+    expect(isValidSourceLiteralRaw('&#x20;', ' ')).toBe(true); // hex space
+    expect(isValidSourceLiteralRaw('&#X20;', ' ')).toBe(true); // capital X
+    expect(isValidSourceLiteralRaw('&#32;', ' ')).toBe(true); // decimal space
+    expect(isValidSourceLiteralRaw('&#x9;', '\t')).toBe(true); // hex tab
+    expect(isValidSourceLiteralRaw('&#9;', '\t')).toBe(true); // decimal tab
+  });
+
+  test('accepts a RUN of whitespace refs decoding to the visible run (coalesced segment)', () => {
+    expect(isValidSourceLiteralRaw('&#x20;&#x20;', '  ')).toBe(true);
+    expect(isValidSourceLiteralRaw('&#x9;&#x9;', '\t\t')).toBe(true);
+    expect(isValidSourceLiteralRaw('&#x20;&#x9;', ' \t')).toBe(true);
+  });
+
+  test('rejects a run whose decoded length does NOT match the visible run', () => {
+    expect(isValidSourceLiteralRaw('&#x20;&#x20;', ' ')).toBe(false); // 2 refs, 1 space
+    expect(isValidSourceLiteralRaw('&#x20;', '  ')).toBe(false); // 1 ref, 2 spaces
+    expect(isValidSourceLiteralRaw('&#x20;&#xA;', '  ')).toBe(false); // newline member
+  });
+
+  test('rejects a VERTICAL-whitespace ref displayed as the control char (structure smuggle)', () => {
+    expect(isValidSourceLiteralRaw('&#xA;', '\n')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#10;', '\n')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#xD;', '\r')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#xC;', '\f')).toBe(false);
+  });
+
+  test('rejects a non-whitespace numeric ref displayed as its decoded char', () => {
+    expect(isValidSourceLiteralRaw('&#x41;', 'A')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#38;', '&')).toBe(false);
+  });
+
+  test('rejects a whitespace ref whose decoded char is NOT the visible text', () => {
+    expect(isValidSourceLiteralRaw('&#x20;', 'x')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#x20;', 'attacker')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#x9;', 'safe')).toBe(false);
+  });
+
+  test('rejects a ref with a trailing payload (not a bare numeric ref)', () => {
+    expect(isValidSourceLiteralRaw('&#x20;<script>', ' ')).toBe(false);
+    expect(isValidSourceLiteralRaw('&#x20;extra', ' ')).toBe(false);
+  });
+});

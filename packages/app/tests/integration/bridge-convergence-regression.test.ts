@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { updateYFragment } from '@tiptap/y-tiptap';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
   agentWriteMd,
   assertBridgeInvariant,
@@ -20,7 +21,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer();
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();

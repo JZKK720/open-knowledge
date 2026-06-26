@@ -6,7 +6,7 @@ export default function Layout({ children }: LayoutProps<'/docs'>) {
   return (
     <DocsLayout
       tree={source.pageTree}
-      {...baseOptions({ wordmarkClassName: 'h-6 w-auto text-(--slide-text)' })}
+      {...baseOptions({ wordmarkClassName: 'h-7 w-auto text-(--slide-text)' })}
     >
       {children}
     </DocsLayout>

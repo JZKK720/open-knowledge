@@ -157,3 +157,72 @@ describe('applySeed — nested .ok/ era', () => {
     expect(result.errors[0]?.error).toContain('No content template registered');
   });
 });
+
+describe('applySeed — codebase-wiki nested folder paths + wiki/-prefixed rootFiles', () => {
+  let projectDir: string;
+  const WIKI_PACK = STARTER_PACKS['codebase-wiki'];
+
+  beforeEach(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), 'seed-apply-wiki-'));
+    mkdirSync(join(projectDir, '.ok'), { recursive: true });
+    writeFileSync(join(projectDir, '.ok', 'config.yml'), '', 'utf-8');
+  });
+
+  afterEach(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  test('writes every nested wiki/<section> with .ok/frontmatter.yml + template and no errors', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    const result = await applySeed(plan, { projectDir, packId: 'codebase-wiki' });
+
+    expect(result.errors).toEqual([]);
+    expect(result.applied).toBe(plan.created.length);
+
+    for (const folder of WIKI_PACK.folders) {
+      expect(existsSync(join(projectDir, folder.path, '.ok', 'frontmatter.yml'))).toBe(true);
+      expect(
+        existsSync(
+          join(projectDir, folder.path, '.ok', 'templates', `${folder.starterTemplate}.md`),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  test('nested frontmatter.yml resolves to the folder defaults (resolver tolerates the slash)', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    await applySeed(plan, { projectDir, packId: 'codebase-wiki' });
+
+    for (const folder of WIKI_PACK.folders) {
+      const fm = readFileSync(join(projectDir, folder.path, '.ok', 'frontmatter.yml'), 'utf-8');
+      expect(fm).toContain(folder.title);
+      for (const tag of folder.tags) expect(fm).toContain(`- ${tag}`);
+    }
+  });
+
+  test('template bodies resolve verbatim for nested folder paths', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    await applySeed(plan, { projectDir, packId: 'codebase-wiki' });
+
+    for (const folder of WIKI_PACK.folders) {
+      const tpl = readFileSync(
+        join(projectDir, folder.path, '.ok', 'templates', `${folder.starterTemplate}.md`),
+        'utf-8',
+      );
+      expect(tpl).toBe(WIKI_PACK.templates[folder.starterTemplate]);
+    }
+  });
+
+  test('wiki/-prefixed rootFiles land at wiki/OVERVIEW.md + wiki/log.md with verbatim content', async () => {
+    const plan = await planSeed({ projectDir, packId: 'codebase-wiki' });
+    const result = await applySeed(plan, { projectDir, packId: 'codebase-wiki' });
+
+    expect(result.errors).toEqual([]);
+    expect(readFileSync(join(projectDir, 'wiki', 'OVERVIEW.md'), 'utf-8')).toBe(
+      WIKI_PACK.rootFiles?.['wiki/OVERVIEW.md'],
+    );
+    expect(readFileSync(join(projectDir, 'wiki', 'log.md'), 'utf-8')).toBe(
+      WIKI_PACK.rootFiles?.['wiki/log.md'],
+    );
+  });
+});

@@ -6,13 +6,13 @@ import type { Config } from '@inkeep/open-knowledge-core';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
-import { OpenInAgentMenuRequestProvider } from '@/components/handoff/OpenInAgentMenuRequestContext';
+import { subscribeToOpenAskAiComposer } from '@/components/ask-ai-composer-events';
+import { OUTLINE_NAV_EVENT, type OutlineNavDetail } from '@/components/OutlinePanel';
 import { ConfigContext, type ConfigContextValue } from '@/lib/config-context';
 import { evictCmEditor } from './editor-cache';
 import { SourceEditor } from './SourceEditor';
 
 const originalFetch = globalThis.fetch;
-const openRequests: unknown[] = [];
 (globalThis as { Window?: typeof window.Window }).Window = window.Window;
 Object.defineProperty(window.Range.prototype, 'getClientRects', {
   configurable: true,
@@ -25,6 +25,9 @@ Object.defineProperty(window.Range.prototype, 'getBoundingClientRect', {
 
 const mountedDocNames = new Set<string>();
 
+let composerOpenRequests = 0;
+let unsubscribeComposer: (() => void) | null = null;
+
 function makeConfigValue(wordWrap: boolean): ConfigContextValue {
   return {
     userBinding: null,
@@ -36,15 +39,19 @@ function makeConfigValue(wordWrap: boolean): ConfigContextValue {
     userConfig: null,
     projectConfig: null,
     projectLocalConfig: null,
+    projectSynced: false,
     projectLocalSynced: false,
     merged: { editor: { wordWrap } } as Config,
   };
 }
 
-function makeProvider(docName: string): { provider: HocuspocusProvider; ytext: Y.Text } {
+function makeProvider(
+  docName: string,
+  content = '# heading\n\nbody',
+): { provider: HocuspocusProvider; ytext: Y.Text } {
   const document = new Y.Doc();
   const ytext = document.getText('source');
-  ytext.insert(0, '# heading\n\nbody');
+  ytext.insert(0, content);
   const awareness = new Awareness(document);
   const provider = {
     document,
@@ -72,21 +79,12 @@ function Harness({
 }) {
   return (
     <ConfigContext value={makeConfigValue(wordWrap)}>
-      <OpenInAgentMenuRequestProvider
-        value={{
-          openSelection(request) {
-            openRequests.push(request);
-            return true;
-          },
-        }}
-      >
-        <SourceEditor
-          docName={provider.configuration.name ?? 'test-source'}
-          ytext={ytext}
-          provider={provider}
-          isSourceModeActive={isSourceModeActive}
-        />
-      </OpenInAgentMenuRequestProvider>
+      <SourceEditor
+        docName={provider.configuration.name ?? 'test-source'}
+        ytext={ytext}
+        provider={provider}
+        isSourceModeActive={isSourceModeActive}
+      />
     </ConfigContext>
   );
 }
@@ -107,6 +105,10 @@ function setPlatform(platform: string): void {
 
 describe('SourceEditor word-wrap preference wiring', () => {
   beforeEach(() => {
+    composerOpenRequests = 0;
+    unsubscribeComposer = subscribeToOpenAskAiComposer(() => {
+      composerOpenRequests += 1;
+    });
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/pages') return Response.json({ pages: [] });
@@ -117,12 +119,13 @@ describe('SourceEditor word-wrap preference wiring', () => {
   });
 
   afterEach(() => {
+    unsubscribeComposer?.();
+    unsubscribeComposer = null;
     cleanup();
     for (const docName of mountedDocNames) {
       evictCmEditor(docName);
     }
     mountedDocNames.clear();
-    openRequests.length = 0;
     globalThis.fetch = originalFetch;
   });
 
@@ -153,7 +156,7 @@ describe('SourceEditor word-wrap preference wiring', () => {
     expect(container.querySelector('.cm-editor')).toBe(cmEditor);
   });
 
-  test('Cmd+Shift+I requests the header Open with AI menu with the source selection', async () => {
+  test('Cmd+Shift+I opens the Ask AI composer', async () => {
     setPlatform('MacIntel');
     const { provider, ytext } = makeProvider('source-edit-with-ai');
     const { container } = render(<Harness provider={provider} ytext={ytext} wordWrap={true} />);
@@ -176,13 +179,7 @@ describe('SourceEditor word-wrap preference wiring', () => {
       );
     });
 
-    expect(openRequests).toEqual([
-      {
-        docName: 'source-edit-with-ai',
-        instruction: '',
-        selectionMarkdown: 'heading',
-      },
-    ]);
+    expect(composerOpenRequests).toBe(1);
   });
 
   test('Cmd+Shift+I does not fire when source mode is inactive', async () => {
@@ -210,7 +207,7 @@ describe('SourceEditor word-wrap preference wiring', () => {
       );
     });
 
-    expect(openRequests).toEqual([]);
+    expect(composerOpenRequests).toBe(0);
   });
 
   test('Cmd+Shift+I does not fire on non-macOS', async () => {
@@ -236,6 +233,110 @@ describe('SourceEditor word-wrap preference wiring', () => {
       );
     });
 
-    expect(openRequests).toEqual([]);
+    expect(composerOpenRequests).toBe(0);
+  });
+});
+
+describe('SourceEditor outline navigation', () => {
+  beforeEach(() => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/pages') return Response.json({ pages: [] });
+      if (url === '/api/documents') return Response.json({ documents: [] });
+      if (url === '/api/tags') return Response.json({ tags: [] });
+      return Response.json({}, { status: 404 });
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    cleanup();
+    for (const docName of mountedDocNames) {
+      evictCmEditor(docName);
+    }
+    mountedDocNames.clear();
+    globalThis.fetch = originalFetch;
+  });
+
+  async function dispatchOutlineNav(index: number, slug: string): Promise<void> {
+    const detail: OutlineNavDetail = { index, slug, mode: 'source' };
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(OUTLINE_NAV_EVENT, { detail }));
+    });
+  }
+
+  test('skips a frontmatter region whose opening fence carries a trailing space', async () => {
+    const content = [
+      '--- ',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '---',
+      '',
+      '# Real Heading',
+      '',
+      'body',
+    ].join('\n');
+    const { provider, ytext } = makeProvider('source-outline-nav-fm-ws', content);
+    const { container } = render(<Harness provider={provider} ytext={ytext} wordWrap={true} />);
+
+    const cmContent = await findCmContent(container);
+    const view = EditorView.findFromDOM(cmContent);
+    expect(view).toBeTruthy();
+    if (!view) return;
+
+    await dispatchOutlineNav(0, 'real-heading');
+
+    const headingLine = view.state.doc.line(6);
+    expect(headingLine.text).toBe('# Real Heading');
+    expect(view.state.selection.main.head).toBe(headingLine.from);
+  });
+
+  test('skips a frontmatter region whose closing fence carries a trailing tab', async () => {
+    const content = [
+      '---',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '---\t',
+      '',
+      '# Real Heading',
+    ].join('\n');
+    const { provider, ytext } = makeProvider('source-outline-nav-fm-close-ws', content);
+    const { container } = render(<Harness provider={provider} ytext={ytext} wordWrap={true} />);
+
+    const cmContent = await findCmContent(container);
+    const view = EditorView.findFromDOM(cmContent);
+    expect(view).toBeTruthy();
+    if (!view) return;
+
+    await dispatchOutlineNav(0, 'real-heading');
+
+    const headingLine = view.state.doc.line(6);
+    expect(headingLine.text).toBe('# Real Heading');
+    expect(view.state.selection.main.head).toBe(headingLine.from);
+  });
+
+  test('bare fences: jumps to the Nth heading after the FM region (regression control)', async () => {
+    const content = [
+      '---',
+      'title: Fence hazard',
+      '# yaml comment, not a heading',
+      '---',
+      '',
+      '# First',
+      '',
+      '## Second',
+    ].join('\n');
+    const { provider, ytext } = makeProvider('source-outline-nav-fm-bare', content);
+    const { container } = render(<Harness provider={provider} ytext={ytext} wordWrap={true} />);
+
+    const cmContent = await findCmContent(container);
+    const view = EditorView.findFromDOM(cmContent);
+    expect(view).toBeTruthy();
+    if (!view) return;
+
+    await dispatchOutlineNav(1, 'second');
+
+    const headingLine = view.state.doc.line(8);
+    expect(headingLine.text).toBe('## Second');
+    expect(view.state.selection.main.head).toBe(headingLine.from);
   });
 });

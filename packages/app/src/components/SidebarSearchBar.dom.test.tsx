@@ -1,116 +1,45 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { getParseHealth, resetParseHealth } from '@inkeep/open-knowledge-core';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
-import { ErrorBoundary } from 'react-error-boundary';
-import { onPillRenderError } from './SidebarSearchBar';
+import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 
-let shouldThrow = false;
+mock.module('@lingui/react/macro', () => ({
+  Trans: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
 
-function MaybeThrowPill({ label }: { label: string }) {
-  if (shouldThrow) {
-    throw new Error(`MaybeThrowPill boom: ${label}`);
-  }
-  return (
-    <button type="button" data-testid="pill">
-      {label}
-    </button>
-  );
+async function renderSidebarSearchBar(onClick: () => void = () => {}) {
+  const { SidebarSearchBar } = await import('./SidebarSearchBar');
+  render(<SidebarSearchBar onClick={onClick} className="extra-class" />);
 }
 
-describe('SidebarSearchBar ErrorBoundary (Tier-3 mount, QA-015)', () => {
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let consoleWarnSpy: ReturnType<typeof spyOn>;
+describe('SidebarSearchBar runtime behavior', () => {
+  afterEach(() => cleanup());
 
-  beforeEach(() => {
-    shouldThrow = false;
-    resetParseHealth();
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+  test('exports the component', async () => {
+    const mod = await import('./SidebarSearchBar');
+    expect(typeof mod.SidebarSearchBar).toBe('function');
   });
 
-  afterEach(() => {
-    cleanup();
-    consoleErrorSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
+  test('renders an accessible visible-label search button with the locked visual contract', async () => {
+    await renderSidebarSearchBar();
+
+    const button = screen.getByRole('button', { name: /Search/ });
+    expect(button.getAttribute('aria-label')).toBeNull();
+    expect(button.getAttribute('data-slot')).toBe('button');
+    expect(button.getAttribute('data-variant')).toBe('outline');
+    expect(button.getAttribute('data-telemetry-event')).toBe('ok.sidebar.search_pill.click');
+    expect(button.classList.contains('extra-class')).toBe(true);
+    expect(button.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(button.querySelector('span')?.textContent).toBe('Search');
+    expect(['⌘ K', 'Ctrl K']).toContain(button.querySelector('kbd')?.textContent);
   });
 
-  test('renders child when no throw — baseline (no boundary fallback, no observability emission)', () => {
-    render(
-      <ErrorBoundary fallbackRender={() => null} onError={onPillRenderError}>
-        <MaybeThrowPill label="Search" />
-      </ErrorBoundary>,
-    );
-    expect(screen.getByTestId('pill').textContent).toBe('Search');
-    expect(getParseHealth().jsxRenderFailure.sidebarSearchPill).toBeUndefined();
-  });
+  test('click delegates to the supplied handler', async () => {
+    const clicks: string[] = [];
+    await renderSidebarSearchBar(() => clicks.push('click'));
 
-  test('renders null fallback on child throw + onPillRenderError fires the structured emission', () => {
-    shouldThrow = true;
-    render(
-      <ErrorBoundary fallbackRender={() => null} onError={onPillRenderError}>
-        <MaybeThrowPill label="Search" />
-      </ErrorBoundary>,
-    );
-    expect(screen.queryByTestId('pill')).toBeNull();
-    expect(getParseHealth().jsxRenderFailure.sidebarSearchPill).toBe(1);
-    const sawStructuredEmission = consoleWarnSpy.mock.calls.some((call: unknown[]) => {
-      const message = call[0];
-      if (typeof message !== 'string') return false;
-      try {
-        const parsed = JSON.parse(message);
-        return (
-          parsed.event === 'jsx-render-failure' &&
-          parsed.component === 'sidebarSearchPill' &&
-          parsed.rawComponentName === 'sidebarSearchPill'
-        );
-      } catch {
-        return false;
-      }
-    });
-    expect(sawStructuredEmission).toBe(true);
-  });
+    await userEvent.click(screen.getByRole('button', { name: /Search/ }));
 
-  test('sibling subtree outside the boundary stays mounted when the pill throws', () => {
-    shouldThrow = true;
-    render(
-      <div>
-        <ErrorBoundary fallbackRender={() => null} onError={onPillRenderError}>
-          <MaybeThrowPill label="Search" />
-        </ErrorBoundary>
-        <div data-testid="sibling">FileTree + toolbar + ⌘K listener live here</div>
-      </div>,
-    );
-    expect(screen.queryByTestId('pill')).toBeNull();
-    expect(screen.getByTestId('sibling').textContent).toBe(
-      'FileTree + toolbar + ⌘K listener live here',
-    );
-  });
-
-  test('resetKeys flip after a throw remounts the child for a fresh render attempt', () => {
-    shouldThrow = true;
-    const { rerender } = render(
-      <ErrorBoundary
-        fallbackRender={() => null}
-        onError={onPillRenderError}
-        resetKeys={['expanded']}
-      >
-        <MaybeThrowPill label="Search" />
-      </ErrorBoundary>,
-    );
-    expect(screen.queryByTestId('pill')).toBeNull();
-    expect(getParseHealth().jsxRenderFailure.sidebarSearchPill).toBe(1);
-
-    shouldThrow = false;
-    rerender(
-      <ErrorBoundary
-        fallbackRender={() => null}
-        onError={onPillRenderError}
-        resetKeys={['collapsed']}
-      >
-        <MaybeThrowPill label="Search" />
-      </ErrorBoundary>,
-    );
-    expect(screen.getByTestId('pill').textContent).toBe('Search');
-    expect(getParseHealth().jsxRenderFailure.sidebarSearchPill).toBe(1);
+    expect(clicks).toEqual(['click']);
   });
 });

@@ -87,6 +87,22 @@ describe('file-tree-operations', () => {
     ).toEqual(['docs/renamed', 'guides/nested/page', 'docs/empty', 'docs/image.png', 'README']);
   });
 
+  test('applyRenameToDocuments updates docExt for explicit extension-change rename', () => {
+    const [renamed] = applyRenameToDocuments(
+      [{ kind: 'document', docName: 'docs/notes', docExt: '.md', size: 10, modified: '' }],
+      [{ fromDocName: 'docs/notes', toDocName: 'docs/notes' }],
+      [],
+      [],
+      [{ toDocName: 'docs/notes', docExt: '.mdx' }],
+    );
+
+    expect(renamed).toMatchObject({
+      kind: 'document',
+      docName: 'docs/notes',
+      docExt: '.mdx',
+    });
+  });
+
   test('applyRenameToDocuments remaps explicit folder and asset paths', () => {
     expect(
       applyRenameToDocuments(documents, [], [{ fromPath: 'docs', toPath: 'guides' }]).map(
@@ -104,6 +120,51 @@ describe('file-tree-operations', () => {
         [{ fromPath: 'docs/image.png', toPath: 'docs/hero.png' }],
       ).map((entry) => (entry.kind === 'document' ? entry.docName : entry.path)),
     ).toEqual(['docs/notes', 'docs/nested/page', 'docs/empty', 'docs/hero.png', 'README']);
+  });
+
+  test('applyRenameToDocuments converts a markdown document renamed to a non-document file', () => {
+    const [renamed] = applyRenameToDocuments(
+      [{ kind: 'document', docName: 'docs/notes', docExt: '.md', size: 10, modified: 'now' }],
+      [],
+      [],
+      [{ fromPath: 'docs/notes.md', toPath: 'docs/notes.txt' }],
+    );
+
+    expect(renamed).toEqual({
+      kind: 'asset',
+      path: 'docs/notes.txt',
+      assetExt: 'txt',
+      mediaKind: null,
+      size: 10,
+      modified: 'now',
+      referencedBy: [],
+    });
+  });
+
+  test('applyRenameToDocuments converts a non-document file renamed to markdown', () => {
+    const [renamed] = applyRenameToDocuments(
+      [
+        {
+          kind: 'asset',
+          path: 'docs/notes.txt',
+          assetExt: 'txt',
+          mediaKind: null,
+          size: 10,
+          modified: 'now',
+        },
+      ],
+      [],
+      [],
+      [{ fromPath: 'docs/notes.txt', toPath: 'docs/notes.md' }],
+    );
+
+    expect(renamed).toEqual({
+      kind: 'document',
+      docName: 'docs/notes',
+      docExt: '.md',
+      size: 10,
+      modified: 'now',
+    });
   });
 
   test('applyDeleteToDocuments removes all deleted doc names', () => {
@@ -251,10 +312,10 @@ describe('file-tree-operations', () => {
     ).toBe('README');
   });
 
-  describe('planRenameCleanupCalls — symptom 1+3 race gate', () => {
+  describe('planRenameCleanupCalls', () => {
     const poolHasAll = () => true;
 
-    test('pool active === toDocName → skip the destructive `to` clear', () => {
+    test('skips destination cleanup when redirect already reopened it', () => {
       expect(
         planRenameCleanupCalls(
           [{ fromDocName: 'docs/notes', toDocName: 'docs/renamed' }],
@@ -264,7 +325,7 @@ describe('file-tree-operations', () => {
       ).toEqual(['docs/notes']);
     });
 
-    test('pool active === fromDocName (server-push not yet run) → clear BOTH ends', () => {
+    test('clears both ends when redirect has not run yet', () => {
       expect(
         planRenameCleanupCalls(
           [{ fromDocName: 'docs/notes', toDocName: 'docs/renamed' }],
@@ -274,7 +335,7 @@ describe('file-tree-operations', () => {
       ).toEqual(['docs/notes', 'docs/renamed']);
     });
 
-    test('pool active is unrelated (renamed doc was never active) → clear BOTH ends', () => {
+    test('clears both ends when the active doc is unrelated', () => {
       expect(
         planRenameCleanupCalls(
           [{ fromDocName: 'docs/notes', toDocName: 'docs/renamed' }],
@@ -284,7 +345,7 @@ describe('file-tree-operations', () => {
       ).toEqual(['docs/notes', 'docs/renamed']);
     });
 
-    test('pool active is null (collabUrl unresolved) → clear BOTH ends', () => {
+    test('clears both ends when active doc is unknown', () => {
       expect(
         planRenameCleanupCalls(
           [{ fromDocName: 'docs/notes', toDocName: 'docs/renamed' }],
@@ -294,7 +355,7 @@ describe('file-tree-operations', () => {
       ).toEqual(['docs/notes', 'docs/renamed']);
     });
 
-    test('multi-rename batch — gate is per-entry', () => {
+    test('applies redirect guard per rename entry', () => {
       expect(
         planRenameCleanupCalls(
           [
@@ -313,7 +374,7 @@ describe('file-tree-operations', () => {
       expect(planRenameCleanupCalls([], 'anything', poolHasAll)).toEqual([]);
     });
 
-    test('pool has no entry for toDocName (never-opened) → skip toDocName cleanup', () => {
+    test('skips destination cleanup when the pool never opened it', () => {
       expect(
         planRenameCleanupCalls(
           [{ fromDocName: 'Untitled', toDocName: 'dhx' }],
@@ -323,7 +384,7 @@ describe('file-tree-operations', () => {
       ).toEqual(['Untitled']);
     });
 
-    test('bulk rename — per-entry poolHas decision', () => {
+    test('applies pool presence guard per rename entry', () => {
       const poolHas = (docName: string) => docName === 'archive/a' || docName === 'archive/c';
       expect(
         planRenameCleanupCalls(

@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { type ApiHelpers, expect, test } from './_helpers';
+import {
+  type ApiHelpers,
+  createFileViaSidebar,
+  createFolderViaSidebar,
+  expect,
+  test,
+} from './_helpers';
 
 type DeleteKind = 'file' | 'folder';
 
@@ -97,7 +103,7 @@ function defaultName(base: string, index: number) {
 }
 
 async function commitDefaultFileCreate(page: Page, docName: string): Promise<void> {
-  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  await page.getByRole('button', { name: 'New file', exact: true }).click();
   const input = page.getByRole('textbox', {
     name: new RegExp(`rename ${docName}\\.md`, 'i'),
   });
@@ -121,7 +127,7 @@ async function commitDefaultFileCreate(page: Page, docName: string): Promise<voi
 }
 
 async function commitDefaultFolderCreate(page: Page, folderName: string): Promise<void> {
-  await page.getByRole('button', { name: 'New Folder', exact: true }).click();
+  await page.getByRole('button', { name: 'New folder', exact: true }).click();
   const input = page.getByRole('textbox', { name: new RegExp(`rename ${folderName}`, 'i') });
   const row = sidebarTreeItem(page, folderName);
 
@@ -173,7 +179,7 @@ async function installDelayedDesktopSessionBridge(
         platform: 'darwin',
         config: {
           apiOrigin: baseURL,
-          collabUrl: `ws://localhost:${port}/collab`,
+          collabUrl: `ws://127.0.0.1:${port}/collab`,
           mode: 'editor',
           projectName: 'session-restore-test',
           projectPath: contentDir,
@@ -181,6 +187,8 @@ async function installDelayedDesktopSessionBridge(
         onProjectSwitched: () => unsubscribe,
         onMenuAction: () => unsubscribe,
         onUpdateDownloaded: () => unsubscribe,
+        onUpdateRelaunching: () => unsubscribe,
+        onUpdateRelaunchFailed: () => unsubscribe,
         onWhatsNew: () => unsubscribe,
         onWhatsNewDismissed: () => unsubscribe,
         onUpdateStuckHint: () => unsubscribe,
@@ -203,7 +211,6 @@ async function installDelayedDesktopSessionBridge(
           showAssetMenu: async () => {},
           showItemInFolder: async () => {},
           trashItem: async () => ({ ok: true as const }),
-          openInTerminal: async () => ({ ok: true as const }),
         },
         editor: {
           notifyActiveTargetChanged: () => {},
@@ -317,10 +324,15 @@ test.describe('FileTree sidebar create', () => {
       await page.goto('/#/zz-bulk-delete-a');
       await page.waitForLoadState('domcontentloaded');
 
+      await expect(
+        page.locator('[data-slot="sidebar-container"]').getByRole('treeitem').first(),
+      ).toBeVisible({ timeout: 30_000 });
+
       const firstItem = await visibleSidebarItemByPath(page, 'zz-bulk-delete-a.md');
       const secondItem = await visibleSidebarItemByPath(page, 'zz-bulk-delete-b.md');
 
       await firstItem.click();
+      await expect(firstItem).toHaveAttribute('aria-selected', 'true');
       await secondItem.click({
         modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'],
       });
@@ -636,7 +648,7 @@ test.describe('FileTree sidebar create', () => {
       await gotoRootAndAwaitSidebar(page);
 
       for (const docName of fileNames) {
-        await page.getByRole('button', { name: 'New File', exact: true }).click();
+        await page.getByRole('button', { name: 'New file', exact: true }).click();
         const input = page.getByRole('textbox', {
           name: new RegExp(`rename ${docName}\\.md`, 'i'),
         });
@@ -647,7 +659,7 @@ test.describe('FileTree sidebar create', () => {
         });
       }
 
-      await page.getByRole('button', { name: 'New Folder', exact: true }).click();
+      await page.getByRole('button', { name: 'New folder', exact: true }).click();
       await expect(page.getByRole('textbox', { name: /rename New Folder/i })).toBeVisible({
         timeout: 10_000,
       });
@@ -695,16 +707,8 @@ test.describe('FileTree sidebar create', () => {
     try {
       await gotoRootAndAwaitSidebar(page);
 
-      await page.getByRole('button', { name: 'New Folder', exact: true }).click();
-      const input = page.getByRole('textbox', { name: /rename New Folder/i });
-      await expect(input).toBeVisible({ timeout: 10_000 });
-      await input.fill('hello');
-      await input.press('Enter');
+      await createFolderViaSidebar(page, 'hello');
 
-      await expect(sidebarTreeItem(page, 'hello')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole('button', { name: 'hello/', exact: true })).toBeVisible({
-        timeout: 10_000,
-      });
       await expect(page.getByRole('button', { name: 'New Folder/', exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'New Folder.md', exact: true })).toHaveCount(0);
       expect(existsSync(join(workerServer.contentDir, 'hello'))).toBe(true);
@@ -731,46 +735,28 @@ test.describe('FileTree sidebar create', () => {
     try {
       await gotoRootAndAwaitSidebar(page);
 
-      await page.getByRole('button', { name: 'New Folder', exact: true }).click();
-      const folderInput = page.getByRole('textbox', { name: /rename New Folder/i });
-      await expect(folderInput).toBeVisible({ timeout: 10_000 });
-      await folderInput.fill(name);
-      await folderInput.press('Enter');
-
+      await createFolderViaSidebar(page, name);
       const folderItem = await visibleSidebarItemByPath(page, `${name}/`);
-      await expect(activeEditorTabButton(page, `${name}/`)).toBeVisible({
-        timeout: 10_000,
-      });
-      await expect(page).toHaveURL(new RegExp(`#/${name}/$`));
 
       await page.evaluate(() => {
         window.location.hash = '#/';
       });
       await expect(page).toHaveURL(/#\/$/);
-      await page.getByRole('button', { name: 'New File', exact: true }).click();
-      const fileInput = page.getByRole('textbox', { name: /rename Untitled\.md/i });
-      await expect(fileInput).toBeVisible({ timeout: 10_000 });
-      await fileInput.fill(name);
-      await fileInput.press('Enter');
-
+      await createFileViaSidebar(page, name);
       const fileItem = await visibleSidebarItemByPath(page, `${name}.md`);
-      await expect(activeEditorTabButton(page, `${name}.md`)).toBeVisible({
-        timeout: 10_000,
-      });
       await expect(editorTabButton(page, `${name}/`).first()).toBeVisible();
-      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
 
       await folderItem.click();
+      await expect(page).toHaveURL(new RegExp(`#/${name}/$`));
       await expect(activeEditorTabButton(page, `${name}/`)).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page).toHaveURL(new RegExp(`#/${name}/$`));
 
       await fileItem.click();
+      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
       await expect(activeEditorTabButton(page, `${name}.md`)).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
 
       expect(existsSync(join(workerServer.contentDir, name))).toBe(true);
       expect(statSync(join(workerServer.contentDir, name)).isDirectory()).toBe(true);
@@ -797,7 +783,7 @@ test.describe('FileTree sidebar create', () => {
     try {
       await gotoRootAndAwaitSidebar(page);
 
-      await page.getByRole('button', { name: 'New File', exact: true }).click();
+      await page.getByRole('button', { name: 'New file', exact: true }).click();
       const fileRenameInput = page.getByRole('textbox', { name: /rename Untitled\.md/i });
       await expect
         .poll(async () => {
@@ -807,7 +793,7 @@ test.describe('FileTree sidebar create', () => {
         })
         .not.toBe('pending');
 
-      await page.getByRole('button', { name: 'New Folder', exact: true }).click();
+      await page.getByRole('button', { name: 'New folder', exact: true }).click();
       const folderRenameInput = page.getByRole('textbox', { name: /rename New Folder/i });
       await expect(folderRenameInput).toBeVisible({ timeout: 10_000 });
 
@@ -839,14 +825,14 @@ test.describe('FileTree sidebar create', () => {
 
     await gotoRootAndAwaitSidebar(page);
 
-    await page.getByRole('button', { name: 'New File', exact: true }).click();
+    await page.getByRole('button', { name: 'New file', exact: true }).click();
     const canceledFileInput = page.getByRole('textbox', { name: /rename Untitled\.md/i });
     await expect(canceledFileInput).toBeVisible({ timeout: 10_000 });
     await canceledFileInput.press('Escape');
     await expect(sidebarTreeItem(page, 'Untitled.md')).toHaveCount(0);
     expect(existsSync(join(workerServer.contentDir, 'Untitled.md'))).toBe(false);
 
-    await page.getByRole('button', { name: 'New Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'New folder', exact: true }).click();
     const canceledFolderInput = page.getByRole('textbox', { name: /rename New Folder/i });
     await expect(canceledFolderInput).toBeVisible({ timeout: 10_000 });
     await canceledFolderInput.press('Escape');
@@ -855,7 +841,7 @@ test.describe('FileTree sidebar create', () => {
     await expect(page.getByRole('button', { name: 'New Folder.md', exact: true })).toHaveCount(0);
     expect(existsSync(join(workerServer.contentDir, 'New Folder'))).toBe(false);
 
-    await page.getByRole('button', { name: 'New File', exact: true }).click();
+    await page.getByRole('button', { name: 'New file', exact: true }).click();
     const fileRenameInput = page.getByRole('textbox', { name: /rename Untitled\.md/i });
     await expect(fileRenameInput).toBeVisible({ timeout: 10_000 });
     await fileRenameInput.press('Enter');
@@ -865,7 +851,7 @@ test.describe('FileTree sidebar create', () => {
     expect(existsSync(join(workerServer.contentDir, 'Untitled.md'))).toBe(true);
     await expectDocumentLoads(workerServer.baseURL, 'Untitled');
 
-    await page.getByRole('button', { name: 'New Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'New folder', exact: true }).click();
     const folderRenameInput = page.getByRole('textbox', { name: /rename New Folder/i });
     await expect(folderRenameInput).toBeVisible({ timeout: 10_000 });
     await folderRenameInput.press('Enter');

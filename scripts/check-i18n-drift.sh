@@ -4,8 +4,8 @@
 # packages/app) and fail if the committed catalogs at
 # packages/app/src/locales/{en,pseudo}/messages.{po,json} do not match what the
 # extractor would produce against the current `<Trans>` / t`...` macros under
-# packages/app/src. Mirrors check-instructions-drift.sh /
-# check-schema-snapshot-clean.sh so `bun run check` catches drift before push.
+# packages/app/src. Mirrors check-schema-snapshot-clean.sh so `bun run check`
+# catches drift before push.
 #
 # Canonical source: packages/app/src/**/*.{ts,tsx} (per packages/app/lingui.config.ts).
 # Regenerate after adding strings:

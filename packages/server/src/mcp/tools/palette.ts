@@ -10,13 +10,15 @@ import { z } from 'zod';
 import type { ConfigOrResolver, ServerInstance } from './shared.ts';
 import { outputSchemaWithText, ROUTED_CWD_DESCRIPTION, textPlusStructured } from './shared.ts';
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   '[Operates on registry data; no running OK server required] Return the OK authoring palette so a generated document reads as one coherent, themed artifact.',
   '',
   'Three sections:',
   '- `components` — the **markdown-native forms** OK auto-promotes into themed canonical components at parse time. Write `> [!NOTE]` (not `<Callout>`), `<details>` (not `<Accordion>`), ` ```mermaid `, `$x$`. Each entry carries a copy-ready `example` + `guidance`.',
   '- `embedPatterns` — copy-ready ` ```html preview ` starters (chart, stat cards, custom SVG, interactive control) already wired to the theme tokens, so an embed tracks light/dark with no hand-picked colors.',
-  '- `tokens` — the CSS custom properties injected into every preview iframe; reference them as `var(--chart-1)`, `var(--foreground)`, … inside an `html preview` embed.',
+  '- `tokens` — the CSS custom properties injected into every preview iframe; reference them as `var(--chart-1)`, `var(--foreground)`, … inside an `html preview` embed. **Inside SVG, route theme tokens through `style="..."` rather than presentation attributes** — `<circle style="fill: var(--chart-1)">` works; `<circle fill="var(--chart-1)">` silently falls back to black in Safari / older Chromium because CSS `var()` is not a valid SVG `<paint>` value per the W3C spec.',
+  '',
+  'External resources load directly: the preview iframe has open network access, so an embed can load external stylesheets, `fetch` live data, or pull map tiles / remote images / web fonts over `https:`. The iframe is a sandboxed null-origin frame — an embed can reach the network but never the knowledge base, cookies, or auth.',
   '',
   'Pass `components: [ids]` to ALSO get the full JSX-form prop schema for specific canonicals (e.g. `palette({ components: ["Callout", "Tabs"] })`) — merged from the former `get_components`.',
   '',
@@ -123,8 +125,10 @@ const AUTHORING_FORMS: readonly AuthoringFormSeed[] = [
     fallbackDisplayName: 'Mermaid diagram',
     description: 'Flowchart / sequence / class / state / ER / gantt / pie diagram.',
     authoring: 'markdown',
-    example: '```mermaid\ngraph LR\n  A[Start] --> B[End]\n```',
-    guidance: 'Write a ` ```mermaid ` fenced block — it renders as a themed diagram.',
+    example:
+      '```mermaid\ngraph LR\n  A["Start (label with punctuation)"] --> B[End]\n```\n\n```mermaid\nsequenceDiagram\n    A->>B: request queued #59; retried\n    B-->>A: done\n```',
+    guidance:
+      'Write a ` ```mermaid ` fenced block — it renders as a themed diagram. Sharp edge 1: raw `;` and `#` END message/label text in sequence-family grammars — use commas, or the entity escapes `#59;` / `#35;`. Sharp edge 2: quote flowchart labels containing punctuation (`A["label (with) punctuation"]`). Feedback: parse failures come back as `warnings` entries (kind `mermaid-parse-error`) on write/edit — fix the fence and re-edit.',
   },
   {
     id: 'Math',

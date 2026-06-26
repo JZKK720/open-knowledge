@@ -62,7 +62,7 @@ async function bootRig(
   hocuspocus.configuration.extensions.push(ext);
 
   const port = await new Promise<number>((resolveListen) => {
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
       resolveListen(typeof addr === 'object' && addr ? addr.port : 0);
     });
@@ -101,7 +101,7 @@ function seedRemoteAndHead(
 }
 
 async function postConstructUrl(port: number, body: unknown): Promise<Response> {
-  return fetch(`http://localhost:${port}/api/share/construct-url`, {
+  return fetch(`http://127.0.0.1:${port}/api/share/construct-url`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -298,7 +298,7 @@ describe('POST /api/share/construct-url', () => {
         branchesOnOrigin: ['main'],
       });
     });
-    const res = await fetch(`http://localhost:${rig.port}/api/share/construct-url`);
+    const res = await fetch(`http://127.0.0.1:${rig.port}/api/share/construct-url`);
     expect(res.status).toBe(405);
   });
 

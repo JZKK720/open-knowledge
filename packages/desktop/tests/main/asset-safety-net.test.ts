@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { attachAssetSafetyNet, matchAssetUrl } from '../../src/main/asset-safety-net.ts';
+import {
+  attachAssetSafetyNet,
+  matchAssetUrl,
+  matchInAppRoute,
+} from '../../src/main/asset-safety-net.ts';
 
 const ORIGIN = 'http://localhost:5173';
 
@@ -22,6 +26,11 @@ describe('matchAssetUrl', () => {
 
   test('app bundle (index.html) → null', () => {
     expect(matchAssetUrl('http://localhost:5173/index.html', ORIGIN)).toBeNull();
+  });
+
+  test('content html/htm → null (handled by the renderer dispatcher, not the safety net)', () => {
+    expect(matchAssetUrl('http://localhost:5173/fishing-log/trip-viewer.html', ORIGIN)).toBeNull();
+    expect(matchAssetUrl('http://localhost:5173/notes/legacy.htm', ORIGIN)).toBeNull();
   });
 
   test('app bundle without explicit path → null', () => {
@@ -66,6 +75,30 @@ describe('matchAssetUrl', () => {
 
   test('encoded traversal (`%2E%2E`) is canonicalized by the URL parser', () => {
     expect(matchAssetUrl('http://localhost:5173/%2E%2E/secret.pdf', ORIGIN)).toBe('secret.pdf');
+  });
+});
+
+describe('matchInAppRoute', () => {
+  test('same-renderer-origin hash route → returns the hash', () => {
+    expect(
+      matchInAppRoute('http://localhost:5173/#/people/ray-zaragoza', 'http://localhost:5173'),
+    ).toBe('#/people/ray-zaragoza');
+  });
+
+  test('different origin (renderer route vs api/editor port) → null', () => {
+    expect(matchInAppRoute('http://localhost:5173/#/doc', 'http://localhost:8765')).toBeNull();
+  });
+
+  test('same origin but non-hash URL (bundle entry) → null', () => {
+    expect(matchInAppRoute('http://localhost:5173/index.html', 'http://localhost:5173')).toBeNull();
+  });
+
+  test('null renderer origin (URL not yet loaded) → null', () => {
+    expect(matchInAppRoute('http://localhost:5173/#/doc', null)).toBeNull();
+  });
+
+  test('bogus URL → null (no throw)', () => {
+    expect(matchInAppRoute('not a url', 'http://localhost:5173')).toBeNull();
   });
 });
 
@@ -188,6 +221,68 @@ describe('attachAssetSafetyNet — setWindowOpenHandler', () => {
       data: { reason: 'path-escape' },
     });
   });
+
+  test('same-renderer-origin in-app route (open-in-new-tab) → navigated in-app, NOT openExternal', async () => {
+    const openAsset = mock(async (_: string) => ({ ok: true }) as const);
+    const openExternal = mock(noopOpenExternal);
+    const executeJavaScript = mock(async (_: string) => undefined);
+
+    let installedHandler: ((details: { url: string }) => { action: 'allow' | 'deny' }) | null =
+      null;
+    const webContents = {
+      setWindowOpenHandler(handler: (details: { url: string }) => { action: 'allow' | 'deny' }) {
+        installedHandler = handler;
+      },
+      on: () => {},
+      getURL: () => 'http://localhost:5173/#/home',
+      executeJavaScript,
+    };
+
+    attachAssetSafetyNet(webContents, {
+      openAsset,
+      openExternal,
+      editorOrigin: 'http://localhost:8765',
+    });
+
+    const result = installedHandler?.({ url: 'http://localhost:5173/#/people/ray-zaragoza' });
+    expect(result).toEqual({ action: 'deny' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(executeJavaScript).toHaveBeenCalledTimes(1);
+    expect(executeJavaScript.mock.calls[0]?.[0]).toBe(
+      'window.location.hash = "#/people/ray-zaragoza";',
+    );
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(openAsset).not.toHaveBeenCalled();
+  });
+
+  test('cross-origin new-window with renderer URL present → still openExternal (not in-app)', async () => {
+    const openAsset = mock(async (_: string) => ({ ok: true }) as const);
+    const openExternal = mock(noopOpenExternal);
+    const executeJavaScript = mock(async (_: string) => undefined);
+
+    let installedHandler: ((details: { url: string }) => { action: 'allow' | 'deny' }) | null =
+      null;
+    const webContents = {
+      setWindowOpenHandler(handler: (details: { url: string }) => { action: 'allow' | 'deny' }) {
+        installedHandler = handler;
+      },
+      on: () => {},
+      getURL: () => 'http://localhost:5173/#/home',
+      executeJavaScript,
+    };
+
+    attachAssetSafetyNet(webContents, {
+      openAsset,
+      openExternal,
+      editorOrigin: 'http://localhost:8765',
+    });
+
+    installedHandler?.({ url: 'https://example.com/path' });
+    await Promise.resolve();
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/path');
+    expect(executeJavaScript).not.toHaveBeenCalled();
+  });
 });
 
 describe('attachAssetSafetyNet — will-navigate', () => {
@@ -241,6 +336,36 @@ describe('attachAssetSafetyNet — will-navigate', () => {
     expect(preventDefault).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(openAsset).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  test('same-renderer-origin navigation (distinct from editorOrigin) → no preventDefault, no delegation', async () => {
+    const openAsset = mock(async (_: string) => ({ ok: true }) as const);
+    const openExternal = mock(noopOpenExternal);
+
+    let installedHandler: ((event: { preventDefault: () => void }, url: string) => void) | null =
+      null;
+    const webContents = {
+      setWindowOpenHandler: () => {},
+      on(
+        event: 'will-navigate',
+        handler: (event: { preventDefault: () => void }, url: string) => void,
+      ) {
+        if (event === 'will-navigate') installedHandler = handler;
+      },
+      getURL: () => 'http://localhost:5173/#/home',
+    };
+
+    attachAssetSafetyNet(webContents, {
+      openAsset,
+      openExternal,
+      editorOrigin: 'http://localhost:8765',
+    });
+
+    const preventDefault = mock(() => {});
+    installedHandler?.({ preventDefault }, 'http://localhost:5173/#/people/ray-zaragoza');
+    expect(preventDefault).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(openExternal).not.toHaveBeenCalled();
   });
 

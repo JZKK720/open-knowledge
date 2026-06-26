@@ -1,6 +1,6 @@
-# Contributing to Open Knowledge
+# Contributing to OpenKnowledge
 
-Open Knowledge is developed in Inkeep's internal monorepo and mirrored to this public repository with Copybara. Public contributions should still start here: open a pull request against `inkeep/open-knowledge`.
+OpenKnowledge is developed in Inkeep's internal monorepo and mirrored to this public repository with Copybara. Public contributions should still start here: open a pull request against `inkeep/open-knowledge`.
 
 ## How Public PRs Flow
 
@@ -49,7 +49,7 @@ bun run dev
 
 ### Environment Variables
 
-Open Knowledge requires no environment variables for development — `bun install && bun run check` works in a fresh clone. To start the dev server, see the commands above. See `.env.example` for optional dev/observability env vars (OpenTelemetry, custom dev server port).
+OpenKnowledge requires no environment variables for development — `bun install && bun run check` works in a fresh clone. To start the dev server, see the commands above. See `.env.example` for optional dev/observability env vars (OpenTelemetry, custom dev server port).
 
 ### Toolchain
 
@@ -118,4 +118,4 @@ Only source code, public docs, and build or development scripts are exported her
 
 ## License
 
-Open Knowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`). By submitting a contribution, you agree that it is licensed under the same terms.
+OpenKnowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`). By submitting a contribution, you agree that it is licensed under the same terms.

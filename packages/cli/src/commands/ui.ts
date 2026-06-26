@@ -483,7 +483,7 @@ export async function resolveUiLockCollision(
 
 export function uiCommand(getConfig: () => Config): Command {
   return new Command('ui')
-    .description('Serve the Open Knowledge React editor UI')
+    .description('Serve the OpenKnowledge React editor UI')
     .option(
       '-p, --port <port>',
       `UI port (default: $PORT env or ${DEFAULT_UI_PORT}, kernel-allocated fallback if busy)`,

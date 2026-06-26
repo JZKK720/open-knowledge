@@ -3,6 +3,8 @@ import type {
   OkLocalOpAuthEvent,
   OkLocalOpCloneEvent,
   OkMenuAction,
+  OkPtyData,
+  OkPtyExit,
   OkServerReclaimedInfo,
   OkServerRestartedInfo,
   OkServerVersionDriftInfo,
@@ -15,6 +17,10 @@ export interface EventChannels {
   'ok:project:switched': { payload: OkDesktopConfig };
   'ok:menu-action': { payload: OkMenuAction };
   'ok:update:downloaded': { payload: { version: string } };
+  'ok:update:relaunching': { payload: { version: string } };
+  'ok:update:relaunch-failed': {
+    payload: { version: string; message?: string; downloadUrl?: string };
+  };
   'ok:update:whats-new': { payload: { version: string; releaseUrl: string } };
   'ok:update:whats-new-dismissed': { payload: { version: string } };
   'ok:update:stuck-hint': { payload: { downloadUrl: string } };
@@ -85,4 +91,7 @@ export interface EventChannels {
   'ok:server-version-drift': { payload: OkServerVersionDriftInfo };
   'ok:server-restarted': { payload: OkServerRestartedInfo };
   'ok:server-reclaimed': { payload: OkServerReclaimedInfo };
+
+  'ok:pty:data': { payload: OkPtyData };
+  'ok:pty:exit': { payload: OkPtyExit };
 }

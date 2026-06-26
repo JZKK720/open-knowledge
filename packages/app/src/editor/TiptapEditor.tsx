@@ -8,7 +8,7 @@ import {
   hasNewEntries,
   MarkdownManager,
 } from '@inkeep/open-knowledge-core';
-import { type AnyExtension, Editor, type EditorOptions, Extension, getSchema } from '@tiptap/core';
+import { type AnyExtension, Editor, type EditorOptions, Extension } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import Placeholder from '@tiptap/extension-placeholder';
 import { EditorContent } from '@tiptap/react';
@@ -26,9 +26,11 @@ import { OUTLINE_NAV_EVENT, type OutlineNavDetail } from '@/components/OutlinePa
 import { anchorFromHash } from '@/lib/doc-hash';
 import { mark } from '@/lib/perf';
 import { wrapExtensionsWithTiming } from '@/lib/perf/cold-mount-instrumentation';
+import type { SidebarDragPayload } from '@/lib/sidebar-drag';
 import { useIdentity } from '../presence/identity';
 import { registerEditor, unregisterEditor } from './active-editor';
 import { buildAwarenessUser } from './awareness-user';
+import { bindingStalenessGuardPlugin, type WedgeDetail } from './binding-staleness-guard';
 import { BubbleMenuBar } from './bubble-menu/BubbleMenuBar';
 import {
   createClipboardHtmlSerializer,
@@ -39,19 +41,23 @@ import {
 import { useDocumentContext } from './DocumentContext';
 import { setEditorDocName } from './extensions/doc-context.ts';
 import { setEditorSourceMode } from './extensions/editor-mode-context.ts';
+import { FrozenTableHeaders } from './extensions/frozen-table-headers.ts';
 import { sharedExtensions } from './extensions/shared.ts';
 import { uploadDecorationPlugin } from './image-upload/index.ts';
 import { getMountId } from './mount-id-registry';
 import { mountTiptapEditorPromise } from './mount-promise';
 import { markUserTyping } from './observers';
+import { publishSelectionContext, selectionSnapshotFromWysiwyg } from './selection-context';
 import {
   publishSelectionStats,
   SELECTION_STATS_DEBOUNCE_MS,
   selectionStatsFromWysiwyg,
 } from './selection-stats';
+import { createSidebarAwareHandleDrop, openSidebarDropPayload } from './sidebar-drop';
 import { TableCellHandles } from './table-controls/TableCellHandles';
 import { attachTypingBurstDetector } from './typing-burst-detector';
 import { getEditorView } from './utils/get-editor-view';
+import { walkCurrencyExtension } from './walk-currency-extension';
 
 function renderCursor(user: Record<string, string>): HTMLElement {
   const cursor = document.createElement('span');
@@ -98,6 +104,37 @@ interface TiptapEditorProps {
 
 type ClipboardState = ReturnType<typeof buildClipboardState>;
 
+type EditorContentBindingState = Editor & {
+  contentComponent: unknown | null;
+  isEditorContentInitialized: boolean;
+};
+
+function hasEditorContentBindingState(editor: Editor): editor is EditorContentBindingState {
+  return 'contentComponent' in editor && 'isEditorContentInitialized' in editor;
+}
+
+function repairDetachedEditorContent(editor: Editor, portalTarget: HTMLElement): boolean {
+  const view = getEditorView(editor);
+  if (!view || portalTarget.contains(view.dom)) return false;
+
+  if (!hasEditorContentBindingState(editor)) {
+    console.warn(
+      '[TiptapEditor] TipTap EditorContent binding fields missing; detached editor repair skipped',
+    );
+    return false;
+  }
+
+  const editorWithContent = editor;
+  if (editorWithContent.contentComponent == null) return false;
+
+  try {
+    view.setProps({ nodeViews: {} });
+  } catch {}
+  editorWithContent.contentComponent = null;
+  editorWithContent.isEditorContentInitialized = false;
+  return true;
+}
+
 type ProsemirrorMapping = ReturnType<typeof initProseMirrorDoc>['mapping'];
 
 function buildClipboardState() {
@@ -117,10 +154,39 @@ interface BuildEditorOptionsArgs {
   clipboard: ClipboardState;
   ctorStart: number;
   prebuiltMapping?: ProsemirrorMapping;
+  onWedged?: (detail: WedgeDetail) => void;
+  onSidebarDrop?: (payload: SidebarDragPayload) => void;
 }
 
-function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
-  const { provider, placeholder, prebuiltMapping } = args;
+interface PrewarmBoundCollaboration {
+  collaboration: AnyExtension;
+  guard: AnyExtension[];
+}
+
+function buildPrewarmBoundCollaboration(
+  provider: HocuspocusProvider,
+  prebuiltMapping: ProsemirrorMapping | undefined,
+): PrewarmBoundCollaboration {
+  if (!prebuiltMapping) {
+    return { collaboration: Collaboration.configure({ document: provider.document }), guard: [] };
+  }
+  return {
+    collaboration: Collaboration.configure({
+      document: provider.document,
+      ySyncOptions: { mapping: prebuiltMapping },
+    }),
+    guard: [
+      walkCurrencyExtension({
+        fragment: provider.document.getXmlFragment('default'),
+        docName: provider.configuration.name ?? '',
+      }),
+    ],
+  };
+}
+
+export function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
+  const { provider, placeholder, prebuiltMapping, onWedged } = args;
+  const { collaboration, guard } = buildPrewarmBoundCollaboration(provider, prebuiltMapping);
   return [
     ...sharedExtensions.map((ext) => {
       if (ext.name === 'link' || ext.name === 'wikiLink' || ext.name === 'jsxComponent') {
@@ -132,10 +198,7 @@ function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
       placeholder: placeholder ?? "Type '/' for commands",
       showOnlyCurrent: true,
     }),
-    Collaboration.configure({
-      document: provider.document,
-      ...(prebuiltMapping ? { ySyncOptions: { mapping: prebuiltMapping } } : {}),
-    }),
+    collaboration,
     Extension.create({
       name: 'imageUploadDecoration',
       addProseMirrorPlugins() {
@@ -158,6 +221,20 @@ function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
         ];
       },
     }),
+    Extension.create({
+      name: 'bindingStalenessGuard',
+      addProseMirrorPlugins() {
+        return [
+          bindingStalenessGuardPlugin({
+            fragment: provider.document.getXmlFragment('default'),
+            docName: provider.configuration.name ?? '',
+            onWedged: onWedged ?? (() => {}),
+          }),
+        ];
+      },
+    }),
+    ...guard,
+    FrozenTableHeaders,
   ];
 }
 
@@ -195,7 +272,7 @@ function buildEditorOptions(args: BuildEditorOptionsArgs): Partial<EditorOptions
       clipboardTextSerializer: (slice, view) => clipboard.text(slice, view),
       clipboardSerializer: clipboard.html.serializer,
       handlePaste: (view, event) => clipboard.paste(view, event),
-      handleDrop: (view, event) => clipboard.drop(view, event as DragEvent),
+      handleDrop: createSidebarAwareHandleDrop(clipboard.drop, args.onSidebarDrop),
     },
     extensions: wrapExtensionsWithTiming(buildExtensionList(args)),
   };
@@ -206,6 +283,8 @@ interface BuildPatternDConstructorOptionsArgs {
   placeholder?: string;
   clipboard: ClipboardState;
   ctorStart: number;
+  onWedged?: (detail: WedgeDetail) => void;
+  onSidebarDrop?: (payload: SidebarDragPayload) => void;
 }
 
 type PatternDConstructorOptions = Partial<EditorOptions> & { element: null };
@@ -213,14 +292,30 @@ type PatternDConstructorOptions = Partial<EditorOptions> & { element: null };
 export function buildPatternDConstructorOptions(
   args: BuildPatternDConstructorOptionsArgs,
 ): PatternDConstructorOptions {
-  const { provider, placeholder, clipboard, ctorStart } = args;
-  const baseExtensions = buildExtensionList({ provider, placeholder, clipboard, ctorStart });
-  const schema = getSchema(baseExtensions);
+  const { provider, placeholder, clipboard, ctorStart, onWedged, onSidebarDrop } = args;
   const fragment = provider.document.getXmlFragment('default');
-  const { doc: prebuiltDoc, mapping: prebuiltMapping } = initProseMirrorDoc(fragment, schema);
+  const prebuiltMapping: ProsemirrorMapping = new Map();
+  const baseOptions = buildEditorOptions({
+    provider,
+    placeholder,
+    clipboard,
+    ctorStart,
+    prebuiltMapping,
+    onWedged,
+    onSidebarDrop,
+  });
+  const baseOnBeforeCreate = baseOptions.onBeforeCreate;
   return {
-    ...buildEditorOptions({ provider, placeholder, clipboard, ctorStart, prebuiltMapping }),
-    content: prebuiltDoc.toJSON(),
+    ...baseOptions,
+    onBeforeCreate: (props) => {
+      baseOnBeforeCreate?.(props);
+      const { editor } = props;
+      const { doc, mapping } = initProseMirrorDoc(fragment, editor.schema);
+      mapping.forEach((node, key) => {
+        prebuiltMapping.set(key, node);
+      });
+      editor.options.content = doc.toJSON();
+    },
     element: null,
   };
 }
@@ -234,7 +329,7 @@ export const TiptapEditor: FC<TiptapEditorProps> = ({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const flashStateRef = useRef(INITIAL_FLASH_STATE);
   const identity = useIdentity();
-  const { principal, activeDocName } = useDocumentContext();
+  const { principal, activeDocName, recycleDocument, openTarget } = useDocumentContext();
   const docName = provider.configuration.name ?? '';
 
   const [clipboard] = useState(buildClipboardState);
@@ -247,6 +342,13 @@ export const TiptapEditor: FC<TiptapEditorProps> = ({
         placeholder,
         clipboard,
         ctorStart,
+        onWedged: ({ externalSeq, appliedSeq }) => {
+          mark('ok/editor/binding-wedge-recycle', { docName, externalSeq, appliedSeq });
+          recycleDocument(docName);
+        },
+        onSidebarDrop: (payload) => {
+          openSidebarDropPayload(payload, openTarget);
+        },
       }),
     );
     return {
@@ -312,6 +414,7 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
   portalTarget,
 }) => {
   const portalSlotRef = useRef<HTMLDivElement | null>(null);
+  const [editorContentRevision, setEditorContentRevision] = useState(0);
   useLayoutEffect(() => {
     const slot = portalSlotRef.current;
     if (!slot) return;
@@ -322,6 +425,12 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
       }
     };
   }, [portalTarget]);
+
+  useEffect(() => {
+    if (repairDetachedEditorContent(editor, portalTarget)) {
+      setEditorContentRevision((revision) => revision + 1);
+    }
+  }, [editor, portalTarget]);
   useEffect(() => {
     const docName = provider.configuration.name ?? null;
     setEditorDocName(editor, docName);
@@ -344,6 +453,7 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
     const publish = () => {
       timer = null;
       publishSelectionStats(docName, 'wysiwyg', selectionStatsFromWysiwyg(editor));
+      publishSelectionContext(docName, 'wysiwyg', selectionSnapshotFromWysiwyg(editor, docName));
     };
     const schedule = () => {
       if (timer) clearTimeout(timer);
@@ -357,6 +467,7 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
       editor.off('selectionUpdate', schedule);
       editor.off('update', schedule);
       publishSelectionStats(docName, 'wysiwyg', null);
+      publishSelectionContext(docName, 'wysiwyg', null);
     };
   }, [editor, provider]);
 
@@ -789,7 +900,11 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
       <div ref={portalSlotRef} style={{ display: 'contents' }} />
       {createPortal(
         // biome-ignore lint/plugin/no-unportaled-editor-content: canonical portaled site — H6 fix per PRECEDENTS.md #44
-        <EditorContent editor={editor} className="tiptap-editor-portal-content h-full" />,
+        <EditorContent
+          key={editorContentRevision}
+          editor={editor}
+          className="tiptap-editor-portal-content h-full"
+        />,
         portalTarget,
       )}
       {/* Aria-live announcer for selection changes. Always in the DOM

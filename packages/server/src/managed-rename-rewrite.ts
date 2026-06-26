@@ -235,7 +235,7 @@ function recomputeRelativeImageHref(
   const assetFromRoot = posix.resolve(oldDirAnchored, pathPart).slice(1);
 
   let newRef = posix.relative(newDir === '.' ? '' : newDir, assetFromRoot);
-  if (!newRef) newRef = posix.basename(assetFromRoot);
+  newRef ||= posix.basename(assetFromRoot);
 
   if (pathPart.startsWith('./') && !newRef.startsWith('./') && !newRef.startsWith('../')) {
     newRef = `./${newRef}`;
@@ -278,7 +278,7 @@ function buildAssetHrefFromSource(
 
   const sourceDir = posix.dirname(sourceDocName);
   let nextHref = posix.relative(sourceDir === '.' ? '' : sourceDir, newAssetPath);
-  if (!nextHref) nextHref = posix.basename(newAssetPath);
+  nextHref ||= posix.basename(newAssetPath);
 
   if (pathPart.startsWith('./') && !nextHref.startsWith('./') && !nextHref.startsWith('../')) {
     nextHref = `./${nextHref}`;
@@ -317,7 +317,7 @@ function recomputeRelativeMarkdownHref(
   let relativePath = keepsRootPrefix
     ? `/${newDocName}`
     : posix.relative(sourceDir === '.' ? '' : sourceDir, newDocName);
-  if (!relativePath) relativePath = posix.basename(newDocName);
+  relativePath ||= posix.basename(newDocName);
 
   if (pathPart.endsWith('.mdx')) {
     relativePath += '.mdx';

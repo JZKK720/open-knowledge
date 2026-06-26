@@ -48,7 +48,7 @@ export function LargeFileEditorState({ docName, size, limit, backNav }: LargeFil
         </h2>
         <p className="max-w-md text-sm text-muted-foreground">
           <Trans>
-            {docName} is {formatFileSize(size)}. Open Knowledge currently opens files up to{' '}
+            {docName} is {formatFileSize(size)}. OpenKnowledge currently opens files up to{' '}
             {formatFileSize(limit)}.
           </Trans>
         </p>

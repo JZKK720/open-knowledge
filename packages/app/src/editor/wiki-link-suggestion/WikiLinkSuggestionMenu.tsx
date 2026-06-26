@@ -1,7 +1,18 @@
 import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
+import { FilePlus2 } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import type { WikiLinkSuggestionItem } from '../extensions/wiki-link-suggestion';
+import { getFileIcon } from '../registry/file-icons';
+
+function itemIcon(item: WikiLinkSuggestionItem) {
+  if (item.kind === 'create') {
+    return <FilePlus2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
+  }
+  const assetExt = item.kind === 'asset' ? (item.path.split('.').pop() ?? '') : undefined;
+  const Icon = getFileIcon({ kind: item.kind, assetExt });
+  return <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
+}
 
 interface WikiLinkSuggestionMenuProps {
   items: WikiLinkSuggestionItem[];
@@ -70,7 +81,7 @@ export function WikiLinkSuggestionMenu({
         ref={containerRef}
         role="status"
         aria-live="polite"
-        className="w-64 rounded-lg border bg-popover p-2 shadow-md text-sm text-muted-foreground"
+        className="w-80 max-w-[min(28rem,90vw)] rounded-lg border bg-popover p-2 shadow-md text-sm text-muted-foreground"
         style={{ maxHeight: 'var(--suggestion-menu-max-height, 40vh)' }}
         onMouseDown={preventFocusSteal}
       >
@@ -97,7 +108,7 @@ export function WikiLinkSuggestionMenu({
         ref={containerRef}
         role="status"
         aria-live="polite"
-        className="w-64 rounded-lg border bg-popover p-2 shadow-md text-sm text-muted-foreground"
+        className="w-80 max-w-[min(28rem,90vw)] rounded-lg border bg-popover p-2 shadow-md text-sm text-muted-foreground"
         style={{ maxHeight: 'var(--suggestion-menu-max-height, 40vh)' }}
         onMouseDown={preventFocusSteal}
       >
@@ -117,7 +128,7 @@ export function WikiLinkSuggestionMenu({
       aria-activedescendant={activeDescendant}
       tabIndex={-1}
       onMouseDown={preventFocusSteal}
-      className="w-64 overflow-y-auto subtle-scrollbar rounded-lg border bg-popover p-1 shadow-md"
+      className="w-80 max-w-[min(28rem,90vw)] overflow-y-auto subtle-scrollbar rounded-lg border bg-popover p-1 shadow-md"
       style={{ maxHeight: 'var(--suggestion-menu-max-height, 40vh)' }}
     >
       {/*
@@ -177,7 +188,7 @@ export function WikiLinkSuggestionMenu({
             role="option"
             aria-selected={isSelected}
             data-selected={isSelected}
-            className={`flex w-full flex-col rounded-md px-2 py-1.5 text-sm text-left ${
+            className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-sm text-left ${
               isSelected ? 'bg-accent text-accent-foreground' : ''
             }`}
             onMouseDown={(e) => {
@@ -185,18 +196,32 @@ export function WikiLinkSuggestionMenu({
               onSelect(item);
             }}
           >
-            <span className="truncate font-medium">
-              {item.kind === 'create' ? item.actionLabel : item.title}
+            <span className="mt-0.5">{itemIcon(item)}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate font-medium">
+                {item.kind === 'create' ? item.actionLabel : item.title}
+              </span>
+              {/*
+                Secondary path/docName line. Wrap (break-all + clamp) rather
+                than end-truncate so the discriminating tail of a long path
+                stays visible — the wider popup gives it room.
+              */}
+              {item.kind === 'page' && item.title !== item.docName && (
+                <span className="line-clamp-2 break-all text-xs text-muted-foreground">
+                  {item.docName}
+                </span>
+              )}
+              {item.kind === 'asset' && (
+                <span className="line-clamp-2 break-all text-xs text-muted-foreground">
+                  {item.path}
+                </span>
+              )}
+              {item.kind === 'create' && (
+                <span className="line-clamp-2 break-all text-xs text-muted-foreground">
+                  {item.docName}.md
+                </span>
+              )}
             </span>
-            {item.kind === 'page' && item.title !== item.docName && (
-              <span className="truncate text-xs text-muted-foreground">{item.docName}</span>
-            )}
-            {item.kind === 'asset' && (
-              <span className="truncate text-xs text-muted-foreground">{item.path}</span>
-            )}
-            {item.kind === 'create' && (
-              <span className="truncate text-xs text-muted-foreground">{item.docName}.md</span>
-            )}
           </button>
         );
       })}

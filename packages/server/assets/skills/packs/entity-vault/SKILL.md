@@ -1,7 +1,7 @@
 ---
 name: open-knowledge-pack-entity-vault
 description: "How to work in an Entity vault project (the `entity-vault` starter pack, GBrain-compatible): a typed-entity vault of people, companies, meetings, and concepts, each a dossier with a rewritable summary plus an append-only timeline. Read when the project has these folders. Carries the dossier convention and entity-extraction behaviors so that guidance does not live inside template bodies or folder descriptions. Complements the platform `open-knowledge` skill; does not replace it."
-compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires Open Knowledge MCP server. Installed project-local by `ok seed --pack entity-vault`."
+compatibility: "Claude Code, Claude Desktop, Claude Cowork, Claude.ai web. Requires OpenKnowledge MCP server. Installed project-local by `ok seed --pack entity-vault`."
 metadata:
   pack: "entity-vault"
   author: "Inkeep"

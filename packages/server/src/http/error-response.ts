@@ -33,12 +33,10 @@ export type HttpErrorStatus =
 
 let _apiErrorCounter: Counter | null = null;
 export function apiErrorCounter(): Counter {
-  if (!_apiErrorCounter) {
-    _apiErrorCounter = getMeter().createCounter('ok.api.error.count', {
-      description: 'API error responses by problem type and handler',
-      unit: '1',
-    });
-  }
+  _apiErrorCounter ||= getMeter().createCounter('ok.api.error.count', {
+    description: 'API error responses by problem type and handler',
+    unit: '1',
+  });
   return _apiErrorCounter;
 }
 

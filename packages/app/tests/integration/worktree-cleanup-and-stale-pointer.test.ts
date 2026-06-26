@@ -26,6 +26,7 @@ describe('git worktree remove cleans up the per-worktree shadow (FR6)', () => {
     const shadowHead = resolve(adminDir, 'ok/HEAD');
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: handle.worktreePath,
       port: 0,
@@ -67,6 +68,7 @@ describe('MalformedGitPointerError at boot when .git pointer is stale (FR7)', ()
     let caught: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir: projectRoot,
         port: 0,
@@ -90,6 +92,7 @@ describe('MalformedGitPointerError at boot when .git pointer is stale (FR7)', ()
     handle = createLinkedWorktree({ seedOkScaffold: true });
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: handle.worktreePath,
       port: 0,
@@ -119,6 +122,7 @@ describe('MalformedGitPointerError at boot when .git pointer is stale (FR7)', ()
     let firstAttemptError: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir: projectRoot,
         port: 0,
@@ -136,6 +140,7 @@ describe('MalformedGitPointerError at boot when .git pointer is stale (FR7)', ()
     mkdirSync(resolve(projectRoot, '.git'), { recursive: true });
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: projectRoot,
       port: 0,

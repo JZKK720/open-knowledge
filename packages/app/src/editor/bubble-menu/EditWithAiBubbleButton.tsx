@@ -1,15 +1,13 @@
-import { Trans, useLingui } from '@lingui/react/macro';
+import { Trans } from '@lingui/react/macro';
 import { isMacOS } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
 import { Sparkles } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
-import { toast } from 'sonner';
-import { useOpenInAgentMenuRequest } from '@/components/handoff/OpenInAgentMenuRequestContext';
+import { emitOpenAskAiComposer } from '@/components/ask-ai-composer-events';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
-import { serializeWysiwygSelection } from '../edit-with-ai-selection.ts';
-import { getEditorDocName } from '../extensions/doc-context.ts';
 
 function isNativeTextControl(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -18,35 +16,21 @@ function isNativeTextControl(target: EventTarget | null): boolean {
 }
 
 export function EditWithAiBubbleButton({
-  editor,
+  editor: _editor,
   shortcutEnabled = false,
 }: {
   editor: Editor;
   shortcutEnabled?: boolean;
 }): ReactNode {
-  const { t } = useLingui();
-  const { openSelection } = useOpenInAgentMenuRequest();
   const isMac = isMacOS();
+  const isEmbedded = useIsEmbedded();
+  if (!isMac || isEmbedded) return null;
 
-  const openSelectionMenu = (): void => {
-    let selectionMarkdown: string;
-    try {
-      selectionMarkdown = serializeWysiwygSelection(editor);
-    } catch (err) {
-      console.error('Edit with AI: could not read the selection', err);
-      toast.error(t`Couldn't read the selection — please try again.`);
-      return;
-    }
+  return <EditWithAiBubbleMenu shortcutEnabled={shortcutEnabled} />;
+}
 
-    openSelection({
-      docName: getEditorDocName(editor),
-      instruction: '',
-      selectionMarkdown,
-    });
-  };
-
+function EditWithAiBubbleMenu({ shortcutEnabled }: { shortcutEnabled: boolean }): ReactNode {
   useEffect(() => {
-    if (!isMac) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (!shortcutEnabled) return;
       if (!matchesKeyboardShortcut(event, 'edit-with-ai')) return;
@@ -55,19 +39,12 @@ export function EditWithAiBubbleButton({
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      openSelectionMenu();
+      emitOpenAskAiComposer();
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [
-    isMac,
-    shortcutEnabled,
-    // biome-ignore lint/correctness/useExhaustiveDependencies: openSelectionMenu is render-bound; re-subscribing keeps the handler fresh for the current editor selection.
-    openSelectionMenu,
-  ]);
-
-  if (!isMac) return null;
+  }, [shortcutEnabled]);
 
   return (
     <>
@@ -78,11 +55,11 @@ export function EditWithAiBubbleButton({
         size="sm"
         data-testid="edit-with-ai-bubble-button"
         className="gap-1 px-2 text-sm font-medium text-accent-foreground/80"
-        onClick={openSelectionMenu}
+        onClick={() => emitOpenAskAiComposer()}
       >
         <Sparkles className="size-3.5" aria-hidden="true" />
         <span>
-          <Trans>Edit with AI</Trans>
+          <Trans>Ask AI</Trans>
         </span>
       </Button>
     </>

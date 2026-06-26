@@ -26,6 +26,10 @@ describe('buildGitEnv', () => {
     expect(env.LC_ALL).toBe('C');
   });
 
+  test('disables terminal prompts (no-TTY server-spawned git)', () => {
+    expect(buildGitEnv().GIT_TERMINAL_PROMPT).toBe('0');
+  });
+
   test('preserves PATH so a bare-command credential helper resolves', () => {
     withEnv('PATH', '/custom/bin:/usr/bin', () => {
       expect(buildGitEnv().PATH).toBe('/custom/bin:/usr/bin');
@@ -42,6 +46,16 @@ describe('buildGitEnv', () => {
     withEnv('ELECTRON_RUN_AS_NODE', undefined, () => {
       expect('ELECTRON_RUN_AS_NODE' in buildGitEnv()).toBe(false);
     });
+  });
+
+  test('emits OK_GH_TOKEN/OK_GH_TOKEN_HOST only when a relay token is supplied', () => {
+    const without = buildGitEnv();
+    expect('OK_GH_TOKEN' in without).toBe(false);
+    expect('OK_GH_TOKEN_HOST' in without).toBe(false);
+
+    const withToken = buildGitEnv({ token: 'gho_relayed', host: 'github.com' });
+    expect(withToken.OK_GH_TOKEN).toBe('gho_relayed');
+    expect(withToken.OK_GH_TOKEN_HOST).toBe('github.com');
   });
 });
 

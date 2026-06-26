@@ -1,4 +1,4 @@
-// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge-legacy/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
+// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 import {
   type HubEntry,
   HubsSuccessSchema,
@@ -42,6 +42,8 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { hashFromDocName } from '@/lib/doc-hash';
+import { openExternalUrl } from '@/lib/external-link';
+import { cn } from '@/lib/utils';
 
 const FULLSCREEN_HUB_LIMIT = 50;
 
@@ -283,6 +285,7 @@ export function GraphPanel({ activeDocName }: { activeDocName: string }) {
     pagesBySlug,
     pagesByBasename,
   } = usePageList();
+  const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
   const [isExpanded, setIsExpanded] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState<FullscreenGraphMode>('explore');
   const [orphanMode, setOrphanMode] = useState<OrphanMode>('both');
@@ -388,7 +391,7 @@ export function GraphPanel({ activeDocName }: { activeDocName: string }) {
                 actionLabel: t`Open link`,
                 secondaryLabel: selectedNode.url,
                 onAction: () => {
-                  window.open(selectedNode.url, '_blank', 'noopener,noreferrer');
+                  openExternalUrl(selectedNode.url);
                   setIsExpanded(false);
                 },
               };
@@ -396,13 +399,35 @@ export function GraphPanel({ activeDocName }: { activeDocName: string }) {
   return (
     <Panel className={isExpanded ? 'fixed inset-0 z-50 overflow-hidden bg-background' : undefined}>
       <PanelHeader
-        className={
+        data-electron-drag={isExpanded && isElectronHost ? '' : undefined}
+        className={cn(
           isExpanded
-            ? 'flex-wrap gap-3 pl-[var(--ok-titlebar-reserve-left,1rem)]'
-            : 'flex-wrap gap-3'
-        }
+            ? 'mt-2 h-12 gap-3 py-0 pl-[var(--ok-titlebar-reserve-left,1rem)]'
+            : 'flex-wrap gap-3',
+          isExpanded && isElectronHost && '[-webkit-app-region:drag]',
+        )}
       >
-        <div className="flex min-w-0 items-center gap-1.5">
+        {/* Fullscreen header anatomy (expanded only):
+            • `pl-[var(--ok-titlebar-reserve-left,1rem)]` reserves the macOS
+              traffic-light footprint on the chrome row (precedent #49). The
+              arbitrary `pl-` wins over PanelHeader's base `px-4` by Tailwind
+              emit order (measured: resolves to 78px under electron-mode); the
+              `,1rem` fallback keeps web layout at the base `px-4`. Because `pl-`
+              *replaces* the base `px-4` rather than stacking on it, 78px alone
+              leaves the title touching the buttons — the title cluster adds
+              `ml-4` below for the 16px of breathing room (94px total, measured).
+            • `mt-2 h-12 py-0` land the row on the editor chrome midline: the
+              overlay is pinned to the whole window, so it starts at the raw
+              window top, 8px above EditorHeader's SidebarInset-`m-2` band.
+              `mt-2` reproduces that inset, `h-12` matches the 48px band, `py-0`
+              drops the inherited `py-3` so content centers in the full band —
+              title at y=32, exactly where the traffic lights are tuned (measured).
+            • Electron: the header row is the window-drag region (so graph mode
+              stays draggable); the controls cluster opts back out below. */}
+        <div
+          data-slot="graph-title-cluster"
+          className={cn('flex min-w-0 items-center gap-1.5', isExpanded && 'ml-4')}
+        >
           <PanelTitle>
             <Trans>Graph</Trans>
           </PanelTitle>
@@ -417,7 +442,13 @@ export function GraphPanel({ activeDocName }: { activeDocName: string }) {
             </div>
           ) : null}
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div
+          data-slot="graph-controls"
+          className={cn(
+            'ml-auto flex items-center gap-2',
+            isExpanded && isElectronHost && '[&>*]:[-webkit-app-region:no-drag]',
+          )}
+        >
           {isExpanded ? (
             <ToggleGroup
               type="single"

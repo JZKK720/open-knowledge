@@ -52,6 +52,7 @@ let baseUrl: string;
 beforeAll(() => {
   testServer = Bun.serve({
     port: 0,
+    hostname: '127.0.0.1',
     fetch(req) {
       const url = new URL(req.url);
       if (url.pathname === '/api/history') {
@@ -74,7 +75,7 @@ beforeAll(() => {
       return new Response('Not found', { status: 404 });
     },
   });
-  baseUrl = `http://localhost:${testServer.port}`;
+  baseUrl = `http://127.0.0.1:${testServer.port}`;
 });
 
 afterAll(() => {

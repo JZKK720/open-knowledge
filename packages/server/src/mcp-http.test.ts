@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import { type AddressInfo, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { type Config, ConfigSchema } from './config/schema.ts';
+import { getFreeLoopbackPort } from './loopback-rig-test-helpers.ts';
 import { MCP_CONNECTION_ID_HEADER } from './mcp/agent-identity.ts';
 import {
   createMcpHttpHandler,
@@ -21,22 +21,12 @@ interface SessionHarness {
   cleanup: () => Promise<void>;
 }
 
-async function getFreePort(): Promise<number> {
-  return new Promise((res) => {
-    const s = createNetServer();
-    s.listen(0, () => {
-      const port = (s.address() as AddressInfo).port;
-      s.close(() => res(port));
-    });
-  });
-}
-
 async function bootHandler(
   config: Config,
   handlerOptions: Partial<Pick<McpHttpHandlerOptions, 'log' | 'maxSessions' | 'sessionTtlMs'>> = {},
 ): Promise<SessionHarness> {
   const contentDir = mkdtempSync(join(tmpdir(), 'ok-mcp-http-cfg-'));
-  const port = await getFreePort();
+  const port = await getFreeLoopbackPort();
   let handler: McpHttpHandler | null = null;
   let httpServer: HttpServer | null = null;
   try {
@@ -44,7 +34,7 @@ async function bootHandler(
       contentDir,
       projectDir: contentDir,
       config,
-      getServerUrl: () => `http://localhost:${port}`,
+      getServerUrl: () => `http://127.0.0.1:${port}`,
       ...handlerOptions,
     });
 
@@ -65,7 +55,7 @@ async function bootHandler(
     });
     await new Promise<void>((res) => {
       // biome-ignore lint/style/noNonNullAssertion: httpServer is set inside the try
-      httpServer!.listen(port, () => res());
+      httpServer!.listen(port, '127.0.0.1', () => res());
     });
   } catch (err) {
     if (httpServer) await new Promise<void>((res) => httpServer?.close(() => res()));
@@ -93,7 +83,7 @@ interface InitializedSession {
 }
 
 async function openMcpSession(port: number): Promise<InitializedSession> {
-  const init = await fetch(`http://localhost:${port}/mcp`, {
+  const init = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -118,7 +108,7 @@ async function openMcpSession(port: number): Promise<InitializedSession> {
   };
   const protocolVersion = initBody.result?.protocolVersion ?? MCP_PROTOCOL_VERSION;
 
-  const initialized = await fetch(`http://localhost:${port}/mcp`, {
+  const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -151,7 +141,7 @@ test('active MCP session cap refuses new sessions before allocation', async () =
 
   await openMcpSession(harness.port);
 
-  const second = await fetch(`http://localhost:${harness.port}/mcp`, {
+  const second = await fetch(`http://127.0.0.1:${harness.port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -181,7 +171,7 @@ test('mcp-tool-path-traversal: explicit cwd outside configured project root is r
   const session = await openMcpSession(harness.port);
 
   const callExec = async (cwd: string) =>
-    fetch(`http://localhost:${harness.port}/mcp`, {
+    fetch(`http://127.0.0.1:${harness.port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -217,7 +207,7 @@ test('PRD-6659: tools/call write with an invalid position returns field name + a
 
   const session = await openMcpSession(harness.port);
 
-  const callRes = await fetch(`http://localhost:${harness.port}/mcp`, {
+  const callRes = await fetch(`http://127.0.0.1:${harness.port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -254,7 +244,7 @@ test('PRD-6659: tools/call write with an invalid position returns field name + a
 test('forwarded connectionId header reaches /api/agent-write-md as agentId', async () => {
   const config: Config = ConfigSchema.parse({});
   const contentDir = mkdtempSync(join(tmpdir(), 'ok-mcp-http-cid-'));
-  const port = await getFreePort();
+  const port = await getFreeLoopbackPort();
   let handler: McpHttpHandler | null = null;
   let httpServer: HttpServer | null = null;
   let capturedAgentId: string | undefined;
@@ -264,7 +254,7 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
       contentDir,
       projectDir: contentDir,
       config,
-      getServerUrl: () => `http://localhost:${port}`,
+      getServerUrl: () => `http://127.0.0.1:${port}`,
     });
 
     httpServer = createHttpServer((req, res) => {
@@ -299,12 +289,12 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
     });
     await new Promise<void>((res) => {
       // biome-ignore lint/style/noNonNullAssertion: httpServer set above
-      httpServer!.listen(port, () => res());
+      httpServer!.listen(port, '127.0.0.1', () => res());
     });
 
     const forwarded = 'forwarded-keepalive-id-1234';
 
-    const init = await fetch(`http://localhost:${port}/mcp`, {
+    const init = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -328,7 +318,7 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
     const initBody = (await init.json()) as { result?: { protocolVersion?: string } };
     const protocolVersion = initBody.result?.protocolVersion ?? MCP_PROTOCOL_VERSION;
 
-    const initialized = await fetch(`http://localhost:${port}/mcp`, {
+    const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -340,7 +330,7 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
     });
     expect(initialized.status).toBe(202);
 
-    const call = await fetch(`http://localhost:${port}/mcp`, {
+    const call = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -376,7 +366,7 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
 test('invalid connectionId header is ignored — session falls back to a fresh UUID', async () => {
   const config: Config = ConfigSchema.parse({});
   const contentDir = mkdtempSync(join(tmpdir(), 'ok-mcp-http-cid-bad-'));
-  const port = await getFreePort();
+  const port = await getFreeLoopbackPort();
   let handler: McpHttpHandler | null = null;
   let httpServer: HttpServer | null = null;
   let capturedAgentId: string | undefined;
@@ -387,7 +377,7 @@ test('invalid connectionId header is ignored — session falls back to a fresh U
       contentDir,
       projectDir: contentDir,
       config,
-      getServerUrl: () => `http://localhost:${port}`,
+      getServerUrl: () => `http://127.0.0.1:${port}`,
       log: {
         warn: (obj, msg) => {
           warnCalls.push({ obj, msg });
@@ -427,12 +417,12 @@ test('invalid connectionId header is ignored — session falls back to a fresh U
     });
     await new Promise<void>((res) => {
       // biome-ignore lint/style/noNonNullAssertion: httpServer set above
-      httpServer!.listen(port, () => res());
+      httpServer!.listen(port, '127.0.0.1', () => res());
     });
 
     const forwarded = 'bad value with spaces!';
 
-    const init = await fetch(`http://localhost:${port}/mcp`, {
+    const init = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -454,7 +444,7 @@ test('invalid connectionId header is ignored — session falls back to a fresh U
     const sessionId = init.headers.get('mcp-session-id') as string;
     const initBody = (await init.json()) as { result?: { protocolVersion?: string } };
     const protocolVersion = initBody.result?.protocolVersion ?? MCP_PROTOCOL_VERSION;
-    await fetch(`http://localhost:${port}/mcp`, {
+    await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -465,7 +455,7 @@ test('invalid connectionId header is ignored — session falls back to a fresh U
       body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
     });
 
-    const call = await fetch(`http://localhost:${port}/mcp`, {
+    const call = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: 'POST',
       headers: {
         accept: 'application/json, text/event-stream',
@@ -516,7 +506,7 @@ test('inactive MCP sessions expire and return 404 on later use', async () => {
   const session = await openMcpSession(harness.port);
   await wait(350);
 
-  const expired = await fetch(`http://localhost:${harness.port}/mcp`, {
+  const expired = await fetch(`http://127.0.0.1:${harness.port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',

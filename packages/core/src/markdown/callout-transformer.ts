@@ -204,7 +204,7 @@ export function calloutTransformerPlugin() {
         opener = inspectOpenerLine(source, node.position.start.offset);
         if (opener) {
           title = opener.title;
-          if (!type) type = normalizeType(opener.rawType);
+          type ||= normalizeType(opener.rawType);
         }
       }
 

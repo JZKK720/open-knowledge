@@ -20,6 +20,14 @@ function resolvedContentDir(contentDir: string): string {
   }
 }
 
+/** Sidebar-scoped locator for the seeded doc's tree row. The handoff entry
+ *  point lives on this row's right-click context menu. */
+function seededDocRow(page: Page) {
+  return page
+    .locator('[data-slot="sidebar-container"]')
+    .getByRole('treeitem', { name: `${DOC_NAME}.md`, exact: true });
+}
+
 async function seedAndNavigate(
   page: Page,
   api: { seedDocs: (docs: Array<{ name: string; markdown: string }>) => Promise<void> },
@@ -28,14 +36,22 @@ async function seedAndNavigate(
   await page.goto(`/#/${DOC_NAME}`);
   await waitForActiveProviderSynced(page);
   await page.waitForSelector('.ProseMirror');
-  const trigger = page.getByTestId('open-in-agent-trigger');
-  await expect(trigger).toBeVisible();
-  await expect(trigger).toBeEnabled();
+  await expect(seededDocRow(page)).toBeVisible({ timeout: 15_000 });
 }
 
-async function openDropdown(page: Page): Promise<void> {
-  await page.getByTestId('open-in-agent-trigger').click();
-  await expect(page.getByTestId('open-in-agent-menu')).toBeVisible();
+async function openHandoffSubmenu(page: Page): Promise<void> {
+  await seededDocRow(page).click({ button: 'right' });
+  const submenuTrigger = page.getByRole('menuitem', { name: 'Open with AI' });
+  await expect(submenuTrigger).toBeVisible({ timeout: 10_000 });
+  await submenuTrigger.click();
+}
+
+/** Close any open file-tree context menu (Escape collapses the submenu then
+ *  the root menu). Used by the install-state-flip cell between probes. */
+async function closeHandoffMenu(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menuitem', { name: 'Open with AI' })).toHaveCount(0);
 }
 
 async function waitForProbeSettled(page: Page, host: 'electron' | 'web'): Promise<void> {
@@ -76,15 +92,14 @@ test.describe('handoff — 8-cell matrix', () => {
     await installHandoffMocks(page, cfg);
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
+    await waitForProbeSettled(page, 'electron');
+    await openHandoffSubmenu(page);
 
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-codex')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-cursor')).toBeVisible();
+    await expect(page.getByTestId('file-tree-open-in-claude-code')).toBeVisible();
+    await expect(page.getByTestId('file-tree-open-in-codex')).toBeVisible();
+    await expect(page.getByTestId('file-tree-open-in-cursor')).toBeVisible();
 
-    await expect(page.getByTestId('open-in-agent-item-claude-cowork')).toHaveCount(0);
-
-    await expect(page.getByTestId('open-in-agent-claude-web-fallback')).toHaveCount(0);
+    await expect(page.getByTestId('file-tree-open-in-claude-cowork')).toHaveCount(0);
   });
 
   test('cell 2: Electron Cursor two-step spawn → single prompt URL dispatch + success toast', async ({
@@ -101,8 +116,9 @@ test.describe('handoff — 8-cell matrix', () => {
     await installHandoffMocks(page, cfg);
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
-    await page.getByTestId('open-in-agent-item-cursor').click();
+    await waitForProbeSettled(page, 'electron');
+    await openHandoffSubmenu(page);
+    await page.getByTestId('file-tree-open-in-cursor').click();
 
     await expect
       .poll(async () => (await readCapturedHandoff(page)).handoffApiCalls.length, {
@@ -138,17 +154,19 @@ test.describe('handoff — 8-cell matrix', () => {
     await installHandoffMocks(page, cfg);
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
-    const codexRow = page.getByTestId('open-in-agent-item-codex');
+    await waitForProbeSettled(page, 'electron');
+    await openHandoffSubmenu(page);
+    await expect(page.getByTestId('file-tree-open-in-cursor')).toBeVisible();
+    const codexRow = page.getByTestId('file-tree-open-in-codex');
     await expect(codexRow).toHaveCount(0);
 
-    await page.keyboard.press('Escape');
-    await expect(page.getByTestId('open-in-agent-menu')).toBeHidden();
+    await closeHandoffMenu(page);
 
     await advanceHandoffFakeTime(page, 11_000);
     await updateElectronInstallMap(page, { claude: true, codex: true, cursor: true });
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
-    await openDropdown(page);
+    await openHandoffSubmenu(page);
     await expect(codexRow).toBeVisible({ timeout: 5_000 });
   });
 
@@ -166,12 +184,11 @@ test.describe('handoff — 8-cell matrix', () => {
     await installHandoffMocks(page, cfg);
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
     await waitForProbeSettled(page, 'web');
+    await openHandoffSubmenu(page);
 
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toBeVisible();
-    await expect(page.getByTestId('open-in-agent-item-claude-cowork')).toHaveCount(0);
-    await expect(page.getByTestId('open-in-agent-claude-web-fallback')).toHaveCount(0);
+    await expect(page.getByTestId('file-tree-open-in-claude-code')).toBeVisible();
+    await expect(page.getByTestId('file-tree-open-in-claude-cowork')).toHaveCount(0);
   });
 
   test('cell 5: Web Cursor happy path → POST /api/handoff (target=cursor, workspacePath) + cursor:// URL', async ({
@@ -188,10 +205,10 @@ test.describe('handoff — 8-cell matrix', () => {
     await installHandoffMocks(page, cfg);
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
     await waitForProbeSettled(page, 'web');
+    await openHandoffSubmenu(page);
 
-    await page.getByTestId('open-in-agent-item-cursor').click();
+    await page.getByTestId('file-tree-open-in-cursor').click();
 
     await expect
       .poll(async () => (await readCapturedHandoff(page)).handoffApiCalls.length, {
@@ -216,49 +233,7 @@ test.describe('handoff — 8-cell matrix', () => {
     expect(captured.anchorClicks.length).toBe(0);
   });
 
-  test('cell 6: Web Claude not installed — top-level "Open in claude.ai →" row dispatches https://claude.ai/new (v1)', async ({
-    page,
-    api,
-    workerServer,
-  }) => {
-    const cfg: HandoffMockConfig = {
-      host: 'web',
-      install: { claude: false, codex: true, cursor: false },
-      workerBaseURL: workerServer.baseURL,
-      workerContentDir: resolvedContentDir(workerServer.contentDir),
-    };
-    await installHandoffMocks(page, cfg);
-    await seedAndNavigate(page, api);
-
-    await openDropdown(page);
-    await waitForProbeSettled(page, 'web');
-
-    await expect(page.getByTestId('open-in-agent-item-claude-cowork')).toHaveCount(0);
-    await expect(page.getByTestId('open-in-agent-item-claude-code')).toHaveCount(0);
-    await expect(page.getByTestId('open-in-agent-item-cursor')).toHaveCount(0);
-    await expect(page.getByTestId('open-in-agent-item-codex')).toBeVisible();
-
-    const fallback = page.getByTestId('open-in-agent-claude-web-fallback');
-    await expect(fallback).toBeVisible();
-    await fallback.click();
-
-    await expect
-      .poll(async () => (await readCapturedHandoff(page)).anchorClicks.length, {
-        timeout: 5_000,
-      })
-      .toBe(1);
-    const captured = await readCapturedHandoff(page);
-    const u = new URL(captured.anchorClicks[0] as string);
-    expect(u.hostname).toBe('claude.ai');
-    expect(u.pathname).toBe('/new');
-    expect(u.searchParams.get('q')).toContain(
-      'using Open Knowledge. Open the OK editor in web view.',
-    );
-
-    await expect(page.getByText('Opened claude.ai in your browser.')).toBeVisible();
-  });
-
-  test('cell 7: Web empty-state — menu shows only the Claude web fallback row (v1-AC4)', async ({
+  test('cell 7: Web empty-state — every per-target row hidden, disabled "No installed agents found" hint shown, no claude.ai fallback', async ({
     page,
     api,
     workerServer,
@@ -278,13 +253,14 @@ test.describe('handoff — 8-cell matrix', () => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await openDropdown(page);
     await waitForProbeSettled(page, 'web');
+    await openHandoffSubmenu(page);
 
     for (const id of ['claude-cowork', 'claude-code', 'codex', 'cursor']) {
-      await expect(page.getByTestId(`open-in-agent-item-${id}`)).toHaveCount(0);
+      await expect(page.getByTestId(`file-tree-open-in-${id}`)).toHaveCount(0);
     }
-    await expect(page.getByTestId('open-in-agent-claude-web-fallback')).toBeVisible();
+    await expect(page.getByTestId('open-in-agent-claude-web-fallback')).toHaveCount(0);
+    await expect(page.getByTestId('file-tree-open-in-empty')).toBeVisible();
 
     expect(consoleErrors.filter((e) => !e.includes('net::') && !e.includes('favicon'))).toEqual([]);
 
@@ -320,8 +296,9 @@ test.describe('handoff — 8-cell matrix', () => {
     });
     await seedAndNavigate(page, api);
 
-    await openDropdown(page);
-    await page.getByTestId('open-in-agent-item-cursor').click();
+    await waitForProbeSettled(page, 'electron');
+    await openHandoffSubmenu(page);
+    await page.getByTestId('file-tree-open-in-cursor').click();
 
     await expect
       .poll(async () => (await readCapturedHandoff(page)).handoffApiCalls.length, {

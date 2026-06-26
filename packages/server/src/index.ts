@@ -41,9 +41,11 @@ export {
   type HocuspocusAuthToken,
   HocuspocusAuthTokenSchema,
   isHocuspocusAuthRejectionReason,
+  LINEAGE_EPOCH_KEY,
   parseAuthRejectionWire,
   parseHocuspocusAuthToken,
 } from './auth-token-schema.ts';
+export { AutoStartDisabledError } from './autostart.ts';
 export {
   type BacklinkEntry,
   BacklinkIndex,
@@ -100,11 +102,25 @@ export {
   detectClaudeDesktopPresence,
 } from './detect-claude-desktop.ts';
 export {
+  clearEmbeddingsKeyFromAllBackends,
+  createEmbeddingsSecretStore,
+  DEFAULT_EMBEDDINGS_DIMENSIONS,
+  describeStoredEmbeddingsKey,
+  EMBEDDINGS_API_KEY_ENV,
+  type EmbeddingsKeyReader,
+  type EmbeddingsKeyStore,
+  type EmbeddingsSecretStore,
+  FileEmbeddingsBackend,
+  makeLazyEmbeddingsKeyStore,
+  type ResolvedSemanticConfig,
+  readProjectLocalSemanticConfig,
+} from './embeddings/index.ts';
+export {
   applyExternalChange,
   createExternalChangeHandler,
   FILE_WATCHER_ORIGIN,
 } from './external-change.ts';
-export { createFileLogger, getLogFilePath, getLogsDir } from './file-logger.ts';
+export { createFileLogger, flushFileLogger, getLogFilePath, getLogsDir } from './file-logger.ts';
 export {
   type AsyncSubscription,
   assertNeverDiskEvent,
@@ -243,7 +259,6 @@ export {
   MCP_CONNECTION_ID_HEADER,
   sanitizeClientName,
 } from './mcp/agent-identity.ts';
-export { buildInstructions } from './mcp/instructions.ts';
 export { getCurrentMcpLogger, McpLogger, runWithMcpLogger } from './mcp/logger.ts';
 export { installPrettyZodErrors } from './mcp/pretty-zod-errors.ts';
 export { buildExecResult, type ExecStructuredResult } from './mcp/tools/exec.ts';
@@ -323,6 +338,7 @@ export {
   coercePackId,
   DEFAULT_PACK_ID,
   type FileEntry,
+  formatPackRationale,
   isKnownPackId,
   LOG_MD_TEMPLATE,
   listStarterPacks,
@@ -391,6 +407,21 @@ export {
   type WriterIdentity,
 } from './shadow-repo.ts';
 export {
+  countShadowObjects,
+  countStaleAgentWipRefs,
+  countWipRefs,
+  hasGcLogLatch,
+  type ShadowObjectStats,
+} from './shadow-repo-stats.ts';
+export {
+  createEphemeralProjectDir,
+  prepareSingleFileOpen,
+  SingleFileNotAFileError,
+  SingleFileNotFoundError,
+  SingleFileNotMarkdownError,
+  type SingleFileOpenPlan,
+} from './single-file-open.ts';
+export {
   type BuildAndOpenSkillOptions,
   type BuildAndOpenSkillResult,
   type BuildAndOpenSkillStatus,
@@ -458,6 +489,12 @@ export {
   spansCurrentPath,
   spansPreviousPath,
 } from './telemetry-file-sink.ts';
+export {
+  initToleranceTelemetryWriter,
+  isToleranceTelemetryEnabled,
+  type ToleranceFireLine,
+  teardownToleranceTelemetryWriter,
+} from './tolerance-telemetry-writer.ts';
 export {
   acquireUiLock,
   readUiLock,

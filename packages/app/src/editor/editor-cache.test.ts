@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { Compartment } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type { Editor } from '@tiptap/core';
@@ -213,11 +214,17 @@ interface CmHarness {
   spies: FakeCmViewSpies;
   providerSpies: FakeProviderSpies;
   factoryCallCount: number;
+  themeCompartment: Compartment;
+  wordWrapCompartment: Compartment;
+  placeholderCompartment: Compartment;
   factory: (container: FakeNode) => {
     view: EditorView;
     ydoc: Y.Doc;
     ytext: Y.Text;
     provider: HocuspocusProvider;
+    themeCompartment: Compartment;
+    wordWrapCompartment: Compartment;
+    placeholderCompartment: Compartment;
   };
 }
 
@@ -228,6 +235,9 @@ function makeCmHarness(docName: string): CmHarness {
   const { view, spies } = makeFakeCmView(viewDom);
   const { provider, spies: providerSpies } = makeFakeProvider(ydoc);
   const container = makeNode();
+  const themeCompartment = new Compartment();
+  const wordWrapCompartment = new Compartment();
+  const placeholderCompartment = new Compartment();
   let factoryCallCount = 0;
   const harness: CmHarness = {
     docName,
@@ -240,11 +250,22 @@ function makeCmHarness(docName: string): CmHarness {
     spies,
     providerSpies,
     factoryCallCount: 0,
+    themeCompartment,
+    wordWrapCompartment,
+    placeholderCompartment,
     factory: (ctr) => {
       factoryCallCount++;
       harness.factoryCallCount = factoryCallCount;
       ctr.appendChild(viewDom);
-      return { view, ydoc, ytext, provider };
+      return {
+        view,
+        ydoc,
+        ytext,
+        provider,
+        themeCompartment,
+        wordWrapCompartment,
+        placeholderCompartment,
+      };
     },
   };
   return harness;
@@ -858,6 +879,49 @@ describe('CM6 cache — lifecycle', () => {
     expect(entry.activeMountKey).toBe(h.docName);
   });
 
+  test('mount: stores the factory compartments on the entry and preserves them across cache-hit', () => {
+    const h = makeCmHarness('cm-doc-a');
+    const first = mountCmEditor({
+      docName: h.docName,
+      container: h.container as unknown as HTMLElement,
+      factory: h.factory as unknown as (el: HTMLElement) => ReturnType<typeof h.factory>,
+    });
+    expect(first.themeCompartment).toBe(h.themeCompartment);
+    expect(first.wordWrapCompartment).toBe(h.wordWrapCompartment);
+    expect(first.placeholderCompartment).toBe(h.placeholderCompartment);
+
+    const second = mountCmEditor({
+      docName: h.docName,
+      container: makeNode() as unknown as HTMLElement,
+      factory: h.factory as unknown as (el: HTMLElement) => ReturnType<typeof h.factory>,
+    });
+    expect(second.themeCompartment).toBe(h.themeCompartment);
+    expect(second.wordWrapCompartment).toBe(h.wordWrapCompartment);
+    expect(second.placeholderCompartment).toBe(h.placeholderCompartment);
+    expect(h.factoryCallCount).toBe(1);
+  });
+
+  test('park then remount: compartments survive the park→remount round-trip', () => {
+    const h = makeCmHarness('cm-doc-a');
+    const first = mountCmEditor({
+      docName: h.docName,
+      container: h.container as unknown as HTMLElement,
+      factory: h.factory as unknown as (el: HTMLElement) => ReturnType<typeof h.factory>,
+    });
+    parkCmEditor(first);
+
+    const remounted = mountCmEditor({
+      docName: h.docName,
+      container: makeNode() as unknown as HTMLElement,
+      factory: h.factory as unknown as (el: HTMLElement) => ReturnType<typeof h.factory>,
+    });
+    expect(remounted).toBe(first);
+    expect(remounted.themeCompartment).toBe(h.themeCompartment);
+    expect(remounted.wordWrapCompartment).toBe(h.wordWrapCompartment);
+    expect(remounted.placeholderCompartment).toBe(h.placeholderCompartment);
+    expect(h.factoryCallCount).toBe(1);
+  });
+
   test('mount: cache-hit reparents view.dom without construction', () => {
     const h = makeCmHarness('cm-doc-a');
     const first = mountCmEditor({
@@ -974,6 +1038,10 @@ describe('CM6 cache — lifecycle', () => {
       ydoc: h.ydoc,
       ytext: h.ytext,
       provider: h.provider,
+      themeCompartment: h.themeCompartment,
+      wordWrapCompartment: h.wordWrapCompartment,
+      placeholderCompartment: h.placeholderCompartment,
+      parkingNode: null,
       scrollTop: 0,
       hadFocus: false,
       activeMountKey: h.docName,

@@ -1,7 +1,4 @@
-import type { Config } from '@inkeep/open-knowledge-core';
 import { PREVIEW_THEME_TOKENS } from '@inkeep/open-knowledge-core';
-
-export type PreviewScriptSrcPolicy = Config['preview']['scriptSrc'];
 
 export type PreviewTheme = 'light' | 'dark';
 
@@ -23,12 +20,37 @@ export function parsePreviewHeightMessage(data: unknown): number | null {
   return typeof h === 'number' && Number.isFinite(h) && h > 0 ? Math.ceil(h) : null;
 }
 
-export const PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST = [
-  'https://cdnjs.cloudflare.com',
-  'https://cdn.jsdelivr.net',
-  'https://unpkg.com',
-  'https://esm.sh',
-] as const;
+const PREVIEW_CSP_VIOLATION_MESSAGE_KEY = 'okPreviewCspViolation';
+
+/** One CSP-blocked request: the violated directive and the (browser-reported,
+ *  possibly origin-truncated or `inline`/`eval`) URI it blocked. */
+export interface PreviewBlockedRequest {
+  directive: string;
+  uri: string;
+}
+
+export const PREVIEW_CSP_VIOLATION_SAMPLE_CAP = 20;
+
+export function parsePreviewCspViolationMessage(
+  data: unknown,
+): { blocked: PreviewBlockedRequest[]; truncated: boolean } | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const payload = (data as Record<string, unknown>)[PREVIEW_CSP_VIOLATION_MESSAGE_KEY];
+  if (typeof payload !== 'object' || payload === null) return null;
+  const rawBlocked = (payload as Record<string, unknown>).blocked;
+  if (!Array.isArray(rawBlocked)) return null;
+  const blocked: PreviewBlockedRequest[] = [];
+  for (const item of rawBlocked) {
+    if (typeof item !== 'object' || item === null) continue;
+    const directive = (item as Record<string, unknown>).directive;
+    const uri = (item as Record<string, unknown>).uri;
+    if (typeof directive === 'string' && typeof uri === 'string') {
+      blocked.push({ directive, uri });
+    }
+  }
+  if (blocked.length === 0) return null;
+  return { blocked, truncated: (payload as Record<string, unknown>).truncated === true };
+}
 
 const PREVIEW_SCROLLBAR_STYLE = `<style>
   html, body { scrollbar-width: thin; scrollbar-color: rgba(115,115,115,0.4) transparent; }
@@ -79,31 +101,33 @@ function previewBootstrapScript(theme: PreviewTheme): string {
     `}` +
     `if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}` +
     `else{init();}` +
+    `var cspSeen=new Set();var cspList=[];var cspTrunc=false;var cspTimer;` +
+    `function cspFlush(){parent.postMessage({${PREVIEW_CSP_VIOLATION_MESSAGE_KEY}:{blocked:cspList.slice(),truncated:cspTrunc}},'*');}` +
+    `addEventListener('securitypolicyviolation',function(e){` +
+    `if(cspTrunc)return;` +
+    `var dir=(e&&(e.effectiveDirective||e.violatedDirective))||'';` +
+    `var uri=(e&&e.blockedURI)||'';` +
+    `var k=dir+' '+uri;` +
+    `if(cspSeen.has(k))return;cspSeen.add(k);` +
+    `if(cspList.length<${PREVIEW_CSP_VIOLATION_SAMPLE_CAP}){cspList.push({directive:dir,uri:uri});}else{cspTrunc=true;}` +
+    `if(cspTimer){clearTimeout(cspTimer);}cspTimer=setTimeout(cspFlush,250);` +
+    `});` +
     `})();</script>`
   );
 }
 
-function scriptSrcDirective(policy: PreviewScriptSrcPolicy): string {
-  switch (policy) {
-    case 'cdn-allowlist':
-      return `script-src 'unsafe-inline' ${PREVIEW_SCRIPT_SRC_CDN_ALLOWLIST.join(' ')}`;
-    case 'inline-only':
-      return "script-src 'unsafe-inline'";
-    default: {
-      const _exhaustive: never = policy;
-      throw new Error(
-        `Unhandled preview script-src policy: ${JSON.stringify(_exhaustive as unknown)}`,
-      );
-    }
-  }
-}
+const PREVIEW_CSP =
+  "default-src 'none'; " +
+  "script-src 'unsafe-inline' https:; " +
+  "style-src 'unsafe-inline' https: data:; " +
+  'img-src https: data: blob:; ' +
+  'font-src https: data:; ' +
+  'connect-src https: wss: data: blob:; ' +
+  'media-src https: data: blob:; ' +
+  "frame-src https:; child-src https:; form-action 'none'; base-uri 'none';";
 
-export function buildPreviewIframeHeader(
-  policy: PreviewScriptSrcPolicy,
-  theme: PreviewTheme,
-): string {
-  const csp = `default-src 'none'; ${scriptSrcDirective(policy)}; style-src 'unsafe-inline' data:; img-src data:; font-src data:; connect-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; base-uri 'none';`;
-  return `<meta http-equiv="Content-Security-Policy" content="${csp}">
+export function buildPreviewIframeHeader(theme: PreviewTheme): string {
+  return `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">
 ${themeTokenStyle()}
 ${PREVIEW_SCROLLBAR_STYLE}
 ${previewBootstrapScript(theme)}`;

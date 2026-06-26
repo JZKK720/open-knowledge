@@ -97,6 +97,59 @@ function tryExitCompoundJsxUp(editor: Editor): boolean {
   }
 }
 
+function tryEnterCompoundJsx(editor: Editor, dir: ArrowDirection): boolean {
+  const { state, view } = editor;
+  if (!(state.selection instanceof TextSelection)) return false;
+  if (!state.selection.empty) return false;
+  if (!view.endOfTextblock(dir)) return false;
+
+  const $head = state.selection.$head;
+  const isForward = dir === 'down' || dir === 'right';
+
+  let adj: ReturnType<typeof state.doc.nodeAt> | null = null;
+  let adjPos = -1;
+  if (isForward) {
+    const afterPos = $head.after();
+    if (afterPos >= state.doc.content.size) return false;
+    adj = state.doc.nodeAt(afterPos);
+    adjPos = afterPos;
+  } else {
+    const beforePos = $head.before();
+    if (beforePos <= 0) return false;
+    const $beforePos = state.doc.resolve(beforePos);
+    adj = $beforePos.nodeBefore;
+    if (!adj) return false;
+    adjPos = beforePos - adj.nodeSize;
+  }
+
+  if (!adj) return false;
+  if (adj.type.name !== 'jsxComponent') return false;
+  if (adj.childCount === 0) return false;
+
+  const adjEnd = adjPos + adj.nodeSize;
+
+  try {
+    const fromPos = isForward ? adjPos + 1 : adjEnd - 1;
+    const found = Selection.findFrom(state.doc.resolve(fromPos), isForward ? 1 : -1, true);
+    if (!found || !(found instanceof TextSelection)) return false;
+    if (found.$head.pos <= adjPos || found.$head.pos >= adjEnd) return false;
+    editor.view.dispatch(state.tr.setSelection(found).scrollIntoView());
+    return true;
+  } catch (err) {
+    if (!(err instanceof RangeError)) throw err;
+    incrementJsxArrowNodeSelectFailed(dir);
+    console.warn(
+      JSON.stringify({
+        event: 'jsx-component-arrow-node-select-failed',
+        direction: dir,
+        tier: 'L2d',
+        reason: err.message.slice(0, 500),
+      }),
+    );
+    return true;
+  }
+}
+
 export const KeyboardNav = Extension.create({
   name: 'keyboardNav',
   priority: 50, // lower than Suggestion plugins so they intercept Escape first (L4)
@@ -107,6 +160,10 @@ export const KeyboardNav = Extension.create({
         const { state } = editor;
 
         if (state.selection instanceof NodeSelection) {
+          if (state.selection.$from.depth === 0) {
+            editor.commands.blur();
+            return true;
+          }
           const pos = state.selection.from + state.selection.node.nodeSize;
           const $pos = state.doc.resolve(Math.min(pos, state.doc.content.size));
           const sel = TextSelection.near($pos);
@@ -124,6 +181,7 @@ export const KeyboardNav = Extension.create({
       ArrowUp: ({ editor }) => {
         if (tryL0NodeSelect(editor, 'up')) return true;
         if (tryExitCompoundJsxUp(editor)) return true;
+        if (tryEnterCompoundJsx(editor, 'up')) return true;
 
         const { state } = editor;
         if (!(state.selection instanceof NodeSelection)) return false;
@@ -163,6 +221,7 @@ export const KeyboardNav = Extension.create({
 
       ArrowDown: ({ editor }) => {
         if (tryL0NodeSelect(editor, 'down')) return true;
+        if (tryEnterCompoundJsx(editor, 'down')) return true;
 
         const { state } = editor;
         if (!(state.selection instanceof NodeSelection)) return false;
@@ -194,9 +253,11 @@ export const KeyboardNav = Extension.create({
         }
       },
 
-      ArrowLeft: ({ editor }) => tryL0NodeSelect(editor, 'left'),
+      ArrowLeft: ({ editor }) =>
+        tryL0NodeSelect(editor, 'left') || tryEnterCompoundJsx(editor, 'left'),
 
-      ArrowRight: ({ editor }) => tryL0NodeSelect(editor, 'right'),
+      ArrowRight: ({ editor }) =>
+        tryL0NodeSelect(editor, 'right') || tryEnterCompoundJsx(editor, 'right'),
 
       Enter: ({ editor }) => {
         const { state } = editor;

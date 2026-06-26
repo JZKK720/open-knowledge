@@ -1,40 +1,50 @@
 import { z } from 'zod';
+import { AutoStartDisabledError } from '../../autostart.ts';
 import { resolveLockDir } from '../../config/paths.ts';
 import { armPaneTarget } from '../../pane-target.ts';
+import { isProcessAlive } from '../../process-alive.ts';
+import { readServerLock } from '../../server-lock.ts';
 import {
+  awaitUiBaseUrl,
   encodeDocName,
   encodeFolderRoute,
   type PreviewUrlContext,
   resolveUiInfo,
 } from './preview-url.ts';
-import type { ConfigOrResolver, ServerInstance } from './shared.ts';
+import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
 import {
   outputSchemaWithText,
   ROUTED_CWD_DESCRIPTION,
   resolveProjectConfigContext,
+  resolveServerUrl,
   textPlusStructured,
 } from './shared.ts';
 
-export const DESCRIPTION = [
-  '[Operates on disk; no running OK server required] Resolve the browser-reachable preview URL for an Open Knowledge project (optionally for a specific doc).',
+const DESCRIPTION = [
+  'Resolve the browser-reachable preview URL for an OpenKnowledge project (optionally for a specific doc). Opening a preview counts as demand: when no OK server is running for the project, this call auto-starts one (same `OK_MCP_AUTOSTART` gate and spawn timeout as the read/write tools) and waits briefly for the preview UI to bind — a cold first call can take a few seconds; calls against a running system answer immediately.',
   '',
   'Per-response `previewUrl` fields on read/write tools are ROUTE-ONLY (`/#/<doc>`, no host:port) — they identify which doc to preview, not a URL to open by itself. Call this tool to get the full, openable URL.',
   '',
   'Use this when YOUR host opens the URL itself: navigate your in-app browser to the returned `url`, or — only on a stdio host with no browser tool — `open` it in the system browser. Hosts with a preview pane (Claude Code Desktop) call `preview_start("open-knowledge-ui")` instead; the Claude Code CLI uses `ok open <doc>` to open in the OK Desktop app.',
   '',
-  'Returns `{ url: null, baseUrl: null, running: false, autoOpen }` and a recovery hint when no UI is running for the project (start one with `ok ui`).',
+  'Returns `{ url: null, baseUrl: null, running: false, autoOpen }` + a recovery hint only when no UI could be reached (auto-start disabled via `OK_MCP_AUTOSTART=0`, no spawn authority in this registration, or the UI did not bind in time) — the hint names the right command for the actual state.',
   '',
   '**Parameters:**',
   '- `document` (optional) — Extension-less doc path (e.g. `specs/foo/SPEC`). Omit for the UI root URL.',
   '- `folder` (optional) — Folder path (e.g. `specs/foo`); returns the `…/#/<folder>/` route. Mutually exclusive with `document`.',
-  '- `armPaneTarget` (optional) — When true with a `document`/`folder`, writes a small TTL-bounded (~30s) state file under `.ok/local/` so a later Claude-pane base-open lands on that target. This is the tool’s ONLY side effect; omit it and the call is read-only.',
+  '- `armPaneTarget` (optional) — When true with a `document`/`folder`, writes a small TTL-bounded (~30s) state file under `.ok/local/` so a later Claude-pane base-open lands on that target. Independent of server state; omit it and the call writes nothing.',
   '- `cwd` (optional) — Project root (see `cwd` description below).',
 ].join('\n');
 
 interface GetPreviewUrlDeps {
   config: ConfigOrResolver;
   resolveCwd: (explicit?: string) => Promise<string>;
+  serverUrl?: ServerUrlOrResolver;
+  uiBindWait?: { timeoutMs?: number; pollIntervalMs?: number };
 }
+
+const UI_BIND_WAIT_TIMEOUT_MS = 3000;
+const UI_BIND_WAIT_POLL_MS = 100;
 
 const InputSchema = {
   document: z
@@ -80,8 +90,23 @@ const OutputSchema = outputSchemaWithText({
     ),
 });
 
-const NO_UI_MESSAGE =
-  'No UI is running for this project. Start one to see the preview: `ok ui` (terminal), `preview_start("open-knowledge-ui")` (Claude Code), or open the project in OK Electron.';
+const NO_UI_SERVER_RUNNING_MESSAGE =
+  'The OK server is running but no UI has bound for this project yet. Retry in a few seconds, or start one: `ok ui` (terminal), `preview_start("open-knowledge-ui")` (Claude Code Desktop), or open the project in OK Electron.';
+const NO_SERVER_MESSAGE =
+  'No OpenKnowledge server is running for this project. Start it with `ok start` (also starts the preview UI), use `preview_start("open-knowledge-ui")` (Claude Code Desktop), or open the project in OK Electron.';
+const AUTOSTART_DISABLED_NOTE = ' Auto-start is disabled (OK_MCP_AUTOSTART=0).';
+
+function isServerLive(lockDir: string): boolean {
+  try {
+    const lock = readServerLock(lockDir);
+    return lock !== null && lock.port > 0 && isProcessAlive(lock.pid);
+  } catch (err) {
+    process.stderr.write(
+      `[preview-url] readServerLock failed at ${lockDir} while checking server liveness: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return false;
+  }
+}
 
 export function register(server: ServerInstance, deps: GetPreviewUrlDeps): void {
   server.registerTool(
@@ -116,7 +141,6 @@ export function register(server: ServerInstance, deps: GetPreviewUrlDeps): void 
       }
       const lockDir = resolveLockDir(context.cwd);
       const ctx: PreviewUrlContext = { lockDir };
-      const { baseUrl } = resolveUiInfo(ctx);
       const autoOpen = context.config.appearance.preview.autoOpen;
 
       const routeFragment = args.document
@@ -136,8 +160,41 @@ export function register(server: ServerInstance, deps: GetPreviewUrlDeps): void 
           ? ' (note: armPaneTarget was set but no document/folder was given, so nothing was armed)'
           : '';
 
+      const serverWasLive = isServerLive(lockDir);
+      let autoStartDisabled = false;
+      if (deps.serverUrl !== undefined) {
+        try {
+          await resolveServerUrl(deps.serverUrl, context.cwd);
+        } catch (err) {
+          if (err instanceof AutoStartDisabledError) {
+            autoStartDisabled = true;
+          } else {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
+            };
+          }
+        }
+      }
+
+      let { baseUrl } = resolveUiInfo(ctx);
+      if (baseUrl === null && !serverWasLive && isServerLive(lockDir)) {
+        baseUrl = await awaitUiBaseUrl(ctx, {
+          timeoutMs: deps.uiBindWait?.timeoutMs ?? UI_BIND_WAIT_TIMEOUT_MS,
+          pollIntervalMs: deps.uiBindWait?.pollIntervalMs ?? UI_BIND_WAIT_POLL_MS,
+        });
+      }
+
       if (baseUrl === null) {
-        return textPlusStructured(`${NO_UI_MESSAGE}${armNote}`, {
+        const hint = isServerLive(lockDir)
+          ? NO_UI_SERVER_RUNNING_MESSAGE
+          : `${NO_SERVER_MESSAGE}${autoStartDisabled ? AUTOSTART_DISABLED_NOTE : ''}`;
+        return textPlusStructured(`${hint}${armNote}`, {
           url: null,
           baseUrl: null,
           running: false,

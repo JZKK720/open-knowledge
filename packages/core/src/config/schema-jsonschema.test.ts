@@ -59,21 +59,6 @@ const FIXTURES: Fixture[] = [
     shouldAccept: false,
   },
   {
-    name: 'preview.scriptSrc=cdn-allowlist accepted',
-    input: { preview: { scriptSrc: 'cdn-allowlist' } },
-    shouldAccept: true,
-  },
-  {
-    name: 'preview.scriptSrc=inline-only accepted',
-    input: { preview: { scriptSrc: 'inline-only' } },
-    shouldAccept: true,
-  },
-  {
-    name: 'preview.scriptSrc=wide-open rejected',
-    input: { preview: { scriptSrc: 'wide-open' } },
-    shouldAccept: false,
-  },
-  {
     name: 'appearance.preview.autoOpen=false accepted',
     input: { appearance: { preview: { autoOpen: false } } },
     shouldAccept: true,
@@ -176,16 +161,6 @@ describe('loose-mode forgiveness', () => {
   test('appearance.preview.autoOpen preserves an explicit false', () => {
     const config = ConfigSchema.parse({ appearance: { preview: { autoOpen: false } } });
     expect(config.appearance.preview.autoOpen).toBe(false);
-  });
-
-  test("preview.scriptSrc defaults to 'cdn-allowlist'", () => {
-    const config = ConfigSchema.parse({});
-    expect(config.preview.scriptSrc).toBe('cdn-allowlist');
-  });
-
-  test("preview.scriptSrc preserves an explicit 'inline-only'", () => {
-    const config = ConfigSchema.parse({ preview: { scriptSrc: 'inline-only' } });
-    expect(config.preview.scriptSrc).toBe('inline-only');
   });
 
   test('telemetry.localSink defaults to enabled with built-in caps + denylist', () => {

@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualCore from '@inkeep/open-knowledge-core';
+import * as actualSonner from 'sonner';
 
 import { createHandleDrop } from './handle-paste.ts';
 
 mock.module('@inkeep/open-knowledge-core', () => {
   return {
+    ...actualCore,
     htmlToMdast: mock((_html: string) => ({ type: 'root', children: [] })),
     mdastToMarkdown: mock((_tree: unknown) => '**bold**'),
   };
 });
 
-mock.module('sonner', () => ({ toast: { error: mock(() => {}) } }));
+mock.module('sonner', () => ({ ...actualSonner, toast: { error: mock(() => {}) } }));
 
 interface FakeDropOptions {
   data: Record<string, string>;

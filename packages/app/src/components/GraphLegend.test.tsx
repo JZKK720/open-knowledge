@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualNextThemes from 'next-themes';
 import type { ReactElement, ReactNode } from 'react';
 
 const useThemeMock = mock(() => ({ resolvedTheme: 'light' as const }));
 
 mock.module('next-themes', () => ({
+  ...actualNextThemes,
   useTheme: useThemeMock,
 }));
 

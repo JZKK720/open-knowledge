@@ -25,17 +25,53 @@ export interface TokenStore {
 
 const KEYRING_SERVICE = 'open-knowledge';
 
+function safeDiag(fn: () => void): void {
+  try {
+    fn();
+  } catch {}
+}
+
+export interface TokenStoreDiagnostics {
+  onKeychainRead?: (info: {
+    kind: 'absent' | 'read-error' | 'corrupt-entry';
+    host: string;
+    error?: string;
+  }) => void;
+  onBackendSelected?: (info: { backend: 'keyring' | 'file'; reason?: string }) => void;
+}
+
 class KeyringBackend implements TokenStore {
   readonly backend = 'keyring' as const;
 
+  constructor(private readonly onKeychainRead?: TokenStoreDiagnostics['onKeychainRead']) {}
+
   async get(host: string): Promise<TokenEntry | null> {
     const { Entry } = await import('@napi-rs/keyring');
+    let raw: string | null;
     try {
-      const entry = new Entry(KEYRING_SERVICE, host);
-      const raw = entry.getPassword();
-      if (raw == null) return null;
+      raw = new Entry(KEYRING_SERVICE, host).getPassword();
+    } catch (e) {
+      safeDiag(() =>
+        this.onKeychainRead?.({
+          kind: 'read-error',
+          host,
+          error: e instanceof Error ? e.name : 'unknown',
+        }),
+      );
+      return null;
+    }
+
+    if (raw == null) {
+      safeDiag(() => this.onKeychainRead?.({ kind: 'absent', host }));
+      return null;
+    }
+
+    try {
       return JSON.parse(raw) as TokenEntry;
     } catch {
+      safeDiag(() =>
+        this.onKeychainRead?.({ kind: 'corrupt-entry', host, error: 'corrupt-entry' }),
+      );
       return null;
     }
   }
@@ -154,17 +190,25 @@ class KeychainWithFileFallback implements TokenStore {
   }
 }
 
-export async function createTokenStore(authFile?: string): Promise<TokenStore> {
+export async function createTokenStore(
+  authFile?: string,
+  diag?: TokenStoreDiagnostics,
+): Promise<TokenStore> {
   try {
     const { Entry } = await import('@napi-rs/keyring');
     new Entry(KEYRING_SERVICE, '__probe__');
     process.stderr.write('[auth] token storage: OS keychain\n');
-    return new KeychainWithFileFallback(new KeyringBackend(), new FileBackend(authFile));
+    safeDiag(() => diag?.onBackendSelected?.({ backend: 'keyring' }));
+    return new KeychainWithFileFallback(
+      new KeyringBackend(diag?.onKeychainRead),
+      new FileBackend(authFile),
+    );
   } catch (e) {
     const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
     process.stderr.write(
       `[auth] token storage: file (~/.ok/auth.yml) — OS keychain unavailable: ${reason}\n`,
     );
+    safeDiag(() => diag?.onBackendSelected?.({ backend: 'file', reason }));
     return new FileBackend(authFile);
   }
 }

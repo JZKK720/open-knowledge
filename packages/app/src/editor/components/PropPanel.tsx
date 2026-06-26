@@ -1,6 +1,6 @@
 import type { PropDef } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
-import { Trans, useLingui } from '@lingui/react/macro';
+import { Trans } from '@lingui/react/macro';
 import { ChevronDown, Loader2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -85,9 +85,10 @@ interface PropPanelProps {
   descriptor: JsxComponentDescriptor;
   values: Record<string, unknown>;
   onChange: (propName: string, value: unknown) => void;
+  onDismiss?: () => void;
 }
 
-export function PropPanel({ descriptor, values, onChange }: PropPanelProps) {
+export function PropPanel({ descriptor, values, onChange, onDismiss }: PropPanelProps) {
   const editableProps = descriptor.props.filter(
     (p) => !('hidden' in p && p.hidden) && p.hideWhen?.(values) !== true && p.type !== 'reactnode',
   );
@@ -109,6 +110,7 @@ export function PropPanel({ descriptor, values, onChange }: PropPanelProps) {
           propDef={propDef}
           value={values[propDef.name]}
           onChange={(v) => onChange(propDef.name, v)}
+          onDismiss={onDismiss}
           isAutoFocused={propDef.name === autoFocusedPropName}
         />
       ))}
@@ -143,6 +145,7 @@ export function PropPanel({ descriptor, values, onChange }: PropPanelProps) {
                   propDef={propDef}
                   value={values[propDef.name]}
                   onChange={(v) => onChange(propDef.name, v)}
+                  onDismiss={onDismiss}
                   isAutoFocused={propDef.name === autoFocusedPropName}
                 />
               ))}
@@ -162,13 +165,23 @@ function PropControl({
   propDef,
   value,
   onChange,
+  onDismiss,
   isAutoFocused,
 }: {
   propDef: PropDef;
   value: unknown;
   onChange: (value: unknown) => void;
+  onDismiss?: () => void;
   isAutoFocused: boolean;
 }) {
+  const handleDismissKeyDown = onDismiss
+    ? (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onDismiss();
+        }
+      }
+    : undefined;
   switch (propDef.type) {
     case 'reactnode':
       return null;
@@ -271,6 +284,7 @@ function PropControl({
                 }
                 onChange(raw);
               }}
+              onKeyDown={handleDismissKeyDown}
               autoFocus={isAutoFocused}
               data-prop-autofocus={isAutoFocused ? '' : undefined}
               aria-invalid={cssError !== null ? true : undefined}
@@ -310,7 +324,14 @@ function PropControl({
           <label htmlFor={stringId} className="text-xs text-muted-foreground">
             {humanizePropName(propDef.name)}
           </label>
-          <div className="flex gap-1">
+          {/* Two-row layout: src input on its own line, then the upload
+              affordance below it as a labeled full-width button. UX
+              research found users skipping the icon-only upload button
+              entirely — the row-with-icon shape read as "URL field with a
+              decoration on the right," not "URL field OR pick a file."
+              Stacking the affordances and giving the upload button visible
+              "Upload from computer" text makes the second path explicit. */}
+          <div className="flex flex-col gap-1.5">
             {accept !== undefined ? (
               <SrcAutocomplete
                 id={stringId}
@@ -322,6 +343,7 @@ function PropControl({
                   }
                   onChange(raw);
                 }}
+                onSubmit={onDismiss}
                 accept={accept}
                 placeholder={mediaPlaceholder}
                 autoFocus={isAutoFocused}
@@ -344,6 +366,7 @@ function PropControl({
                   }
                   onChange(raw);
                 }}
+                onKeyDown={handleDismissKeyDown}
                 autoFocus={isAutoFocused}
                 data-prop-autofocus={isAutoFocused ? '' : undefined}
                 aria-invalid={mediaErrorMessage !== null ? true : undefined}
@@ -433,6 +456,7 @@ function PropControl({
               const num = Number(raw);
               if (!Number.isNaN(num)) onChange(num);
             }}
+            onKeyDown={handleDismissKeyDown}
             className="h-7 text-sm"
           />
         </div>
@@ -451,7 +475,6 @@ function PropUploadButton({
   accept: readonly string[];
   onUploaded: (url: string) => void;
 }) {
-  const { t } = useLingui();
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -478,15 +501,20 @@ function PropUploadButton({
         variant="outline"
         size="sm"
         disabled={uploading}
-        aria-label={t`Upload file`}
         data-prop-upload-trigger=""
-        className="h-7 px-2"
+        className="h-7 w-full justify-center gap-1.5 px-2 text-xs"
         onClick={() => inputRef.current?.click()}
       >
         {uploading ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <>
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <Trans>Uploading</Trans>
+          </>
         ) : (
-          <Upload className="size-3.5" />
+          <>
+            <Upload className="size-3.5" aria-hidden="true" />
+            <Trans>Upload from computer</Trans>
+          </>
         )}
       </Button>
     </>

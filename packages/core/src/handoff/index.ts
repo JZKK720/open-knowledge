@@ -2,11 +2,31 @@ export { buildClaudeUrl } from './claude-url.ts';
 export { buildCodexUrl } from './codex-url.ts';
 export { buildCursorUrl } from './cursor-url.ts';
 export {
+  type AssembleHandoffPromptInput,
+  assembleHandoffPrompt,
+  type ComposeSelection,
+  type CreateScenario,
+  composeAskProjectPrompt,
+  composeAskPrompt,
+  composeCreatePrompt,
   composeEmptySpacePrompt,
   composeFilePrompt,
   composeFolderPrompt,
   composeSelectionPrompt,
+  composeTerminalBareLaunchPrompt,
+  OK_PROJECT_SKILL_POINTER,
+  OK_TERMINAL_SURFACE_PREAMBLE,
+  withSkillPointer,
 } from './prompt-composer.ts';
+export {
+  buildClaudeLaunchCommand,
+  buildCliLaunchCommand,
+  shellSingleQuote,
+  TERMINAL_CLI_IDS,
+  TERMINAL_CLIS,
+  type TerminalCli,
+  type TerminalCliInfo,
+} from './terminal-launch.ts';
 export type {
   DocContext,
   HandoffFailureReason,
@@ -26,4 +46,3 @@ export {
   URN_IPC_REGISTRY,
   type UrnIpcLookup,
 } from './urn-ipc-registry.ts';
-export { buildClaudeAiWebUrl } from './web-fallback-url.ts';

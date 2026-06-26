@@ -40,7 +40,7 @@ export function createNavigatorWindow(deps: NavigatorDeps): BrowserWindowLike {
       '--ok-project-path=',
       '--ok-project-name=Project Navigator',
     ],
-    title: 'Open Knowledge',
+    title: 'OpenKnowledge',
   });
   const disposeShowGate = deps.showGate.register(window, { kind: 'navigator' });
   window.on('closed', () => {

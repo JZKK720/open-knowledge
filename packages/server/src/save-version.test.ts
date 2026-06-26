@@ -9,7 +9,14 @@ import simpleGit from 'simple-git';
 import * as Y from 'yjs';
 import { AgentSessionManager } from './agent-sessions.ts';
 import { createApiExtension } from './api-extension.ts';
-import { commitWip, initShadowRepo, type ShadowRef, type WriterIdentity } from './shadow-repo.ts';
+import {
+  commitWip,
+  initShadowRepo,
+  type ShadowHandle,
+  type ShadowRef,
+  shadowGit,
+  type WriterIdentity,
+} from './shadow-repo.ts';
 
 interface CapturedResponse {
   status: number;
@@ -300,5 +307,167 @@ describe('PRD-6716: save-version + rollback do not mutate parent git', () => {
 
     expect(headAfter).toBe(headBefore);
     expect(statusAfter).toBe(statusBefore);
+  });
+});
+
+describe('PRD-6972 FR6: Save Version unification', () => {
+  let tmpDir: string;
+  let projectDir: string;
+  let contentDir: string;
+  let shadow: ShadowHandle;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'ok-fr6-'));
+    projectDir = tmpDir;
+    contentDir = join(tmpDir, 'content');
+    mkdirSync(contentDir, { recursive: true });
+    const git = simpleGit(projectDir);
+    await git.init();
+    await git.addConfig('user.name', 'Test');
+    await git.addConfig('user.email', 't@t.test');
+    writeFileSync(join(projectDir, 'README.md'), '# project\n');
+    await git.add('.');
+    await git.commit('init');
+    shadow = await initShadowRepo(projectDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeExt(getCurrentBranch?: () => string | null) {
+    const hocuspocus = new Hocuspocus({ quiet: true });
+    const sessionManager = new AgentSessionManager(hocuspocus);
+    const ext = createApiExtension({
+      hocuspocus,
+      sessionManager,
+      contentDir,
+      projectDir,
+      shadowRef: { current: shadow } as ShadowRef,
+      contentRoot: 'content',
+      getFileIndex: () => new Map(),
+      ...(getCurrentBranch ? { getCurrentBranch } : {}),
+    });
+    return { ext, sessionManager };
+  }
+
+  async function post(
+    ext: ReturnType<typeof makeExt>['ext'],
+    body: unknown,
+  ): Promise<CapturedResponse> {
+    const req = makeJsonPostReq('/api/save-version', body);
+    const { res, captured } = makeRes();
+    await (
+      ext as {
+        onRequest: (ctx: { request: IncomingMessage; response: ServerResponse }) => Promise<void>;
+      }
+    ).onRequest({ request: req, response: res });
+    return captured;
+  }
+
+  async function wipRefs(branch: string): Promise<string[]> {
+    const sg = shadowGit(shadow);
+    return (await sg.raw('for-each-ref', '--format=%(refname)', `refs/wip/${branch}/`))
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+  }
+
+  test('empty-body request consolidates ALL non-park WIP chains on the active branch', async () => {
+    writeFileSync(join(contentDir, 'doc.md'), '# a\n');
+    await commitWip(
+      shadow,
+      { id: 'agent-1', name: 'a1', email: 'a1@x' },
+      'content',
+      'wip a1',
+      'main',
+    );
+    writeFileSync(join(contentDir, 'doc.md'), '# b\n');
+    await commitWip(
+      shadow,
+      { id: 'agent-2', name: 'a2', email: 'a2@x' },
+      'content',
+      'wip a2',
+      'main',
+    );
+    writeFileSync(join(contentDir, 'doc.md'), '# c\n');
+    await commitWip(
+      shadow,
+      { id: 'principal-p', name: 'p', email: 'p@x' },
+      'content',
+      'wip p',
+      'main',
+    );
+    expect(await wipRefs('main')).toHaveLength(3);
+
+    const { ext, sessionManager } = makeExt();
+    try {
+      const captured = await post(ext, {});
+      expect(captured.status).toBe(200);
+      expect(typeof captured.parsed.checkpointRef).toBe('string');
+      expect(await wipRefs('main')).toHaveLength(0);
+    } finally {
+      await sessionManager.closeAll();
+    }
+  });
+
+  test('explicit writers list stays scoped (does not fold everything)', async () => {
+    await commitWip(
+      shadow,
+      { id: 'agent-1', name: 'a1', email: 'a1@x' },
+      'content',
+      'wip a1',
+      'main',
+    );
+    await commitWip(
+      shadow,
+      { id: 'agent-2', name: 'a2', email: 'a2@x' },
+      'content',
+      'wip a2',
+      'main',
+    );
+
+    const { ext, sessionManager } = makeExt();
+    try {
+      const captured = await post(ext, { writers: [{ id: 'agent-1', name: 'a1', email: 'a1@x' }] });
+      expect(captured.status).toBe(200);
+      const remaining = await wipRefs('main');
+      expect(remaining.some((r) => r.endsWith('/agent-1'))).toBe(false);
+      expect(remaining.some((r) => r.endsWith('/agent-2'))).toBe(true);
+    } finally {
+      await sessionManager.closeAll();
+    }
+  });
+
+  test('threads the active branch (consolidates a feature branch, not main)', async () => {
+    await commitWip(
+      shadow,
+      { id: 'agent-1', name: 'a1', email: 'a1@x' },
+      'content',
+      'wip',
+      'feature-x',
+    );
+    expect(await wipRefs('feature-x')).toHaveLength(1);
+
+    const { ext, sessionManager } = makeExt(() => 'feature-x');
+    try {
+      const captured = await post(ext, {});
+      expect(captured.status).toBe(200);
+      expect(captured.parsed.checkpointRef as string).toContain('refs/checkpoints/feature-x/');
+      expect(await wipRefs('feature-x')).toHaveLength(0);
+    } finally {
+      await sessionManager.closeAll();
+    }
+  });
+
+  test('empty-body with no WIP activity still lands a checkpoint', async () => {
+    const { ext, sessionManager } = makeExt();
+    try {
+      const captured = await post(ext, {});
+      expect(captured.status).toBe(200);
+      expect(typeof captured.parsed.checkpointRef).toBe('string');
+    } finally {
+      await sessionManager.closeAll();
+    }
   });
 });

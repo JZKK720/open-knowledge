@@ -119,6 +119,66 @@ describe('unwrapFrontmatterFences', () => {
   });
 });
 
+describe('fence trailing whitespace — recognition contract', () => {
+  const recognized: Array<{ label: string; input: string; fm: string }> = [
+    {
+      label: 'space after the opening fence',
+      input: '--- \ntitle: X\n---\n# Body',
+      fm: '--- \ntitle: X\n---\n',
+    },
+    {
+      label: 'tab after the opening fence',
+      input: '---\t\ntitle: X\n---\n# Body',
+      fm: '---\t\ntitle: X\n---\n',
+    },
+    {
+      label: 'space after the closing fence',
+      input: '---\ntitle: X\n--- \n# Body',
+      fm: '---\ntitle: X\n--- \n',
+    },
+    {
+      label: 'tab after the closing fence',
+      input: '---\ntitle: X\n---\t\n# Body',
+      fm: '---\ntitle: X\n---\t\n',
+    },
+  ];
+
+  for (const { label, input, fm } of recognized) {
+    test(`stripFrontmatter recognizes ${label} and preserves the raw bytes`, () => {
+      const { frontmatter, body } = stripFrontmatter(input);
+      expect(frontmatter).toBe(fm);
+      expect(body).toBe('# Body');
+    });
+  }
+
+  test('leading whitespace before the opening fence stays unrecognized', () => {
+    const input = ' ---\ntitle: X\n---\n# Body';
+    const { frontmatter, body } = stripFrontmatter(input);
+    expect(frontmatter).toBe('');
+    expect(body).toBe(input);
+  });
+
+  test('unwrapFrontmatterFences unwraps fences carrying trailing whitespace', () => {
+    expect(unwrapFrontmatterFences('--- \ntitle: X\n---\n')).toBe('title: X');
+    expect(unwrapFrontmatterFences('---\ntitle: X\n--- \n')).toBe('title: X');
+    expect(unwrapFrontmatterFences('---\t\ntitle: X\n---\t')).toBe('title: X');
+  });
+
+  test('strip then prepend stays identity with trailing-whitespace fences', () => {
+    const original = '--- \ntitle: Keep\n--- \n# Content\n';
+    const { frontmatter, body } = stripFrontmatter(original);
+    expect(prependFrontmatter(frontmatter, body)).toBe(original);
+    expect(frontmatter).not.toBe('');
+  });
+
+  test('closing-fence detection stops at the first ---[ \\t]* line inside the region', () => {
+    const input = '---\ntitle: X\n--- \nrest: y\n---\n# Body';
+    const { frontmatter, body } = stripFrontmatter(input);
+    expect(frontmatter).toBe('---\ntitle: X\n--- \n');
+    expect(body).toBe('rest: y\n---\n# Body');
+  });
+});
+
 describe('round-trip', () => {
   test('strip then prepend is identity', () => {
     const original = '---\ntitle: Test\ndate: 2026-01-01\n---\n# Content\n\nParagraph here.\n';

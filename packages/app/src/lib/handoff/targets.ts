@@ -7,7 +7,6 @@ export const KNOWN_TARGETS = [
     appBrandName: 'Claude Desktop',
     schemes: ['claude:'],
     installUrl: 'https://claude.com/download',
-    hasWebFallback: true,
     tagline: "Conversational pairing in Claude Desktop's Cowork tab.",
   },
   {
@@ -16,7 +15,6 @@ export const KNOWN_TARGETS = [
     appBrandName: 'Claude Desktop',
     schemes: ['claude:'],
     installUrl: 'https://claude.com/download',
-    hasWebFallback: true,
     tagline: "Agentic coding in Claude Desktop's Code tab.",
   },
   {
@@ -34,8 +32,15 @@ export const KNOWN_TARGETS = [
     installUrl: 'https://cursor.com/',
     tagline: 'AI-first VS Code fork with multi-file edits.',
   },
+  {
+    id: 'opencode',
+    displayName: 'OpenCode',
+    schemes: [],
+    installUrl: 'https://opencode.ai',
+    tagline: 'Open-source terminal coding agent; bring any local model.',
+  },
 ] as const satisfies ReadonlyArray<TargetData>;
 
 export const VISIBLE_TARGETS: ReadonlyArray<TargetData> = KNOWN_TARGETS.filter(
-  (target) => target.id !== 'claude-cowork',
+  (target) => target.id !== 'claude-cowork' && target.id !== 'opencode',
 );

@@ -266,6 +266,8 @@ export function parseContributors(body: string): ShadowContributor[] {
 
 const OK_CHECKPOINT_PREFIX = 'ok-checkpoint-v1: ';
 
+export type AutoConsolidationTrigger = 'dead-chain' | 'session-close' | 'boot' | 'ttl';
+
 export type ParsedCheckpoint =
   | {
       kind: 'bridge-merge-loss';
@@ -278,6 +280,12 @@ export type ParsedCheckpoint =
       docName: string | null;
       size: number | null;
       metadata: { incomingDiskSha: string };
+    }
+  | {
+      kind: 'auto-consolidation';
+      docName: string | null;
+      size: number | null;
+      metadata: { foldedRefs: number; trigger: string };
     };
 
 export function parseCheckpoint(body: string): ParsedCheckpoint | null {
@@ -323,6 +331,22 @@ export function parseCheckpoint(body: string): ParsedCheckpoint | null {
           docName,
           size,
           metadata: { incomingDiskSha: m.incomingDiskSha },
+        };
+      }
+      return null;
+    }
+    if (kind === 'auto-consolidation') {
+      const m = metadata as { foldedRefs?: unknown; trigger?: unknown };
+      if (
+        typeof m.foldedRefs === 'number' &&
+        Number.isFinite(m.foldedRefs) &&
+        typeof m.trigger === 'string'
+      ) {
+        return {
+          kind: 'auto-consolidation',
+          docName,
+          size,
+          metadata: { foldedRefs: m.foldedRefs, trigger: m.trigger },
         };
       }
       return null;

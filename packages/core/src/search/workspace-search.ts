@@ -1,8 +1,11 @@
 import { type AnyOrama, create, insertMultiple, search } from '@orama/orama';
+import { isHiddenDocName } from '../util/doc-name.ts';
 
-export type WorkspaceSearchKind = 'page' | 'folder';
+export type WorkspaceSearchKind = 'page' | 'folder' | 'file';
 export type WorkspaceSearchIntent = 'omnibar' | 'autocomplete' | 'full_text';
 export type WorkspaceSearchScope = WorkspaceSearchKind | 'content';
+
+export type WorkspaceSearchRanking = 'navigation' | 'relevance';
 
 export interface WorkspaceSearchDocument {
   id: string;
@@ -22,13 +25,23 @@ export interface WorkspaceSearchResult {
     lexical: number;
     fullText: number;
     recency: number;
+    vector?: number;
   };
+}
+
+export interface WorkspaceSemanticInput {
+  scores: ReadonlyMap<string, number>;
+  rrfK?: number;
+  candidateLimit?: number;
+  similarityFloor?: number;
 }
 
 export interface WorkspaceSearchOptions {
   intent?: WorkspaceSearchIntent;
+  ranking?: WorkspaceSearchRanking;
   scopes?: readonly WorkspaceSearchScope[];
   limit?: number;
+  semantic?: WorkspaceSemanticInput;
 }
 
 export interface WorkspaceSearchCorpus {
@@ -37,6 +50,20 @@ export interface WorkspaceSearchCorpus {
 
 export const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
 export const MAX_WORKSPACE_SEARCH_LIMIT = 100;
+
+export const DEFAULT_RRF_K = 60;
+export const DEFAULT_VECTOR_CANDIDATE_LIMIT = 64;
+export const DEFAULT_VECTOR_SIMILARITY_FLOOR = 0;
+
+export const DEFAULT_FOLDER_RESULT_CAP = 3;
+export const DEFAULT_FILE_RESULT_CAP = 3;
+
+const DEFAULT_LEXICAL_RESULT_CAP = MAX_WORKSPACE_SEARCH_LIMIT;
+export const DEFAULT_BODY_RESULT_CAP = 6;
+export const DEFAULT_PATH_ONLY_RESULT_CAP = 4;
+
+const LEXICAL_BRACKET_FLOOR = 500;
+const PATH_SUBSTRING_BRACKET = 450;
 
 const WORKSPACE_SEARCH_SCHEMA = {
   id: 'string',
@@ -63,6 +90,14 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+const DOC_EXTENSION_RE = /\.(?:md|mdx)$/;
+
+function queryForKind(normalizedQuery: string, kind: WorkspaceSearchKind): string {
+  if (kind !== 'page') return normalizedQuery;
+  const stripped = normalizedQuery.replace(DOC_EXTENSION_RE, '');
+  return stripped.length > 0 ? stripped : normalizedQuery;
+}
+
 export function workspaceSearchBasename(path: string): string {
   const segments = path.split('/').filter(Boolean);
   return segments[segments.length - 1] ?? path;
@@ -78,17 +113,27 @@ export function createWorkspaceSearchDocument(input: {
   title?: string | null;
   content?: string | null;
   modifiedTs?: number | null;
+  aliases?: readonly string[] | null;
 }): WorkspaceSearchDocument {
   const name = workspaceSearchBasename(input.path);
   const title = input.title?.trim() || name;
   const modifiedTs = input.modifiedTs ?? 0;
+  const baseSegments = input.path.split('/').filter(Boolean);
+  const baseSet = new Set(baseSegments);
+  const aliasSegments = [
+    ...new Set(
+      (input.aliases ?? [])
+        .flatMap((alias) => alias.split('/').filter(Boolean))
+        .filter((segment) => !baseSet.has(segment)),
+    ),
+  ];
   return {
     id: `${input.kind}:${input.path}`,
     kind: input.kind,
     path: input.path,
     title,
     name,
-    pathSegments: workspaceSearchPathSegments(input.path),
+    pathSegments: [...baseSegments, ...aliasSegments].join(' '),
     content: input.content ?? '',
     modifiedTs: Number.isFinite(modifiedTs) ? modifiedTs : 0,
   };
@@ -124,8 +169,8 @@ function getWorkspaceSearchIndex(corpus: WorkspaceSearchCorpus): WorkspaceSearch
 
 function defaultScopes(intent: WorkspaceSearchIntent): readonly WorkspaceSearchScope[] {
   if (intent === 'autocomplete') return ['page'];
-  if (intent === 'full_text') return ['page', 'content'];
-  return ['page', 'folder'];
+  if (intent === 'full_text') return ['page', 'content', 'file'];
+  return ['page', 'folder', 'file'];
 }
 
 function scopeAllows(document: WorkspaceSearchDocument, scopes: ReadonlySet<WorkspaceSearchScope>) {
@@ -133,22 +178,102 @@ function scopeAllows(document: WorkspaceSearchDocument, scopes: ReadonlySet<Work
   return document.kind === 'page' && scopes.has('content');
 }
 
-function lexicalScore(document: WorkspaceSearchDocument, query: string): number {
+function lexicalBracket(document: WorkspaceSearchDocument, query: string): number {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return 0;
+  const q = queryForKind(normalizedQuery, document.kind);
 
   const title = normalize(document.title);
   const name = normalize(document.name);
   const path = normalize(document.path);
   const pathSegments = path.split('/');
 
-  if (title === normalizedQuery || name === normalizedQuery) return 700;
-  if (path === normalizedQuery) return 650;
-  if (title.startsWith(normalizedQuery) || name.startsWith(normalizedQuery)) return 600;
-  if (pathSegments.some((segment) => segment.startsWith(normalizedQuery))) return 550;
-  if (title.includes(normalizedQuery) || name.includes(normalizedQuery)) return 500;
-  if (path.includes(normalizedQuery)) return 450;
+  if (title === q || name === q) return 700;
+  if (path === q) return 650;
+  if (title.startsWith(q) || name.startsWith(q)) return 600;
+  if (pathSegments.some((segment) => segment.startsWith(q))) return 550;
+  if (title.includes(q) || name.includes(q)) return 500;
+  if (path.includes(q)) return 450;
   return -1;
+}
+
+const HIDDEN_DOC_LEXICAL_PENALTY = 0.5;
+
+function lexicalScore(document: WorkspaceSearchDocument, query: string): number {
+  const bracket = lexicalBracket(document, query);
+  if (bracket <= 0) return bracket;
+  return isHiddenDocName(document.path) ? bracket * HIDDEN_DOC_LEXICAL_PENALTY : bracket;
+}
+
+const FILE_KIND_SCORE_DEMOTION = 60;
+
+function canonicalKindAdjustment(kind: WorkspaceSearchKind): number {
+  return kind === 'file' ? -FILE_KIND_SCORE_DEMOTION : 0;
+}
+
+const TIER_DOMINANT_GAP = 1000;
+
+const NAV_RECENCY_CAP = 50;
+
+const NAV_BODY_WEIGHT = 1;
+const NAV_RECENCY_WEIGHT = 1;
+
+const NAV_KIND_NUDGE = 0.001;
+
+function navigationScore(
+  lexical: number,
+  fullText: number,
+  recency: number,
+  kind: WorkspaceSearchKind,
+  maxFullText: number,
+): number {
+  const bodyNorm = maxFullText > 0 ? fullText / maxFullText : 0;
+  const recencyNorm = NAV_RECENCY_CAP > 0 ? recency / NAV_RECENCY_CAP : 0;
+  const kindNudge = kind === 'file' ? -NAV_KIND_NUDGE : 0;
+  const secondary = NAV_BODY_WEIGHT * bodyNorm + NAV_RECENCY_WEIGHT * recencyNorm + kindNudge;
+  return lexical * TIER_DOMINANT_GAP + secondary;
+}
+
+function fullTextScore(
+  lexical: number,
+  fullText: number,
+  recency: number,
+  kind: WorkspaceSearchKind,
+): number {
+  return lexical + fullText * 20 + recency + canonicalKindAdjustment(kind);
+}
+
+function combinedScore(
+  ranking: WorkspaceSearchRanking,
+  lexical: number,
+  fullText: number,
+  recency: number,
+  kind: WorkspaceSearchKind,
+  maxFullText: number,
+): number {
+  return ranking === 'relevance'
+    ? fullTextScore(lexical, fullText, recency, kind)
+    : navigationScore(lexical, fullText, recency, kind, maxFullText);
+}
+
+function resolveRanking(
+  intent: WorkspaceSearchIntent,
+  ranking: WorkspaceSearchRanking | undefined,
+): WorkspaceSearchRanking {
+  if (ranking) return ranking;
+  return intent === 'full_text' ? 'relevance' : 'navigation';
+}
+
+function maxFullTextScore(
+  candidates: Iterable<WorkspaceSearchDocument>,
+  fullTextScores: ReadonlyMap<string, number>,
+): number {
+  let max = 0;
+  for (const document of candidates) {
+    const value = fullTextScores.get(document.id) ?? 0;
+    if (value > max) max = value;
+  }
+  return max;
 }
 
 function recencyScores(documents: readonly WorkspaceSearchDocument[]): Map<string, number> {
@@ -195,6 +320,56 @@ function toleranceFor(intent: WorkspaceSearchIntent, query: string): number {
   return intent === 'full_text' ? 1 : 0;
 }
 
+type SearchCategory = 'lexical' | 'body' | 'pathOnly';
+
+function categorize(result: WorkspaceSearchResult): SearchCategory {
+  const { lexical, fullText } = result.signals;
+  if (lexical >= LEXICAL_BRACKET_FLOOR) return 'lexical';
+  if (lexical === PATH_SUBSTRING_BRACKET && fullText <= 0) return 'pathOnly';
+  return 'body';
+}
+
+function applyCategoryCaps(ranked: readonly WorkspaceSearchResult[]): WorkspaceSearchResult[] {
+  const lexical: WorkspaceSearchResult[] = [];
+  const body: WorkspaceSearchResult[] = [];
+  const pathOnly: WorkspaceSearchResult[] = [];
+  for (const result of ranked) {
+    const category = categorize(result);
+    if (category === 'lexical') {
+      if (lexical.length < DEFAULT_LEXICAL_RESULT_CAP) lexical.push(result);
+    } else if (category === 'body') {
+      if (body.length < DEFAULT_BODY_RESULT_CAP) body.push(result);
+    } else if (pathOnly.length < DEFAULT_PATH_ONLY_RESULT_CAP) {
+      pathOnly.push(result);
+    }
+  }
+  return [...lexical, ...body, ...pathOnly];
+}
+
+function finalizeResults(
+  ranked: readonly WorkspaceSearchResult[],
+  ranking: WorkspaceSearchRanking,
+  limit: number,
+): WorkspaceSearchResult[] {
+  if (ranking === 'relevance') return ranked.slice(0, limit);
+  const categorized = applyCategoryCaps(ranked);
+  const selected: WorkspaceSearchResult[] = [];
+  let folders = 0;
+  let files = 0;
+  for (const result of categorized) {
+    if (result.document.kind === 'folder') {
+      if (folders >= DEFAULT_FOLDER_RESULT_CAP) continue;
+      folders += 1;
+    } else if (result.document.kind === 'file') {
+      if (files >= DEFAULT_FILE_RESULT_CAP) continue;
+      files += 1;
+    }
+    selected.push(result);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
 export function searchWorkspaceDocuments(
   documents: readonly WorkspaceSearchDocument[],
   query: string,
@@ -209,6 +384,7 @@ export function searchWorkspaceCorpus(
   options: WorkspaceSearchOptions = {},
 ): WorkspaceSearchResult[] {
   const intent = options.intent ?? 'omnibar';
+  const ranking = resolveRanking(intent, options.ranking);
   const limit = clampLimit(options.limit);
   const scopes = new Set(options.scopes ?? defaultScopes(intent));
   const scopedDocuments = corpus.documents.filter((document) => scopeAllows(document, scopes));
@@ -253,20 +429,164 @@ export function searchWorkspaceCorpus(
     candidates.set(hit.document.id, hit.document);
   }
 
-  return [...candidates.values()]
-    .map((document) => {
-      const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
-      const fullText = fullTextScores.get(document.id) ?? 0;
-      const recencyScore = recency.get(document.id) ?? 0;
-      return {
-        document,
-        score: lexical + fullText * 20 + recencyScore,
-        signals: { lexical, fullText, recency: recencyScore },
-      };
-    })
+  if (!options.semantic) {
+    const maxFullText = maxFullTextScore(candidates.values(), fullTextScores);
+    const ranked = [...candidates.values()]
+      .map((document) => {
+        const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
+        const fullText = fullTextScores.get(document.id) ?? 0;
+        const recencyScore = recency.get(document.id) ?? 0;
+        return {
+          document,
+          score: combinedScore(
+            ranking,
+            lexical,
+            fullText,
+            recencyScore,
+            document.kind,
+            maxFullText,
+          ),
+          signals: { lexical, fullText, recency: recencyScore },
+        };
+      })
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        return a.document.path.localeCompare(b.document.path);
+      });
+    return finalizeResults(ranked, ranking, limit);
+  }
+
+  return finalizeResults(
+    rankWithVector({
+      scopedDocuments,
+      candidates,
+      fullTextScores,
+      recency,
+      normalizedQuery,
+      ranking,
+      semantic: options.semantic,
+    }),
+    ranking,
+    limit,
+  );
+}
+
+interface SemanticRow {
+  document: WorkspaceSearchDocument;
+  score: number;
+  signals: WorkspaceSearchResult['signals'];
+  lexical: number;
+  fullText: number;
+  recency: number;
+  cosine: number | undefined;
+}
+
+function denseRank(orderedIds: readonly string[]): Map<string, number> {
+  const ranks = new Map<string, number>();
+  orderedIds.forEach((id, i) => {
+    ranks.set(id, i + 1);
+  });
+  return ranks;
+}
+
+function rankWithVector(args: {
+  scopedDocuments: readonly WorkspaceSearchDocument[];
+  candidates: Map<string, WorkspaceSearchDocument>;
+  fullTextScores: ReadonlyMap<string, number>;
+  recency: ReadonlyMap<string, number>;
+  normalizedQuery: string;
+  ranking: WorkspaceSearchRanking;
+  semantic: WorkspaceSemanticInput;
+}): WorkspaceSearchResult[] {
+  const {
+    scopedDocuments,
+    candidates,
+    fullTextScores,
+    recency,
+    normalizedQuery,
+    ranking,
+    semantic,
+  } = args;
+  const rrfK = semantic.rrfK ?? DEFAULT_RRF_K;
+  const candidateLimit = semantic.candidateLimit ?? DEFAULT_VECTOR_CANDIDATE_LIMIT;
+  const floor = semantic.similarityFloor ?? DEFAULT_VECTOR_SIMILARITY_FLOOR;
+  const vectorScores = semantic.scores;
+
+  const scopedById = new Map(scopedDocuments.map((d) => [d.id, d] as const));
+  const topVector = [...vectorScores.entries()]
+    .filter(([id, cos]) => cos >= floor && scopedById.has(id))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, candidateLimit);
+  for (const [id] of topVector) {
+    if (!candidates.has(id)) {
+      const doc = scopedById.get(id);
+      if (doc) candidates.set(id, doc);
+    }
+  }
+
+  const maxFullText = maxFullTextScore(candidates.values(), fullTextScores);
+
+  const rows: SemanticRow[] = [...candidates.values()].map((document) => {
+    const lexical = Math.max(0, lexicalScore(document, normalizedQuery));
+    const fullText = fullTextScores.get(document.id) ?? 0;
+    const recencyScore = recency.get(document.id) ?? 0;
+    const cosine = vectorScores.get(document.id);
+    const qualifies = cosine !== undefined && cosine >= floor;
+    const score =
+      lexical > 0
+        ? combinedScore(ranking, lexical, fullText, recencyScore, document.kind, maxFullText)
+        : fullTextScore(lexical, fullText, recencyScore, document.kind);
+    return {
+      document,
+      score,
+      signals: qualifies
+        ? { lexical, fullText, recency: recencyScore, vector: cosine }
+        : { lexical, fullText, recency: recencyScore },
+      lexical,
+      fullText,
+      recency: recencyScore,
+      cosine,
+    };
+  });
+
+  const bm25Rank = denseRank(
+    rows
+      .filter((r) => r.fullText > 0)
+      .sort((a, b) => b.fullText - a.fullText || a.document.path.localeCompare(b.document.path))
+      .map((r) => r.document.id),
+  );
+  const vecRank = denseRank(
+    rows
+      .filter(
+        (r): r is SemanticRow & { cosine: number } => r.cosine !== undefined && r.cosine >= floor,
+      )
+      .sort((a, b) => b.cosine - a.cosine || a.document.path.localeCompare(b.document.path))
+      .map((r) => r.document.id),
+  );
+
+  const rrfScore = (id: string): number => {
+    let s = 0;
+    const br = bm25Rank.get(id);
+    if (br !== undefined) s += 1 / (rrfK + br);
+    const vr = vecRank.get(id);
+    if (vr !== undefined) s += 1 / (rrfK + vr);
+    return s;
+  };
+
+  return rows
     .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score;
+      const aLexical = a.lexical > 0 ? 1 : 0;
+      const bLexical = b.lexical > 0 ? 1 : 0;
+      if (aLexical !== bLexical) return bLexical - aLexical; // lexical tier first
+      if (aLexical === 1) {
+        if (a.score !== b.score) return b.score - a.score; // within lexical tier: legacy order
+        return a.document.path.localeCompare(b.document.path);
+      }
+      const ar = rrfScore(a.document.id);
+      const br = rrfScore(b.document.id);
+      if (ar !== br) return br - ar; // body tier: RRF(BM25, vector)
+      if (a.recency !== b.recency) return b.recency - a.recency;
       return a.document.path.localeCompare(b.document.path);
     })
-    .slice(0, limit);
+    .map(({ document, score, signals }) => ({ document, score, signals }));
 }

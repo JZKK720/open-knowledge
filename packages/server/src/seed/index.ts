@@ -1,5 +1,6 @@
 export { applySeed } from './apply.ts';
 export { planSeed } from './plan.ts';
+export { formatPackRationale } from './rationale.ts';
 export {
   buildStarterFolderFrontmatterYaml,
   coercePackId,

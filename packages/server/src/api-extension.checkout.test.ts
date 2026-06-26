@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 interface TestRig {
   port: number;
@@ -75,12 +76,7 @@ async function bootRig(
   });
   hocuspocus.configuration.extensions.push(ext);
 
-  const port = await new Promise<number>((resolveListen) => {
-    server.listen(0, () => {
-      const addr = server.address();
-      resolveListen(typeof addr === 'object' && addr ? addr.port : 0);
-    });
-  });
+  const { port } = await listenOnLoopback(server);
 
   return {
     port,
@@ -97,7 +93,7 @@ async function postCheckout(
   port: number,
   body: Record<string, unknown>,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`http://localhost:${port}/api/git/checkout`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/git/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -341,7 +337,7 @@ describe('POST /api/git/checkout', () => {
       commitAll(projectDir, 'init');
     });
 
-    const res = await fetch(`http://localhost:${rig.port}/api/git/checkout`);
+    const res = await fetch(`http://127.0.0.1:${rig.port}/api/git/checkout`);
     expect(res.status).toBe(405);
   });
 

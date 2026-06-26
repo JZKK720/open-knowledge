@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 const FIXED_GROUP_ANCHOR = '@inkeep/open-knowledge';
 const PRE_PATH = '.changeset/pre.json';
 const CHANGESET_DIR = '.changeset';
-const PUBLIC_REPO = process.env.GITHUB_REPOSITORY || 'inkeep/open-knowledge-legacy';
+const PUBLIC_REPO = process.env.GITHUB_REPOSITORY || 'inkeep/open-knowledge';
 const CHANGELOG_PKGS = ['cli', 'core', 'server', 'app', 'desktop'];
 const CONSUMED_MARKER_RE = /<!--\s*ok-consumed-set:\s*(\[[^\]]*\])\s*-->/;
 const BUMP_RANK = { patch: 1, minor: 2, major: 3 };

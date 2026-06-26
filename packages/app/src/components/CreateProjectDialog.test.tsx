@@ -3,11 +3,9 @@ import {
   basenamePreview,
   CreateProjectDialog,
   computeCascade,
-  dirnamePreview,
   joinPathPreview,
   parseCreateNewError,
 } from './CreateProjectDialog';
-import SRC from './CreateProjectDialog?raw';
 
 describe('joinPathPreview', () => {
   test('joins parent + name with forward slash by default', () => {
@@ -50,49 +48,6 @@ describe('basenamePreview', () => {
 
   test('returns empty string for empty input', () => {
     expect(basenamePreview('')).toBe('');
-  });
-});
-
-describe('dirnamePreview', () => {
-  test('extracts the parent directory from a POSIX path', () => {
-    expect(dirnamePreview('/Users/me/Projects/Foo')).toBe('/Users/me/Projects');
-  });
-
-  test('extracts the parent directory from a Windows path', () => {
-    expect(dirnamePreview('C:\\Users\\me\\Projects\\Foo')).toBe('C:\\Users\\me\\Projects');
-  });
-
-  test('tolerates trailing separators', () => {
-    expect(dirnamePreview('/Users/me/Projects/Foo/')).toBe('/Users/me/Projects');
-    expect(dirnamePreview('C:\\Users\\me\\Foo\\')).toBe('C:\\Users\\me');
-  });
-
-  test('returns empty string when there is no parent (single segment)', () => {
-    expect(dirnamePreview('Foo')).toBe('');
-  });
-
-  test('returns the root separator when path is one segment under root', () => {
-    expect(dirnamePreview('/foo')).toBe('/');
-    expect(dirnamePreview('\\foo')).toBe('\\');
-  });
-
-  test('returns empty string for empty input', () => {
-    expect(dirnamePreview('')).toBe('');
-  });
-
-  test('round-trips with basenamePreview at the submit-time decomposition site', () => {
-    const inputs = [
-      '/Users/me/Projects/MyNotes',
-      '/Users/me/Projects/MyNotes/',
-      'C:\\Users\\me\\Projects\\MyNotes',
-    ];
-    for (const picked of inputs) {
-      const parent = dirnamePreview(picked);
-      const basename = basenamePreview(picked);
-      expect(parent).not.toBe('');
-      expect(basename).not.toBe('');
-      expect(joinPathPreview(parent, basename)).toBe(picked.replace(/[/\\]+$/, ''));
-    }
   });
 });
 
@@ -227,116 +182,7 @@ describe('CreateProjectDialog module', () => {
     expect(typeof mod.CreateProjectDialog).toBe('function');
     expect(typeof mod.computeCascade).toBe('function');
     expect(typeof mod.joinPathPreview).toBe('function');
+    expect(typeof mod.basenamePreview).toBe('function');
     expect(typeof mod.parseCreateNewError).toBe('function');
-  });
-});
-
-describe('CreateProjectDialog — load-bearing structural guards', () => {
-  test('Cancel button is type="button" so it does not submit the form', () => {
-    expect(SRC).toMatch(
-      /<Button[\s\S]{0,400}?type="button"[\s\S]{0,400}?data-testid="create-cancel"/,
-    );
-  });
-
-  test('Submit button is type="submit" so Enter-on-input fires Create', () => {
-    expect(SRC).toMatch(
-      /<Button[\s\S]{0,400}?type="submit"[\s\S]{0,400}?data-testid="create-submit"/,
-    );
-  });
-
-  test('Submit button form attribute binds to the form element id (cross-form submit contract)', () => {
-    expect(SRC).toMatch(/<form[\s\S]{0,400}?id={formId}/);
-    expect(SRC).toMatch(
-      /<Button[\s\S]{0,400}?form={formId}[\s\S]{0,400}?data-testid="create-submit"/,
-    );
-  });
-
-  test('Subfolder rescue sticky-promotes on block-nonempty at the probe transition', () => {
-    expect(SRC).toMatch(
-      /nextCascade\.kind\s*===\s*['"]block-nonempty['"][\s\S]{0,100}?setNeedsSubfolder\(true\)/,
-    );
-  });
-
-  test('Browse re-pick resets both needsSubfolder and subfolderName', () => {
-    const onBrowseBlock = SRC.match(/async function onBrowse\(\)[\s\S]{0,2500}?\n\s{2}\}/);
-    expect(onBrowseBlock).not.toBeNull();
-    const body = onBrowseBlock?.[0] ?? '';
-    expect(body).toContain('setNeedsSubfolder(false)');
-    expect(body).toContain("setSubfolderName('')");
-  });
-
-  test('Browse button is type="button" and calls bridge.dialog.openFolder', () => {
-    expect(SRC).toMatch(
-      /<Button[\s\S]{0,400}?type="button"[\s\S]{0,400}?data-testid="create-browse"/,
-    );
-    expect(SRC).toMatch(/bridge\.dialog\.openFolder\s*\(/);
-  });
-
-  test('onSubmit calls preventDefault to suppress renderer page-reload', () => {
-    expect(SRC).toMatch(/onSubmit[\s\S]{0,200}?e\.preventDefault\(\)/);
-  });
-
-  test('Editor labels + ALL_EDITOR_IDS are sourced from @inkeep/open-knowledge-core', () => {
-    expect(SRC).toMatch(/EDITOR_LABELS[\s\S]{0,400}from '@inkeep\/open-knowledge-core'/);
-    expect(SRC).toMatch(/ALL_EDITOR_IDS[\s\S]{0,400}from '@inkeep\/open-knowledge-core'/);
-    expect(SRC).not.toMatch(/^const EDITOR_LABELS\b/m);
-    expect(SRC).not.toMatch(/^const ALL_EDITOR_IDS\b/m);
-  });
-
-  test('Cascade evaluator imports + uses sanitizeFolderName from core', () => {
-    expect(SRC).toContain("from '@inkeep/open-knowledge-core'");
-    expect(SRC).toContain('sanitizeFolderName');
-  });
-
-  test('Telemetry call fires bridge.project.recordCreateNewBannerShown', () => {
-    expect(SRC).toContain('recordCreateNewBannerShown');
-  });
-
-  test('All four ALL_EDITOR_IDS rendered as checkbox rows (data-testid contract)', () => {
-    expect(SRC).toMatch(/data-testid={`create-editor-\$\{id\}`}/);
-  });
-
-  test('Banner variants carry stable data-testids the e2e relies on', () => {
-    expect(SRC).toContain('data-testid="create-banner-nested"');
-    expect(SRC).toContain('data-testid="create-banner-git-confirm"');
-    expect(SRC).toContain('data-testid="create-banner-nested-open"');
-    expect(SRC).toContain('data-testid="create-banner-sanitize-diverged"');
-    expect(SRC).toContain('data-testid="create-banner-sanitize-erased"');
-    expect(SRC).not.toContain('data-testid="create-banner-nonempty"');
-    expect(SRC).toContain('data-testid="create-subfolder-rescue"');
-    expect(SRC).toContain('data-testid="create-subfolder-input"');
-  });
-
-  test('No forbidden React Compiler escape hatches (memo / useMemo / useCallback / forwardRef)', () => {
-    expect(SRC).not.toMatch(/\bforwardRef\b/);
-    expect(SRC).not.toMatch(/\buseMemo\b/);
-    expect(SRC).not.toMatch(/\buseCallback\b/);
-    expect(SRC).not.toMatch(/\bmemo\(/);
-  });
-
-  test('No inline style props (Tailwind via className per code-style rule)', () => {
-    expect(SRC).not.toMatch(/\bstyle=\{\{/);
-  });
-
-  test('Open-tracking useEffect resets transient state on each open', () => {
-    const block = SRC.match(/if \(!open\) return;[\s\S]{0,1500}?bridge\.fs/);
-    expect(block).not.toBeNull();
-    const body = block?.[0] ?? '';
-    expect(body).toContain('setBusy(false)');
-    expect(body).toContain("setPicked('')");
-    expect(body).toContain("setDefaultPath('')");
-    expect(body).toContain('setEditorIds(new Set(ALL_EDITOR_IDS))');
-  });
-
-  test('dialog renders a single Location affordance, no Name <Input>', () => {
-    expect(SRC).not.toMatch(/<Input[\s\S]{0,400}?id="create-name"/);
-    expect(SRC).not.toMatch(/data-testid="create-name"/);
-    expect(SRC).toContain('data-testid="create-browse"');
-    expect(SRC).toContain('data-testid="create-target-caption"');
-  });
-
-  test('submit handler derives parent + name from the picked target', () => {
-    expect(SRC).not.toMatch(/\bconst \[name, setName\] = useState/);
-    expect(SRC).not.toMatch(/\bconst \[parent, setParent\] = useState/);
   });
 });

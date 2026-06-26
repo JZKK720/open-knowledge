@@ -17,9 +17,9 @@ const LAYERS: Layer[] = [
     role: 'What you touch',
     desc: (
       <>
-        A beautiful macOS editor for your <code>.md</code> files: WYSIWYG or source mode, backlinks,
-        the <code>[[Page]]</code> wiki-link syntax, frontmatter, asset embeds, and version history,
-        with a live preview as agents work.
+        A beautiful editor for your <code>.md</code> files: WYSIWYG or source mode, backlinks, the{' '}
+        <code>[[Page]]</code> wiki-link syntax, frontmatter, asset embeds, and version history, with
+        a live preview as agents work.
       </>
     ),
   },
@@ -82,13 +82,13 @@ interface Path {
 const PATHS: Path[] = [
   {
     href: '/docs/get-started/quickstart',
-    title: 'New to Open Knowledge? Run the Quickstart',
+    title: 'New to OpenKnowledge? Run the Quickstart',
     desc: 'Install the desktop app and get your first agent-driven edit in under five minutes.',
   },
   {
     href: '/docs/integrations/claude-code',
     title: 'Setting up an editor?',
-    desc: 'Pick yours from Integrations: Claude Code, Cursor, Codex, or Claude Desktop.',
+    desc: 'Pick yours from Integrations: Claude, Cursor, Codex, or OpenCode.',
   },
   {
     href: '/docs/reference/mcp',
@@ -123,29 +123,6 @@ export function WhereToStart() {
           <ArrowRight className="size-4 shrink-0 text-fd-muted-foreground transition-colors group-hover:text-[var(--ok-accent)]" />
         </a>
       ))}
-    </div>
-  );
-}
-
-export function QuickstartCTA() {
-  return (
-    <div className="ok-overview not-prose mt-10 flex flex-col items-start justify-between gap-5 rounded-2xl border border-fd-border bg-fd-card px-[26px] py-6 shadow-sm sm:flex-row sm:items-center sm:gap-6">
-      <div>
-        <span className="block text-base font-semibold text-fd-foreground">Quickstart</span>
-        <span className="text-sm text-fd-muted-foreground">
-          From install to your first agent-driven edit in under five minutes.
-        </span>
-      </div>
-      <a
-        href="/docs/get-started/quickstart"
-        className="inline-flex shrink-0 items-center gap-2 rounded-[10px] px-[18px] py-[11px] text-[14.5px] font-semibold text-white no-underline"
-        style={{
-          background: 'var(--ok-accent)',
-          boxShadow: '0 2px 8px color-mix(in oklch, var(--ok-accent) 40%, transparent)',
-        }}
-      >
-        Get started <ArrowRight className="size-[15px]" aria-hidden="true" />
-      </a>
     </div>
   );
 }

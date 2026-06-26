@@ -3,12 +3,12 @@ import { describe as _bunDescribe, afterEach, beforeEach, expect, test } from 'b
 const describe = process.env.CI ? _bunDescribe.skip : _bunDescribe;
 
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { OK_DIR } from '@inkeep/open-knowledge-core';
+import { emitToleranceFire, OK_DIR } from '@inkeep/open-knowledge-core';
 import { context, metrics, trace } from '@opentelemetry/api';
 import {
   BasicTracerProvider,
@@ -48,6 +48,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     let caught: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         port: 0,
@@ -64,7 +65,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     expect(e.name).toBe('MissingOkConfigError');
     expect(e.kind).toBe('okdir');
     expect(e.projectDir).toBe(contentDir);
-    expect(e.message).toContain('Open Knowledge config not found at .ok/config.yml');
+    expect(e.message).toContain('OpenKnowledge config not found at .ok/config.yml');
     expect(e.message).toContain('Run ok init');
     expect(existsSync(resolve(contentDir, '.git/ok'))).toBe(false);
   });
@@ -79,6 +80,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     let caught: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         port: 0,
@@ -94,7 +96,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     const e = caught as Error & { kind?: string };
     expect(e.name).toBe('MissingOkConfigError');
     expect(e.kind).toBe('config');
-    expect(e.message).toContain('Open Knowledge config not found at .ok/config.yml');
+    expect(e.message).toContain('OpenKnowledge config not found at .ok/config.yml');
     expect(existsSync(resolve(contentDir, '.git/ok'))).toBe(false);
   });
 
@@ -109,6 +111,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     let booted: Awaited<ReturnType<typeof bootServer>> | null = null;
     try {
       booted = await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         projectDir,
@@ -134,6 +137,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     let caught: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         projectDir,
@@ -168,6 +172,7 @@ describe('bootServer — MissingOkConfigError pre-listen check', () => {
     let booted: Awaited<ReturnType<typeof bootServer>> | null = null;
     try {
       booted = await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         port: 0,
@@ -196,6 +201,7 @@ describe('bootServer — runtime state lives at projectDir, not contentDir', () 
     mkdirSync(contentDir, { recursive: true });
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir,
@@ -221,6 +227,42 @@ describe('bootServer — runtime state lives at projectDir, not contentDir', () 
   });
 });
 
+describe('bootServer — tolerance-telemetry writer wired through the real boot path', () => {
+  test('flag=1 boot produces tolerance-telemetry.jsonl from an emitToleranceFire', async () => {
+    const prevFlag = process.env.OK_BRIDGE_TOLERANCE_TELEMETRY;
+    process.env.OK_BRIDGE_TOLERANCE_TELEMETRY = '1';
+    const projectDir = mkdtempSync(resolve(tmpDir, 'tolerance-telemetry-'));
+    await execFileAsync('git', ['init', '--initial-branch=main', projectDir]);
+    seedOkScaffold(projectDir);
+
+    const booted = await bootServer({
+      config: TEST_CONFIG,
+      projectDir,
+      contentDir: projectDir,
+      port: 0,
+      quiet: true,
+      gitEnabled: false,
+      idleShutdownMs: null,
+      attachUiSibling: false,
+    });
+    try {
+      await booted.ready;
+      emitToleranceFire(['crlf'], 'a\r\n', 'a\n', 'smoke-doc');
+    } finally {
+      await booted.destroy();
+      if (prevFlag === undefined) delete process.env.OK_BRIDGE_TOLERANCE_TELEMETRY;
+      else process.env.OK_BRIDGE_TOLERANCE_TELEMETRY = prevFlag;
+    }
+
+    const logPath = resolve(projectDir, '.ok', 'local', 'tolerance-telemetry.jsonl');
+    expect(existsSync(logPath)).toBe(true);
+    const record = JSON.parse(readFileSync(logPath, 'utf-8').trim().split('\n')[0] ?? '');
+    expect(record.event).toBe('bridge-tolerance-fire');
+    expect(record.class).toBe('crlf');
+    expect(record.document).toBe('smoke-doc');
+  });
+});
+
 describe('bootServer — idle-shutdown runs full destroy', () => {
   test('after idle-shutdown fires with zero WS clients, httpServer is no longer listening', async () => {
     const projectDir = mkdtempSync(resolve(tmpDir, 'idle-full-destroy-'));
@@ -228,6 +270,7 @@ describe('bootServer — idle-shutdown runs full destroy', () => {
     seedOkScaffold(projectDir);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: projectDir,
       port: 0,
@@ -261,6 +304,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     writeFileSync(resolve(shellDistDir, 'index.html'), '<html>shell</html>', 'utf-8');
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -291,6 +335,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     seedOkScaffold(projectDir);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: projectDir,
       port: 0,
@@ -330,6 +375,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     writeFileSync(resolve(lockDir, 'ui.lock'), JSON.stringify(peerSnapshot), 'utf-8');
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -388,6 +434,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     );
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -421,6 +468,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     writeFileSync(resolve(shellDistDir, 'index.html'), '<html>shell</html>', 'utf-8');
 
     const booted1 = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -438,6 +486,7 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     expect(existsSync(uiLockPath)).toBe(false);
 
     const booted2 = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -487,6 +536,7 @@ describe('bootServer — reactShellDistDir end-to-end HTTP shape', () => {
     writeFileSync(resolve(projectDir, 'assets', 'upload.png'), uploadBytes);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       projectDir,
       contentDir: projectDir,
@@ -500,7 +550,7 @@ describe('bootServer — reactShellDistDir end-to-end HTTP shape', () => {
     });
     try {
       await booted.ready;
-      const base = `http://localhost:${booted.port}`;
+      const base = `http://127.0.0.1:${booted.port}`;
 
       const rootRes = await fetch(`${base}/`);
       expect(rootRes.status).toBe(200);
@@ -584,6 +634,7 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     seedOkScaffold(contentDir);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir,
       port: 0,
@@ -628,6 +679,7 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     seedOkScaffold(wtPath);
 
     const booted = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: wtPath,
       port: 0,
@@ -656,6 +708,7 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     let caught: unknown;
     try {
       await bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir,
         port: 0,
@@ -680,6 +733,7 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     await execFileAsync('git', ['init', '--initial-branch=main', mainDir]);
     seedOkScaffold(mainDir);
     const bootedMain = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: mainDir,
       port: 0,
@@ -710,6 +764,7 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     ]);
     seedOkScaffold(wtPath);
     const bootedLinked = await bootServer({
+      host: '127.0.0.1',
       config: TEST_CONFIG,
       contentDir: wtPath,
       port: 0,

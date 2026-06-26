@@ -11,7 +11,7 @@ import {
   textResult,
 } from './shared.ts';
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   '[Requires: Hocuspocus server] Read GitHub-sync merge conflicts. Dispatches on `kind`:',
   '',
   '- `kind: "list"` — enumerate every doc currently tracked in a merge-conflict state. Returns `{ list: [{ file, detectedAt, ... }] }` (empty when none). The entry point to the resolve flow.',

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -7,7 +7,13 @@ import { commitWip, initShadowRepo, type WriterIdentity } from '@inkeep/open-kno
 import simpleGit from 'simple-git';
 import { type Config, ConfigSchema } from '../../config/schema.ts';
 import type { EnrichedMeta } from '../../content/enrichment.ts';
-import { buildExecResult, DESCRIPTION, type ExecStructuredResult } from './exec.ts';
+import {
+  buildExecResult,
+  DESCRIPTION,
+  type ExecStructuredResult,
+  RESULT_BODY_BUDGET_BYTES,
+  WIRE_BODY_COPIES,
+} from './exec.ts';
 import { bindTestUiLock } from './preview-url-test-helpers.ts';
 
 describe('exec DESCRIPTION — STOP-rule anchoring (SPEC 2026-04-22 FR4 / US-007 / QA-009)', () => {
@@ -69,8 +75,8 @@ interface ExecResult {
   isError?: boolean;
 }
 
-function structured(result: ExecResult): ExecStructuredResult {
-  return result.structuredContent as unknown as ExecStructuredResult;
+function structured(result: ExecResult): ExecStructuredResult & { text?: string } {
+  return result.structuredContent as unknown as ExecStructuredResult & { text?: string };
 }
 
 describe('exec — happy path', () => {
@@ -260,7 +266,7 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout?.startsWith('articles/:\n')).toBe(true);
+    expect(s.text?.startsWith('articles/:\n')).toBe(true);
     expect(result.content[0].text).toContain('articles/:\n');
   });
 
@@ -274,8 +280,8 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout?.startsWith('./:')).toBe(false);
-    expect(s.stdout?.startsWith('.:')).toBe(false);
+    expect(s.text?.startsWith('./:')).toBe(false);
+    expect(s.text?.startsWith('.:')).toBe(false);
   });
 
   test('`cat <file.md>` prepends `==> <file> <==` header to stdout', async () => {
@@ -290,7 +296,7 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout?.startsWith('==> articles/auth.md <==\n')).toBe(true);
+    expect(s.text?.startsWith('==> articles/auth.md <==\n')).toBe(true);
   });
 
   test('multi-file `cat a.md b.md` emits no header (would imply false boundaries)', async () => {
@@ -306,7 +312,7 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout).not.toContain('==>');
+    expect(s.text).not.toContain('==>');
     const files = fileEntries(s);
     expect(files.map((f) => f.path).sort()).toEqual(['articles/a.md', 'articles/b.md']);
   });
@@ -323,7 +329,7 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout?.startsWith('==> articles/auth.md <==\n')).toBe(true);
+    expect(s.text?.startsWith('==> articles/auth.md <==\n')).toBe(true);
     const files = fileEntries(s);
     expect(files.some((f) => f.path === 'articles/auth.md')).toBe(true);
   });
@@ -340,7 +346,7 @@ describe('exec — stdout provenance headers', () => {
     )) as ExecResult;
 
     const s = structured(result);
-    expect(s.stdout?.startsWith('==> articles/auth.md <==\n')).toBe(true);
+    expect(s.text).toContain('==> articles/auth.md <==\n');
   });
 });
 
@@ -504,7 +510,7 @@ describe('exec — head/tail truncation banner', () => {
   });
 });
 
-describe('exec — structuredContent mirrors stdout + warnings (Desktop fix)', () => {
+describe('exec — structuredContent mirrors body text + warnings (Desktop fix)', () => {
   async function seed(project: string, nFiles: number, linesPerFile: number): Promise<void> {
     const content = resolve(project, 'content');
     mkdirSync(content, { recursive: true });
@@ -514,7 +520,7 @@ describe('exec — structuredContent mirrors stdout + warnings (Desktop fix)', (
     }
   }
 
-  test('structuredContent.stdout contains the raw output', async () => {
+  test('body rides structuredContent.text; raw stdout copy is dropped (PRD-6937)', async () => {
     const project = await bootstrap();
     const content = resolve(project, 'content');
     mkdirSync(content, { recursive: true });
@@ -526,9 +532,50 @@ describe('exec — structuredContent mirrors stdout + warnings (Desktop fix)', (
     )) as ExecResult;
 
     const s = structured(result);
-    expect(typeof s.stdout).toBe('string');
-    expect(s.stdout).toContain('alpha body');
+    expect(result.content[0].text).toContain('alpha body');
+    expect(typeof s.text).toBe('string');
+    expect(s.text).toContain('alpha body');
+    expect('stdout' in (result.structuredContent ?? {})).toBe(false);
     expect(s.stdoutTruncated).toBe(false);
+  });
+
+  test('body is emitted exactly twice on the wire (content[].text + structuredContent.text)', async () => {
+    const project = await bootstrap();
+    const content = resolve(project, 'content');
+    mkdirSync(content, { recursive: true });
+    const token = 'WIRE_DEDUP_NEEDLE_3F9A';
+    writeFileSync(resolve(content, 'one.md'), `# Doc\n\nfirst ${token} only\n`);
+
+    const result = (await buildExecResult(
+      { command: 'cat content/one.md' },
+      { resolveCwd: async () => project, serverUrl: undefined, config: DEFAULT_CONFIG },
+    )) as ExecResult;
+
+    expect(structured(result).stdoutTruncated).toBe(false);
+    const occurrences = JSON.stringify(result).split(token).length - 1;
+    expect(occurrences).toBe(2);
+  });
+
+  test('mid-size cat stays within the realized per-copy + total wire budget (was 3× overflow)', async () => {
+    const project = await bootstrap();
+    const content = resolve(project, 'content');
+    mkdirSync(content, { recursive: true });
+    const line = `lorem ipsum dolor sit amet consectetur adipiscing elit ${'x'.repeat(40)}`;
+    const body = Array.from({ length: 600 }, () => line).join('\n'); // ~60 KB raw
+    const fm =
+      '---\ntitle: Big Doc\ndescription: a mid-size doc with frontmatter\ntags: [alpha, beta, gamma]\n---\n';
+    writeFileSync(resolve(content, 'big.md'), `${fm}# Big\n\n${body}\n`);
+
+    const result = (await buildExecResult(
+      { command: 'cat content/big.md' },
+      { resolveCwd: async () => project, serverUrl: undefined, config: DEFAULT_CONFIG },
+    )) as ExecResult;
+
+    expect(structured(result).stdoutTruncated).toBe(true);
+    expect(result.content[0].text).toContain('truncated');
+    const perCopyBudget = Math.floor(RESULT_BODY_BUDGET_BYTES / WIRE_BODY_COPIES);
+    expect(result.content[0].text.length).toBeLessThan(perCopyBudget);
+    expect(JSON.stringify(result).length).toBeLessThan(RESULT_BODY_BUDGET_BYTES);
   });
 
   test('structuredContent.warnings includes head-cap truncation banner', async () => {
@@ -665,5 +712,120 @@ describe('exec — per-row route-only previewUrl (FR-2.2)', () => {
     const paths = s.enrichedPaths.map((e) => e.path);
     expect(paths).toContain('meetings/2026-05-01.md');
     expect(paths.some((p) => p.includes('.ok/'))).toBe(false);
+  });
+});
+
+describe('exec — explicit subdirectory cwd', () => {
+  function walkUpResolveCwd(start: string): string {
+    let dir = resolve(start);
+    for (;;) {
+      if (existsSync(resolve(dir, '.ok', 'config.yml'))) return dir;
+      const parent = resolve(dir, '..');
+      if (parent === dir) throw new Error(`no OK project at or above ${start}`);
+      dir = parent;
+    }
+  }
+
+  async function bootstrapWithMarker(): Promise<{ project: string; subdir: string }> {
+    const project = await bootstrap();
+    mkdirSync(resolve(project, '.ok'), { recursive: true });
+    writeFileSync(resolve(project, '.ok', 'config.yml'), 'content:\n  dir: .\n');
+    const subdir = resolve(project, 'subdir');
+    mkdirSync(subdir, { recursive: true });
+    return { project, subdir };
+  }
+
+  test('runs in the passed subdir — bare subdir-relative path resolves', async () => {
+    const { subdir } = await bootstrapWithMarker();
+    writeFileSync(resolve(subdir, 'UNIQUE_MARKER.md'), 'marker contents\n');
+
+    const result = (await buildExecResult(
+      { command: 'cat UNIQUE_MARKER.md', cwd: subdir },
+      {
+        resolveCwd: async (explicit) => walkUpResolveCwd(explicit ?? subdir),
+        serverUrl: undefined,
+        config: DEFAULT_CONFIG,
+      },
+    )) as ExecResult;
+
+    expect(result.isError).toBeFalsy();
+    expect(structured(result).text).toContain('marker contents');
+  });
+
+  test('structuredContent.cwd reports the passed subdir, not the walked-up root', async () => {
+    const { project, subdir } = await bootstrapWithMarker();
+    writeFileSync(resolve(subdir, 'UNIQUE_MARKER.md'), 'marker contents\n');
+
+    const result = (await buildExecResult(
+      { command: 'cat UNIQUE_MARKER.md', cwd: subdir },
+      {
+        resolveCwd: async (explicit) => walkUpResolveCwd(explicit ?? subdir),
+        serverUrl: undefined,
+        config: DEFAULT_CONFIG,
+      },
+    )) as ExecResult;
+
+    expect(structured(result).cwd).toBe(subdir);
+    expect(structured(result).cwd).not.toBe(project);
+  });
+
+  test('enrichment addresses subdir files project-relative (docName under the root)', async () => {
+    const { subdir } = await bootstrapWithMarker();
+    writeFileSync(resolve(subdir, 'note.md'), '---\ntitle: Subdir Note\n---\n\nBody\n');
+
+    const result = (await buildExecResult(
+      { command: 'cat note.md', cwd: subdir },
+      {
+        resolveCwd: async (explicit) => walkUpResolveCwd(explicit ?? subdir),
+        serverUrl: undefined,
+        config: DEFAULT_CONFIG,
+      },
+    )) as ExecResult;
+
+    expect(result.isError).toBeFalsy();
+    const files = fileEntries(structured(result));
+    expect(files.length).toBe(1);
+    expect(files[0].path).toBe('subdir/note.md');
+    expect(files[0].title).toBe('Subdir Note');
+    expect(structured(result).text?.startsWith('==> subdir/note.md <==\n')).toBe(true);
+  });
+
+  test('ls provenance header is rebased to the project-relative dir from a subdir', async () => {
+    const { subdir } = await bootstrapWithMarker();
+    const inner = resolve(subdir, 'inner');
+    mkdirSync(inner, { recursive: true });
+    writeFileSync(resolve(inner, 'doc.md'), '---\ntitle: Inner\n---\nBody');
+
+    const result = (await buildExecResult(
+      { command: 'ls inner/', cwd: subdir },
+      {
+        resolveCwd: async (explicit) => walkUpResolveCwd(explicit ?? subdir),
+        serverUrl: undefined,
+        config: DEFAULT_CONFIG,
+      },
+    )) as ExecResult;
+
+    expect(result.isError).toBeFalsy();
+    expect(structured(result).text?.startsWith('subdir/inner/:\n')).toBe(true);
+  });
+
+  test('passing the project root still runs there (unchanged behavior)', async () => {
+    const { project } = await bootstrapWithMarker();
+    const articles = resolve(project, 'articles');
+    mkdirSync(articles, { recursive: true });
+    writeFileSync(resolve(articles, 'auth.md'), '---\ntitle: Auth\n---\nBody');
+
+    const result = (await buildExecResult(
+      { command: 'cat articles/auth.md', cwd: project },
+      {
+        resolveCwd: async (explicit) => walkUpResolveCwd(explicit ?? project),
+        serverUrl: undefined,
+        config: DEFAULT_CONFIG,
+      },
+    )) as ExecResult;
+
+    expect(result.isError).toBeFalsy();
+    expect(structured(result).cwd).toBe(project);
+    expect(fileEntries(structured(result))[0].path).toBe('articles/auth.md');
   });
 });

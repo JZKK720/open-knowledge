@@ -26,7 +26,9 @@ import {
   installColdMountInstrumentation,
   shouldInstallColdMountInstrumentation,
 } from '@/lib/perf/cold-mount-instrumentation';
+import { installRelaunchStateBridge } from '@/lib/relaunch-store';
 import { installShareReceivedListener } from '@/lib/share/receive-store';
+import { seedInitialDocHashFromWindow } from '@/lib/single-file-initial-doc';
 import { installUpdateNoticesBridge } from '@/lib/update-notices-store';
 import { App } from './App';
 import '@fontsource-variable/inter';
@@ -49,6 +51,8 @@ if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
 }
 
 installUpdateNoticesBridge();
+
+installRelaunchStateBridge();
 
 if (typeof window !== 'undefined') {
   installDeepLinkListener({ bridge: window.okDesktop });
@@ -73,6 +77,8 @@ if (typeof window !== 'undefined') {
 if (typeof window !== 'undefined') {
   installShareReceivedListener({ bridge: window.okDesktop });
 }
+
+seedInitialDocHashFromWindow();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -74,23 +73,15 @@ async function runProbe(
     }).toPass({ timeout: 30_000 });
     if (!page) throw new Error('editor page not found');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('.ProseMirror')).toContainText(marker, { timeout: 30_000 });
+    await expect(
+      page.locator('.ProseMirror[contenteditable="true"]:not(.composer-prosemirror)'),
+    ).toContainText(marker, { timeout: 30_000 });
 
-    let port = 0;
-    const userDataBasename = userDataDir.split('/').pop() ?? userDataDir;
-    try {
-      const psOut = execSync('ps -axww -o command 2>/dev/null', { encoding: 'utf-8' });
-      const line = psOut
-        .split('\n')
-        .find((l) => l.includes(userDataBasename) && l.includes('ok-api-origin='));
-      const m = line?.match(/ok-api-origin=http:\/\/localhost:(\d+)/);
-      if (m) port = Number(m[1]);
-    } catch {}
-    if (!port) {
-      throw new Error(
-        `Could not auto-detect API port via renderer argv (userDataBasename=${userDataBasename})`,
-      );
+    const apiOrigin = await page.evaluate(() => window.okDesktop?.config?.apiOrigin);
+    if (!apiOrigin) {
+      throw new Error(`window.okDesktop.config.apiOrigin was empty (got: ${apiOrigin})`);
     }
+    const port = Number(new URL(apiOrigin).port);
     console.log(`[PROBE ${variant}] API port: ${port}`);
 
     const r = await fetch(`http://localhost:${port}/api/document?docName=${sourceDocName}`);

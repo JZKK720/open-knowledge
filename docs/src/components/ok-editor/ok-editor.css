@@ -1,0 +1,538 @@
+/*
+ * Scoped editor typography — ported from the real editor's canonical
+ * ProseMirror rules in packages/app/src/globals.css and remapped onto the
+ * docs site's design tokens (--slide-*, --color-gray-*, --primary, --border).
+ * Everything is scoped under `.ok-editor-prose` (the class set on the
+ * ProseMirror root via editorProps) so it never leaks to docs prose.
+ *
+ * Drift note: the source of truth for the editor's look is the app stylesheet.
+ * If the app's `.ProseMirror` typography changes, re-sync the rules below.
+ */
+
+.ok-editor-prose {
+  outline: none;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--slide-text);
+  /* Left margin room for the block drag handle (positioned left-start). */
+  padding-left: 1.5rem;
+}
+
+/* Anchor for the absolutely-positioned drag handle (appended next to the
+   ProseMirror root by DragHandlePlugin). */
+.ok-editor-visual {
+  position: relative;
+}
+
+/* Block hover controls — "+" (add block) and a drag grip in the left margin.
+   DragHandlePlugin toggles visibility/pointer-events; we only style looks. */
+.ok-block-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.0625rem;
+}
+.ok-block-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.5rem;
+  border-radius: 0.3rem;
+  color: color-mix(in oklab, var(--slide-muted) 65%, transparent);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.ok-block-btn:hover {
+  background-color: color-mix(in oklab, var(--slide-text) 8%, transparent);
+  color: var(--slide-text);
+}
+.ok-block-grip {
+  cursor: grab;
+}
+.ok-block-controls[data-dragging="true"] .ok-block-grip {
+  cursor: grabbing;
+}
+
+.ok-editor-prose p {
+  margin-bottom: 0.5em;
+}
+
+/* Placeholder ("Type '/' for commands") — the Placeholder extension tags the
+   focused empty node with `is-empty` + a `data-placeholder` attr. */
+.ok-editor-prose p.is-empty::before {
+  content: attr(data-placeholder);
+  pointer-events: none;
+  float: left;
+  height: 0;
+  color: color-mix(in oklab, var(--slide-muted) 60%, transparent);
+}
+
+.ok-editor-prose > :first-child {
+  margin-top: 0;
+}
+
+/* Headings */
+.ok-editor-prose h1,
+.ok-editor-prose h2,
+.ok-editor-prose h3 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  color: var(--slide-text);
+}
+
+.ok-editor-prose > h1:first-child,
+.ok-editor-prose > h2:first-child,
+.ok-editor-prose > h3:first-child {
+  margin-top: 0;
+}
+
+.ok-editor-prose h1 {
+  font-size: 1.5em;
+  letter-spacing: -0.04em;
+}
+.ok-editor-prose h2 {
+  font-size: 1.25em;
+  letter-spacing: -0.03em;
+}
+.ok-editor-prose h3 {
+  font-size: 1.1em;
+  letter-spacing: -0.02em;
+}
+
+/* Lists */
+.ok-editor-prose ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.ok-editor-prose ol {
+  list-style-type: decimal;
+  padding-left: 2.5em;
+  margin-bottom: 0.5em;
+}
+
+.ok-editor-prose li {
+  margin-bottom: 0.15em;
+}
+
+.ok-editor-prose li > p {
+  margin-bottom: 0.15em;
+}
+
+.ok-editor-prose ul ul {
+  list-style-type: circle;
+  margin-bottom: 0;
+}
+
+.ok-editor-prose ul ul ul {
+  list-style-type: square;
+}
+
+/* Task lists — the unified List extension emits <li data-type="taskItem"> */
+.ok-editor-prose ul:has(> li[data-type="taskItem"]) {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ok-editor-prose li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > label {
+  flex-shrink: 0;
+  margin-top: 0.3em;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > label input[type="checkbox"] {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--color-gray-300);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  margin: 0;
+  transition:
+    background-color 150ms,
+    border-color 150ms;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > label input[type="checkbox"]:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.ok-editor-prose li[data-type="taskItem"] > label input[type="checkbox"]:checked::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  background-color: #fff;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > label input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > div {
+  flex: 1;
+}
+
+.ok-editor-prose li[data-type="taskItem"] > div p {
+  margin-bottom: 0;
+}
+
+.ok-editor-prose li[data-type="taskItem"][data-checked="true"] > div {
+  text-decoration: line-through;
+  color: var(--color-gray-400);
+}
+
+/* Blockquote */
+.ok-editor-prose blockquote {
+  border-left: 3px solid var(--color-gray-300);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-bottom: 0.5em;
+  color: var(--color-gray-600);
+}
+
+/* Links */
+.ok-editor-prose a {
+  color: var(--slide-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Highlight mark */
+.ok-editor-prose mark {
+  color: inherit;
+  padding: 0.05em 0.25em;
+  border-radius: 0.2em;
+  background: color-mix(in oklab, #f59e0b 22%, transparent);
+}
+
+/* Inline code */
+.ok-editor-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--color-gray-100);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3em;
+}
+
+/* Code block fallback (until the preview NodeView lands) */
+.ok-editor-prose pre {
+  background: var(--color-gray-100);
+  padding: 0.75em 1em;
+  margin-bottom: 0.5em;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  line-height: 1.6;
+  border-radius: 0.5rem;
+}
+
+.ok-editor-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Keyboard focus ring for the editor's interactive buttons (a11y). */
+.ok-block-btn:focus-visible,
+.ok-slash-item:focus-visible,
+.ok-mode-toggle-btn:focus-visible,
+.ok-bubble-btn:focus-visible,
+.ok-bubble-blocktype:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* --- Visual / Markdown segmented toggle (mirrors ModeTogglePreview) ------ */
+
+.ok-mode-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+  border-radius: 8px;
+  padding: 0.125rem;
+  background-color: color-mix(in srgb, var(--slide-text) 5%, transparent);
+}
+
+.ok-mode-toggle-btn {
+  display: flex;
+  height: 1.5rem;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 6px;
+  padding: 0 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slide-muted);
+  cursor: pointer;
+  transition:
+    color 150ms,
+    background-color 150ms;
+}
+
+.ok-mode-toggle-btn[data-active="true"] {
+  color: var(--slide-text);
+  background-color: var(--slide-bg-elevated);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.ok-mode-toggle-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* --- Source pane -------------------------------------------------------- */
+
+.ok-source-host {
+  min-height: 0;
+}
+
+/* --- html-preview embeds (chart / stat cards) --------------------------- */
+
+.ok-editor-prose .ok-embed-preview {
+  position: relative;
+  margin: 1.5em 0 0.75em;
+}
+
+/* Hover-revealed delete button (top-right of the embed). */
+.ok-embed-delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
+  color: var(--slide-muted);
+  background: color-mix(in srgb, var(--slide-bg-elevated) 82%, transparent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.ok-embed-preview:hover .ok-embed-delete,
+.ok-embed-delete:focus-visible {
+  opacity: 1;
+}
+.ok-embed-delete:hover {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 12%, var(--slide-bg-elevated));
+}
+
+.ok-embed-iframe {
+  display: block;
+  width: 100%;
+  /* Softer card border + a background nudged toward white — lighter, airier
+     embeds (applies to both the line chart and the bar chart). */
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--slide-bg) 50%, var(--slide-bg-elevated));
+}
+
+.ok-editor-prose pre.ok-code-block {
+  /* same surface as the generic code-block fallback above */
+  background: var(--color-gray-100);
+  border-radius: 0.5rem;
+}
+
+/* --- Reveal entrance — the newly landed block fades + rises in. The unified
+   reveal appends one block per step, so the last child is the fresh one; only
+   it animates (rebuilt earlier blocks appear instantly, no whole-doc re-pulse).
+   Also gives a gentle fade when the user adds a block later.
+   prefers-reduced-motion users get no movement. --- */
+@media (prefers-reduced-motion: no-preference) {
+  .ok-editor-prose > *:last-child {
+    animation: ok-reveal-in 360ms ease-out both;
+  }
+}
+
+@keyframes ok-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Slash-command menu (popup mounts on document.body, so global) ------- */
+
+.ok-slash-popup {
+  position: fixed;
+  z-index: 60;
+}
+
+.ok-slash-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0.25rem;
+  border-radius: 0.625rem;
+  background: var(--slide-bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px -8px rgba(15, 23, 42, 0.18);
+  font-family: var(--font-inter, system-ui, sans-serif);
+  /* Subtle thin scrollbar — native CSS (no @apply: this standalone file isn't
+     connected to the docs Tailwind context, and `subtle-scrollbar` lives only
+     in the app's globals.css). Mirrors that class's intent. */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--slide-text) 18%, transparent) transparent;
+}
+
+.ok-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--slide-text);
+  cursor: pointer;
+}
+
+.ok-slash-item[data-active="true"] {
+  background: color-mix(in srgb, var(--slide-text) 6%, transparent);
+}
+
+.ok-slash-item-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--slide-muted);
+}
+
+/* Selection bubble menu (inline format toolbar). Positioned fixed via
+   floating-ui in bubble-menu.tsx; this styles only the appearance. */
+.ok-bubble-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  border-radius: 0.625rem;
+  background: var(--slide-bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px -8px rgba(15, 23, 42, 0.18);
+  z-index: 60;
+}
+
+.ok-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  color: var(--slide-text);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.ok-bubble-btn:hover {
+  background: color-mix(in srgb, var(--slide-text) 6%, transparent);
+}
+.ok-bubble-btn.is-active {
+  background: color-mix(in srgb, var(--slide-accent-strong) 12%, transparent);
+  color: var(--slide-accent-strong);
+}
+.ok-bubble-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+/* Block-type dropdown trigger (left of the format buttons) */
+.ok-bubble-blocktype {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.75rem;
+  padding: 0 0.375rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--slide-text);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.ok-bubble-blocktype:hover {
+  background: color-mix(in srgb, var(--slide-text) 6%, transparent);
+}
+.ok-bubble-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.25rem 0.0625rem;
+  background: var(--slide-border);
+}
+
+.ok-slash-empty {
+  width: 200px;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.625rem;
+  background: var(--slide-bg-elevated);
+  border: 1px solid var(--slide-border);
+  font-size: 0.8125rem;
+  color: var(--slide-muted);
+}
+
+/* Intro reveal — as each step writes content into the editor, the freshly-added
+   block eases in (the agent "writing" effect). `setContent` diffs the DOM, so a
+   CSS animation fires only when a node is first created and never replays on the
+   reused, unchanged nodes. We target exactly the revealed content — the
+   Highlights heading, each new task, and the chart — so the static intro text
+   (which mounts first) doesn't animate. `> :last-child` is avoided because the
+   editor keeps a trailing empty paragraph there. Scoped to `[data-revealing]`
+   (intro only) so live edits don't animate; motion-gated for reduced motion.
+   Kept last in the file so the base h2 / li / embed rules above retain ascending
+   specificity (these `[data-revealing] …` selectors are higher-specificity). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-revealing] .ok-editor-prose h2,
+  [data-revealing] .ok-editor-prose li:last-child,
+  [data-revealing] .ok-editor-prose .ok-embed-preview {
+    animation: ok-block-reveal 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@keyframes ok-block-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}

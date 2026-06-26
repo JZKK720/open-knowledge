@@ -163,7 +163,7 @@ Six sub-passes, each with its own STOP gate.
 
 ### 5b. Hub identification (⛔ STOP gate 5b)
 
-1. Run \`links({ kind: "hubs" })\` — surfaces existing high-fan-out docs.
+1. Run \`links({ kind: "hubs" })\` — surfaces the most-linked-to docs (highest *inbound* links), i.e. pages already acting as hubs.
 2. For each substantial \`[KB]\` folder (those that got templates in Phase 4):
    - Check if a hub already exists (\`<folder>/README.md\`, \`<folder>/INDEX.md\`, \`<folder>/CATALOGUE.md\`).
    - If yes: don't create a new one (anti-pattern: don't create INDEX.md hubs).

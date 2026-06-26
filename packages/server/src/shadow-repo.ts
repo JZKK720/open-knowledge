@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  type AutoConsolidationTrigger,
   formatCheckpointBodyLine,
   formatCheckpointSubject,
   formatImportSubject,
@@ -12,6 +13,7 @@ import {
   parseCheckpoint,
   parseWriterId,
   resolveShadowDir,
+  type WriterClassification,
 } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import { tracedMkdirSync, tracedRenameSync, tracedWriteFileSync } from './fs-traced.ts';
@@ -41,14 +43,79 @@ const GIT_TIMEOUT_MS = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
 })();
 
-export function shadowGit(shadow: ShadowHandle) {
+export const MAINTENANCE_GIT_TIMEOUT_MS = (() => {
+  const raw = process.env.OK_SHADOW_MAINTENANCE_GC_TIMEOUT_MS;
+  if (!raw) return 600_000;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 600_000;
+})();
+
+const SHADOW_GC_AUTO = 512;
+
+export function shadowGit(shadow: ShadowHandle, opts?: { timeoutMs?: number }) {
   return simpleGit({
     baseDir: shadow.workTree,
-    timeout: { block: GIT_TIMEOUT_MS },
+    timeout: { block: opts?.timeoutMs ?? GIT_TIMEOUT_MS },
   }).env({
     GIT_DIR: shadow.gitDir,
     GIT_WORK_TREE: shadow.workTree,
   });
+}
+
+export async function configureShadowGc(shadow: ShadowHandle): Promise<void> {
+  const sg = shadowGit(shadow);
+  await sg.raw('config', 'gc.auto', String(SHADOW_GC_AUTO));
+  await sg.raw('config', 'gc.autoDetach', 'false');
+  await sg.raw('config', 'gc.writeCommitGraph', 'true');
+  await sg.raw('config', 'commitGraph.changedPaths', 'true');
+}
+
+/** One WIP chain on a branch — its writer id, tip, classification, whether the
+ *  tip is a park commit (branch-switch state that must never be folded), and the
+ *  tip's committer time (for the TTL backstop's age check). */
+export interface WipChainInfo {
+  writerId: string;
+  tipSha: string;
+  classification: WriterClassification;
+  isPark: boolean;
+  committedAtMs: number;
+}
+
+export async function enumerateWipChains(
+  shadow: ShadowHandle,
+  branch: string,
+): Promise<WipChainInfo[]> {
+  const sg = shadowGit(shadow);
+  let lines: string[];
+  try {
+    lines = (
+      await sg.raw(
+        'for-each-ref',
+        '--format=%(refname)%00%(objectname)%00%(committerdate:unix)%00%(contents:subject)',
+        `refs/wip/${branch}/`,
+      )
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+  const out: WipChainInfo[] = [];
+  for (const line of lines) {
+    const [refname = '', tipSha = '', committerUnix = '', subject = ''] = line.split('\x00');
+    const writerId = refname.split('/').slice(3).join('/');
+    if (!writerId) continue;
+    const unix = Number.parseInt(committerUnix, 10);
+    out.push({
+      writerId,
+      tipSha,
+      classification: parseWriterId(writerId).classification,
+      isPark: subject.startsWith('park:'),
+      committedAtMs: Number.isFinite(unix) ? unix * 1000 : 0,
+    });
+  }
+  return out;
 }
 
 export async function initShadowRepo(projectRoot: string): Promise<ShadowHandle> {
@@ -78,6 +145,13 @@ export async function initShadowRepo(projectRoot: string): Promise<ShadowHandle>
   }
 
   const handle: ShadowHandle = { gitDir: shadowDir, workTree: projectRoot };
+
+  try {
+    await configureShadowGc(handle);
+  } catch (e) {
+    console.warn('[shadow-repo] failed to write gc config (non-fatal):', e);
+  }
+
   await sweepLegacyShadowRefs(handle);
 
   sweepOrphanedTmpIndexFiles(handle);
@@ -146,12 +220,17 @@ export async function sweepLegacyShadowRefs(shadow: ShadowHandle): Promise<numbe
   return deleted;
 }
 
+export interface CommitWipOptions {
+  date?: string;
+}
+
 export async function commitWip(
   shadow: ShadowHandle,
   writer: WriterIdentity,
   contentRoot: string,
   message: string,
   branch = 'main',
+  opts?: CommitWipOptions,
 ): Promise<string> {
   return withSpan(
     'shadow.commitWip',
@@ -161,7 +240,7 @@ export async function commitWip(
         'shadow.branch': branch,
       },
     },
-    async () => commitWipInner(shadow, writer, contentRoot, message, branch),
+    async () => commitWipInner(shadow, writer, contentRoot, message, branch, opts?.date),
   );
 }
 
@@ -171,6 +250,7 @@ async function commitWipInner(
   contentRoot: string,
   message: string,
   branch = 'main',
+  date?: string,
 ): Promise<string> {
   const tmpIndex = resolve(shadow.gitDir, `index-wip-${writer.id}`);
   const ref = `refs/wip/${branch}/${writer.id}`;
@@ -215,17 +295,18 @@ async function commitWipInner(
     const args = ['commit-tree', treeSha, '-m', message];
     if (parentSha) args.push('-p', parentSha);
 
-    const commitSha = (
-      await sg
-        .env({
-          GIT_DIR: shadow.gitDir,
-          GIT_AUTHOR_NAME: writer.name,
-          GIT_AUTHOR_EMAIL: writer.email,
-          GIT_COMMITTER_NAME: 'openknowledge',
-          GIT_COMMITTER_EMAIL: 'noreply@openknowledge.local',
-        })
-        .raw(...args)
-    ).trim();
+    const commitEnv: Record<string, string> = {
+      GIT_DIR: shadow.gitDir,
+      GIT_AUTHOR_NAME: writer.name,
+      GIT_AUTHOR_EMAIL: writer.email,
+      GIT_COMMITTER_NAME: 'openknowledge',
+      GIT_COMMITTER_EMAIL: 'noreply@openknowledge.local',
+    };
+    if (date) {
+      commitEnv.GIT_AUTHOR_DATE = date;
+      commitEnv.GIT_COMMITTER_DATE = date;
+    }
+    const commitSha = (await sg.env(commitEnv).raw(...args)).trim();
 
     await sg.raw('update-ref', ref, commitSha);
     return commitSha;
@@ -347,7 +428,7 @@ export const GIT_UPSTREAM_WRITER: WriterIdentity = {
 
 export const SERVICE_WRITER: WriterIdentity = {
   id: 'openknowledge-service',
-  name: 'Open Knowledge (service)',
+  name: 'OpenKnowledge (service)',
   email: 'service@openknowledge.local',
 };
 
@@ -598,12 +679,14 @@ export async function listRescueCheckpoints(
 export interface CheckpointRetentionPolicy {
   maxBridgeMergeLoss: number;
   maxExternalChangeRescue: number;
+  maxAutoConsolidation: number;
   ttlMs: number;
 }
 
 export const DEFAULT_CHECKPOINT_RETENTION: CheckpointRetentionPolicy = {
   maxBridgeMergeLoss: 50,
   maxExternalChangeRescue: 50,
+  maxAutoConsolidation: 2,
   ttlMs: 30 * 24 * 60 * 60 * 1000,
 };
 
@@ -611,6 +694,7 @@ export interface CheckpointGcResult {
   scanned: number;
   deletedBridgeMergeLoss: number;
   deletedExternalChangeRescue: number;
+  deletedAutoConsolidation: number;
   retained: number;
 }
 
@@ -623,6 +707,7 @@ export async function gcCheckpointRefs(
     scanned: 0,
     deletedBridgeMergeLoss: 0,
     deletedExternalChangeRescue: 0,
+    deletedAutoConsolidation: 0,
     retained: 0,
   };
   const sg = shadowGit(shadow);
@@ -670,10 +755,11 @@ export async function gcCheckpointRefs(
     return result;
   }
 
+  type TypedKind = 'bridge-merge-loss' | 'external-change-rescue' | 'auto-consolidation';
   interface Entry {
     sha: string;
     timestamp: number; // ms since epoch
-    kind: 'bridge-merge-loss' | 'external-change-rescue' | null;
+    kind: TypedKind | null;
   }
   const entries: Entry[] = [];
   for (const record of logRaw.split('\x1e')) {
@@ -687,9 +773,10 @@ export async function gcCheckpointRefs(
     entries.push({ sha, timestamp: Number.isFinite(ts) ? ts : 0, kind });
   }
 
-  const byKind: Record<'bridge-merge-loss' | 'external-change-rescue', Entry[]> = {
+  const byKind: Record<TypedKind, Entry[]> = {
     'bridge-merge-loss': [],
     'external-change-rescue': [],
+    'auto-consolidation': [],
   };
   let retainedUntyped = 0;
   for (const e of entries) {
@@ -705,7 +792,8 @@ export async function gcCheckpointRefs(
   const planDeletions = (
     list: Entry[],
     limit: number,
-    counter: 'deletedBridgeMergeLoss' | 'deletedExternalChangeRescue',
+    counter: 'deletedBridgeMergeLoss' | 'deletedExternalChangeRescue' | 'deletedAutoConsolidation',
+    applyTtl = true,
   ): void => {
     list.sort((a, b) => b.timestamp - a.timestamp);
     for (let i = 0; i < list.length; i++) {
@@ -713,7 +801,7 @@ export async function gcCheckpointRefs(
       if (!entry) continue;
       const overCount = i >= limit;
       const overTtl =
-        policy.ttlMs > 0 && entry.timestamp > 0 && now - entry.timestamp > policy.ttlMs;
+        applyTtl && policy.ttlMs > 0 && entry.timestamp > 0 && now - entry.timestamp > policy.ttlMs;
       if (overCount || overTtl) {
         const ref = shaToRef.get(entry.sha);
         if (ref) {
@@ -728,6 +816,12 @@ export async function gcCheckpointRefs(
     byKind['external-change-rescue'],
     policy.maxExternalChangeRescue,
     'deletedExternalChangeRescue',
+  );
+  planDeletions(
+    byKind['auto-consolidation'],
+    policy.maxAutoConsolidation,
+    'deletedAutoConsolidation',
+    false,
   );
 
   for (const ref of deleteRefs) {
@@ -887,12 +981,20 @@ export interface SaveVersionResult {
   checkpointRef: string;
 }
 
+export interface SaveVersionOptions {
+  checkpointKind?: { foldedRefs: number; trigger: AutoConsolidationTrigger };
+  includeUpstream?: boolean;
+  timeoutMs?: number;
+  date?: string;
+}
+
 export async function saveVersion(
   shadow: ShadowHandle,
   contentRoot: string,
   writers: WriterIdentity[],
   branch = 'main',
   summary?: string,
+  options?: SaveVersionOptions,
 ): Promise<SaveVersionResult> {
   return withSpan(
     'shadow.saveVersion',
@@ -900,9 +1002,10 @@ export async function saveVersion(
       attributes: {
         'shadow.branch': branch,
         'shadow.writer_count': writers.length,
+        'shadow.checkpoint_kind': options?.checkpointKind ? 'auto-consolidation' : 'user',
       },
     },
-    async () => saveVersionInner(shadow, contentRoot, writers, branch, summary),
+    async () => saveVersionInner(shadow, contentRoot, writers, branch, summary, options),
   );
 }
 
@@ -912,11 +1015,12 @@ async function saveVersionInner(
   writers: WriterIdentity[],
   branch = 'main',
   summary?: string,
+  options?: SaveVersionOptions,
 ): Promise<SaveVersionResult> {
-  const sg = shadowGit(shadow);
+  const sg = shadowGit(shadow, options?.timeoutMs ? { timeoutMs: options.timeoutMs } : undefined);
   const gitPathspec = contentRoot || '.';
 
-  const shadowTmpIndex = resolve(shadow.gitDir, 'index-checkpoint');
+  const shadowTmpIndex = resolve(shadow.gitDir, `index-checkpoint-${randomUUID()}`);
   try {
     await sg
       .env({
@@ -929,31 +1033,33 @@ async function saveVersionInner(
       await sg.env({ GIT_DIR: shadow.gitDir, GIT_INDEX_FILE: shadowTmpIndex }).raw('write-tree')
     ).trim();
 
+    const foldWriters =
+      options?.includeUpstream === false ? writers : [...writers, GIT_UPSTREAM_WRITER];
     const shadowParentShas: string[] = [];
-    for (const w of [...writers, GIT_UPSTREAM_WRITER]) {
+    const wipSnapshotShas = new Map<string, string>(); // writerId -> sha at snapshot
+    for (const w of foldWriters) {
       try {
         const sha = (await sg.raw('rev-parse', `refs/wip/${branch}/${w.id}`)).trim();
         shadowParentShas.push(sha);
+        wipSnapshotShas.set(w.id, sha);
       } catch {}
     }
     const uniqueParents = [...new Set(shadowParentShas)];
 
-    if (uniqueParents.length === 0) {
-      try {
-        const refs = (
-          await sg.raw(
-            'for-each-ref',
-            '--sort=-creatordate',
-            '--format=%(objectname)',
-            `refs/checkpoints/${branch}/`,
-          )
+    try {
+      const priorCheckpoint = (
+        await sg.raw(
+          'for-each-ref',
+          '--sort=-creatordate',
+          '--count=1',
+          '--format=%(objectname)',
+          `refs/checkpoints/${branch}/`,
         )
-          .trim()
-          .split('\n')
-          .filter(Boolean);
-        if (refs[0]) uniqueParents.push(refs[0]);
-      } catch {}
-    }
+      ).trim();
+      if (priorCheckpoint && !uniqueParents.includes(priorCheckpoint)) {
+        uniqueParents.push(priorCheckpoint);
+      }
+    } catch {}
 
     const checkpointActorEntry: OkActorEntry = {
       v: 1,
@@ -969,40 +1075,61 @@ async function saveVersionInner(
       docs: [],
     };
     const checkpointSubject = summary?.trim() ? summary.trim() : 'Checkpoint version';
-    const checkpointMessage = `${formatCheckpointSubject(checkpointSubject)}\n\n${formatOkActor(checkpointActorEntry)}`;
+    let checkpointMessage = `${formatCheckpointSubject(checkpointSubject)}\n\n${formatOkActor(checkpointActorEntry)}`;
+    if (options?.checkpointKind) {
+      checkpointMessage += `\n${formatCheckpointBodyLine({
+        kind: 'auto-consolidation',
+        docName: null,
+        size: null,
+        metadata: {
+          foldedRefs: options.checkpointKind.foldedRefs,
+          trigger: options.checkpointKind.trigger,
+        },
+      })}`;
+    }
     const checkpointArgs = ['commit-tree', shadowTreeSha, '-m', checkpointMessage];
     for (const p of uniqueParents) {
       checkpointArgs.push('-p', p);
     }
 
-    const checkpointSha = (
-      await sg
-        .env({
-          GIT_DIR: shadow.gitDir,
-          GIT_AUTHOR_NAME: 'openknowledge',
-          GIT_AUTHOR_EMAIL: 'noreply@openknowledge.local',
-          GIT_COMMITTER_NAME: 'openknowledge',
-          GIT_COMMITTER_EMAIL: 'noreply@openknowledge.local',
-        })
-        .raw(...checkpointArgs)
-    ).trim();
+    const checkpointEnv: Record<string, string> = {
+      GIT_DIR: shadow.gitDir,
+      GIT_AUTHOR_NAME: 'openknowledge',
+      GIT_AUTHOR_EMAIL: 'noreply@openknowledge.local',
+      GIT_COMMITTER_NAME: 'openknowledge',
+      GIT_COMMITTER_EMAIL: 'noreply@openknowledge.local',
+    };
+    if (options?.date) {
+      checkpointEnv.GIT_AUTHOR_DATE = options.date;
+      checkpointEnv.GIT_COMMITTER_DATE = options.date;
+    }
+    const checkpointSha = (await sg.env(checkpointEnv).raw(...checkpointArgs)).trim();
 
     const checkpointRef = `refs/checkpoints/${branch}/${checkpointSha}`;
     await sg.raw('update-ref', checkpointRef, checkpointSha);
 
-    for (const w of writers) {
-      try {
-        await sg.raw('update-ref', '-d', `refs/wip/${branch}/${w.id}`);
-      } catch {}
-    }
-    try {
-      await sg.raw('update-ref', '-d', `refs/wip/${branch}/${GIT_UPSTREAM_WRITER.id}`);
-    } catch {}
+    await resetFoldedWipRefs(sg, branch, foldWriters, wipSnapshotShas);
 
     return { checkpointRef };
   } finally {
     try {
       rmSync(shadowTmpIndex);
+    } catch {}
+  }
+}
+
+export async function resetFoldedWipRefs(
+  sg: ReturnType<typeof shadowGit>,
+  branch: string,
+  writers: readonly { id: string }[],
+  wipSnapshotShas: ReadonlyMap<string, string>,
+): Promise<void> {
+  for (const w of writers) {
+    const ref = `refs/wip/${branch}/${w.id}`;
+    const expected = wipSnapshotShas.get(w.id);
+    if (expected === undefined) continue; // had no WIP ref at snapshot — nothing to reset
+    try {
+      await sg.raw('update-ref', '-d', ref, expected);
     } catch {}
   }
 }

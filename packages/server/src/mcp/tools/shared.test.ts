@@ -222,10 +222,26 @@ describe('resolveProjectConfigContext', () => {
     expect(result).toEqual({
       ok: true,
       cwd: '/workspace/project',
+      executionCwd: '/workspace/project',
       config: {
         ...TEST_CONFIG,
         content: { ...TEST_CONFIG.content, dir: '/workspace/project' },
       },
+    });
+  });
+
+  test('executionCwd is the literal explicit cwd; cwd is the walked-up root', async () => {
+    const result = await resolveProjectConfigContext(
+      async () => '/workspace/project',
+      TEST_CONFIG,
+      '/workspace/project/subdir/nested',
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      cwd: '/workspace/project',
+      executionCwd: '/workspace/project/subdir/nested',
+      config: TEST_CONFIG,
     });
   });
 
@@ -260,6 +276,7 @@ describe('resolveProjectServerContext', () => {
     expect(result).toEqual({
       ok: true,
       cwd: '/workspace/project',
+      executionCwd: '/workspace/project',
       config: TEST_CONFIG,
       url: 'ws://localhost/project',
     });
@@ -296,6 +313,7 @@ let baseUrl: string;
 beforeAll(() => {
   testServer = Bun.serve({
     port: 0, // random available port
+    hostname: '127.0.0.1',
     fetch(req) {
       const url = new URL(req.url);
 
@@ -378,7 +396,7 @@ beforeAll(() => {
       return new Response('Not found', { status: 404 });
     },
   });
-  baseUrl = `http://localhost:${testServer.port}`;
+  baseUrl = `http://127.0.0.1:${testServer.port}`;
 });
 
 afterAll(() => {
@@ -521,10 +539,11 @@ describe('normalizeResponse — RFC 9457 + flat success', () => {
   test('non-RFC-9457 5xx with no error/message → generic HTTP-status sentence', async () => {
     const stripeServer = Bun.serve({
       port: 0,
+      hostname: '127.0.0.1',
       fetch: () => Response.json({ unrelated: true }, { status: 503 }),
     });
     try {
-      const result = await httpGet(`http://localhost:${stripeServer.port}`, '/anything');
+      const result = await httpGet(`http://127.0.0.1:${stripeServer.port}`, '/anything');
       expect(result.ok).toBe(false);
       expect(result.error).toBe('Server returned HTTP 503');
       expect(result.unrelated).toBe(true);
@@ -536,10 +555,11 @@ describe('normalizeResponse — RFC 9457 + flat success', () => {
   test('non-RFC-9457 4xx with body.error string → `error` ← body.error', async () => {
     const stubServer = Bun.serve({
       port: 0,
+      hostname: '127.0.0.1',
       fetch: () => Response.json({ error: 'rate limited', message: 'try again' }, { status: 429 }),
     });
     try {
-      const result = await httpGet(`http://localhost:${stubServer.port}`, '/anything');
+      const result = await httpGet(`http://127.0.0.1:${stubServer.port}`, '/anything');
       expect(result.ok).toBe(false);
       expect(result.error).toBe('rate limited');
     } finally {

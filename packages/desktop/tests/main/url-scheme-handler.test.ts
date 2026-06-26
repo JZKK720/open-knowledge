@@ -7,7 +7,7 @@ import type {
   ShareNavigatorPayload,
   ShareUrlPayload,
 } from '../../src/main/url-scheme.ts';
-import { registerProtocolHandler } from '../../src/main/url-scheme.ts';
+import { parseOpenKnowledgeFileUrl, registerProtocolHandler } from '../../src/main/url-scheme.ts';
 
 type AppEvent = 'open-url' | 'second-instance' | 'before-quit' | 'continue-activity';
 type OpenUrlListener = (event: { preventDefault: () => void }, url: string) => void;
@@ -96,6 +96,7 @@ interface TestEnv {
   app: FakeApp;
   focusWindowForProject: ReturnType<typeof mock>;
   openProject: ReturnType<typeof mock>;
+  openEphemeralFile: ReturnType<typeof mock>;
   sendDeepLink: ReturnType<typeof mock>;
   getAnyReadyWindow: ReturnType<typeof mock>;
   timers: Array<{ cb: () => void; ms: number }>;
@@ -119,10 +120,11 @@ function makeEnv(opts?: { isPackaged?: boolean }): TestEnv {
       ): Promise<FakeWindowHandle | null> => {
         const win: FakeWindowHandle = { id: `win-${p}` };
         existingWindows.set(p, win);
-        if (!readyWindow) readyWindow = win;
+        readyWindow ||= win;
         return win;
       },
     ),
+    openEphemeralFile: mock(async (_filePath: string): Promise<void> => {}),
     sendDeepLink: mock(() => {}),
     getAnyReadyWindow: mock(() => readyWindow),
     timers,
@@ -254,6 +256,59 @@ describe('registerProtocolHandler — before-quit Launch Services cleanup', () =
     });
     expect(() => env.app.fireBeforeQuit()).not.toThrow();
     expect(warnLog.some((e) => e.msg.includes('removeAsDefaultProtocolClient failed'))).toBe(true);
+  });
+});
+
+describe('registerProtocolHandler — deferred-share routeUrl + dedup', () => {
+  let env: TestEnv;
+
+  beforeEach(() => {
+    env = makeEnv();
+  });
+
+  test('routeUrl feeds a redeemed /d/ universal link through the share spine; a near-simultaneous duplicate is deduped', async () => {
+    env.readyWindow = { id: 'pre-existing' };
+    const resolveShareTarget = mock(async (): Promise<CandidateSelection> => ({ kind: 'miss' }));
+    const routeShareToNavigator = mock(() => {});
+    let clock = 1_000_000;
+
+    const control = registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      resolveShareTarget: resolveShareTarget as unknown as (
+        share: ShareUrlPayload,
+      ) => Promise<CandidateSelection>,
+      routeShareToNavigator,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+      now: () => clock,
+    });
+    env.app.resolveReady();
+    await flushPromises();
+
+    const token = encodeShareUrl('https://github.com/inkeep/tech-ipos/blob/main/README.md');
+    const url = `https://openknowledge.ai/d/${token}`;
+
+    control.routeUrl(url);
+    await flushPromises();
+    await flushPromises();
+    expect(resolveShareTarget).toHaveBeenCalledTimes(1);
+    expect(routeShareToNavigator).toHaveBeenCalledTimes(1); // miss → launcher-miss
+
+    clock += 2_000;
+    control.routeUrl(url);
+    await flushPromises();
+    await flushPromises();
+    expect(resolveShareTarget).toHaveBeenCalledTimes(1);
+    expect(routeShareToNavigator).toHaveBeenCalledTimes(1);
+
+    clock += 11_000;
+    control.routeUrl(url);
+    await flushPromises();
+    await flushPromises();
+    expect(resolveShareTarget).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -467,6 +522,133 @@ describe('registerProtocolHandler — queue-then-flush', () => {
   });
 });
 
+describe('registerProtocolHandler — single-file launch control', () => {
+  let env: TestEnv;
+  const FILE_URL = `openknowledge://open?file=${encodeURIComponent('/Users/me/notes/todo.md')}`;
+
+  beforeEach(() => {
+    env = makeEnv();
+  });
+
+  test('singleFileLaunch() is false with no URL and after a project deep-link', () => {
+    const control = registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    expect(control.singleFileLaunch()).toBe(false);
+    env.app.fireOpenUrl('openknowledge://open?project=/tmp/p&doc=a.md');
+    expect(control.singleFileLaunch()).toBe(false);
+  });
+
+  test('singleFileLaunch() becomes true after a file= URL queued pre-ready', () => {
+    const control = registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    env.app.fireOpenUrl(FILE_URL);
+    expect(control.singleFileLaunch()).toBe(true);
+  });
+
+  test('drainQueuedUrls() routes a queued file= URL with NO ready window (suppress path)', async () => {
+    env.readyWindow = null;
+    const control = registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    env.app.fireOpenUrl(FILE_URL);
+    env.app.resolveReady();
+    await flushPromises();
+
+    expect(env.openEphemeralFile).not.toHaveBeenCalled();
+    expect(env.timers.length).toBe(1);
+
+    control.drainQueuedUrls();
+    await flushPromises();
+    expect(env.openEphemeralFile).toHaveBeenCalledWith('/Users/me/notes/todo.md');
+
+    tickTimer(env);
+    await flushPromises();
+    expect(env.openEphemeralFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('registerProtocolHandler — urlLaunchOwnsWindow (boot-restore suppression)', () => {
+  let env: TestEnv;
+  const SHARE_URL = `https://openknowledge.ai/d/${encodeShareUrl(
+    'https://github.com/inkeep/notes/blob/main/welcome.md',
+  )}`;
+  const FILE_URL = `openknowledge://open?file=${encodeURIComponent('/Users/me/notes/todo.md')}`;
+
+  beforeEach(() => {
+    env = makeEnv();
+  });
+
+  function makeControl() {
+    return registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+  }
+
+  test('becomes true after a valid share URL queued pre-ready (suppresses boot-restore window)', () => {
+    const control = makeControl();
+    expect(control.urlLaunchOwnsWindow()).toBe(false);
+    env.app.fireOpenUrl(SHARE_URL);
+    expect(control.urlLaunchOwnsWindow()).toBe(true);
+  });
+
+  test('becomes true after a valid custom-scheme share URL', () => {
+    const control = makeControl();
+    const blobUrl = 'https://github.com/inkeep/notes/blob/main/welcome.md';
+    env.app.fireOpenUrl(`openknowledge://share?url=${encodeURIComponent(blobUrl)}`);
+    expect(control.urlLaunchOwnsWindow()).toBe(true);
+  });
+
+  test('becomes true after a single-file file= URL (own-window launch parity)', () => {
+    const control = makeControl();
+    env.app.fireOpenUrl(FILE_URL);
+    expect(control.urlLaunchOwnsWindow()).toBe(true);
+  });
+
+  test('stays false for an invalid share URL — its toast needs an existing window', () => {
+    const control = makeControl();
+    env.app.fireOpenUrl('https://openknowledge.ai/d/!!!not-base64!!!');
+    expect(control.urlLaunchOwnsWindow()).toBe(false);
+  });
+
+  test('stays false after a screen deep-link — it targets an existing window', () => {
+    const control = makeControl();
+    env.app.fireOpenUrl('openknowledge://screen?name=settings');
+    expect(control.urlLaunchOwnsWindow()).toBe(false);
+  });
+
+  test('stays false after a legacy project deep-link (unchanged scope)', () => {
+    const control = makeControl();
+    env.app.fireOpenUrl('openknowledge://open?project=/tmp/p&doc=a.md');
+    expect(control.urlLaunchOwnsWindow()).toBe(false);
+  });
+});
+
 describe('registerProtocolHandler — second-instance argv parsing', () => {
   test('extracts openknowledge:// entries from second-instance argv', async () => {
     const env = makeEnv();
@@ -483,7 +665,7 @@ describe('registerProtocolHandler — second-instance argv parsing', () => {
     await flushPromises();
 
     env.app.fireSecondInstance([
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       'openknowledge://open?project=/tmp/si&doc=readme.md',
     ]);
     await flushPromises();
@@ -528,7 +710,7 @@ describe('registerProtocolHandler — cold-start process.argv scan', () => {
       getAnyReadyWindow: env.getAnyReadyWindow,
       setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
       getInitialArgv: () => [
-        '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         'openknowledge://open?project=/tmp/cs&doc=a.md',
       ],
     });
@@ -1374,7 +1556,7 @@ describe('registerProtocolHandler — resolved share routing (US-003)', () => {
     await flushPromises();
 
     env.app.fireSecondInstance([
-      '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       makeShareUrl(sharedBlobUrl),
     ]);
     await flushPromises();
@@ -1398,7 +1580,7 @@ describe('registerProtocolHandler — resolved share routing (US-003)', () => {
       resolveShareTarget,
       setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
       getInitialArgv: () => [
-        '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
         makeShareUrl(sharedBlobUrl),
       ],
     });
@@ -1912,5 +2094,106 @@ describe('registerProtocolHandler — continue-activity Handoff path', () => {
     env.app.fireOpenUrl(`openknowledge://share?url=${encodeURIComponent(blobUrl)}`);
     await flushPromises();
     expect(resolveShareTarget).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('parseOpenKnowledgeFileUrl', () => {
+  test('parses a well-formed file= URL to an absolute resolved path', () => {
+    const parsed = parseOpenKnowledgeFileUrl(
+      `openknowledge://open?file=${encodeURIComponent('/Users/me/notes/todo.md')}`,
+    );
+    expect(parsed).toEqual({ host: 'open', file: '/Users/me/notes/todo.md' });
+  });
+
+  test('rejects a relative path, `..` traversal, null bytes, and a missing param', () => {
+    expect(parseOpenKnowledgeFileUrl('openknowledge://open?file=notes/todo.md')).toBeNull();
+    expect(
+      parseOpenKnowledgeFileUrl(
+        `openknowledge://open?file=${encodeURIComponent('/Users/me/../etc/passwd')}`,
+      ),
+    ).toBeNull();
+    expect(parseOpenKnowledgeFileUrl('openknowledge://open?file=%00/x.md')).toBeNull();
+    expect(parseOpenKnowledgeFileUrl('openknowledge://open?project=/tmp/p&doc=a.md')).toBeNull();
+  });
+
+  test('rejects a foreign protocol / host', () => {
+    expect(parseOpenKnowledgeFileUrl('https://open/?file=/x.md')).toBeNull();
+    expect(
+      parseOpenKnowledgeFileUrl(`openknowledge://share?file=${encodeURIComponent('/x.md')}`),
+    ).toBeNull();
+  });
+});
+
+describe('registerProtocolHandler — single-file open (file=)', () => {
+  let env: TestEnv;
+
+  beforeEach(() => {
+    env = makeEnv();
+  });
+
+  test('a file= URL routes to openEphemeralFile, not openProject', async () => {
+    env.readyWindow = { id: 'pre-existing' };
+    registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    env.app.resolveReady();
+    await flushPromises();
+
+    env.app.fireOpenUrl(
+      `openknowledge://open?file=${encodeURIComponent('/Users/me/notes/todo.md')}`,
+    );
+    await flushPromises();
+
+    expect(env.openEphemeralFile).toHaveBeenCalledWith('/Users/me/notes/todo.md');
+    expect(env.openProject).not.toHaveBeenCalled();
+  });
+
+  test('a project=&doc= URL still routes to openProject (file= branch did not shadow it)', async () => {
+    env.readyWindow = { id: 'pre-existing' };
+    registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      openEphemeralFile: env.openEphemeralFile,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    env.app.resolveReady();
+    await flushPromises();
+
+    env.app.fireOpenUrl('openknowledge://open?project=/tmp/p&doc=a.md');
+    await flushPromises();
+
+    expect(env.openProject).toHaveBeenCalledWith('/tmp/p', {
+      pendingDeepLinkTarget: { kind: 'doc', path: 'a.md' },
+    });
+    expect(env.openEphemeralFile).not.toHaveBeenCalled();
+  });
+
+  test('a file= URL with openEphemeralFile unwired warn-drops (no throw)', async () => {
+    env.readyWindow = { id: 'pre-existing' };
+    registerProtocolHandler({
+      app: env.app,
+      focusWindowForProject: env.focusWindowForProject,
+      openProject: env.openProject,
+      sendDeepLink: env.sendDeepLink,
+      getAnyReadyWindow: env.getAnyReadyWindow,
+      setTimeout: (cb, ms) => env.timers.push({ cb, ms }),
+    });
+    env.app.resolveReady();
+    await flushPromises();
+
+    expect(() =>
+      env.app.fireOpenUrl(`openknowledge://open?file=${encodeURIComponent('/Users/me/x.md')}`),
+    ).not.toThrow();
+    await flushPromises();
+    expect(env.openProject).not.toHaveBeenCalled();
   });
 });

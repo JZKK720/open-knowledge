@@ -1,14 +1,33 @@
 import type { Metadata } from 'next';
-import { DM_Sans } from 'next/font/google';
+import { DM_Sans, Inter, JetBrains_Mono } from 'next/font/google';
 import type { Organization, WebSite, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/site';
+import {
+  metaDescription,
+  SITE_DESCRIPTION,
+  SITE_HEADLINE,
+  SITE_NAME,
+  SITE_URL,
+  TWITTER_HANDLE,
+} from '@/lib/site';
 import './global.css';
 import { Provider } from './provider';
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-dm-sans',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   display: 'swap',
 });
 
@@ -21,29 +40,25 @@ const orgLd = {
   description:
     'Ship Agent-powered assistants and automations that boost customer experience and 10x your teams.',
   foundingDate: '2023',
-  sameAs: [
-    'https://x.com/inkeep',
-    'https://linkedin.com/company/inkeep',
-    'https://github.com/inkeep',
-    'https://crunchbase.com/organization/inkeep',
-    'https://youtube.com/@inkeep-ai',
-  ],
+  sameAs: ['https://x.com/OpenKnowledgeAI', 'https://github.com/inkeep/open-knowledge'],
 } satisfies WithContext<Organization>;
 
 const siteLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: SITE_NAME,
-  alternateName: 'Open Knowledge Docs',
+  alternateName: 'OpenKnowledge Docs',
   url: SITE_URL,
   description: SITE_DESCRIPTION,
 } satisfies WithContext<WebSite>;
 
+const SITE_META_DESCRIPTION = metaDescription(SITE_DESCRIPTION);
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Open Knowledge — Your knowledge, co-authored by AI',
-    template: '%s · Open Knowledge',
+    default: `${SITE_NAME} — ${SITE_HEADLINE}`,
+    template: '%s · OpenKnowledge',
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
@@ -54,15 +69,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
-    title: 'Open Knowledge — Your knowledge, co-authored by AI',
-    description: SITE_DESCRIPTION,
+    title: `${SITE_NAME} — ${SITE_HEADLINE}`,
+    description: SITE_META_DESCRIPTION,
     url: SITE_URL,
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Open Knowledge — Your knowledge, co-authored by AI',
-    description: SITE_DESCRIPTION,
+    site: TWITTER_HANDLE,
+    creator: TWITTER_HANDLE,
+    title: `${SITE_NAME} — ${SITE_HEADLINE}`,
+    description: SITE_META_DESCRIPTION,
   },
   verification: {
     google: 'ZeS2oQLq-M3Hut-WpCMBqfn6XhXPMQmRCx8ntea36RI',
@@ -71,7 +88,11 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" suppressHydrationWarning className={dmSans.variable}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${dmSans.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased scrollbar-thin scrollbar-track-transparent scrollbar-thumb-fd-muted-foreground/30 dark:scrollbar-thumb-fd-muted-foreground/50`}
+    >
       <body>
         <JsonLd json={[orgLd, siteLd]} />
         <Provider>{children}</Provider>

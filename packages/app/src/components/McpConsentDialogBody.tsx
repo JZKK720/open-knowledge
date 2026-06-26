@@ -128,11 +128,11 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            <Trans>Add Open Knowledge to your AI tools</Trans>
+            <Trans>Add OpenKnowledge to your AI tools</Trans>
           </DialogTitle>
           <DialogDescription>
             <Trans>
-              Open Knowledge manages the <code>open-knowledge</code> MCP server name, the{' '}
+              OpenKnowledge manages the <code>open-knowledge</code> MCP server name, the{' '}
               <code>open-knowledge-ui</code> launch config, and <code>ok</code> /{' '}
               <code>open-knowledge</code> on PATH (including OK-owned symlinks). Using a custom
               wrapper? Register it under a different name.
@@ -146,7 +146,7 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
               const checked = selection.has(editor.id);
               const checkboxId = `${idPrefix}-${editor.id}`;
               const statusLabel = editor.willReplace
-                ? t`Will replace existing Open Knowledge entry`
+                ? t`Will replace existing OpenKnowledge entry`
                 : editor.detected
                   ? t`Detected on this machine`
                   : t`Not detected`;

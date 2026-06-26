@@ -24,7 +24,7 @@ function findPackagedHelperBinary(): string | null {
     const candidate = join(
       distDesktopDir,
       subdir,
-      'Open Knowledge.app',
+      'OpenKnowledge.app',
       'Contents/Frameworks',
       HELPER_BUNDLE_NAME,
       'Contents/MacOS',
@@ -50,7 +50,7 @@ describe('packaged helper binary runs under ELECTRON_RUN_AS_NODE=1', () => {
     if (!havePackagedBuild) {
       console.log(
         `[packaged-helper-runs-as-node] no packaged helper binary found under ` +
-          `${distDesktopDir}/mac-<arch>/Open Knowledge.app/... — run ` +
+          `${distDesktopDir}/mac-<arch>/OpenKnowledge.app/... — run ` +
           `\`bunx electron-builder --dir --publish never\` (or \`okdesk\`) to enable this test`,
       );
       return;

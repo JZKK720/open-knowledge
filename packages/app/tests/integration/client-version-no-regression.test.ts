@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { clientVersionHeaders } from '@inkeep/open-knowledge-core';
 import * as Y from 'yjs';
-import { buildAuthToken } from '../../src/editor/provider-pool';
+import { buildAuthToken } from '../../src/lib/auth-token';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestServer, type TestServer, waitForSync } from './test-harness';
 
 describe('read-blind server accepts instrumented clients', () => {
@@ -10,14 +11,14 @@ describe('read-blind server accepts instrumented clients', () => {
 
   beforeAll(async () => {
     server = await createTestServer();
-  });
+  }, HARNESS_BOOT_TIMEOUT_MS);
 
   afterAll(async () => {
     await server.cleanup();
   });
 
   test('HTTP: /api/server-info with x-ok-client-* headers returns 2xx', async () => {
-    const res = await fetch(`http://localhost:${server.port}/api/server-info`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/server-info`, {
       headers: clientVersionHeaders({ kind: 'cli', runtimeVersion: '9.9.9-test' }),
     });
     expect(res.ok).toBe(true);
@@ -28,7 +29,7 @@ describe('read-blind server accepts instrumented clients', () => {
     const doc = new Y.Doc();
     let authFailed = false;
     const provider = new HocuspocusProvider({
-      url: `ws://localhost:${server.port}/collab`,
+      url: `ws://127.0.0.1:${server.port}/collab`,
       name: `test-${crypto.randomUUID()}`,
       document: doc,
       token: buildAuthToken(null, null),

@@ -70,10 +70,67 @@ export function readBranchFromHead(gitDir: string): string | null {
   }
 }
 
+type HeadEventDispatch = (rawPath: string) => void;
+
+export function watchedGitFile(rawPath: string): string | null {
+  const fileName = rawPath.split('/').pop() ?? '';
+  return WATCHED_FILES.has(fileName) ? fileName : null;
+}
+
+async function tryStartParcelHeadWatcher(
+  gitDir: string,
+  dispatch: HeadEventDispatch,
+): Promise<(() => Promise<void>) | null> {
+  let parcel: typeof import('@parcel/watcher');
+  try {
+    parcel = await import('@parcel/watcher');
+  } catch (err) {
+    getLogger('head-watcher').debug(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[head-watcher] @parcel/watcher unavailable; falling back to chokidar',
+    );
+    return null;
+  }
+  try {
+    const subscription = await parcel.subscribe(gitDir, (err, events) => {
+      if (err) {
+        getLogger('head-watcher').warn({ err }, '[head-watcher] parcel subscription error');
+        return;
+      }
+      for (const event of events) dispatch(event.path);
+    });
+    return () => subscription.unsubscribe();
+  } catch (err) {
+    getLogger('head-watcher').debug(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[head-watcher] @parcel/watcher subscribe failed; falling back to chokidar',
+    );
+    return null;
+  }
+}
+
+async function startChokidarHeadWatcher(
+  gitDir: string,
+  dispatch: HeadEventDispatch,
+): Promise<() => Promise<void>> {
+  const { watch } = await import('chokidar');
+  const watcher = watch(gitDir, {
+    ignoreInitial: true,
+    depth: 0,
+    followSymlinks: false,
+  });
+  watcher.on('all', (_event, path) => dispatch(path));
+  watcher.on('error', (err) => {
+    getLogger('head-watcher').warn({ err }, '[head-watcher] chokidar watcher error');
+  });
+  return () => watcher.close();
+}
+
 export async function startHeadWatcher(
   projectRoot: string,
   onBatchBegin: OnBatchBegin,
   onBatchEnd: OnBatchEnd,
+  opts: { forceBackend?: 'parcel' | 'chokidar' } = {},
 ): Promise<HeadWatcherHandle> {
   const resolvedGitDir = resolveGitDir(projectRoot);
   if (!resolvedGitDir) {
@@ -168,44 +225,30 @@ export async function startHeadWatcher(
     resetQuietWindow();
   }
 
-  let unsubscribeFn: () => Promise<void>;
-  let parcel: typeof import('@parcel/watcher');
-  try {
-    parcel = await import('@parcel/watcher');
-  } catch (err) {
-    throw new Error(
-      `@parcel/watcher unavailable for HEAD watching: ${err instanceof Error ? err.message : err}`,
-    );
-  }
+  const dispatch: HeadEventDispatch = (rawPath) => {
+    const fileName = watchedGitFile(rawPath);
+    if (fileName !== null) void handleGitEvent(fileName);
+  };
 
-  try {
-    const subscription = await parcel.subscribe(gitDir, (err, events) => {
-      if (err) {
-        console.error('[head-watcher]', err);
-        return;
-      }
-
-      for (const event of events) {
-        const fileName = event.path.split('/').pop() ?? '';
-        if (WATCHED_FILES.has(fileName)) {
-          void handleGitEvent(fileName);
-          break;
-        }
-      }
-    });
-    unsubscribeFn = () => subscription.unsubscribe();
-  } catch (err) {
-    throw new Error(
-      `@parcel/watcher subscribe failed for HEAD watching: ${
-        err instanceof Error ? err.message : err
-      }`,
-    );
+  let resolvedUnsub: (() => Promise<void>) | null = null;
+  let backend: 'parcel' | 'chokidar' = 'chokidar';
+  if (opts.forceBackend !== 'chokidar') {
+    resolvedUnsub = await tryStartParcelHeadWatcher(gitDir, dispatch);
+    if (resolvedUnsub) backend = 'parcel';
   }
+  if (!resolvedUnsub) {
+    if (opts.forceBackend === 'parcel') {
+      throw new Error('@parcel/watcher unavailable for HEAD watching (forced backend)');
+    }
+    resolvedUnsub = await startChokidarHeadWatcher(gitDir, dispatch);
+    backend = 'chokidar';
+  }
+  const unsubscribeFn: () => Promise<void> = resolvedUnsub;
 
   oldHead = readHeadSha(gitDir);
   lastKnownBranch = readBranchFromHead(gitDir);
 
-  getLogger('head-watcher').info({ gitDir }, 'watching for HEAD changes');
+  getLogger('head-watcher').info({ gitDir, backend }, 'watching for HEAD changes');
 
   return {
     unsubscribe: async () => {

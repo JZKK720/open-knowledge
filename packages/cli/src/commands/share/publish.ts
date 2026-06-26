@@ -317,9 +317,9 @@ async function runSharePublish(opts: PublishOptions, tokenStore: TokenStore): Pr
   try {
     execSync('git config user.email', { cwd: projectDir, stdio: 'ignore' });
   } catch {
-    process.env.GIT_AUTHOR_NAME ??= 'Open Knowledge';
+    process.env.GIT_AUTHOR_NAME ??= 'OpenKnowledge';
     process.env.GIT_AUTHOR_EMAIL ??= 'noreply@inkeep.com';
-    process.env.GIT_COMMITTER_NAME ??= 'Open Knowledge';
+    process.env.GIT_COMMITTER_NAME ??= 'OpenKnowledge';
     process.env.GIT_COMMITTER_EMAIL ??= 'noreply@inkeep.com';
   }
 

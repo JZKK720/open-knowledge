@@ -241,6 +241,69 @@ describe('DocumentListEntrySchema', () => {
       }).success,
     ).toBe(false);
   });
+  test('parses a file entry with path (and optional assetExt)', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        path: 'packages/app/src/components/FileTree.tsx',
+        size: 4096,
+        modified: '2026-04-30T00:00:00Z',
+        assetExt: 'tsx',
+      }).success,
+    ).toBe(true);
+  });
+  test('parses a file entry with no extension', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        path: 'LICENSE',
+        size: 1024,
+        modified: '2026-04-30T00:00:00Z',
+      }).success,
+    ).toBe(true);
+  });
+  test('parses a file entry with docName mirror of path', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        docName: 'data/example.csv',
+        path: 'data/example.csv',
+        size: 64,
+        modified: '2026-04-30T00:00:00Z',
+      }).success,
+    ).toBe(true);
+  });
+  test('rejects a file entry without path', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        size: 0,
+        modified: '2026-04-30T00:00:00Z',
+      }).success,
+    ).toBe(false);
+  });
+  test('rejects a file entry with mediaKind populated', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        path: 'data/example.csv',
+        size: 0,
+        modified: '2026-04-30T00:00:00Z',
+        mediaKind: 'text',
+      }).success,
+    ).toBe(false);
+  });
+  test('rejects a file entry with referencedBy populated', () => {
+    expect(
+      DocumentListEntrySchema.safeParse({
+        kind: 'file',
+        path: 'data/example.csv',
+        size: 0,
+        modified: '2026-04-30T00:00:00Z',
+        referencedBy: ['guide'],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('DocumentListSuccessSchema', () => {

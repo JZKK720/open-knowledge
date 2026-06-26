@@ -15,6 +15,9 @@ export const DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST: readonly string[] = Object.fr
 export const DEFAULT_SPANS_MAX_BYTES = 52_428_800;
 export const DEFAULT_LOGS_MAX_BYTES = 26_214_400;
 
+export const DEFAULT_EMBEDDINGS_BASE_URL = 'https://api.openai.com/v1';
+export const DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-small';
+
 export const ConfigSchema = z.looseObject({
   content: z
     .looseObject({
@@ -25,27 +28,13 @@ export const ConfigSchema = z.looseObject({
           agentSettable: false,
           defaultScope: 'project',
           description:
-            'Folder Open Knowledge reads and writes documents under, relative to the project root (the folder that contains .ok/). Defaults to the project root. Exclude paths with .okignore.',
+            'Folder OpenKnowledge reads and writes documents under, relative to the project root (the folder that contains .ok/). Defaults to the project root. Exclude paths with .okignore.',
         })
         .default('.'),
     })
     .default({
       dir: '.',
     }),
-  preview: z
-    .looseObject({
-      scriptSrc: z
-        .enum(['cdn-allowlist', 'inline-only'])
-        .register(fieldRegistry, {
-          scope: 'project',
-          agentSettable: false,
-          defaultScope: 'project',
-          description:
-            "Security policy for scripts in code-block preview embeds. 'cdn-allowlist' allows <script src> from a fixed set of trusted CDNs; 'inline-only' is the strict policy for cloud / multi-tenant deployments. Shared across collaborators.",
-        })
-        .default('cdn-allowlist'),
-    })
-    .default({ scriptSrc: 'cdn-allowlist' }),
   appearance: z
     .looseObject({
       theme: z
@@ -84,16 +73,6 @@ export const ConfigSchema = z.looseObject({
                 'Show dot-prefixed entries (e.g. .ok/, .okignore) in the file tree. Per-machine (project-local) — not shared with collaborators.',
             })
             .default(false),
-          showAllFiles: z
-            .boolean()
-            .register(fieldRegistry, {
-              scope: 'project-local',
-              agentSettable: false,
-              defaultScope: 'project-local',
-              description:
-                'Show every file, including those excluded by .gitignore / .okignore. Per-machine (project-local) — not shared.',
-            })
-            .default(false),
         })
         .optional(),
     })
@@ -122,6 +101,32 @@ export const ConfigSchema = z.looseObject({
           defaultScope: 'project-local',
           description:
             'Whether this machine auto-pulls and auto-pushes git commits for this project. null = not chosen yet (onboarding asks). Per-machine (project-local) — not shared.',
+        })
+        .nullable()
+        .default(null),
+      default: z
+        .boolean()
+        .register(fieldRegistry, {
+          scope: 'project',
+          agentSettable: false,
+          defaultScope: 'project',
+          description:
+            "Committed project default for a machine's autoSync.enabled on first open: true = auto-sync on, false = off, null = ask (show the onboarding prompt). Shared via git. A per-machine autoSync.enabled choice overrides it.",
+        })
+        .nullable()
+        .default(null),
+    })
+    .default({ enabled: null, default: null }),
+  terminal: z
+    .looseObject({
+      enabled: z
+        .boolean()
+        .register(fieldRegistry, {
+          scope: 'project-local',
+          agentSettable: false,
+          defaultScope: 'project-local',
+          description:
+            'Opt-out for the in-app terminal (a real OS shell at full user privilege). The terminal is on by default; set false to disable it for this project on this machine. Per-machine (project-local) — never shared via git, clone, or sync.',
         })
         .nullable()
         .default(null),
@@ -193,6 +198,78 @@ export const ConfigSchema = z.looseObject({
         spans: { maxBytes: DEFAULT_SPANS_MAX_BYTES },
         logs: { maxBytes: DEFAULT_LOGS_MAX_BYTES },
         attributeDenylist: [...DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST],
+      },
+    }),
+  search: z
+    .looseObject({
+      semantic: z
+        .looseObject({
+          enabled: z
+            .boolean()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Add semantic (embeddings) ranking to the MCP search tool, fused with the lexical engine so conceptually-related pages surface even with no shared keywords. When ON and an API key is set (`ok embeddings set-key`), the search query and matching document content are sent to the configured embeddings provider — content egress. Default OFF. Per-machine (project-local) — not shared with collaborators.',
+            })
+            .default(false),
+          baseUrl: z
+            .string()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Base URL of the OpenAI-compatible embeddings API (default https://api.openai.com/v1). Override for Azure / self-hosted / other providers. The API key is NOT stored here — set it with `ok embeddings set-key` (OS keyring).',
+            })
+            .default(DEFAULT_EMBEDDINGS_BASE_URL),
+          model: z
+            .string()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Embeddings model id (default text-embedding-3-small). Must be served by the provider at baseUrl. Changing it re-embeds the corpus (the cache is keyed by provider + model + dimensions).',
+            })
+            .default(DEFAULT_EMBEDDINGS_MODEL),
+          dimensions: z
+            .number()
+            .int()
+            .positive()
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                "Optional output vector dimensions. Omit to use the model's native size (1536 for text-embedding-3-small). Set a smaller value (text-embedding-3 supports e.g. 512 / 1024) to shrink the on-disk cache, trading a little retrieval quality. Changing it re-embeds the corpus.",
+            })
+            .optional(),
+          similarityFloor: z
+            .number()
+            .min(0)
+            .max(1)
+            .register(fieldRegistry, {
+              scope: 'project-local',
+              agentSettable: false,
+              defaultScope: 'project-local',
+              description:
+                'Optional hard cutoff: drop any "by meaning" match whose cosine similarity is below this value. Off by default (0) because retrieval is rank-based (the closest pages are returned regardless of absolute score) and the right cutoff is model-specific. Set it only to suppress weak matches for a specific provider/model whose cosine scale you know. Most setups should leave it unset and rely on the result-count cap.',
+            })
+            .optional(),
+        })
+        .default({
+          enabled: false,
+          baseUrl: DEFAULT_EMBEDDINGS_BASE_URL,
+          model: DEFAULT_EMBEDDINGS_MODEL,
+        }),
+    })
+    .default({
+      semantic: {
+        enabled: false,
+        baseUrl: DEFAULT_EMBEDDINGS_BASE_URL,
+        model: DEFAULT_EMBEDDINGS_MODEL,
       },
     }),
 });

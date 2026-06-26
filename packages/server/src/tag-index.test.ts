@@ -200,7 +200,7 @@ describe('TagIndex', () => {
     }
   });
 
-  test('init walks contentDir and indexes every md/mdx file', () => {
+  test('init walks contentDir and indexes every md/mdx file', async () => {
     const { contentDir, cleanup } = tempContentDir();
     try {
       writeFileSync(join(contentDir, 'alpha.md'), '#typescript\n', 'utf-8');
@@ -209,7 +209,7 @@ describe('TagIndex', () => {
       writeFileSync(join(contentDir, 'sub', 'gamma.md'), '#proj/team\n', 'utf-8');
 
       const idx = new TagIndex({ contentDir });
-      idx.init();
+      await idx.init();
 
       expect(idx.getDocsForTag('typescript')).toEqual(['alpha']);
       expect(idx.getDocsForTag('react')).toEqual(['beta']);

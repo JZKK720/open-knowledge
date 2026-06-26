@@ -76,7 +76,7 @@ describe('initContent', () => {
     expect(gitignore).toContain('local/');
 
     const configYml = readFileSync(join(okDir, 'config.yml'), 'utf-8');
-    expect(configYml).toContain('Open Knowledge — project configuration');
+    expect(configYml).toContain('OpenKnowledge — project configuration');
     expect(configYml).toContain('# content:');
     expect(configYml).toContain('# appearance:');
     const activeLines = configYml
@@ -93,7 +93,7 @@ describe('initContent', () => {
     expect(firstLine).toMatch(
       /^# yaml-language-server: \$schema=https:\/\/unpkg\.com\/@inkeep\/open-knowledge@latest\/dist\/schemas\/v\d+\/config\.project\.schema\.json$/,
     );
-    expect(configYml.split('\n')[1]).toBe('# Open Knowledge — project configuration');
+    expect(configYml.split('\n')[1]).toBe('# OpenKnowledge — project configuration');
     expect(configYml).toContain('# Schema reference: packages/core/src/config/schema.ts');
   });
 

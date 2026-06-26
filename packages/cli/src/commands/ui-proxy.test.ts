@@ -19,7 +19,7 @@ async function rawRequest(opts: {
   return new Promise((done, fail) => {
     const req = httpRequest(
       {
-        host: 'localhost',
+        host: '127.0.0.1',
         port: opts.port,
         path: opts.path,
         method: opts.method ?? 'GET',
@@ -56,7 +56,7 @@ async function startUpstream(
   await new Promise<void>((done, fail) => {
     const onError = (err: Error) => fail(err);
     server.once('error', onError);
-    server.listen(0, 'localhost', () => {
+    server.listen(0, '127.0.0.1', () => {
       server.off('error', onError);
       done();
     });
@@ -95,12 +95,12 @@ describe('startProxyServer', () => {
 
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
-    const response = await fetch(`http://localhost:${proxy.port}/hello`);
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/hello`);
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('hello world');
     expect(response.headers.get('content-type')).toContain('text/plain');
@@ -120,12 +120,12 @@ describe('startProxyServer', () => {
 
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
-    const response = await fetch(`http://localhost:${proxy.port}/echo`, {
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/echo`, {
       method: 'POST',
       body: payload,
       headers: { 'Content-Type': 'text/plain' },
@@ -143,12 +143,12 @@ describe('startProxyServer', () => {
 
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
-    const response = await fetch(`http://localhost:${proxy.port}/missing`);
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/missing`);
     expect(response.status).toBe(404);
     expect(response.headers.get('x-custom')).toBe('not-found');
     expect(await response.text()).toBe('nope');
@@ -163,12 +163,12 @@ describe('startProxyServer', () => {
 
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
-    const response = await fetch(`http://localhost:${proxy.port}/head`, { method: 'HEAD' });
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/head`, { method: 'HEAD' });
     expect(response.status).toBe(200);
     expect(response.headers.get('x-meta')).toBe('yes');
     expect(await response.text()).toBe('');
@@ -182,12 +182,12 @@ describe('startProxyServer', () => {
 
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: deadPort,
     });
 
-    const response = await fetch(`http://localhost:${proxy.port}/whatever`);
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/whatever`);
     expect(response.status).toBe(502);
     expect(response.headers.get('content-type')).toBe('application/problem+json');
     const body = (await response.json()) as { type: string; title: string; status: number };
@@ -199,15 +199,15 @@ describe('startProxyServer', () => {
     upstream = await startUpstream((_req, res) => res.end('ok'));
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
     const port = proxy.port;
     await proxy.close();
     proxy = null;
 
-    await expect(fetch(`http://localhost:${port}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${port}/`)).rejects.toThrow();
   });
 
   test('rejects requests with non-loopback Host header (DNS-rebind defense)', async () => {
@@ -218,8 +218,8 @@ describe('startProxyServer', () => {
     });
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
@@ -244,8 +244,8 @@ describe('startProxyServer', () => {
     });
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
@@ -268,8 +268,8 @@ describe('startProxyServer', () => {
     });
     proxy = await startProxyServer({
       listenPort: 0,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
 
@@ -285,14 +285,14 @@ describe('startProxyServer', () => {
     upstream = await startUpstream((_req, res) => res.end('ok'));
 
     const pickerSrv = createHttpServer();
-    await new Promise<void>((done) => pickerSrv.listen(0, 'localhost', () => done()));
+    await new Promise<void>((done) => pickerSrv.listen(0, '127.0.0.1', () => done()));
     const requested = (pickerSrv.address() as { port: number }).port;
     await new Promise<void>((done) => pickerSrv.close(() => done()));
 
     proxy = await startProxyServer({
       listenPort: requested,
-      host: 'localhost',
-      upstreamHost: 'localhost',
+      host: '127.0.0.1',
+      upstreamHost: '127.0.0.1',
       upstreamPort: upstream.port,
     });
     expect(proxy.port).toBe(requested);

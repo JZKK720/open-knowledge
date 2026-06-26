@@ -13,7 +13,6 @@ import {
   type RunCommitForm,
   runCommit,
 } from './use-config-form';
-import SRC from './use-config-form?raw';
 
 describe('applyExternalUpdate', () => {
   test('calls form.reset with keepDirtyValues + keepDirty + keepTouched', () => {
@@ -373,24 +372,5 @@ describe('useConfigForm module shape', () => {
     expect(typeof mod.applyExternalUpdate).toBe('function');
     expect(typeof mod.runCommit).toBe('function');
     expect(typeof mod.pickFirstIssueForPath).toBe('function');
-  });
-});
-
-describe('useConfigForm source-level guards', () => {
-  test('initializes useForm with binding.current() as defaultValues + no resolver', () => {
-    expect(SRC).toContain('useForm');
-    expect(SRC).toContain('defaultValues: binding.current()');
-    expect(SRC).not.toContain('zodResolver');
-    expect(SRC).not.toMatch(/resolver:\s/);
-  });
-
-  test('subscribes to binding and bridges to form via applyExternalUpdate', () => {
-    expect(SRC).toContain('binding.subscribe');
-    expect(SRC).toContain('applyExternalUpdate');
-  });
-
-  test('does not instantiate client-side IndexeddbPersistence', () => {
-    expect(SRC).not.toContain('IndexeddbPersistence');
-    expect(SRC).not.toContain('createClientPersistence');
   });
 });

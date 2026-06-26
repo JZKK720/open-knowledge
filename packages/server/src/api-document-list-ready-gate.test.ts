@@ -82,6 +82,7 @@ describe('handleDocumentList ready gating', () => {
         canonicalPath: join(tmp, 'log.md'),
         inode: 0,
         aliases: [],
+        kind: 'markdown',
       });
       fileIndex.set('notes', {
         size: 9,
@@ -89,6 +90,7 @@ describe('handleDocumentList ready gating', () => {
         canonicalPath: join(tmp, 'notes.md'),
         inode: 0,
         aliases: [],
+        kind: 'markdown',
       });
       resolveReady();
 
@@ -108,6 +110,89 @@ describe('handleDocumentList ready gating', () => {
     }
   });
 
+  test('emits kind:file rows for non-markdown index entries via getAllFilesIndex', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'ok-document-list-file-kind-'));
+    try {
+      mkdirSync(tmp, { recursive: true });
+      const now = new Date().toISOString();
+      const fileIndex = new Map<string, FileIndexEntry>([
+        [
+          'notes/page',
+          {
+            size: 9,
+            modified: now,
+            canonicalPath: join(tmp, 'notes/page.md'),
+            inode: 0,
+            aliases: [],
+            kind: 'markdown',
+          },
+        ],
+        [
+          'data/example.csv',
+          {
+            size: 64,
+            modified: now,
+            canonicalPath: join(tmp, 'data/example.csv'),
+            inode: 1,
+            aliases: [],
+            kind: 'file',
+          },
+        ],
+      ]);
+
+      const hocuspocus = new Hocuspocus({ quiet: true });
+      const ext = createApiExtension({
+        hocuspocus,
+        sessionManager: {
+          closeSession: async () => {},
+          closeAllForDoc: async () => {},
+        } as unknown as Parameters<typeof createApiExtension>[0]['sessionManager'],
+        contentDir: tmp,
+        getFileIndex: () => {
+          const view = new Map<string, FileIndexEntry>();
+          for (const [k, v] of fileIndex) if (v.kind === 'markdown') view.set(k, v);
+          return view;
+        },
+        getAllFilesIndex: () => fileIndex,
+        getFolderIndex: () => new Map(),
+        serverInstanceId: 'test-instance',
+      });
+
+      const req = makeReq('/api/documents');
+      const { res, captured } = makeRes();
+      await (
+        ext as {
+          onRequest: (ctx: { request: IncomingMessage; response: ServerResponse }) => Promise<void>;
+        }
+      ).onRequest({ request: req, response: res });
+
+      expect(captured.status).toBe(200);
+      const body = JSON.parse(captured.body) as {
+        documents: Array<{
+          kind: string;
+          docName?: string;
+          path?: string;
+          assetExt?: string;
+        }>;
+      };
+      const documents = body.documents;
+      expect(documents.filter((d) => d.kind === 'document').map((d) => d.docName)).toEqual([
+        'notes/page',
+      ]);
+      const fileRows = documents.filter((d) => d.kind === 'file');
+      expect(fileRows).toEqual([
+        expect.objectContaining({
+          kind: 'file',
+          docName: 'data/example.csv',
+          path: 'data/example.csv',
+          assetExt: 'csv',
+        }),
+      ]);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('responds normally when ready is omitted (test-construction path)', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'ok-ready-gate-'));
     try {
@@ -121,6 +206,7 @@ describe('handleDocumentList ready gating', () => {
             canonicalPath: join(tmp, 'only.md'),
             inode: 0,
             aliases: [],
+            kind: 'markdown',
           },
         ],
       ]);

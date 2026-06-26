@@ -12,6 +12,7 @@ import {
 import type { Server } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 function extractHandlerBlock(src: string, handlerNameConst: string): string {
   const anchorRe = new RegExp(`const\\s+${handlerNameConst}\\s*=`);
@@ -78,12 +79,7 @@ async function bootRig(): Promise<TestRig> {
   });
   hocuspocus.configuration.extensions.push(ext);
 
-  const port = await new Promise<number>((resolveListen) => {
-    server.listen(0, () => {
-      const addr = server.address();
-      resolveListen(typeof addr === 'object' && addr ? addr.port : 0);
-    });
-  });
+  const { port } = await listenOnLoopback(server);
 
   return {
     port,
@@ -101,7 +97,7 @@ async function postOkInit(
   port: number,
   body: Record<string, unknown>,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`http://localhost:${port}/api/local-op/ok-init`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/local-op/ok-init`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

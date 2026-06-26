@@ -2,6 +2,7 @@ export interface PageListCacheSnapshot {
   readonly pages: ReadonlySet<string>;
   readonly folderPaths: ReadonlySet<string>;
   readonly assetPaths?: ReadonlySet<string>;
+  readonly filePaths?: ReadonlySet<string>;
   readonly pageIcons?: ReadonlyMap<string, string>;
 
   readonly pagesBySlug: ReadonlyMap<string, string>;
@@ -33,6 +34,7 @@ export function snapshotsEqual(
     setsEqual(prev.pages, next.pages) &&
     setsEqual(prev.folderPaths, next.folderPaths) &&
     setsEqual(prev.assetPaths ?? new Set(), next.assetPaths ?? new Set()) &&
+    setsEqual(prev.filePaths ?? new Set(), next.filePaths ?? new Set()) &&
     pageIconsEqual(prev.pageIcons, next.pageIcons)
   );
 }

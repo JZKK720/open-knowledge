@@ -42,6 +42,21 @@ async function activeElementIsEditor(page: Page): Promise<boolean> {
   return page.evaluate(() => document.activeElement?.classList.contains('ProseMirror') ?? false);
 }
 
+async function externalLinkCueSnapshot(page: Page) {
+  return page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>('.ProseMirror [data-resolution-state="external"]'),
+    ).map((element) => ({
+      text: element.textContent ?? '',
+      afterContent: window.getComputedStyle(element, '::after').content,
+    })),
+  );
+}
+
+function hasExternalCue(afterContent: string): boolean {
+  return !['none', 'normal', '""', "''"].includes(afterContent);
+}
+
 test('TipTap find/replace highlights, navigates, replaces current, and replaces all', async ({
   page,
   api,
@@ -180,4 +195,37 @@ test('TipTap find navigation does not show table controls inside table matches',
   await page.keyboard.press('Enter');
   await expect(bar).toContainText('2 / 3');
   await expect(page.locator('[data-testid="table-cell-handle"]:visible')).toHaveCount(0);
+});
+
+test('TipTap find does not duplicate the external-link cue across split link matches', async ({
+  page,
+  api,
+}) => {
+  const docName = uniqueDocName('external-link-cue');
+  await api.seedDocs([
+    {
+      name: docName,
+      markdown: '# External Link\n\n[https://nextra.site](https://nextra.site)\n',
+    },
+  ]);
+
+  await page.goto(`/#/${docName}`);
+  await waitForActiveProviderSynced(page);
+  await expect(page.locator('.ProseMirror [data-resolution-state="external"]')).toContainText(
+    'https://nextra.site',
+  );
+  const baseline = await externalLinkCueSnapshot(page);
+  expect(baseline).toHaveLength(1);
+  expect(hasExternalCue(baseline[0]?.afterContent ?? 'none')).toBe(true);
+
+  await page.keyboard.press('ControlOrMeta+f');
+  const bar = page.getByTestId('find-replace-bar');
+  await expect(bar).toBeVisible();
+  await bar.getByRole('textbox', { name: 'Find' }).fill('nextra');
+  await expect(bar).toContainText('1 / 1');
+
+  const cueSnapshot = await externalLinkCueSnapshot(page);
+  expect(cueSnapshot.map((entry) => entry.text)).toEqual(['https://', 'nextra', '.site']);
+  expect(cueSnapshot.filter((entry) => hasExternalCue(entry.afterContent))).toHaveLength(1);
+  expect(hasExternalCue(cueSnapshot.at(-1)?.afterContent ?? 'none')).toBe(true);
 });

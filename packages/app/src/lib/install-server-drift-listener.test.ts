@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import * as actualSonner from 'sonner';
 import type {
   OkDesktopBridge,
   OkServerRestartOutcome,
@@ -12,6 +13,7 @@ const toastError = mock((_msg: string, _opts?: unknown) => 'error-id');
 const toastDismiss = mock((_id?: unknown) => {});
 const toastCustom = mock((_render: (id: unknown) => unknown, _opts?: unknown) => 'custom-id');
 mock.module('sonner', () => ({
+  ...actualSonner,
   toast: Object.assign(
     mock(() => {}),
     {
@@ -28,8 +30,8 @@ mock.module('sonner', () => ({
 import {
   driftToastBody,
   installServerDriftListener,
-  RESTART_DISRUPTION_WARNING,
   reclaimNoticeMessage,
+  restartDisruptionWarning,
   restartFailureMessage,
   restartSuccessMessage,
 } from '@/lib/install-server-drift-listener';
@@ -117,9 +119,9 @@ describe('drift copy', () => {
   });
 
   test('disruption warning names MCP and the agent remedy', () => {
-    expect(RESTART_DISRUPTION_WARNING).toContain('MCP');
-    expect(RESTART_DISRUPTION_WARNING.toLowerCase()).toContain('restart the agent');
-    expect(RESTART_DISRUPTION_WARNING).toContain('Claude Code');
+    expect(restartDisruptionWarning()).toContain('MCP');
+    expect(restartDisruptionWarning().toLowerCase()).toContain('restart the agent');
+    expect(restartDisruptionWarning()).toContain('Claude Code');
   });
 
   test('success message names the running version', () => {
@@ -180,7 +182,7 @@ describe('installServerDriftListener', () => {
     expect(toastCustom).toHaveBeenCalledTimes(1);
     expect(toastCustom.mock.calls[0]?.[1]).toMatchObject({ duration: Number.POSITIVE_INFINITY });
     expect(node.props.body).toBe(driftToastBody(olderInfo));
-    expect(node.props.warning).toBe(RESTART_DISRUPTION_WARNING);
+    expect(node.props.warning).toBe(restartDisruptionWarning());
     expect(typeof node.props.onRestart).toBe('function');
     expect(typeof node.props.onDismiss).toBe('function');
   });

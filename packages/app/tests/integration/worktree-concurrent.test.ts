@@ -27,6 +27,7 @@ describe('Two linked worktrees boot in parallel with isolated state (D13)', () =
 
     const [bootedA, bootedB] = await Promise.all([
       bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir: a.worktreePath,
         port: 0,
@@ -36,6 +37,7 @@ describe('Two linked worktrees boot in parallel with isolated state (D13)', () =
         attachUiSibling: false,
       }),
       bootServer({
+        host: '127.0.0.1',
         config: TEST_CONFIG,
         contentDir: b.worktreePath,
         port: 0,

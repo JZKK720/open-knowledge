@@ -1,10 +1,12 @@
 import { describe, expect, mock, test } from 'bun:test';
+import type { SharePublishOwner } from '@inkeep/open-knowledge-core';
 import {
   buildSamlSsoAuthorizeUrl,
   canSubmitPublish,
   extractFolderBasename,
   fetchPublishNameCheck,
   fetchPublishOwners,
+  pickDefaultOwner,
   presentPublishError,
   resolveNameCheckStatus,
   sanitizeRepoName,
@@ -61,6 +63,28 @@ describe('extractFolderBasename', () => {
   });
 });
 
+describe('pickDefaultOwner', () => {
+  const user: SharePublishOwner = { login: 'alice', kind: 'user' };
+  const orgA: SharePublishOwner = { login: 'docs-team', kind: 'org' };
+  const orgB: SharePublishOwner = { login: 'platform', kind: 'org' };
+
+  test('prefers the first org over the user account', () => {
+    expect(pickDefaultOwner([user, orgA, orgB])).toBe('docs-team');
+  });
+
+  test('falls back to the user account when there is no org', () => {
+    expect(pickDefaultOwner([user])).toBe('alice');
+  });
+
+  test('returns the first entry when somehow ordered with no org', () => {
+    expect(pickDefaultOwner([orgA, orgB])).toBe('docs-team');
+  });
+
+  test('empty list yields empty string', () => {
+    expect(pickDefaultOwner([])).toBe('');
+  });
+});
+
 describe('buildSamlSsoAuthorizeUrl', () => {
   test('builds the GitHub org-policies-applications URL', () => {
     expect(buildSamlSsoAuthorizeUrl('inkeep')).toBe(
@@ -90,7 +114,7 @@ describe('presentPublishError', () => {
       kind: 'authorize-org',
       authorizeUrl: 'https://github.com/orgs/inkeep/policies/applications',
     });
-    expect(r.banner).toContain('authorize Open Knowledge for inkeep');
+    expect(r.banner).toContain('authorize OpenKnowledge for inkeep');
   });
 
   test('push-failed routes to retry-push + interpolates owner/name', () => {

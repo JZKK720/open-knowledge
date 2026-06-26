@@ -1,62 +1,24 @@
 import type { AgentIdentity } from '../agent-identity.ts';
 import { getCurrentMcpLogger, type McpLogger } from '../logger.ts';
 import { createLoggedServer } from '../tool-logging.ts';
-import {
-  DESCRIPTION as CHECKPOINT_DESCRIPTION,
-  register as registerCheckpoint,
-} from './checkpoint.ts';
-import { DESCRIPTION as CONFIG_DESCRIPTION, register as registerConfig } from './config.ts';
-import {
-  DESCRIPTION as CONFLICTS_DESCRIPTION,
-  register as registerConflicts,
-} from './conflicts.ts';
-import { DESCRIPTION as DELETE_DESCRIPTION, register as registerDelete } from './delete.ts';
-import { DESCRIPTION as EDIT_DESCRIPTION, register as registerEdit } from './edit.ts';
-import { DESCRIPTION as EXEC_DESCRIPTION, register as registerExec } from './exec.ts';
-import {
-  DESCRIPTION as PREVIEW_URL_DESCRIPTION,
-  register as registerPreviewUrl,
-} from './get-preview-url.ts';
-import { DESCRIPTION as HISTORY_DESCRIPTION, register as registerHistory } from './history.ts';
-import { DESCRIPTION as LINKS_DESCRIPTION, register as registerLinks } from './links.ts';
-import { DESCRIPTION as MOVE_DESCRIPTION, register as registerMove } from './move.ts';
-import { DESCRIPTION as PALETTE_DESCRIPTION, register as registerPalette } from './palette.ts';
-import {
-  DESCRIPTION as RESOLVE_CONFLICT_DESCRIPTION,
-  register as registerResolveConflict,
-} from './resolve-conflict.ts';
-import {
-  DESCRIPTION as RESTORE_VERSION_DESCRIPTION,
-  register as registerRestoreVersion,
-} from './restore-version.ts';
-import { register as registerSearch, DESCRIPTION as SEARCH_DESCRIPTION } from './search.ts';
-import {
-  register as registerShareLink,
-  DESCRIPTION as SHARE_LINK_DESCRIPTION,
-} from './share-link.ts';
+import { register as registerCheckpoint } from './checkpoint.ts';
+import { register as registerConfig } from './config.ts';
+import { register as registerConflicts } from './conflicts.ts';
+import { register as registerDelete } from './delete.ts';
+import { register as registerEdit } from './edit.ts';
+import { register as registerExec } from './exec.ts';
+import { register as registerPreviewUrl } from './get-preview-url.ts';
+import { register as registerHistory } from './history.ts';
+import { register as registerLinks } from './links.ts';
+import { register as registerMove } from './move.ts';
+import { register as registerPalette } from './palette.ts';
+import { register as registerResolveConflict } from './resolve-conflict.ts';
+import { register as registerRestoreVersion } from './restore-version.ts';
+import { register as registerSearch } from './search.ts';
+import { register as registerShareLink } from './share-link.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
-import { register as registerWorkflow, DESCRIPTION as WORKFLOW_DESCRIPTION } from './workflow.ts';
-import { register as registerWrite, DESCRIPTION as WRITE_DESCRIPTION } from './write.ts';
-
-const _TOOL_DESCRIPTIONS = {
-  exec: EXEC_DESCRIPTION,
-  workflow: WORKFLOW_DESCRIPTION,
-  move: MOVE_DESCRIPTION,
-  search: SEARCH_DESCRIPTION,
-  links: LINKS_DESCRIPTION,
-  write: WRITE_DESCRIPTION,
-  edit: EDIT_DESCRIPTION,
-  delete: DELETE_DESCRIPTION,
-  history: HISTORY_DESCRIPTION,
-  checkpoint: CHECKPOINT_DESCRIPTION,
-  restore_version: RESTORE_VERSION_DESCRIPTION,
-  palette: PALETTE_DESCRIPTION,
-  config: CONFIG_DESCRIPTION,
-  preview_url: PREVIEW_URL_DESCRIPTION,
-  conflicts: CONFLICTS_DESCRIPTION,
-  resolve_conflict: RESOLVE_CONFLICT_DESCRIPTION,
-  share_link: SHARE_LINK_DESCRIPTION,
-} as const;
+import { register as registerWorkflow } from './workflow.ts';
+import { register as registerWrite } from './write.ts';
 
 type ResolveCwd = (explicit?: string) => Promise<string>;
 
@@ -165,6 +127,7 @@ export function registerAllTools(server: ServerInstance, opts: RegisterAllToolsO
   registerPreviewUrl(registrationServer, {
     config: opts.config,
     resolveCwd: named('preview_url'),
+    serverUrl: opts.serverUrl,
   });
   registerConflicts(registrationServer, {
     serverUrl: opts.serverUrl,

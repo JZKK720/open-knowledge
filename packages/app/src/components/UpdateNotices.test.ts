@@ -4,6 +4,9 @@ import {
   addSchemaIncompatibilityNotice,
   appendErrorDetail,
   attachUpdateSubscribers,
+  INSTALL_FAILED_DOWNLOAD_ACTION,
+  INSTALL_FAILED_RETRY_ACTION,
+  installFailedBody,
   pickActiveNotice,
   TOAST_A_ACTION,
   TOAST_A_ERROR_BODY,
@@ -21,12 +24,16 @@ import {
 } from './UpdateNotices';
 
 type UpdateDownloadedCb = (info: { version: string }) => void;
+type RelaunchingCb = (info: { version: string }) => void;
+type RelaunchFailedCb = (info: { version: string; message?: string; downloadUrl?: string }) => void;
 type WhatsNewCb = (info: { version: string; releaseUrl: string }) => void;
 type WhatsNewDismissedCb = (info: { version: string }) => void;
 type StuckHintCb = (info: { downloadUrl: string }) => void;
 
 interface FakeBridge {
   onUpdateDownloaded: ReturnType<typeof mock>;
+  onUpdateRelaunching: ReturnType<typeof mock>;
+  onUpdateRelaunchFailed: ReturnType<typeof mock>;
   onWhatsNew: ReturnType<typeof mock>;
   onWhatsNewDismissed: ReturnType<typeof mock>;
   onUpdateStuckHint: ReturnType<typeof mock>;
@@ -40,10 +47,14 @@ interface FakeBridge {
   };
   shell: { openExternal: ReturnType<typeof mock> };
   _downloaded?: UpdateDownloadedCb;
+  _relaunching?: RelaunchingCb;
+  _relaunchFailed?: RelaunchFailedCb;
   _whatsNew?: WhatsNewCb;
   _whatsNewDismissed?: WhatsNewDismissedCb;
   _stuckHint?: StuckHintCb;
   _downloadedUnsub: ReturnType<typeof mock>;
+  _relaunchingUnsub: ReturnType<typeof mock>;
+  _relaunchFailedUnsub: ReturnType<typeof mock>;
   _whatsNewUnsub: ReturnType<typeof mock>;
   _whatsNewDismissedUnsub: ReturnType<typeof mock>;
   _stuckHintUnsub: ReturnType<typeof mock>;
@@ -52,10 +63,14 @@ interface FakeBridge {
 function makeFakeBridge(): FakeBridge {
   const b: FakeBridge = {
     _downloadedUnsub: mock(() => {}),
+    _relaunchingUnsub: mock(() => {}),
+    _relaunchFailedUnsub: mock(() => {}),
     _whatsNewUnsub: mock(() => {}),
     _whatsNewDismissedUnsub: mock(() => {}),
     _stuckHintUnsub: mock(() => {}),
     onUpdateDownloaded: mock(() => {}),
+    onUpdateRelaunching: mock(() => {}),
+    onUpdateRelaunchFailed: mock(() => {}),
     onWhatsNew: mock(() => {}),
     onWhatsNewDismissed: mock(() => {}),
     onUpdateStuckHint: mock(() => {}),
@@ -72,6 +87,14 @@ function makeFakeBridge(): FakeBridge {
   b.onUpdateDownloaded = mock((cb: UpdateDownloadedCb) => {
     b._downloaded = cb;
     return b._downloadedUnsub;
+  });
+  b.onUpdateRelaunching = mock((cb: RelaunchingCb) => {
+    b._relaunching = cb;
+    return b._relaunchingUnsub;
+  });
+  b.onUpdateRelaunchFailed = mock((cb: RelaunchFailedCb) => {
+    b._relaunchFailed = cb;
+    return b._relaunchFailedUnsub;
   });
   b.onWhatsNew = mock((cb: WhatsNewCb) => {
     b._whatsNew = cb;
@@ -155,25 +178,129 @@ describe('appendErrorDetail', () => {
 });
 
 describe('attachUpdateSubscribers — registration', () => {
-  test('subscribes to all four update channels on the bridge', () => {
+  test('subscribes to all six update channels on the bridge', () => {
     const bridge = makeFakeBridge();
     const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
     attachUpdateSubscribers(castBridge(bridge), addNotice);
     expect(bridge.onUpdateDownloaded).toHaveBeenCalledTimes(1);
+    expect(bridge.onUpdateRelaunching).toHaveBeenCalledTimes(1);
+    expect(bridge.onUpdateRelaunchFailed).toHaveBeenCalledTimes(1);
     expect(bridge.onWhatsNew).toHaveBeenCalledTimes(1);
     expect(bridge.onWhatsNewDismissed).toHaveBeenCalledTimes(1);
     expect(bridge.onUpdateStuckHint).toHaveBeenCalledTimes(1);
   });
 
-  test('returns a single unsubscribe closure that detaches ALL four listeners', () => {
+  test('returns a single unsubscribe closure that detaches ALL six listeners', () => {
     const bridge = makeFakeBridge();
     const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
     const unsubscribe = attachUpdateSubscribers(castBridge(bridge), addNotice);
     unsubscribe();
     expect(bridge._downloadedUnsub).toHaveBeenCalledTimes(1);
+    expect(bridge._relaunchingUnsub).toHaveBeenCalledTimes(1);
+    expect(bridge._relaunchFailedUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._whatsNewUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._whatsNewDismissedUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._stuckHintUnsub).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Notice A cross-window relaunch — ok:update:relaunching', () => {
+  test('swaps the update-downloaded card to the button-less in-progress card', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+
+    bridge._relaunching?.({ version: '0.1.1' });
+    expect(addNotice).toHaveBeenCalledTimes(1);
+    const inProgress = addNotice.mock.calls[0]?.[0] as UpdateNotice;
+    expect(inProgress.id).toBe('update-downloaded');
+    expect(inProgress.body).toBe(TOAST_A_PROGRESS_BODY);
+    expect(inProgress.action).toBeUndefined();
+    expect(inProgress.priority).toBe(2);
+    expect(inProgress.dismissible).toBe(false);
+  });
+
+  test('does NOT invoke relaunchNow — it is the echo, not the trigger (no loop)', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunching?.({ version: '0.1.1' });
+    expect(bridge.update.relaunchNow).not.toHaveBeenCalled();
+  });
+
+  test('onUpdateRelaunchFailed → error notice with detail, same id as the rejection path', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunchFailed?.({ version: '0.1.1', message: 'App Still Running Error' });
+    const errorNotice = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    expect(errorNotice.id).toBe('relaunch-error-0.1.1');
+    expect(errorNotice.body).toBe(`${TOAST_A_ERROR_BODY}: App Still Running Error`);
+    expect(errorNotice.variant).toBe('error');
+    expect(errorNotice.priority).toBe(1);
+    expect(errorNotice.action).toBeUndefined();
+  });
+
+  test('onUpdateRelaunchFailed without message → canonical body, no trailing colon', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunchFailed?.({ version: '0.1.1' });
+    const errorNotice = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    expect(errorNotice.body).toBe(TOAST_A_ERROR_BODY);
+  });
+
+  test('boot-detected failed install (downloadUrl present) → richer two-action card', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunchFailed?.({
+      version: '0.16.0-beta.3',
+      downloadUrl: 'https://inkeep.com/open-knowledge/download',
+    });
+    const notice = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    expect(notice.id).toBe('install-failed-0.16.0-beta.3');
+    expect(notice.body).toBe(installFailedBody('0.16.0-beta.3'));
+    expect(notice.variant).toBe('error');
+    expect(notice.action?.label).toBe(INSTALL_FAILED_RETRY_ACTION);
+    expect(notice.secondaryAction?.label).toBe(INSTALL_FAILED_DOWNLOAD_ACTION);
+  });
+
+  test('failed-install Retry invokes relaunchNow; Download manually opens the URL', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    const url = 'https://inkeep.com/open-knowledge/download';
+    bridge._relaunchFailed?.({ version: '0.16.0-beta.3', downloadUrl: url });
+    const notice = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    notice.action?.onClick();
+    expect(bridge.update.relaunchNow).toHaveBeenCalledTimes(1);
+    notice.secondaryAction?.onClick();
+    expect(bridge.shell.openExternal).toHaveBeenCalledWith(url);
+  });
+
+  test('relaunch-failed WITHOUT downloadUrl keeps the plain error notice (no actions)', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunchFailed?.({ version: '0.16.0-beta.3' });
+    const notice = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    expect(notice.id).toBe('relaunch-error-0.16.0-beta.3');
+    expect(notice.action).toBeUndefined();
+    expect(notice.secondaryAction).toBeUndefined();
+  });
+
+  test('a downloaded re-broadcast after a failed relaunch replaces the stuck in-progress card in place', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice);
+    bridge._relaunching?.({ version: '0.1.1' });
+    bridge._downloaded?.({ version: '0.1.1' });
+    const reArmed = addNotice.mock.calls.at(-1)?.[0] as UpdateNotice;
+    expect(reArmed.id).toBe('update-downloaded');
+    expect(reArmed.body).toBe(toastABody('0.1.1'));
+    expect(reArmed.action?.label).toBe(TOAST_A_ACTION);
+    expect(reArmed.dismissible).toBeUndefined();
   });
 });
 
@@ -191,6 +318,7 @@ describe('Notice A — ok:update:downloaded', () => {
     expect(notice.action?.label).toBe(TOAST_A_ACTION);
     expect(notice.variant).toBeUndefined();
     expect(notice.priority).toBe(2); // update-downloaded = A
+    expect(notice.dismissible).toBeUndefined();
   });
 
   test('action onClick invokes bridge.update.relaunchNow', () => {
@@ -203,7 +331,7 @@ describe('Notice A — ok:update:downloaded', () => {
     expect(bridge.update.relaunchNow).toHaveBeenCalledTimes(1);
   });
 
-  test('action onClick synchronously swaps Toast A in-place to a button-less in-progress card', () => {
+  test('action onClick synchronously swaps Toast A in-place to a button-less, non-dismissible in-progress card', () => {
     const bridge = makeFakeBridge();
     const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
     attachUpdateSubscribers(castBridge(bridge), addNotice);
@@ -215,6 +343,7 @@ describe('Notice A — ok:update:downloaded', () => {
     expect(inProgress.body).toBe(TOAST_A_PROGRESS_BODY);
     expect(inProgress.action).toBeUndefined();
     expect(inProgress.priority).toBe(2);
+    expect(inProgress.dismissible).toBe(false);
   });
 
   test('relaunchNow rejection → error notice with appended detail + armed card restored for retry', async () => {
@@ -347,6 +476,7 @@ describe('Notice B — ok:update:whats-new', () => {
     expect(notice.body).toBe('Updated to Version 0.3.1');
     expect(notice.id).toBe('whats-new-0.3.1');
     expect(notice.action?.label).toBe(TOAST_B_ACTION);
+    expect(notice.variant).toBe('success'); // green card — distinct from the gray "ready to install"
     expect(notice.priority).toBe(3); // whats-new = lowest
     notice.action?.onClick();
     expect(bridge.shell.openExternal).toHaveBeenCalledWith(releaseUrl);
@@ -563,12 +693,14 @@ describe('pickActiveNotice', () => {
 });
 
 describe('unsubscribe semantics', () => {
-  test('after unsubscribe, all four per-channel unsub closures fire', () => {
+  test('after unsubscribe, all six per-channel unsub closures fire', () => {
     const bridge = makeFakeBridge();
     const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
     const unsubscribe = attachUpdateSubscribers(castBridge(bridge), addNotice);
     unsubscribe();
     expect(bridge._downloadedUnsub).toHaveBeenCalledTimes(1);
+    expect(bridge._relaunchingUnsub).toHaveBeenCalledTimes(1);
+    expect(bridge._relaunchFailedUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._whatsNewUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._whatsNewDismissedUnsub).toHaveBeenCalledTimes(1);
     expect(bridge._stuckHintUnsub).toHaveBeenCalledTimes(1);

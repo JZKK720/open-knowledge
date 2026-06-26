@@ -14,10 +14,10 @@ import {
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useConfigContext } from '@/lib/config-provider';
 import { cn } from '@/lib/utils';
 import { OPT_OUT_ATTR } from '../clipboard/index.ts';
 import { CodePreviewEditModal } from '../components/CodePreviewEditModal';
+import { PreviewBlockedNotice } from '../components/PreviewBlockedNotice';
 import { ResizeHandles } from '../components/ResizeHandles.tsx';
 import { CODE_BLOCK_LANGUAGES, normalizeCodeLanguage } from './code-block-languages';
 import {
@@ -35,7 +35,9 @@ import {
 import {
   buildPreviewIframeHeader,
   buildPreviewThemeMessage,
+  type PreviewBlockedRequest,
   type PreviewTheme,
+  parsePreviewCspViolationMessage,
   parsePreviewHeightMessage,
 } from './preview-iframe-header';
 
@@ -78,12 +80,14 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos, selected
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [autoHeight, setAutoHeight] = useState<number | null>(null);
+  const [blockedRequests, setBlockedRequests] = useState<{
+    blocked: PreviewBlockedRequest[];
+    truncated: boolean;
+  } | null>(null);
   const { resolvedTheme } = useTheme();
   const appTheme: PreviewTheme =
     resolvedTheme === 'dark' || resolvedTheme === 'light' ? resolvedTheme : readAppTheme();
   const [bakedTheme] = useState<PreviewTheme>(readAppTheme);
-  const { merged } = useConfigContext();
-  const previewScriptSrc = merged?.preview?.scriptSrc ?? 'cdn-allowlist';
   const rawLanguage = (node.attrs.language as string | null) ?? null;
   const rawMeta = (node.attrs.meta as string | null) ?? null;
   const title = getMetaTitle(rawMeta);
@@ -127,8 +131,14 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos, selected
     function onMessage(e: MessageEvent) {
       if (e.source !== previewFrameRef.current?.contentWindow) return;
       const reported = parsePreviewHeightMessage(e.data);
-      if (reported === null) return;
-      setAutoHeight((prev) => (prev !== null && Math.abs(prev - reported) <= 2 ? prev : reported));
+      if (reported !== null) {
+        setAutoHeight((prev) =>
+          prev !== null && Math.abs(prev - reported) <= 2 ? prev : reported,
+        );
+        return;
+      }
+      const violation = parsePreviewCspViolationMessage(e.data);
+      if (violation !== null) setBlockedRequests(violation);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -223,9 +233,10 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos, selected
             ref={previewFrameRef}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
-            srcDoc={buildPreviewIframeHeader(previewScriptSrc, bakedTheme) + node.textContent}
+            srcDoc={buildPreviewIframeHeader(bakedTheme) + node.textContent}
             className="ok-codeblock-preview-frame"
             onLoad={() => {
+              setBlockedRequests(null);
               previewFrameRef.current?.contentWindow?.postMessage(
                 buildPreviewThemeMessage(appTheme),
                 '*',
@@ -249,6 +260,14 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos, selected
             onResizeEnd={handleResizeEnd}
           />
         </div>
+      ) : null}
+
+      {previewActive && blockedRequests ? (
+        <PreviewBlockedNotice
+          blocked={blockedRequests.blocked}
+          truncated={blockedRequests.truncated}
+          onDismiss={() => setBlockedRequests(null)}
+        />
       ) : null}
 
       {/* Title strip — rendered above the source whenever the fence carries
@@ -454,7 +473,7 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos, selected
               title={t`HTML preview`}
               sandbox="allow-scripts"
               className="size-full border-0"
-              srcDoc={buildPreviewIframeHeader(previewScriptSrc, bakedTheme) + value}
+              srcDoc={buildPreviewIframeHeader(bakedTheme) + value}
             />
           )}
           onSave={handleEditSave}

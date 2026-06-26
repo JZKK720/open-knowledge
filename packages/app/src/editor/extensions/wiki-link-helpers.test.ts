@@ -77,6 +77,72 @@ describe('resolveWikiLinkAssetTarget', () => {
   });
 });
 
+describe('resolveWikiLinkAssetTarget — file-paths partition', () => {
+  test('resolves a tracked non-markdown file by exact path', () => {
+    const assets = new Set<string>();
+    const files = new Set(['data/example.csv']);
+    expect(resolveWikiLinkAssetTarget('data/example.csv', assets, files)).toBe('data/example.csv');
+  });
+
+  test('resolves a tracked non-markdown file by leading-slash content path', () => {
+    const assets = new Set<string>();
+    const files = new Set(['data/example.csv']);
+    expect(resolveWikiLinkAssetTarget('/data/example.csv', assets, files)).toBe('data/example.csv');
+  });
+
+  test('resolves a tracked non-markdown file by case-insensitive basename', () => {
+    const assets = new Set<string>();
+    const files = new Set(['packages/app/src/components/FileTree.tsx']);
+    expect(resolveWikiLinkAssetTarget('FileTree.tsx', assets, files)).toBe(
+      'packages/app/src/components/FileTree.tsx',
+    );
+    expect(resolveWikiLinkAssetTarget('filetree.tsx', assets, files)).toBe(
+      'packages/app/src/components/FileTree.tsx',
+    );
+  });
+
+  test('returns null when the target is not in either partition', () => {
+    const assets = new Set(['images/diagram.png']);
+    const files = new Set(['data/example.csv']);
+    expect(resolveWikiLinkAssetTarget('missing.csv', assets, files)).toBeNull();
+  });
+
+  test('asset partition still wins when both partitions hold the target path', () => {
+    const assets = new Set(['shared.png']);
+    const files = new Set(['shared.png']);
+    expect(resolveWikiLinkAssetTarget('shared.png', assets, files)).toBe('shared.png');
+  });
+});
+
+describe('isResolvedWikiLinkTarget — non-markdown file existence (US-009)', () => {
+  test('a tracked non-markdown file resolves as existing', () => {
+    const pages = new Set(['notes/guide']);
+    const assets = new Set<string>();
+    const files = new Set(['data/example.csv']);
+    expect(isResolvedWikiLinkTarget('data/example.csv', pages, assets, files)).toBe(true);
+  });
+
+  test('a NOT-tracked non-markdown file renders as missing', () => {
+    const pages = new Set(['notes/guide']);
+    const assets = new Set<string>();
+    const files = new Set(['data/example.csv']);
+    expect(isResolvedWikiLinkTarget('data/missing.csv', pages, assets, files)).toBe(false);
+  });
+
+  test('non-markdown file resolution composes with the snapshot input shape', () => {
+    const snapshot = {
+      pages: new Set<string>(),
+      folderPaths: new Set<string>(),
+      pagesBySlug: new Map<string, string>(),
+      pagesByBasename: new Map<string, string>(),
+      assetPaths: new Set<string>(),
+      filePaths: new Set(['data/example.csv']),
+    };
+    expect(isResolvedWikiLinkTarget('data/example.csv', snapshot)).toBe(true);
+    expect(isResolvedWikiLinkTarget('data/missing.csv', snapshot)).toBe(false);
+  });
+});
+
 describe('isResolvedWikiLinkTarget — case-insensitive resolution against case-preserved pages cache', () => {
   test('lowercased slug resolves against case-preserved cache entry', () => {
     const pages = new Set(['README']);

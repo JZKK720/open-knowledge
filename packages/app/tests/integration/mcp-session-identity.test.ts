@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { toBroadcasterKey } from '@inkeep/open-knowledge-server';
 import type { EffectValue } from '../../../../packages/server/src/activity-log.ts';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestClient, createTestServer, type TestServer } from './test-harness.ts';
 
 const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -14,7 +15,7 @@ interface InitializedSession {
 }
 
 async function openMcpSession(port: number, clientName: string): Promise<InitializedSession> {
-  const init = await fetch(`http://localhost:${port}/mcp`, {
+  const init = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -37,7 +38,7 @@ async function openMcpSession(port: number, clientName: string): Promise<Initial
   const initBody = (await init.json()) as { result?: { protocolVersion?: string } };
   const protocolVersion = initBody.result?.protocolVersion ?? MCP_PROTOCOL_VERSION;
 
-  const initialized = await fetch(`http://localhost:${port}/mcp`, {
+  const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -69,7 +70,7 @@ async function callWriteDocument(
   },
   rpcId: number,
 ): Promise<ToolCallResult> {
-  const res = await fetch(`http://localhost:${port}/mcp`, {
+  const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
@@ -104,7 +105,7 @@ let server: TestServer;
 
 beforeAll(async () => {
   server = await createTestServer({ debounce: 50, maxDebounce: 200 });
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -164,11 +165,11 @@ test('two simultaneous Claude MCP sessions land with identical displayName but d
     }
   } finally {
     await client.cleanup();
-    await fetch(`http://localhost:${server.port}/mcp`, {
+    await fetch(`http://127.0.0.1:${server.port}/mcp`, {
       method: 'DELETE',
       headers: { 'mcp-session-id': sessionA.sessionId },
     });
-    await fetch(`http://localhost:${server.port}/mcp`, {
+    await fetch(`http://127.0.0.1:${server.port}/mcp`, {
       method: 'DELETE',
       headers: { 'mcp-session-id': sessionB.sessionId },
     });

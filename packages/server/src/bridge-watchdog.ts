@@ -4,12 +4,14 @@ import {
   BridgeInvariantViolationError,
   type BridgeToleranceClass,
   detectAppliedToleranceClasses,
+  emitToleranceFire,
   normalizeBridge,
   toBridgeInvariantLog,
 } from '@inkeep/open-knowledge-core';
 import {
   incrementBridgeInvariantViolations,
   incrementBridgeInvariantViolationsSuppressed,
+  incrementBridgeSplitBrainRederivesSuppressed,
   incrementBridgeToleranceApplied,
   incrementObserverAPathBFiresSuppressed,
 } from './metrics.ts';
@@ -54,12 +56,12 @@ const lastEmitMs = new Map<string, number>();
 const MAX_VIOLATION_RATE_TUPLES = 1024;
 
 /** Map<rateKey, last-emit-Unix-ms> for the bridge-tolerance-applied event.
- *  rateKey = `${site}::${class}`. Bounded cardinality: 8 classes × 3 sites =
- *  24 entries max globally. Per-(site, class) windows let operators see how
+ *  rateKey = `${site}::${class}`. Bounded cardinality: 16 classes × 3 sites =
+ *  48 entries max globally. Per-(site, class) windows let operators see how
  *  often each site relies on each tolerance class — observer-b CRLF rates
  *  vs persistence CRLF rates surface separately.
  *
- *  WARN: same module-level state caveat as `lastEmitMs` above. The 24-entry
+ *  WARN: same module-level state caveat as `lastEmitMs` above. The 48-entry
  *  bound is global; under multi-server-per-process, a single server's
  *  tolerance event would suppress another server's same-class event in
  *  the same window. Less concerning than the violation rate-limiter
@@ -78,6 +80,23 @@ const lastToleranceEmitMs = new Map<string, number>();
  *
  *  WARN: same module-level state caveat as `lastEmitMs` above. */
 const lastPathBEmitMs = new Map<string, number>();
+
+/** Observer A settlement-check site that detected a drain settling
+ *  split-brain. Three production sites in `server-observers.ts`: the
+ *  identity gate (fragment changed but its serialization didn't move),
+ *  the post-merge baseline check (after a Path A/B Y.Text write), and
+ *  the error-recovery catch (sync work threw before the settlement check,
+ *  so the baseline reset must not witness a divergent Y.Text). */
+export type BridgeSplitBrainSite = 'identity-gate' | 'post-merge' | 'error-recovery';
+
+/** Map<rateKey, last-emit-Unix-ms> for the bridge-split-brain-rederive
+ *  event. rateKey = `${site}::${docName ?? '__nodoc__'}` — per-(site, doc)
+ *  so a chatty doc can't suppress signal from quieter docs and the two
+ *  detection sites surface independently. Bounded: 2 sites × docs, with
+ *  the same lazy prune as `lastEmitMs`.
+ *
+ *  WARN: same module-level state caveat as `lastEmitMs` above. */
+const lastSplitBrainEmitMs = new Map<string, number>();
 
 function toleranceRateKey(site: BridgeInvariantSite, cls: BridgeToleranceClass): string {
   return `${site}::${cls}`;
@@ -151,14 +170,49 @@ export function emitObserverAPathBFired(docName: string | undefined, nowMs?: num
   return shouldEmit;
 }
 
+export function shouldEmitBridgeSplitBrainRederive(
+  site: BridgeSplitBrainSite,
+  docName: string | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  const key = `${site}::${docName ?? '__nodoc__'}`;
+  const last = lastSplitBrainEmitMs.get(key);
+  const debounceMs = readDebounceMs();
+  if (last !== undefined && nowMs - last < debounceMs) return false;
+  if (lastSplitBrainEmitMs.size >= MAX_VIOLATION_RATE_TUPLES) {
+    for (const [k, lastMs] of lastSplitBrainEmitMs) {
+      if (nowMs - lastMs >= debounceMs) lastSplitBrainEmitMs.delete(k);
+    }
+  }
+  lastSplitBrainEmitMs.set(key, nowMs);
+  return true;
+}
+
+export function emitBridgeSplitBrainRederive(
+  site: BridgeSplitBrainSite,
+  docName: string | undefined,
+  nowMs?: number,
+): boolean {
+  const shouldEmit = shouldEmitBridgeSplitBrainRederive(site, docName, nowMs);
+  if (!shouldEmit) {
+    incrementBridgeSplitBrainRederivesSuppressed();
+  }
+  return shouldEmit;
+}
+
 export function __resetBridgeWatchdogForTests(): void {
   lastEmitMs.clear();
   lastToleranceEmitMs.clear();
   lastPathBEmitMs.clear();
+  lastSplitBrainEmitMs.clear();
 }
 
 export function __getViolationRateTupleCountForTests(): number {
   return lastEmitMs.size;
+}
+
+export function __getSplitBrainRateTupleCountForTests(): number {
+  return lastSplitBrainEmitMs.size;
 }
 
 export function shouldThrowOnBridgeInvariantViolation(
@@ -185,17 +239,21 @@ export function assertBridgeInvariant(
   if (ytextNorm === fragNorm) {
     if (ytextSnapshot !== fragmentMdSnapshot) {
       const classes = detectAppliedToleranceClasses(ytextSnapshot, fragmentMdSnapshot);
-      for (const cls of classes) {
-        if (shouldEmitBridgeToleranceApplied(opts.site, cls, opts.nowMs)) {
-          incrementBridgeToleranceApplied(cls);
-          console.warn(
-            JSON.stringify({
-              event: 'bridge-tolerance-applied',
-              site: opts.site,
-              class: cls,
-            }),
-          );
-        }
+      const emittedClasses = classes.filter((cls) =>
+        shouldEmitBridgeToleranceApplied(opts.site, cls, opts.nowMs),
+      );
+      if (classes.length > 0) {
+        emitToleranceFire(classes, ytextSnapshot, fragmentMdSnapshot, opts.docName);
+      }
+      for (const cls of emittedClasses) {
+        incrementBridgeToleranceApplied(cls);
+        console.warn(
+          JSON.stringify({
+            event: 'bridge-tolerance-applied',
+            site: opts.site,
+            class: cls,
+          }),
+        );
       }
     }
     return true;

@@ -29,3 +29,53 @@ export function mergeAndPruneRecentLocalAdds(
   if (preservedLocal.length === 0) return [...serverEntries];
   return [...serverEntries, ...preservedLocal];
 }
+
+export function spliceLazyFolderChildren(
+  currentEntries: readonly FileEntry[],
+  folderTreePath: string,
+  serverChildren: readonly FileEntry[],
+  recentAdds: Map<string, number>,
+  now: number = Date.now(),
+): FileEntry[] {
+  if (
+    folderTreePath !== '' &&
+    !currentEntries.some((entry) => fileEntryToTreePath(entry) === folderTreePath)
+  ) {
+    return [...currentEntries];
+  }
+  const currentChildren: FileEntry[] = [];
+  const passthrough: FileEntry[] = [];
+  for (const entry of currentEntries) {
+    if (isDirectChildTreePath(folderTreePath, fileEntryToTreePath(entry))) {
+      currentChildren.push(entry);
+    } else {
+      passthrough.push(entry);
+    }
+  }
+  const mergedChildren = mergeAndPruneRecentLocalAdds(
+    serverChildren,
+    currentChildren,
+    recentAdds,
+    now,
+  );
+  const survivingChildFolders = new Set(
+    mergedChildren.map((entry) => fileEntryToTreePath(entry)).filter((p) => p.endsWith('/')),
+  );
+  const kept = passthrough.filter((entry) => {
+    const treePath = fileEntryToTreePath(entry);
+    if (!treePath.startsWith(folderTreePath)) return true; // outside the spliced subtree
+    const rest = treePath.slice(folderTreePath.length);
+    const firstSlash = rest.indexOf('/');
+    if (firstSlash === -1) return true; // the spliced folder's own entry
+    return survivingChildFolders.has(folderTreePath + rest.slice(0, firstSlash + 1));
+  });
+  return [...kept, ...mergedChildren];
+}
+
+function isDirectChildTreePath(parentDirTreePath: string, treePath: string): boolean {
+  if (!treePath.startsWith(parentDirTreePath)) return false;
+  const rest = treePath.slice(parentDirTreePath.length);
+  if (rest === '') return false;
+  const stem = rest.endsWith('/') ? rest.slice(0, -1) : rest;
+  return stem !== '' && !stem.includes('/');
+}

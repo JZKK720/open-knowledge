@@ -98,7 +98,7 @@ function config() {
 }
 
 async function get(port: number, path: string) {
-  const res = await fetch(`http://localhost:${port}${path}`);
+  const res = await fetch(`http://127.0.0.1:${port}${path}`);
   const body = await res.text();
   return { status: res.status, body, headers: res.headers };
 }
@@ -126,7 +126,7 @@ async function rawRequest(opts: {
   return new Promise((done, fail) => {
     const req = httpRequest(
       {
-        host: 'localhost',
+        host: '127.0.0.1',
         port: opts.port,
         path: opts.path,
         method: opts.method ?? 'GET',
@@ -155,6 +155,44 @@ async function rawRequest(opts: {
     if (opts.body !== undefined) req.write(opts.body);
     req.end();
   });
+}
+
+type UpstreamSurrogate = { port: number; close: () => Promise<void> };
+
+async function startDualLoopbackUpstream(
+  handler: Parameters<typeof createHttpServer>[1],
+): Promise<UpstreamSurrogate> {
+  const v6 = createHttpServer(handler);
+  await new Promise<void>((done, fail) => {
+    v6.once('error', fail);
+    v6.listen(0, '::1', () => {
+      v6.off('error', fail);
+      done();
+    });
+  });
+  const port = (v6.address() as { port: number }).port;
+  const v4 = createHttpServer(handler);
+  try {
+    await new Promise<void>((done, fail) => {
+      v4.once('error', fail);
+      v4.listen(port, '127.0.0.1', () => {
+        v4.off('error', fail);
+        done();
+      });
+    });
+  } catch (err) {
+    await new Promise<void>((r) => v6.close(() => r()));
+    throw err;
+  }
+  return {
+    port,
+    close: async () => {
+      await Promise.all([
+        new Promise<void>((r) => v6.close(() => r())),
+        new Promise<void>((r) => v4.close(() => r())),
+      ]);
+    },
+  };
 }
 
 describe('resolveRequestedPort', () => {
@@ -198,7 +236,7 @@ describe('resolveRequestedPort', () => {
 
 describe('startUiServer', () => {
   test('binds requested port and writes ui.lock with resolved port', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     expect(handle.port).toBeGreaterThan(0);
 
     const lockPath = resolve(lockDir, 'ui.lock');
@@ -281,7 +319,7 @@ describe('startUiServer', () => {
   });
 
   test('/api/config returns collabUrl=null when server.lock is absent', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, body, headers } = await get(handle.port, '/api/config');
     expect(status).toBe(200);
     expect(headers.get('content-type')).toContain('application/json');
@@ -294,11 +332,11 @@ describe('startUiServer', () => {
 
   test('/api/config returns an armed paneTarget; DELETE consumes it', async () => {
     armPaneTarget(lockDir, '#/specs/foo/SPEC');
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const first = JSON.parse((await get(handle.port, '/api/config')).body);
     expect(first.paneTarget).toBe('#/specs/foo/SPEC');
 
-    const del = await fetch(`http://localhost:${handle.port}/api/config`, { method: 'DELETE' });
+    const del = await fetch(`http://127.0.0.1:${handle.port}/api/config`, { method: 'DELETE' });
     expect(del.status).toBe(204);
     expect(readArmedPaneTarget(lockDir)).toBeNull();
 
@@ -308,15 +346,15 @@ describe('startUiServer', () => {
 
   test('base-open GET / 302-redirects to an armed pane target and consumes it', async () => {
     armPaneTarget(lockDir, '#/specs/foo/SPEC');
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
 
-    const res = await fetch(`http://localhost:${handle.port}/`, { redirect: 'manual' });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/`, { redirect: 'manual' });
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/#/specs/foo/SPEC');
     expect(res.headers.get('cache-control')).toBe('no-store');
 
     expect(readArmedPaneTarget(lockDir)).toBeNull();
-    const follow = await fetch(`http://localhost:${handle.port}/`, { redirect: 'manual' });
+    const follow = await fetch(`http://127.0.0.1:${handle.port}/`, { redirect: 'manual' });
     expect(follow.status).not.toBe(302);
   });
 
@@ -326,10 +364,10 @@ describe('startUiServer', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       assetDir: dist,
     });
-    const res = await fetch(`http://localhost:${handle.port}/`, { redirect: 'manual' });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/`, { redirect: 'manual' });
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('id="root"');
   });
@@ -338,41 +376,41 @@ describe('startUiServer', () => {
     acquireServerLock(lockDir, { port: 0, worktreeRoot: tmpDir });
     updateServerLockPort(lockDir, 54321);
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { body } = await get(handle.port, '/api/config');
     const parsed = JSON.parse(body);
-    expect(parsed.collabUrl).toBe(`ws://localhost:${handle.port}/collab`);
+    expect(parsed.collabUrl).toBe(`ws://127.0.0.1:${handle.port}/collab`);
   });
 
   test('/api/config has no-store cache-control', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { headers } = await get(handle.port, '/api/config');
     expect(headers.get('cache-control')).toBe('no-store');
   });
 
   test('HEAD /api/config returns 200 with no body', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
-    const res = await fetch(`http://localhost:${handle.port}/api/config`, { method: 'HEAD' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/api/config`, { method: 'HEAD' });
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toBe('');
   });
 
   test('unknown path returns 404 when no static assets present (tmp dir has no dist)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status } = await get(handle.port, '/does-not-exist');
     expect([200, 404]).toContain(status);
   });
 
   test('GET / serves the SPA shell (rewrites to /index.html)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const root = await get(handle.port, '/');
     const indexHtml = await get(handle.port, '/index.html');
     expect(root.status).toBe(indexHtml.status);
   });
 
   test('release() removes the ui.lock', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const lockPath = resolve(lockDir, 'ui.lock');
     expect(existsSync(lockPath)).toBe(true);
 
@@ -441,8 +479,8 @@ describe('startUiServer', () => {
       expect(handle.port).toBeGreaterThan(0);
       expect(secondHandle.port).toBeGreaterThan(0);
       expect(handle.port).not.toBe(secondHandle.port);
-      const a = await fetch(`http://localhost:${handle.port}/api/config`);
-      const b = await fetch(`http://localhost:${secondHandle.port}/api/config`);
+      const a = await fetch(`http://127.0.0.1:${handle.port}/api/config`);
+      const b = await fetch(`http://127.0.0.1:${secondHandle.port}/api/config`);
       expect(a.status).toBe(200);
       expect(b.status).toBe(200);
     } finally {
@@ -453,7 +491,7 @@ describe('startUiServer', () => {
   });
 
   test('GET /api/pages is proxied to the collab server when server.lock is live', async () => {
-    const upstream = createHttpServer((req, res) => {
+    const upstream = await startDualLoopbackUpstream((req, res) => {
       if (req.url === '/api/pages') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, source: 'collab', pages: [] }));
@@ -462,13 +500,12 @@ describe('startUiServer', () => {
         res.end();
       }
     });
-    await new Promise<void>((done) => upstream.listen(0, 'localhost', () => done()));
-    const upstreamPort = (upstream.address() as { port: number }).port;
+    const upstreamPort = upstream.port;
 
     acquireServerLock(lockDir, { port: 0, worktreeRoot: tmpDir });
     updateServerLockPort(lockDir, upstreamPort);
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     try {
       const { status, body, headers } = await get(handle.port, '/api/pages');
       expect(status).toBe(200);
@@ -476,12 +513,12 @@ describe('startUiServer', () => {
       const parsed = JSON.parse(body);
       expect(parsed).toEqual({ ok: true, source: 'collab', pages: [] });
     } finally {
-      await new Promise<void>((done) => upstream.close(() => done()));
+      await upstream.close();
     }
   });
 
   test('GET /api/anything returns RFC 9457 problem+json 503 when server.lock is absent', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, body, headers } = await get(handle.port, '/api/pages');
     expect(status).toBe(503);
     expect(headers.get('content-type')).toContain('application/problem+json');
@@ -499,7 +536,7 @@ describe('startUiServer', () => {
 
   test('POST /api/create-page forwards method + body to the collab server', async () => {
     const receivedRequests: Array<{ method: string; body: string; contentType: string }> = [];
-    const upstream = createHttpServer((req, res) => {
+    const upstream = await startDualLoopbackUpstream((req, res) => {
       if (req.url === '/api/create-page' && req.method === 'POST') {
         let body = '';
         req.setEncoding('utf-8');
@@ -520,14 +557,13 @@ describe('startUiServer', () => {
         res.end();
       }
     });
-    await new Promise<void>((done) => upstream.listen(0, 'localhost', () => done()));
-    const upstreamPort = (upstream.address() as { port: number }).port;
+    const upstreamPort = upstream.port;
     acquireServerLock(lockDir, { port: 0, worktreeRoot: tmpDir });
     updateServerLockPort(lockDir, upstreamPort);
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     try {
-      const res = await fetch(`http://localhost:${handle.port}/api/create-page`, {
+      const res = await fetch(`http://127.0.0.1:${handle.port}/api/create-page`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docName: 'notes/test', content: '# hi' }),
@@ -541,21 +577,21 @@ describe('startUiServer', () => {
       const sent = JSON.parse(receivedRequests[0]?.body ?? '{}');
       expect(sent).toEqual({ docName: 'notes/test', content: '# hi' });
     } finally {
-      await new Promise<void>((done) => upstream.close(() => done()));
+      await upstream.close();
     }
   });
 
   test('/api/* proxy returns 502 when upstream connection fails', async () => {
     const probe = createHttpServer();
-    await new Promise<void>((done) => probe.listen(0, 'localhost', () => done()));
+    await new Promise<void>((done) => probe.listen(0, '127.0.0.1', () => done()));
     const deadPort = (probe.address() as { port: number }).port;
     await new Promise<void>((done) => probe.close(() => done()));
 
     acquireServerLock(lockDir, { port: 0, worktreeRoot: tmpDir });
     updateServerLockPort(lockDir, deadPort);
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
-    const res = await fetch(`http://localhost:${handle.port}/api/pages`);
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/api/pages`);
     expect(res.status).toBe(502);
   });
 
@@ -578,7 +614,7 @@ describe('startUiServer', () => {
   test('starts when the content root contains a broken symlink', async () => {
     symlinkSync(resolve(tmpDir, 'missing-target'), resolve(tmpDir, 'broken-link'));
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status } = await get(handle.port, '/api/config');
     expect(status).toBe(200);
   });
@@ -588,7 +624,7 @@ describe('startUiServer', () => {
     const seedFile = resolve(tmpDir, 'doc.md');
     fs.writeFileSync(seedFile, '# seed', 'utf-8');
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, headers } = await get(handle.port, '/missing.m4v');
     expect(status).toBe(404);
     expect(headers.get('content-type') ?? '').not.toMatch(/^text\/html/);
@@ -601,7 +637,7 @@ describe('startUiServer', () => {
     const seedAsset = resolve(tmpDir, 'photo.png');
     fs.writeFileSync(seedAsset, 'fake-png', 'binary');
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, headers } = await get(handle.port, '/photo.png');
     expect(status).toBe(200);
     expect(headers.get('content-disposition')).toBe('inline');
@@ -614,7 +650,7 @@ describe('startUiServer', () => {
     const fontFile = readdirSync(distAssets).find((name) => name.endsWith('.woff2'));
     if (!fontFile) return; // Build emitted no fonts — nothing to assert.
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, headers } = await get(handle.port, `/assets/${fontFile}`);
     expect(status).toBe(200);
     expect(headers.get('content-disposition')).toBeNull();
@@ -626,7 +662,7 @@ describe('startUiServer', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       assetDir: distDir,
     });
 
@@ -651,7 +687,7 @@ describe('startUiServer', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       assetDir: distDir,
     });
 
@@ -670,17 +706,17 @@ describe('startUiServer', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       assetDir: distDir,
     });
 
-    const first = await fetch(`http://localhost:${handle.port}/assets/app-AAAA.js`);
+    const first = await fetch(`http://127.0.0.1:${handle.port}/assets/app-AAAA.js`);
     expect(first.status).toBe(200);
     const etag = first.headers.get('etag');
     expect(etag).toBeTruthy();
     expect(first.headers.get('cache-control') ?? '').not.toBe('no-store');
 
-    const second = await fetch(`http://localhost:${handle.port}/assets/app-AAAA.js`, {
+    const second = await fetch(`http://127.0.0.1:${handle.port}/assets/app-AAAA.js`, {
       headers: { 'If-None-Match': etag as string },
     });
     expect(second.status).toBe(304);
@@ -693,27 +729,47 @@ describe('startUiServer', () => {
     fs.writeFileSync(resolve(tmpDir, 'doc.md'), '# seed', 'utf-8');
     fs.writeFileSync(resolve(assetsDir, 'user-upload.png'), 'fake-png', 'binary');
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, headers } = await get(handle.port, '/assets/user-upload.png');
     expect(status).toBe(200);
     expect(headers.get('content-disposition')).toBe('inline');
     expect(headers.get('x-content-type-options')).toBe('nosniff');
   });
 
-  test('asset serve: scripted-document extension is not served from contentDir', async () => {
+  test('asset serve: content .html is served only inside a sandbox CSP (stored-XSS defense)', async () => {
     const fs = await import('node:fs');
     const seedDoc = resolve(tmpDir, 'doc.md');
     fs.writeFileSync(seedDoc, '# seed', 'utf-8');
-    const seedHtml = resolve(tmpDir, 'evil.html');
-    fs.writeFileSync(seedHtml, '<script>alert(1)</script>', 'utf-8');
+    const seedHtml = resolve(tmpDir, 'viewer.html');
+    fs.writeFileSync(seedHtml, '<h1>viewer</h1><script>alert(1)</script>', 'utf-8');
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
-    const { body } = await get(handle.port, '/evil.html');
-    expect(body).not.toContain('<script>alert(1)</script>');
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
+    const { status, headers } = await get(handle.port, '/viewer.html');
+    expect(status).toBe(200);
+    expect(headers.get('content-disposition')).toBe('inline');
+    expect(headers.get('content-security-policy')).toBe(
+      "sandbox allow-scripts; connect-src 'none'",
+    );
+    expect(headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  test('asset serve: SPA app shell (/index.html miss) is NOT sandboxed', async () => {
+    const dist = seedDist(tmpDir, 'noshell');
+    handle = await startUiServer({
+      config: config(),
+      cwd: tmpDir,
+      port: 0,
+      host: '127.0.0.1',
+      assetDir: dist,
+    });
+    const { status, headers } = await get(handle.port, '/index.html');
+    expect(status).toBe(200);
+    expect(headers.get('content-security-policy')).toBeNull();
+    expect(headers.get('content-disposition')).toBeNull();
   });
 
   test('/api/* gate rejects requests with non-loopback Host header (DNS-rebind defense)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const res = await rawRequest({
       port: handle.port,
       path: '/api/config',
@@ -727,7 +783,7 @@ describe('startUiServer', () => {
   });
 
   test('/api/* gate rejects requests with non-loopback Origin (CSRF defense)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const res = await rawRequest({
       port: handle.port,
       path: '/api/config',
@@ -739,7 +795,7 @@ describe('startUiServer', () => {
   });
 
   test('/api/* gate accepts loopback Origin (legitimate Vite dev server)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const res = await rawRequest({
       port: handle.port,
       path: '/api/config',
@@ -749,7 +805,7 @@ describe('startUiServer', () => {
   });
 
   test('/api/* gate accepts Origin: null (Electron packaged renderer)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const res = await rawRequest({
       port: handle.port,
       path: '/api/config',
@@ -760,17 +816,16 @@ describe('startUiServer', () => {
 
   test('/api/* proxy gate rejects DNS-rebind Host even when collab server is up', async () => {
     let upstreamHits = 0;
-    const upstream = createHttpServer((_req, res) => {
+    const upstream = await startDualLoopbackUpstream((_req, res) => {
       upstreamHits++;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     });
-    await new Promise<void>((done) => upstream.listen(0, 'localhost', () => done()));
-    const upstreamPort = (upstream.address() as { port: number }).port;
+    const upstreamPort = upstream.port;
     acquireServerLock(lockDir, { port: 0, worktreeRoot: tmpDir });
     updateServerLockPort(lockDir, upstreamPort);
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     try {
       const res = await rawRequest({
         port: handle.port,
@@ -785,12 +840,12 @@ describe('startUiServer', () => {
       expect(body.type).toBe('urn:ok:error:host-not-allowed');
       expect(upstreamHits).toBe(0);
     } finally {
-      await new Promise<void>((done) => upstream.close(() => done()));
+      await upstream.close();
     }
   });
 
   test('non-/api/* paths are NOT subject to the gate (Host check would harm SPA)', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const res = await rawRequest({
       port: handle.port,
       path: '/missing.png',
@@ -806,7 +861,7 @@ describe('startUiServer', () => {
     const seedZip = resolve(tmpDir, 'archive.zip');
     fs.writeFileSync(seedZip, 'fake-zip-bytes', 'binary');
 
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const { status, headers } = await get(handle.port, '/archive.zip');
     expect(status).toBe(200);
     expect(headers.get('content-disposition')).toBe('attachment');
@@ -825,7 +880,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       safetyNetMs: 60_000,
       scheduler,
     });
@@ -839,7 +894,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       safetyNetMs: 60_000,
       scheduler,
       onSafetyNet: () => {
@@ -858,7 +913,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
     if (handle) await closeHttpServers(handle.httpServers);
     let connectError: unknown = null;
     try {
-      await fetch(`http://localhost:${port}/api/config`);
+      await fetch(`http://127.0.0.1:${port}/api/config`);
     } catch (err) {
       connectError = err;
     }
@@ -873,7 +928,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       safetyNetMs: 60_000,
       scheduler,
       onSafetyNet: () => {
@@ -895,7 +950,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       safetyNetMs: 60_000,
       scheduler,
     });
@@ -908,7 +963,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
   });
 
   test('release() is idempotent — second call is a no-op', async () => {
-    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: 'localhost' });
+    handle = await startUiServer({ config: config(), cwd: tmpDir, port: 0, host: '127.0.0.1' });
     const lockPath = resolve(lockDir, 'ui.lock');
 
     handle.release();
@@ -926,7 +981,7 @@ describe('startUiServer — D-025 12h safety-net', () => {
       config: config(),
       cwd: tmpDir,
       port: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       safetyNetMs: 0,
       scheduler,
     });
@@ -948,7 +1003,7 @@ describe('resolveUiLockCollision', () => {
   test('same port as holder → already-running', async () => {
     const result = await resolveUiLockCollision({
       requestedPort: 3000,
-      host: 'localhost',
+      host: '127.0.0.1',
       lockDir,
       readLock: () => fakeLock(3000),
     });
@@ -960,7 +1015,7 @@ describe('resolveUiLockCollision', () => {
     await expect(
       resolveUiLockCollision({
         requestedPort: 3000,
-        host: 'localhost',
+        host: '127.0.0.1',
         lockDir,
         readLock: () => null,
       }),
@@ -968,16 +1023,15 @@ describe('resolveUiLockCollision', () => {
   });
 
   test('different port + live upstream → proxy mode forwards correctly', async () => {
-    const upstream = createHttpServer((_req, res) => {
+    const upstream = await startDualLoopbackUpstream((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('upstream ok');
     });
-    await new Promise<void>((done) => upstream.listen(0, 'localhost', () => done()));
-    const upstreamPort = (upstream.address() as { port: number }).port;
+    const upstreamPort = upstream.port;
 
     const result = await resolveUiLockCollision({
       requestedPort: 0, // kernel-allocated so we don't conflict with anything
-      host: 'localhost',
+      host: '127.0.0.1',
       lockDir,
       readLock: () => fakeLock(upstreamPort),
     });
@@ -987,31 +1041,31 @@ describe('resolveUiLockCollision', () => {
     expect(result.upstreamPort).toBe(upstreamPort);
 
     try {
-      const response = await fetch(`http://localhost:${result.handle.port}/`);
+      const response = await fetch(`http://127.0.0.1:${result.handle.port}/`);
       expect(response.status).toBe(200);
       expect(await response.text()).toBe('upstream ok');
     } finally {
       await result.handle.close();
-      await new Promise<void>((done) => upstream.close(() => done()));
+      await upstream.close();
     }
   });
 
   test('proxy returns 502 when upstream dies', async () => {
     const probe = createHttpServer();
-    await new Promise<void>((done) => probe.listen(0, 'localhost', () => done()));
+    await new Promise<void>((done) => probe.listen(0, '127.0.0.1', () => done()));
     const deadPort = (probe.address() as { port: number }).port;
     await new Promise<void>((done) => probe.close(() => done()));
 
     const result = await resolveUiLockCollision({
       requestedPort: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       lockDir,
       readLock: () => fakeLock(deadPort),
     });
     if (result.mode !== 'proxy') throw new Error('unreachable');
 
     try {
-      const response = await fetch(`http://localhost:${result.handle.port}/`);
+      const response = await fetch(`http://127.0.0.1:${result.handle.port}/`);
       expect(response.status).toBe(502);
     } finally {
       await result.handle.close();
@@ -1019,9 +1073,8 @@ describe('resolveUiLockCollision', () => {
   });
 
   test('lock port=0 that becomes live within deadline → proxy mode', async () => {
-    const upstream = createHttpServer((_req, res) => res.end('late upstream'));
-    await new Promise<void>((done) => upstream.listen(0, 'localhost', () => done()));
-    const upstreamPort = (upstream.address() as { port: number }).port;
+    const upstream = await startDualLoopbackUpstream((_req, res) => res.end('late upstream'));
+    const upstreamPort = upstream.port;
 
     let calls = 0;
     const readLock = () => {
@@ -1031,7 +1084,7 @@ describe('resolveUiLockCollision', () => {
 
     const result = await resolveUiLockCollision({
       requestedPort: 0,
-      host: 'localhost',
+      host: '127.0.0.1',
       lockDir,
       readLock,
       pollIntervalMs: 10,
@@ -1043,14 +1096,14 @@ describe('resolveUiLockCollision', () => {
     expect(result.upstreamPort).toBe(upstreamPort);
 
     await result.handle.close();
-    await new Promise<void>((done) => upstream.close(() => done()));
+    await upstream.close();
   });
 
   test('lock port=0 that stays 0 → throws timeout error', async () => {
     await expect(
       resolveUiLockCollision({
         requestedPort: 3000,
-        host: 'localhost',
+        host: '127.0.0.1',
         lockDir,
         readLock: () => fakeLock(0),
         pollIntervalMs: 5,
@@ -1068,7 +1121,7 @@ describe('resolveUiLockCollision', () => {
 
     const result = await resolveUiLockCollision({
       requestedPort: 4321,
-      host: 'localhost',
+      host: '127.0.0.1',
       lockDir,
       readLock,
       pollIntervalMs: 5,

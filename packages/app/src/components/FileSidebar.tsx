@@ -8,7 +8,6 @@ import {
   FoldVertical,
   ListCollapse,
   SquarePen,
-  Terminal,
   UnfoldVertical,
 } from 'lucide-react';
 import { type ComponentProps, type FC, type MouseEventHandler, useEffect, useState } from 'react';
@@ -61,11 +60,9 @@ import { useFolderConfig } from '@/hooks/use-folder-config';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { useConfigContext } from '@/lib/config-provider';
 import { subscribeToCreateTopLevelFile } from '@/lib/create-file-events';
-import { dispatchOpenInTerminal } from '@/lib/dispatch-open-in-terminal';
 import {
   buildSendToAiInputForActiveTarget,
   resolveActiveTargetAbsPath,
-  resolveActiveTargetParentDirAbsPath,
   resolveActiveTargetRelativePath,
 } from '@/lib/file-menu-target-resolvers';
 import {
@@ -126,10 +123,12 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
   const [tree, setTree] = useState<FileTreeHandle | null>(null);
 
   const { activeDocName, activeTarget } = useDocumentContext();
-  const initialCreateDir =
+  const baseCreateDir =
     activeTarget?.kind === 'folder' || activeTarget?.kind === 'folder-index'
       ? activeTarget.folderPath
       : defaultInitialDir(activeDocName);
+  const [treeCreationCleared, setTreeCreationCleared] = useState(false);
+  const initialCreateDir = treeCreationCleared ? '' : baseCreateDir;
 
   const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
 
@@ -142,10 +141,12 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
   const [folderState, setFolderState] = useState(EMPTY_FOLDER_STATE);
   useEffect(() => {
     if (tree === null) return;
-    setFolderState(tree.getFolderState());
-    return tree.subscribe(() => {
+    const sync = () => {
       setFolderState(tree.getFolderState());
-    });
+      setTreeCreationCleared(tree.isCreationTargetCleared());
+    };
+    sync();
+    return tree.subscribe(sync);
   }, [tree]);
 
   useEffect(() => {
@@ -182,7 +183,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
   const emptySpaceHandoffInput = buildProjectScopedHandoffInput({ workspace });
   const { projectLocalBinding, merged } = useConfigContext();
   const showHiddenFiles = merged?.appearance?.sidebar?.showHiddenFiles ?? false;
-  const showAllFiles = merged?.appearance?.sidebar?.showAllFiles ?? false;
   const showEmptySpaceExpandAll = hasFolders && !allExpanded;
   const showEmptySpaceCollapseAll = hasFolders && !noneExpanded;
   const showEmptySpaceTreeStateSection = showEmptySpaceExpandAll || showEmptySpaceCollapseAll;
@@ -210,10 +210,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
     if (!workspace || !bridge) return;
     void bridge.shell.showItemInFolder(workspace.contentDir);
   };
-  const handleEmptySpaceOpenInTerminal = () => {
-    if (!workspace || !bridge) return;
-    void dispatchOpenInTerminal(bridge, workspace.contentDir);
-  };
   const handleEmptySpaceCopyFullPath = async () => {
     if (!workspace) return;
     try {
@@ -236,18 +232,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
       });
     }
   };
-  const handleEmptySpaceShowAllFilesToggle = (checked: boolean) => {
-    if (projectLocalBinding === null) return;
-    const result = projectLocalBinding.patch({
-      appearance: { sidebar: { showAllFiles: checked } },
-    });
-    if (!result.ok) {
-      console.warn('[FileSidebar] showAllFiles toggle rejected:', humanFormat(result.error));
-      toast.error(t`Could not update sidebar settings`, {
-        description: humanFormat(result.error),
-      });
-    }
-  };
   const handleEmptySpaceExpandAll = () => {
     tree?.expandAll();
   };
@@ -259,19 +243,11 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
     if (!bridge) return;
     bridge.editor.notifyViewMenuStateChanged({
       showHiddenFiles,
-      showAllFiles,
       canExpandAll: showEmptySpaceExpandAll,
       canCollapseAll: showEmptySpaceCollapseAll,
       sidebarVisible: sidebarState === 'expanded',
     });
-  }, [
-    bridge,
-    showHiddenFiles,
-    showAllFiles,
-    showEmptySpaceExpandAll,
-    showEmptySpaceCollapseAll,
-    sidebarState,
-  ]);
+  }, [bridge, showHiddenFiles, showEmptySpaceExpandAll, showEmptySpaceCollapseAll, sidebarState]);
 
   useEffect(() => {
     if (!bridge) return;
@@ -311,16 +287,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
           if (!bridge || !workspace) return;
           const absPath = resolveActiveTargetAbsPath(activeTarget, activeDocName, workspace);
           void bridge.shell.showItemInFolder(absPath);
-          return;
-        }
-        case 'open-in-terminal': {
-          if (!bridge || !workspace) return;
-          const dirAbsPath = resolveActiveTargetParentDirAbsPath(
-            activeTarget,
-            activeDocName,
-            workspace,
-          );
-          void dispatchOpenInTerminal(bridge, dirAbsPath);
           return;
         }
         case 'send-to-ai': {
@@ -381,22 +347,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
           }
           return;
         }
-        case 'toggle-show-all-files': {
-          if (projectLocalBinding === null) return;
-          const result = projectLocalBinding.patch({
-            appearance: { sidebar: { showAllFiles: !showAllFiles } },
-          });
-          if (!result.ok) {
-            console.warn(
-              '[FileSidebar] toggle-show-all-files rejected:',
-              humanFormat(result.error),
-            );
-            toast.error(t`Could not update sidebar settings`, {
-              description: humanFormat(result.error),
-            });
-          }
-          return;
-        }
         case 'expand-all-tree': {
           tree?.expandAll();
           return;
@@ -415,6 +365,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
         case 'version-history':
         case 'focus-search':
         case 'focus-command-palette':
+        case 'close-active-tab-or-window':
         case 'toggle-doc-panel':
           return;
       }
@@ -428,7 +379,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
     initialCreateDir,
     projectLocalBinding,
     showHiddenFiles,
-    showAllFiles,
     handoffInstallStates,
     dispatchHandoff,
     toggleSidebar,
@@ -467,7 +417,8 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
               data-electron-drag={isElectronHost ? '' : undefined}
               className={cn(
                 'flex-row h-12 items-center py-0 px-3',
-                isElectronHost ? 'justify-end' : 'justify-between',
+                'justify-between',
+                isElectronHost && 'overflow-x-clip',
                 isElectronHost &&
                   'motion-safe:transition-opacity motion-safe:duration-100 motion-safe:ease-out',
                 isElectronHost && isExpanded && 'motion-safe:delay-100',
@@ -475,12 +426,20 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
                 isElectronHost && '[-webkit-app-region:drag]',
               )}
             >
+              {isElectronHost ? (
+                <div
+                  aria-hidden="true"
+                  data-testid="sidebar-traffic-light-reserve"
+                  className="w-[var(--ok-titlebar-reserve-left,0px)] shrink-0 self-stretch"
+                />
+              ) : null}
               {isExpanded && !isElectronHost ? (
                 <span className="shrink-0 font-mono text-sm uppercase tracking-wider text-sidebar-foreground/50">
                   <Trans>Files</Trans>
                 </span>
               ) : null}
               <div
+                data-testid="sidebar-toolbar"
                 className={cn(
                   'flex items-center gap-1',
                   isElectronHost && '[&>*]:[-webkit-app-region:no-drag]',
@@ -500,26 +459,26 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
                  * Smart-hide: trigger only renders when the tree has folders
                  * (no folders → both menu items would be no-ops, so the entire
                  * trigger is wasted screen real estate). Individual items hide
-                 * when their action would no-op: "Expand All" hides when every
-                 * folder is already expanded; "Collapse All" hides when none
+                 * when their action would no-op: "Expand all" hides when every
+                 * folder is already expanded; "Collapse all" hides when none
                  * are expanded. Mixed states show both items.
                  */}
                 {hasFolders ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <ToolbarButton icon={ListCollapse} label={t`Tree View Options`} />
+                      <ToolbarButton icon={ListCollapse} label={t`Tree view options`} />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {!allExpanded ? (
                         <DropdownMenuItem onSelect={() => tree?.expandAll()}>
                           <UnfoldVertical aria-hidden="true" />
-                          <Trans>Expand All</Trans>
+                          <Trans>Expand all</Trans>
                         </DropdownMenuItem>
                       ) : null}
                       {!noneExpanded ? (
                         <DropdownMenuItem onSelect={() => tree?.collapseAll()}>
                           <FoldVertical aria-hidden="true" />
-                          <Trans>Collapse All</Trans>
+                          <Trans>Collapse all</Trans>
                         </DropdownMenuItem>
                       ) : null}
                     </DropdownMenuContent>
@@ -527,7 +486,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
                 ) : null}
                 <ToolbarButton
                   icon={SquarePen}
-                  label={t`New File`}
+                  label={t`New file`}
                   onClick={() => tree?.startCreating('file', initialCreateDir)}
                 />
                 {activeFolderHasTemplates ? (
@@ -548,7 +507,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
                 ) : null}
                 <ToolbarButton
                   icon={FolderPlus}
-                  label={t`New Folder`}
+                  label={t`New folder`}
                   onClick={() => tree?.startCreating('folder', initialCreateDir)}
                 />
               </div>
@@ -666,12 +625,13 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
           {/*
            * Empty-space menu — 11 items, 4 sections.
            *
-           * Section 1: Creation (always visible). New file / from template /
-           * folder dispatch the project-root creation flow (parentDir = ''
-           * → contentDir). Disabled when workspace hasn't resolved.
+           * Section 1: Creation (always visible). New file / from
+           * template / folder dispatch the project-root creation flow
+           * (parentDir = '' → contentDir). Disabled when workspace hasn't
+           * resolved.
            *
-           * Section 2: Act-on-project. Reveal in Finder + Open in Terminal
-           * are Electron-only (`if (!bridge) return null`); Open with AI submenu
+           * Section 2: Act-on-project. Reveal in Finder
+           * is Electron-only (`if (!bridge) return null`); Open with AI submenu
            * is cross-host (filtered via useInstalledAgents); Copy full path
            * is cross-host.
            *
@@ -692,31 +652,33 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             data-testid="empty-space-menu-new-file"
           >
             <SquarePen aria-hidden="true" />
-            <Trans>New File</Trans>
+            <Trans>New file</Trans>
           </ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger
-              disabled={!workspace || !rootHasTemplates}
-              data-testid="empty-space-menu-new-from-template"
-            >
-              <FilePlus aria-hidden="true" />
-              <Trans>New from template</Trans>
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <TemplateMenuRows
-                parentDir=""
-                onSelectTemplate={handleEmptySpaceSelectTemplate}
-                ItemComponent={ContextMenuItem}
-              />
-            </ContextMenuSubContent>
-          </ContextMenuSub>
+          {rootHasTemplates ? (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger
+                disabled={!workspace}
+                data-testid="empty-space-menu-new-from-template"
+              >
+                <FilePlus aria-hidden="true" />
+                <Trans>New from template</Trans>
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <TemplateMenuRows
+                  parentDir=""
+                  onSelectTemplate={handleEmptySpaceSelectTemplate}
+                  ItemComponent={ContextMenuItem}
+                />
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          ) : null}
           <ContextMenuItem
             disabled={!workspace}
             onSelect={handleEmptySpaceCreateFolder}
             data-testid="empty-space-menu-new-folder"
           >
             <FolderPlus aria-hidden="true" />
-            <Trans>New Folder</Trans>
+            <Trans>New folder</Trans>
           </ContextMenuItem>
           <ContextMenuSeparator />
           {bridge ? (
@@ -741,26 +703,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             input={emptySpaceHandoffInput}
             installStates={handoffInstallStates}
             dispatch={dispatchHandoff}
-            webFallbackVisible={false}
           />
-          {bridge ? (
-            <ContextMenuItem
-              disabled={!workspace}
-              onSelect={handleEmptySpaceOpenInTerminal}
-              data-testid="empty-space-menu-open-in-terminal"
-              aria-label={workspace ? t`Open in Terminal` : t`Open in Terminal, No workspace`}
-            >
-              <Terminal aria-hidden="true" />
-              <span className="flex-1">
-                <Trans>Open in Terminal</Trans>
-              </span>
-              {!workspace ? (
-                <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-                  <Trans>No workspace</Trans>
-                </span>
-              ) : null}
-            </ContextMenuItem>
-          ) : null}
           <ContextMenuItem
             disabled={!workspace}
             onSelect={handleEmptySpaceCopyFullPath}
@@ -784,15 +727,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             disabled={projectLocalBinding === null}
             data-testid="empty-space-menu-show-hidden-files"
           >
-            <Trans>Show Hidden Files</Trans>
-          </ContextMenuCheckboxItem>
-          <ContextMenuCheckboxItem
-            checked={showAllFiles}
-            onCheckedChange={handleEmptySpaceShowAllFilesToggle}
-            disabled={projectLocalBinding === null}
-            data-testid="empty-space-menu-show-all-files"
-          >
-            <Trans>Show all files</Trans>
+            <Trans>Show hidden files</Trans>
           </ContextMenuCheckboxItem>
           {showEmptySpaceTreeStateSection ? <ContextMenuSeparator /> : null}
           {showEmptySpaceExpandAll ? (

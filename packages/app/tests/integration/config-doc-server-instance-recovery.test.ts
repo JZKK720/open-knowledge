@@ -5,7 +5,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { CONFIG_DOC_NAME_OKIGNORE } from '@inkeep/open-knowledge-core';
 import * as Y from 'yjs';
-import { buildAuthToken } from '../../src/editor/provider-pool';
+import { buildAuthToken } from '../../src/lib/auth-token';
 import { createRestartableServer, pollUntil, waitForSync } from './test-harness';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -28,7 +28,7 @@ describe('PRD-6881: config-doc server-instance recovery', () => {
 
     const doc = new Y.Doc();
     const provider = new HocuspocusProvider({
-      url: `ws://localhost:${server.port}/collab`,
+      url: `ws://127.0.0.1:${server.port}/collab`,
       name: CONFIG_DOC_NAME_OKIGNORE,
       document: doc,
     });
@@ -55,7 +55,7 @@ describe('PRD-6881: config-doc server-instance recovery', () => {
     const instanceA = server.instance.serverInstanceId;
     const doc = new Y.Doc();
     const provider = new HocuspocusProvider({
-      url: `ws://localhost:${server.port}/collab`,
+      url: `ws://127.0.0.1:${server.port}/collab`,
       name: CONFIG_DOC_NAME_OKIGNORE,
       document: doc,
       token: buildAuthToken(null, instanceA, null),

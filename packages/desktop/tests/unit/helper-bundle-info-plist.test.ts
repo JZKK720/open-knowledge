@@ -43,9 +43,9 @@ describe('helper-bundle Info.plist (detached-server Dock-leak regression guard)'
     );
   });
 
-  test('CFBundleExecutable is "Open Knowledge Helper" — Electron canonical generic-helper name', () => {
+  test('CFBundleExecutable is "OpenKnowledge Helper" — Electron canonical generic-helper name', () => {
     const content = readFileSync(helperPlistPath, 'utf8');
-    expect(extractStringValue(content, 'CFBundleExecutable')).toBe('Open Knowledge Helper');
+    expect(extractStringValue(content, 'CFBundleExecutable')).toBe('OpenKnowledge Helper');
   });
 
   test('CFBundlePackageType=APPL (canonical .app bundle marker)', () => {

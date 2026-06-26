@@ -30,11 +30,11 @@ describe('ListWidget — render-side invalid tag flagging', () => {
     const chips = container.querySelectorAll('[data-testid="list-chip"]');
     expect(chips).toHaveLength(5);
     const invalid = container.querySelectorAll('[data-tag-invalid="true"]');
-    expect(invalid).toHaveLength(3);
+    expect(invalid).toHaveLength(2);
     const invalidTexts = Array.from(invalid).map((el) =>
       (el.textContent ?? '').replace(/\s+/g, ' ').trim(),
     );
-    expect(invalidTexts.some((t) => t.includes('2026'))).toBe(true);
+    expect(invalidTexts.some((t) => t.includes('2026'))).toBe(false);
     expect(invalidTexts.some((t) => t.includes('has spaces'))).toBe(true);
     expect(invalidTexts.some((t) => t.includes('hello!'))).toBe(true);
   });
@@ -48,7 +48,7 @@ describe('ListWidget — render-side invalid tag flagging', () => {
   });
 
   test('invalid chips are wrapped in a Radix Tooltip trigger (content lazy-renders on open)', () => {
-    const { container } = renderWidget({ keyName: 'tags', value: ['2026'] });
+    const { container } = renderWidget({ keyName: 'tags', value: ['bad!'] });
     const invalidChip = container.querySelector('[data-tag-invalid="true"]');
     expect(invalidChip?.getAttribute('data-slot')).toBe('tooltip-trigger');
   });
@@ -76,10 +76,10 @@ describe('ListWidget — input-side grammar gate (tags field only)', () => {
     const onCommit = mock(() => {});
     const { container } = renderWidget({ keyName: 'tags', value: [], onCommit });
     const input = container.querySelector('[data-testid="list-chip-input"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '2026' } });
+    fireEvent.change(input, { target: { value: 'bad!' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onCommit).toHaveBeenCalledTimes(0);
-    expect(input.value).toBe('2026');
+    expect(input.value).toBe('bad!');
     expect(input.getAttribute('data-tag-invalid')).toBe('true');
     expect(input.getAttribute('aria-invalid')).toBe('true');
     const alert = container.querySelector('[data-testid="list-chip-input-error"]');
@@ -101,13 +101,25 @@ describe('ListWidget — input-side grammar gate (tags field only)', () => {
     expect(container.querySelector('[data-testid="list-chip-input-error"]')).toBeNull();
   });
 
-  test('typing after a rejection clears the rejection state immediately', () => {
-    const { container } = renderWidget({ keyName: 'tags', value: [] });
+  test('addChip accepts a digit-leading tag like a year (2026)', () => {
+    const onCommit = mock(() => {});
+    const { container } = renderWidget({ keyName: 'tags', value: [], onCommit });
     const input = container.querySelector('[data-testid="list-chip-input"]') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '2026' } });
     fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit.mock.calls[0]?.[0]).toEqual(['2026']);
+    expect(input.value).toBe('');
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  test('typing after a rejection clears the rejection state immediately', () => {
+    const { container } = renderWidget({ keyName: 'tags', value: [] });
+    const input = container.querySelector('[data-testid="list-chip-input"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'bad!' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    fireEvent.change(input, { target: { value: '2026r' } });
+    fireEvent.change(input, { target: { value: 'bad!x' } });
     expect(input.getAttribute('aria-invalid')).toBeNull();
     expect(container.querySelector('[data-testid="list-chip-input-error"]')).toBeNull();
   });
@@ -116,7 +128,7 @@ describe('ListWidget — input-side grammar gate (tags field only)', () => {
     const onCommit = mock(() => {});
     const { container } = renderWidget({ keyName: 'tags', value: [], onCommit });
     const input = container.querySelector('[data-testid="list-chip-input"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '2026' } });
+    fireEvent.change(input, { target: { value: 'bad!' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(input.getAttribute('aria-invalid')).toBe('true');
     fireEvent.keyDown(input, { key: 'Escape' });

@@ -1,8 +1,21 @@
 ---
 title: Editor
-description: The Open Knowledge editor. WYSIWYG markdown, source toggle, content blocks, inline frontmatter, and the file sidebar.
+description: The OpenKnowledge editor. WYSIWYG markdown, source toggle, content blocks, inline frontmatter, and the file sidebar.
 ---
 The editor is where you read, write, and collaborate on your docs, and where AI agents land when they edit. WYSIWYG by default with a source-mode toggle, a frontmatter properties pane, real-time CRDT collaboration, and a file sidebar that organizes the project.
+
+## Open a single file
+
+Want the editor on one loose markdown file without setting up a project? Run `ok <file>`:
+
+```bash
+ok notes.md            # open a single file in the editor
+ok ./specs/foo/SPEC.md # a file inside a project opens that project, focused on the doc
+```
+
+When the file is inside an existing OpenKnowledge project, this opens that project focused on the doc. When it's a loose file, it opens an **ephemeral single-file session**: a throwaway editor scoped to just that one file, with no project scaffolding, no agents, and no git. Your edits save straight back to the original file, and **nothing is written into the file's directory** — all session state lives in a temporary directory that's removed when you close the window. Opening a file you don't edit leaves it byte-for-byte unchanged.
+
+It opens in the desktop app when it's installed, and falls back to your browser otherwise (press Ctrl-C in the terminal to end a browser session). Single-file sessions show just the file and the editor — no sidebar, tabs, or project switcher. Discover it any time with `ok --help`.
 
 ## Document body
 
@@ -10,22 +23,37 @@ Open any doc from the sidebar. The body renders as WYSIWYG markdown with familia
 
 A backslash command (`/`) opens an insert menu for headings, lists, code blocks, callouts, and the other content shapes the editor supports.
 
-## Edit with AI
+## Right-click menu and spell check
 
-Select text in the WYSIWYG editor to hand that exact passage to an installed agent. The selection bubble menu shows an **Edit with AI** button alongside the formatting controls. Clicking it opens a popover with an instruction field and your installed-agent list (Claude, Codex, or Cursor). Type what you want done (the instruction is optional), pick an agent, and it opens with the project as its working directory and a prompt naming the doc, your instruction, and the selected passage.
+In the desktop app, right-clicking editable text opens a native context menu. Any editable field gets **Cut / Copy / Paste / Select All**; when there's a selection or a flagged word under the cursor, **Look Up** (the macOS dictionary panel) and **Search with Google** join it.
 
-The passage travels one of two ways, chosen automatically:
+Spell checking uses the native macOS spellchecker (language follows your macOS settings), so misspelled words get the familiar red underline. Right-clicking a flagged word adds the spelling section:
 
-| Mode | When | What the agent gets |
-| --- | --- | --- |
-| Inline | The selection fits the agent's deep-link URL budget (the common case) | The passage inlined in a fenced block, plus the doc path and your instruction |
-| Locus | The selection is too large to inline | A short quote of the passage's opening plus a directive to read the full passage from the doc via the [Open Knowledge MCP](/docs/reference/mcp); nothing is truncated |
+| Item | Behavior |
+| --- | --- |
+| *Suggestions* | The spellchecker's corrections, one row each; pick one to replace the word. |
+| **Add to Dictionary** | Teaches the macOS system dictionary the word — persistent, and shared with your other Mac apps (Safari, Notes). |
+| **Disable Spell Check** | Turns spell checking off app-wide. The choice persists across relaunches. |
 
-This is the selection-scoped sibling of the sidebar's [Open with AI](#open-with-ai), which hands off a whole file, folder, or project. Like the native handoff it's macOS-only, and unlike Open with AI it has no claude.ai web fallback: selected content stays local, dispatched only to agents installed on your machine. Install detection governs which agents appear, the same as Open with AI. Text selections only for now; selecting an image or other non-text node doesn't show the affordance.
+While spell check is off, right-clicking any editable text offers **Enable Spell Check**, and the menu bar carries the same toggle as **Edit ▸ Check Spelling While Typing** (see [Edit menu](#edit-menu)) — flip either to bring the squiggles back.
+
+Surfaces with their own specialized right-click menus — asset and wiki-link chips, the [file sidebar](#right-click-context-menus), editor tabs — keep them; the editor menu never doubles up on top. In the web build the browser's own context menu fills this role.
+
+## Ask AI
+
+A persistent **Ask AI** composer is docked at the bottom of the editor in the desktop app, above the status bar and above the terminal dock (it's pushed up when the terminal expands). It's a slim, single-line entry field — always present when a doc is open — that expands as you type to accept a fuller prompt (and `@`-mentions). Type an instruction — "condense this doc", "research X", "make a spec from this user story" — and press Enter to hand it to an agent. `Shift+Enter` inserts a newline; the field clears once the prompt is sent.
+
+It's the primary in-editor way to hand work to an agent, and the freetext companion to the menu-driven [Open with AI](#open-with-ai) (whole file / folder / project). Submitting dispatches the typed prompt to your **default agent** — the first one installed, in Claude → Codex → Cursor order — scoped to the current doc, which the agent receives as an `@`-mention. The agent picker beside the field overrides the default per send (its targets include Claude, Codex, Cursor, and the Terminal CLI), and your choice is remembered on that machine. Success and failure use the same handoff toast as Open with AI.
+
+The composer is desktop-only and stays out of the way where it doesn't belong: it's hidden inside an AI editor's embedded view, on the web build, and when no doc is open (the empty state already offers project handoff). Like the other handoffs it dispatches only to agents installed on your machine; when none are installed, the field is disabled.
+
+### From a text selection
+
+Select text in the WYSIWYG editor and the selection bubble menu shows an **Ask AI** button (Sparkles icon) alongside the formatting controls. Clicking it — or pressing the selection shortcut — opens and focuses the bottom Ask AI composer with the selected passage pinned as a removable context pill, so the exact text rides along as context. Type your instruction, pick an agent, and send. (macOS desktop only; selecting an image or other non-text node doesn't show the affordance.)
 
 ## Properties
 
-Every doc can carry a bit of structured information at the top: a `status`, an `owner`, a `tags` list, a date. Open Knowledge calls these its **properties**.
+Every doc can carry a bit of structured information at the top: a `status`, an `owner`, a `tags` list, a date. OpenKnowledge calls these its **properties**.
 
 In the raw markdown file, these properties live in a fenced block at the very top of the file, between two `---` lines. Markdown tools call that block *frontmatter*: it's just a small chunk of YAML, the doc's "labels." You never have to write it by hand: the **Properties** panel on the right of the editor shows each field as an ordinary form input (text, number, checkbox, date, or list) and saves your changes back into the file. Edit the panel or the raw block in source mode; changes propagate live either way.
 
@@ -33,7 +61,7 @@ A folder can describe itself (its own properties, just like a doc's) and offer t
 
 ## File sidebar
 
-The sidebar lists every doc in your project that isn't excluded by `.gitignore` or `.okignore`. Folder rows expand and collapse; file rows open in a tab on click. The toolbar at the top of the sidebar has buttons to create files, create folders, and search.
+The sidebar lists every file in your project on disk, including files excluded by `.gitignore` / `.okignore`, except dot-prefixed entries and tooling internals (`.git/`, `.ok/`, `node_modules/`). Turn on **Show Hidden Files** to reveal the dot-prefixed entries. Folder rows expand and collapse; file rows open in a tab on click. The toolbar at the top of the sidebar has buttons to create files, create folders, and search.
 
 ### Right-click context menus
 
@@ -49,7 +77,6 @@ Right-click anywhere in the sidebar to get a context-aware menu. Three shapes sh
 | Open in Terminal | yes (project root) | yes (folder) | yes (parent dir) |
 | Copy full path / Copy Path ▸ | yes (full path of project root) | yes (Full / Relative) | yes (Full / Relative) |
 | Show Hidden Files | yes | yes | no |
-| Show all files | yes | yes | no |
 | Expand all / Collapse all | yes (tree-scoped) | yes (subtree-scoped) | no |
 | Rename | no | yes | yes |
 | Hide folder / Hide this file | no | yes | yes |
@@ -69,15 +96,15 @@ Right-click on empty space drops the new item at the project root. Right-click o
 
 **Hide this file** on a file row, or **Hide folder** on a folder row, appends a matching pattern to `.okignore`. See [Ignore patterns](/docs/features/ignore-patterns) for the full pattern syntax. The item disappears from the tree, search, and the agent's MCP tools immediately; nothing is deleted on disk.
 
-### Show Hidden Files / Show all files
+### Show Hidden Files
 
-Two toggle items on the empty-space and folder menus surface the corresponding file-tree visibility modes. They persist per-project per-machine in `.ok/local/config.yml` under `appearance.sidebar`. The toggles also live in the macOS **View** menu.
+The sidebar always lists every file on disk under the content directory (including files excluded by `.gitignore` / `.okignore`), except synthetic system docs. A single **Show Hidden Files** toggle on the empty-space and folder menus controls whether dot-prefixed entries are shown. It persists per-project per-machine in `.ok/local/config.yml` under `appearance.sidebar`, and also lives in the macOS **View** menu.
 
 | Toggle | Effect |
 | --- | --- |
-| **Show Hidden Files** | Stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Server filters still apply, so `.git/`, `.ok/`, and `node_modules/` stay hidden. |
-| **Show all files** | Bypasses every filter (client dot-segment drop AND the server's `.gitignore` / `.okignore` / built-in exclusions). Surfaces literally everything on disk under the content directory, except synthetic system docs. Useful for one-off triage; flip it back off once you've found what you needed. On very large trees the walk is capped, and the sidebar shows a notice telling you the list is partial so you can use search to find the rest. |
-When both are on, **Show all files** supersedes.
+| **Show Hidden Files** | Off by default. When on, stops the client from hiding paths that start with `.` (recovers allowed dotfiles like `brain/.archived/note.md`). Tooling internals (`.git/`, `.ok/`, `node_modules/`) stay hidden in every mode. |
+
+On very large trees the disk walk is capped per level, and the sidebar shows a notice telling you the list is partial.
 
 ### Deleting via Trash
 
@@ -85,17 +112,17 @@ When both are on, **Show all files** supersedes.
 
 ### Open with AI
 
-**Open with AI ▸** dispatches the project, the folder, or the file to one of your installed agent apps (Claude, Codex, or Cursor). The agent receives a short text prompt asking it to open the target in the Open Knowledge web preview, then grounds the rest of the conversation via the [Open Knowledge MCP](/docs/reference/mcp). Three scopes, three prompt shapes:
+**Open with AI ▸** dispatches the project, the folder, or the file to one of your installed agent apps (Claude, Codex, or Cursor). The agent receives a short text prompt asking it to open the target in the OpenKnowledge web preview, then grounds the rest of the conversation via the [OpenKnowledge MCP](/docs/reference/mcp). Three scopes, three prompt shapes:
 
 | Scope | Triggered from | Prompt template |
 | --- | --- | --- |
-| Project | Empty-space menu · sparkle icon (no doc / folder active) | `Let's work on this project using Open Knowledge. Open the OK editor in web view.` |
-| Folder | Folder row menu · sparkle icon (folder view active) | ``Let's work on the `<folder>` folder using Open Knowledge. Open the OK editor in web view.`` |
-| File | File row menu · sparkle icon (doc active) | ``Let's work on `<path>` using Open Knowledge. Open the OK editor in web view.`` |
+| Project | Empty-space menu (no doc / folder active) | `Let's work on this project using OpenKnowledge. Open the OK editor in web view.` |
+| Folder | Folder row menu (folder view active) | ``Let's work on the `<folder>` folder using OpenKnowledge. Open the OK editor in web view.`` |
+| File | File row menu (doc active) | ``Let's work on `<path>` using OpenKnowledge. Open the OK editor in web view.`` |
 
-The trailing `Open the OK editor in web view.` directive is dropped when the [`appearance.preview.autoOpen`](/docs/reference/configuration) preference is off, so the receiving agent honors the same "leave my preview alone" choice on its first turn; only the `Let's work on … using Open Knowledge.` opener is sent.
+The trailing `Open the OK editor in web view.` directive is dropped when the [`appearance.preview.autoOpen`](/docs/reference/configuration) preference is off, so the receiving agent honors the same "leave my preview alone" choice on its first turn; only the `Let's work on … using OpenKnowledge.` opener is sent.
 
-The same submenu is mounted on the **sparkle icon** in the editor header; it picks the scope to dispatch from whichever target is currently active in the editor.
+To send your own freetext instruction along with the handoff, use the bottom [Ask AI](#ask-ai) composer (or the empty-state create composer on a fresh project) rather than these one-click submenus.
 
 **Install detection** filters the submenu to just the agents you have. When the server and your browser are on the same machine (`localhost`), the filter is accurate. When you're running the server elsewhere (a hosted preview, SSH tunnel, remote dev), the submenu lists every supported agent and lets your browser's OS protocol-dispatch dialog be the truth signal.
 
@@ -103,9 +130,13 @@ The Claude **claude.ai** web fallback row appears on file-scope dispatches only;
 
 See the [per-integration pages](/docs/integrations/claude-code) for what each agent receives once dispatched.
 
+The menu is organized into two sections. **Desktop** lists the installed agent apps (Claude, Codex, Cursor); selecting one launches it via its deep link. **Terminal** (desktop app only) adds a row for each CLI — **Claude**, **Codex**, and **Cursor** — that runs the corresponding CLI (`claude`, `codex`, `cursor`) in OpenKnowledge's docked terminal with the same scoped prompt. Because both sections can list the same name, a Desktop **Claude** (the app) and a Terminal **Claude** (the CLI) can appear together; screen readers tell them apart by the Terminal row's "Claude CLI" accessible name (and likewise "Codex CLI" / "Cursor CLI"). Each section renders only when it has something to launch, so on the web build — which has no docked terminal — the Terminal section is absent and a CLI pick falls back to the first installed Desktop app target.
+
+The empty-state create composer on a fresh project carries the same Desktop / Terminal split: its Desktop rows pick the default agent the **Create** button uses, while its Terminal **Claude** row (desktop only, disabled until the workspace resolves) launches the `claude` CLI with the brief you typed.
+
 ### Open in Terminal
 
-Spawns `open -a Terminal.app <dir>` at the right path: the folder for a folder row, the file's parent for a file row, the project root for the empty-space menu, the parent dir for an asset row. Terminal.app is hardcoded for v1; user-configurable terminal preference is on the roadmap.
+Spawns `open -a Terminal.app <dir>` at the right path: the folder for a folder row, the file's parent for a file row, the project root for the empty-space menu, the parent dir for an asset row. Terminal.app is hardcoded for v1; user-configurable terminal preference is on the roadmap. This is distinct from the **Terminal** section inside **Open with AI**, which runs a CLI (`claude`, `codex`, or `cursor`) in OpenKnowledge's docked terminal rather than opening Terminal.app.
 
 ## Sidebars and window width
 
@@ -113,9 +144,9 @@ The editor has two sidebars: the file sidebar on the left and the document panel
 
 - At comfortable widths (about 1024px and up) both sidebars open by default.
 - Below that, both default to collapsed so the editor canvas isn't squeezed off-screen.
-- When Open Knowledge is opened inside an AI editor's webview (Cursor, Codex, Claude Desktop), both sidebars start collapsed regardless of width; the embedded view is for reading the content you were sent, not for file management.
+- When OpenKnowledge is opened inside an AI editor's webview (Cursor, Codex, Claude Desktop), both sidebars start collapsed regardless of width; the embedded view is for reading the content you were sent, not for file management.
 
-The defaults only apply until you toggle. Open Knowledge remembers your most recent Show / Hide for each sidebar in your browser and survives reloads. When you come back to the same layout context (narrow window, comfortable window, or embedded view) you used last, your toggle is what you'll see. Toggling in a different context replaces that memory; only your most recent choice sticks, so a stale preference from a wide-monitor session can't quietly override what you just chose on a narrow screen.
+The defaults only apply until you toggle. OpenKnowledge remembers your most recent Show / Hide for each sidebar in your browser and survives reloads. When you come back to the same layout context (narrow window, comfortable window, or embedded view) you used last, your toggle is what you'll see. Toggling in a different context replaces that memory; only your most recent choice sticks, so a stale preference from a wide-monitor session can't quietly override what you just chose on a narrow screen.
 
 Keyboard shortcuts (use `Ctrl` on Windows / Linux in place of `Cmd`):
 
@@ -126,11 +157,11 @@ Keyboard shortcuts (use `Ctrl` on Windows / Linux in place of `Cmd`):
 
 In the desktop app the same actions live in the **View** menu (see below) and each menu label flips between **Show …** and **Hide …** based on current state, matching Finder.
 
-Inside an AI editor's embedded view, the **Open with AI** menus, the editor header's sparkle dropdown, and the empty-state agent grid are hidden; you're already inside an agent, so the handoff would loop back into the same surface. Open Knowledge's MCP tools and the document itself stay fully available; only the launchers are gone.
+Inside an AI editor's embedded view, the **Open with AI** menus, the bottom Ask AI composer, and the empty-state agent grid are hidden; you're already inside an agent, so the handoff would loop back into the same surface. OpenKnowledge's MCP tools and the document itself stay fully available; only the launchers are gone.
 
 ## macOS application menus
 
-The Open Knowledge desktop app keeps its menu bar in sync with the active editor target: File menu items enable / disable based on whether a doc, folder, or nothing is currently selected.
+The OpenKnowledge desktop app keeps its menu bar in sync with the active editor target: File menu items enable / disable based on whether a doc, folder, or nothing is currently selected.
 
 ### File menu
 
@@ -145,10 +176,18 @@ Below the project navigation items (Switch Project, Open Folder, Open Recent, CL
 | **Move to Trash** | `Cmd+Delete` | Sends the active file or folder to Trash (with the same confirm modal as the sidebar). Disabled when nothing is selected. |
 | **Reveal in Finder** | (none) | Reveals the active target in Finder. Empty selection reveals the project root. |
 | **Open in Terminal** | (none) | Opens Terminal.app at the active target's directory. |
-| **Open with AI ▸** | (none) | Same submenu as the sidebar / sparkle icon, dispatched at the active scope. |
+| **Open with AI ▸** | (none) | Same submenu as the sidebar, dispatched at the active scope. |
 | **Copy Path ▸** | (none) | Full / Relative path of the active target. |
 
 **Switch Project…** moved to `Cmd+Shift+P`. The old `Cmd+Shift+N` binding now creates a new folder, matching macOS Finder, VS Code, and the broader convention.
+
+### Edit menu
+
+Alongside the standard Undo / Redo / Cut / Copy / Paste / Select All items:
+
+| Item | Accelerator | Behavior |
+| --- | --- | --- |
+| **Check Spelling While Typing** | (none) | Checkbox reflecting whether spell check is on. Toggling applies app-wide and persists across relaunches — it's the same switch the editor right-click menu's Disable / Enable Spell Check rows flip (see [Right-click menu and spell check](#right-click-menu-and-spell-check)). |
 
 ### View menu
 
@@ -159,7 +198,6 @@ Before the existing Zoom and Toggle Fullscreen items, the View menu gets:
 | **Show / Hide Sidebar** | `Cmd+Option+S` | Toggles the file sidebar (left). Label flips between Show and Hide based on current state, matching Finder. |
 | **Show / Hide Document Panel** | `Cmd+Option+B` | Toggles the document panel (right). |
 | **Show Hidden Files** | (none) | `appearance.sidebar.showHiddenFiles`; same toggle as the sidebar's right-click menu. |
-| **Show All Files** | (none) | `appearance.sidebar.showAllFiles`. |
 | **Expand All** | (none) | Expands every folder in the tree. Hidden when nothing is collapsed. |
 | **Collapse All** | (none) | Collapses every folder in the tree. Hidden when nothing is expanded. |
 

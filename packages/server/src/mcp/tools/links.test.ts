@@ -84,6 +84,7 @@ const seenRequests: string[] = [];
 beforeAll(() => {
   testServer = Bun.serve({
     port: 0,
+    hostname: '127.0.0.1',
     fetch(req) {
       const url = new URL(req.url);
       seenRequests.push(`${url.pathname}?${url.searchParams.toString()}`);
@@ -154,7 +155,7 @@ beforeAll(() => {
       }
     },
   });
-  baseUrl = `http://localhost:${testServer.port}`;
+  baseUrl = `http://127.0.0.1:${testServer.port}`;
 });
 
 afterAll(() => {

@@ -138,6 +138,7 @@ describe('server-authoritative stress (US-013)', () => {
     try {
       const allMarkers = new Set<string>();
       let editCount = 0;
+      let authoredBytes = 0;
       const testStart = Date.now();
 
       while (Date.now() - testStart < durationMs) {
@@ -146,6 +147,7 @@ describe('server-authoritative stress (US-013)', () => {
         const editType = rng.next() < 0.8 ? 'wysiwyg' : 'source';
         const marker = `s-${editCount}-c${clientIdx}-${editType === 'wysiwyg' ? 'w' : 's'}-${rng.nextInt(10000)}`;
         allMarkers.add(marker);
+        authoredBytes += Buffer.byteLength(marker) + 4;
 
         if (editType === 'wysiwyg') {
           wysiwygAppend(client, marker);
@@ -222,6 +224,8 @@ describe('server-authoritative stress (US-013)', () => {
           );
         }
         expect(dupes).toEqual([]);
+
+        expect(Buffer.byteLength(ytextStr)).toBeLessThanOrEqual(authoredBytes * 2 + 512);
       }
 
       console.log(

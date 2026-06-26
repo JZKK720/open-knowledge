@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { LOCAL_DIR, OK_DIR } from '@inkeep/open-knowledge-core';
-import type { ServerLockMetadata } from '@inkeep/open-knowledge-server';
+import { AutoStartDisabledError, type ServerLockMetadata } from '@inkeep/open-knowledge-server';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import {
   bridgeStdioToHttpMcp,
@@ -135,15 +135,15 @@ describe('MCP stdio shim server resolution', () => {
   });
 
   test('auto-start opt-out turns missing server into a short diagnostic', async () => {
-    await expect(
-      resolveMcpHttpUrl({
-        lockDir,
-        contentDir: tmp,
-        envAutoStart: '0',
-        readLock: () => null,
-        isAlive: () => false,
-      }),
-    ).rejects.toThrow('OK_MCP_AUTOSTART=0');
+    const err: unknown = await resolveMcpHttpUrl({
+      lockDir,
+      contentDir: tmp,
+      envAutoStart: '0',
+      readLock: () => null,
+      isAlive: () => false,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AutoStartDisabledError);
+    expect((err as Error).message).toContain('OK_MCP_AUTOSTART=0');
   });
 
   test('valid port override bypasses discovery and formats wildcard host as localhost', async () => {

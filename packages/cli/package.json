@@ -1,6 +1,6 @@
 {
   "name": "@inkeep/open-knowledge",
-  "version": "0.9.1",
+  "version": "0.19.2",
   "license": "GPL-3.0-or-later",
   "private": false,
   "type": "module",
@@ -41,6 +41,7 @@
     "build": "bun run build:cli && bun run build:assets",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "bun run build:schema && bun test",
+    "test:e2e:cli": "bun test ./tests/e2e/cli-linux-e2e.ts",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bash ../../scripts/check-notices-clean.sh && bun run build"
   },

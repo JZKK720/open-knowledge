@@ -5,8 +5,8 @@ import {
   resolveAssetProjectPath,
   toDesktopAssetHref,
 } from '@inkeep/open-knowledge-core';
-import { dispatchAssetClick } from '../asset-dispatch';
 import { getInteractionLayer } from '../interaction-layer-host';
+import { activateAssetLink } from '../internal-link-helpers';
 
 let __wikiLinkEmbedNodeIdCounter = 0;
 
@@ -155,12 +155,12 @@ export const WikiLinkEmbed = BaseWikiLinkEmbed.extend({
           if (ext === null) return false;
           const projectRelPath = resolveAssetProjectPath(liveUrl, '');
           const rel = projectRelPath ?? liveTarget;
-          void dispatchAssetClick({
+          activateAssetLink({
             url: liveUrl,
             projectRelPath: rel,
             ext,
             title: rel.split('/').pop() ?? liveUrl,
-            forceOsDelegation: newTab,
+            newTab,
           });
           return true;
         },

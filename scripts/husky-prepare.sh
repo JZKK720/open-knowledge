@@ -21,7 +21,7 @@
 #   This guard skips husky entirely in the monorepo case so the parent's
 #   own `.husky/` stays in charge of git hooks.
 #
-#   When OK is cloned from the public mirror (inkeep/open-knowledge-legacy),
+#   When OK is cloned from the public mirror (inkeep/open-knowledge),
 #   `.git` is at the OK root (standalone-clone shape) but the Copybara
 #   manifest does NOT include `.husky/pre-commit` or `.husky/pre-push` in
 #   the mirror output. A fresh public clone therefore has no hook files

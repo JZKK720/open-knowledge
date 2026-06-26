@@ -11,6 +11,7 @@ import { isAllowedApiOrigin } from './api-origin.ts';
 import { errorResponse } from './http/error-response.ts';
 import type { PinoLogger } from './logger.ts';
 import { isAllowedWorkspaceHostHeader, isLoopbackAddress } from './loopback.ts';
+import type { MaintenanceCoordinator } from './maintenance-coordinator.ts';
 import type { McpHttpHandler } from './mcp-http.ts';
 import { handleCollabSocketError, incrementCollabMessageTooLarge } from './metrics.ts';
 
@@ -31,9 +32,11 @@ export interface MountMcpAndApiOptions {
   sessionManager?: AgentSessionManager;
   agentFocusBroadcaster?: AgentFocusBroadcaster | null;
   agentPresenceBroadcaster?: AgentPresenceBroadcaster | null;
+  maintenanceCoordinator?: MaintenanceCoordinator;
   keepaliveGraceMs?: number;
   contentAssetMiddleware?: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
   reactShellMiddleware?: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
+  ephemeral?: boolean;
 }
 
 export interface MountMcpAndApiHandle {
@@ -50,8 +53,10 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     contentAssetMiddleware,
     reactShellMiddleware,
+    ephemeral,
   } = opts;
   const keepaliveGraceMs = opts.keepaliveGraceMs ?? DEFAULT_KEEPALIVE_GRACE_MS;
 
@@ -169,8 +174,20 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
         }
       }
     };
-    const runContent = (onMiss: () => void): void =>
+    const runContent = (onMiss: () => void): void => {
+      if (
+        ephemeral === true &&
+        contentAssetMiddleware !== undefined &&
+        (!isLoopbackAddress(req.socket.remoteAddress) ||
+          !isAllowedWorkspaceHostHeader(req.headers.host))
+      ) {
+        errorResponse(res, 403, 'urn:ok:error:loopback-required', 'Loopback access required.', {
+          handler: 'content-asset',
+        });
+        return;
+      }
       runMiddleware(contentAssetMiddleware, 'content-asset', onMiss);
+    };
     const runShell = (onMiss: () => void): void =>
       runMiddleware(reactShellMiddleware, 'react-shell', onMiss);
     const notFound = (): void => {
@@ -277,6 +294,11 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
                 agentPresenceBroadcaster?.clearPresence(toBroadcasterKey(connectionId));
               } catch (err) {
                 log.error({ err, connectionId }, '[keepalive] clearPresence failed');
+              }
+              try {
+                await maintenanceCoordinator?.onSessionClose();
+              } catch (err) {
+                log.error({ err, connectionId }, '[keepalive] maintenance onSessionClose failed');
               }
             })();
             keepaliveGraceInflight.add(work);

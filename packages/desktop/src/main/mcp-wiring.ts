@@ -22,7 +22,7 @@ import type {
   McpWiringSkipResult,
 } from '../shared/ipc-channels.ts';
 import { createHandler } from '../shared/ipc-handler.ts';
-import { sendToRenderer } from '../shared/ipc-send.ts';
+import { type SendableWebContents, sendToRenderer } from '../shared/ipc-send.ts';
 import { logIpcError } from './ipc-log.ts';
 
 const MCP_STATUS_DIR_NAME = '.ok';
@@ -149,6 +149,10 @@ function isPermittedSender(
 
 interface IpcMainLike extends Pick<IpcMain, 'handle' | 'removeHandler'> {}
 
+export interface McpWiringDispatchTarget extends SendableWebContents {
+  readonly id: number;
+}
+
 export interface McpWiringCliSurface {
   detectInstalledEditors(cwd: string, home?: string): McpWiringEditorId[];
   writeUserMcpConfigs(opts: { editors: McpWiringEditorId[]; home?: string }): Promise<
@@ -201,6 +205,7 @@ interface RunMcpWiringOpts {
   forceEnv?: string | null | undefined;
   reclaimDisableEnv?: string | null | undefined;
   forceShow?: boolean;
+  immediateDispatchTarget?: McpWiringDispatchTarget;
   fs?: McpWiringFsOps;
   now?: () => Date;
   logger?: McpWiringLogger;
@@ -394,6 +399,7 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
     forceEnv,
     reclaimDisableEnv,
     forceShow = false,
+    immediateDispatchTarget,
     fs,
     now,
     logger = DEFAULT_LOGGER,
@@ -626,26 +632,31 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
     return { ok: true };
   };
 
-  const rendererReadyHandler = (event: IpcMainInvokeEvent): undefined => {
+  const dispatchShowAndBind = (target: McpWiringDispatchTarget): boolean => {
     try {
-      sendToRenderer(event.sender, 'ok:mcp-wiring:show', {
+      sendToRenderer(target, 'ok:mcp-wiring:show', {
         detectedEditors: detections,
       });
       logger.info('dispatched show to renderer', {
         detectedCount: detections.length,
-        senderId: event.sender.id,
+        senderId: target.id,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error('show dispatch failed — handler remains armed for next renderer', {
         message,
       });
-      return undefined;
+      return false;
     }
-    capturedSenderId = event.sender.id;
+    capturedSenderId = target.id;
     try {
       ipcMain.removeHandler('ok:mcp-wiring:renderer-ready');
     } catch {}
+    return true;
+  };
+
+  const rendererReadyHandler = (event: IpcMainInvokeEvent): undefined => {
+    dispatchShowAndBind(event.sender);
     return undefined;
   };
 
@@ -654,9 +665,14 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
   register('ok:mcp-wiring:skip', skipHandler);
   register('ok:mcp-wiring:renderer-ready', rendererReadyHandler);
 
-  logger.info('armed — waiting for renderer mount-ack', {
-    detectedCount: detections.filter((d) => d.detected).length,
-  });
+  const immediateDispatched =
+    immediateDispatchTarget !== undefined && dispatchShowAndBind(immediateDispatchTarget);
+
+  if (!immediateDispatched) {
+    logger.info('armed — waiting for renderer mount-ack', {
+      detectedCount: detections.filter((d) => d.detected).length,
+    });
+  }
 
   let destroyed = false;
   return {

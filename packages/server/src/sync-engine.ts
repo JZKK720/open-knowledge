@@ -20,6 +20,7 @@ import {
   classifyGitError,
   type UserFacingErrorCode,
 } from './error-classification.ts';
+import { createGhTokenSource, type GhTokenSource } from './gh-token-source.ts';
 import { createGitInstance, type GitHandle, withParentLock } from './git-handle.ts';
 import { resolveGitIdentity } from './git-identity.ts';
 import {
@@ -30,6 +31,7 @@ import {
   type PushPermission,
 } from './github-permissions.ts';
 import { getLogger } from './logger.ts';
+import { toPosix } from './path-utils.ts';
 import {
   readOriginGitHubRepo,
   readSyncRemoteInfo,
@@ -40,6 +42,8 @@ import { computeRemainingMs } from './sync-timing.ts';
 const log = getLogger('sync-engine');
 
 const SHA_HEX_40 = /^[0-9a-f]{40}$/i;
+
+const SYNC_GH_TOKEN_HOST = 'github.com';
 
 export type SyncState =
   | 'dormant'
@@ -192,6 +196,7 @@ export class SyncEngine {
   private setBatchInProgress: ((value: boolean) => void) | undefined;
   private onAutoDisable: ((reason: 'protected-branch') => void | Promise<void>) | undefined;
   private detectGh: DetectGhFn | undefined;
+  private ghTokenSource: GhTokenSource;
   private tokenStore: ProbeTokenStore | null | undefined;
   private checkPushPermissionFn: (opts: CheckPushPermissionOptions) => Promise<PushPermission>;
   private pushPermission: PushPermissionStatus | null = null;
@@ -240,10 +245,19 @@ export class SyncEngine {
     this.setBatchInProgress = options.setBatchInProgress;
     this.onAutoDisable = options.onAutoDisable;
     this.detectGh = options.detectGh;
+    this.ghTokenSource = createGhTokenSource(options.detectGh);
     this.tokenStore = options.tokenStore;
     this.checkPushPermissionFn = options.checkPushPermissionFn ?? defaultCheckPushPermission;
     this.statePath = resolve(getLocalDir(this.projectDir), 'sync-state.json');
     this.conflictStore = new ConflictStore(this.projectDir, this.currentBranch);
+  }
+
+  private gitHandle(gitIndexFile?: string): GitHandle {
+    return createGitInstance(this.projectDir, {
+      credentialArgs: this.credentialArgs,
+      gitIndexFile,
+      ghToken: this.ghTokenSource.get(SYNC_GH_TOKEN_HOST) ?? undefined,
+    });
   }
 
   async start(): Promise<void> {
@@ -253,9 +267,7 @@ export class SyncEngine {
 
     let hasRemote = false;
     try {
-      const handle = createGitInstance(this.projectDir, {
-        credentialArgs: this.credentialArgs,
-      });
+      const handle = this.gitHandle();
       const remoteOutput = await handle.git.raw('remote', '-v');
       hasRemote = remoteOutput.trim().length > 0;
       this.hasRemote = hasRemote;
@@ -304,9 +316,7 @@ export class SyncEngine {
       this.conflictCount = 0;
     } else if (this.conflictCount > 0 && mergeInProgress) {
       try {
-        const handle = createGitInstance(this.projectDir, {
-          credentialArgs: this.credentialArgs,
-        });
+        const handle = this.gitHandle();
         const out = (await handle.git.raw(['diff', '--name-only', '--diff-filter=U'])).trim();
         const stillUnmerged = new Set(
           out
@@ -337,7 +347,7 @@ export class SyncEngine {
     if (mergeInProgress && this.conflictCount === 0) {
       log.warn({}, '[sync] stale MERGE_HEAD detected with no tracked conflicts — aborting merge');
       try {
-        const handle = createGitInstance(this.projectDir, { credentialArgs: this.credentialArgs });
+        const handle = this.gitHandle();
         await handle.git.raw(['merge', '--abort']);
       } catch (e) {
         log.warn({ err: e }, '[sync] git merge --abort for stale MERGE_HEAD failed');
@@ -429,6 +439,32 @@ export class SyncEngine {
     this.clearPullError();
     this.consecutiveFailures = 0;
 
+    if (!this.hasRemote) {
+      this.transitionTo('dormant');
+      this.saveStateNow();
+      return;
+    }
+
+    this.transitionTo('idle');
+    this.schedulePull(0);
+    this.schedulePush();
+    this.saveStateNow();
+    void this.probePushPermissionInternal('refresh');
+  }
+
+  async notifyCredentialsChanged(): Promise<void> {
+    if (!this.syncEnabled) return;
+
+    this.ghTokenSource.invalidate();
+
+    if (this.state !== 'auth-error' && this.pausedReason !== 'auth-error') return;
+
+    this.pausedReason = undefined;
+    this.clearPushError();
+    this.clearPullError();
+    this.consecutiveFailures = 0;
+
+    this.hasRemote = await this.probeRemote();
     if (!this.hasRemote) {
       this.transitionTo('dormant');
       this.saveStateNow();
@@ -617,9 +653,7 @@ export class SyncEngine {
   private async probeRemote(): Promise<boolean> {
     if (!existsSync(join(this.projectDir, '.git'))) return false;
     try {
-      const handle = createGitInstance(this.projectDir, {
-        credentialArgs: this.credentialArgs,
-      });
+      const handle = this.gitHandle();
       const remoteOutput = await handle.git.raw('remote', '-v');
       return remoteOutput.trim().length > 0;
     } catch (e) {
@@ -648,9 +682,7 @@ export class SyncEngine {
       this.conflictCount = 0;
     } else {
       try {
-        const handle = createGitInstance(this.projectDir, {
-          credentialArgs: this.credentialArgs,
-        });
+        const handle = this.gitHandle();
         const out = (await handle.git.raw(['diff', '--name-only', '--diff-filter=U'])).trim();
         const stillUnmerged = new Set(
           out
@@ -768,7 +800,8 @@ export class SyncEngine {
 
   private async runPullCycle(): Promise<void> {
     if (this.pullInFlight) return;
-    if (this.state === 'dormant' || this.state === 'disabled') return;
+    if (this.state === 'dormant' || this.state === 'disabled' || this.state === 'auth-error')
+      return;
     if (this.state === 'conflict') {
       this.schedulePull(); // retry after interval but don't fetch while conflicted
       return;
@@ -788,9 +821,7 @@ export class SyncEngine {
   }
 
   private async doPullCycle(): Promise<void> {
-    const handle = createGitInstance(this.projectDir, {
-      credentialArgs: this.credentialArgs,
-    });
+    const handle = this.gitHandle();
 
     let branch: string;
     try {
@@ -887,10 +918,7 @@ export class SyncEngine {
 
     try {
       await withParentLock(async () => {
-        const handle = createGitInstance(this.projectDir, {
-          credentialArgs: this.credentialArgs,
-          gitIndexFile: tmpIndexPath,
-        });
+        const handle = this.gitHandle(tmpIndexPath);
 
         if (isUnbornHead(this.projectDir)) {
           log.info({}, '[sync] repo has no commits yet — skipping push cycle');
@@ -996,7 +1024,7 @@ export class SyncEngine {
               changedProjectRelPaths.push(projRelPath);
               const contentRelPath =
                 contentFileByProjRel.get(projRelPath) ??
-                relative(this.contentDir, join(this.projectDir, projRelPath));
+                toPosix(relative(this.contentDir, join(this.projectDir, projRelPath)));
               if (contentRelPath && !contentRelPath.startsWith('..')) {
                 changedContentRelPaths.push(contentRelPath);
               }
@@ -1014,7 +1042,7 @@ export class SyncEngine {
           this.identityUnresolved = nextUnresolved;
           this.cc1Broadcaster?.signal('sync-status');
         }
-        const authorName = identity?.name ?? 'Open Knowledge';
+        const authorName = identity?.name ?? 'OpenKnowledge';
         const authorEmail = identity?.email ?? 'sync@open-knowledge.local';
 
         handle.git.env({
@@ -1081,9 +1109,7 @@ export class SyncEngine {
       if (classified.class === 'semantic' && classified.subclass === 'non-fast-forward') {
         if (retriesLeft > 0) {
           log.info({}, '[sync] push rejected (non-fast-forward) — fetching, merging, retrying');
-          const retryHandle = createGitInstance(this.projectDir, {
-            credentialArgs: this.credentialArgs,
-          });
+          const retryHandle = this.gitHandle();
           this.setBatchInProgress?.(true);
           try {
             await retryHandle.git.fetch('origin');
@@ -1140,10 +1166,7 @@ export class SyncEngine {
     if (contentFiles.length === 0 && headContentSet.size === 0) return null;
 
     const tmpIndex = join(tmpdir(), `ok-sync-retry-idx-${process.pid}-${Date.now()}.idx`);
-    const isoHandle = createGitInstance(this.projectDir, {
-      credentialArgs: this.credentialArgs,
-      gitIndexFile: tmpIndex,
-    });
+    const isoHandle = this.gitHandle(tmpIndex);
     try {
       await isoHandle.git.raw(['read-tree', headSha]);
       const BATCH = 100;
@@ -1173,7 +1196,7 @@ export class SyncEngine {
       }
 
       const identity = await resolveGitIdentity(this.projectDir);
-      const authorName = identity?.name ?? 'Open Knowledge';
+      const authorName = identity?.name ?? 'OpenKnowledge';
       const authorEmail = identity?.email ?? 'sync@open-knowledge.local';
       isoHandle.git.env({
         GIT_AUTHOR_NAME: authorName,
@@ -1288,14 +1311,14 @@ export class SyncEngine {
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);
         if (entry.isDirectory()) {
-          const dirRelPath = relative(this.contentDir, fullPath);
+          const dirRelPath = toPosix(relative(this.contentDir, fullPath));
           if (!dirRelPath.startsWith('..') && this.contentFilter.isDirExcluded(dirRelPath))
             continue;
           walk(fullPath);
         } else if (entry.isFile()) {
-          const contentRelPath = relative(this.contentDir, fullPath);
+          const contentRelPath = toPosix(relative(this.contentDir, fullPath));
           if (!contentRelPath.startsWith('..') && !this.contentFilter.isExcluded(contentRelPath)) {
-            const projectRelPath = relative(this.projectDir, fullPath);
+            const projectRelPath = toPosix(relative(this.projectDir, fullPath));
             results.push({ contentRelPath, projectRelPath });
           }
         }
@@ -1316,7 +1339,7 @@ export class SyncEngine {
         const projRelPath = line.trim();
         if (!projRelPath) continue;
         const absPath = join(this.projectDir, projRelPath);
-        const contentRelPath = relative(this.contentDir, absPath);
+        const contentRelPath = toPosix(relative(this.contentDir, absPath));
         if (!contentRelPath.startsWith('..') && !this.contentFilter.isExcluded(contentRelPath)) {
           paths.add(projRelPath);
         }
@@ -1337,11 +1360,7 @@ export class SyncEngine {
 
   private async resetRealIndexForPaths(paths: string[], handle?: GitHandle): Promise<void> {
     if (paths.length === 0) return;
-    const realIndexHandle =
-      handle ??
-      createGitInstance(this.projectDir, {
-        credentialArgs: this.credentialArgs,
-      });
+    const realIndexHandle = handle ?? this.gitHandle();
     const unique = [...new Set(paths)];
     const BATCH = 100;
     for (let i = 0; i < unique.length; i += BATCH) {
@@ -1363,7 +1382,7 @@ export class SyncEngine {
   }
 
   private async handleMergeConflict(): Promise<void> {
-    const handle = createGitInstance(this.projectDir, { credentialArgs: this.credentialArgs });
+    const handle = this.gitHandle();
 
     let conflictedFiles: string[] = [];
     try {
@@ -1396,7 +1415,7 @@ export class SyncEngine {
 
     for (const file of conflictedFiles) {
       const absPath = join(this.projectDir, file);
-      const contentRelPath = relative(this.contentDir, absPath);
+      const contentRelPath = toPosix(relative(this.contentDir, absPath));
       if (
         !contentRelPath.startsWith('..') &&
         isSupportedDocFile(contentRelPath) &&
@@ -1500,20 +1519,6 @@ export class SyncEngine {
     }
   }
 
-  async abortMerge(): Promise<void> {
-    const handle = createGitInstance(this.projectDir, { credentialArgs: this.credentialArgs });
-    try {
-      await handle.git.raw(['merge', '--abort']);
-      log.info({}, '[sync] merge aborted');
-    } catch (e) {
-      log.warn({ err: e }, '[sync] git merge --abort failed — conflicts.json still cleared');
-    }
-    this.conflictStore.clear();
-    this.conflictCount = 0;
-    this.transitionTo('idle');
-    this.scheduleSaveState();
-  }
-
   private clearPushError(): void {
     this.pushError = undefined;
     this.pushErrorCode = undefined;
@@ -1551,6 +1556,7 @@ export class SyncEngine {
     );
 
     if (classified.class === 'auth') {
+      this.ghTokenSource.invalidate();
       this.transitionTo('auth-error');
       this.pausedReason = 'auth-error';
     } else if (classified.class === 'semantic' && classified.subclass === 'protected-branch') {
@@ -1592,7 +1598,9 @@ export class SyncEngine {
   private saveStateNow(): void {
     try {
       const persistedReason =
-        this.pausedReason === 'no-push-permission' ? undefined : this.pausedReason;
+        this.pausedReason === 'no-push-permission' || this.pausedReason === 'auth-error'
+          ? undefined
+          : this.pausedReason;
       const data: PersistedSyncState = {
         version: 1,
         lastSyncUtc: this.lastSyncUtc,
@@ -1620,7 +1628,9 @@ export class SyncEngine {
       this.lastPushedSha = data.lastPushedSha ?? null;
       this.consecutiveFailures = data.consecutiveFailures ?? 0;
       this.pausedReason =
-        data.pausedReason === 'no-push-permission' ? undefined : data.pausedReason;
+        data.pausedReason === 'no-push-permission' || data.pausedReason === 'auth-error'
+          ? undefined
+          : data.pausedReason;
 
       const inflightFiles = data.inflightConflicts ?? [];
       if (inflightFiles.length > 0) {

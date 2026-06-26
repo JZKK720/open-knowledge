@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { safeSubdir, sanitizeFilename } from './api-extension.ts';
+import { resumeSyncOnAuthEvent, safeSubdir, sanitizeFilename } from './api-extension.ts';
+import type { AuthEvent } from './local-ops/types.ts';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
+import type { SyncEngine } from './sync-engine.ts';
 
 describe('safeSubdir', () => {
   const baseDir = '/home/user/content';
@@ -188,12 +191,7 @@ describe('handleUploadAsset', () => {
 
     hocuspocus.configuration.extensions.push(ext);
 
-    port = await new Promise<number>((res) => {
-      server.listen(0, () => {
-        const addr = server.address();
-        res(typeof addr === 'object' && addr ? addr.port : 0);
-      });
-    });
+    ({ port } = await listenOnLoopback(server));
   });
 
   afterEach(async () => {
@@ -222,7 +220,7 @@ describe('handleUploadAsset', () => {
     const formData = new FormData();
     formData.append('parentDocName', parentDocName);
     formData.append('file', new Blob([file]), filename);
-    return fetch(`http://localhost:${port}/api/upload`, {
+    return fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -243,7 +241,7 @@ describe('handleUploadAsset', () => {
   test('rejects missing parentDocName', async () => {
     const formData = new FormData();
     formData.append('file', new Blob([createPngBuffer()]), 'test.png');
-    const res = await fetch(`http://localhost:${port}/api/upload`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -351,7 +349,7 @@ describe('handleUploadAsset', () => {
     const formData = new FormData();
     formData.append('parentDocName', 'docs/guide.md');
     formData.append('file', new Blob([createPngBuffer()]), 'screenshot.png');
-    const res = await fetch(`http://localhost:${port}/api/upload`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -367,7 +365,7 @@ describe('handleUploadAsset', () => {
     const formData = new FormData();
     formData.append('parentDocName', 'docs/guide.md');
     formData.append('file', new Blob([pdfBuffer]), 'draft.pdf');
-    const res = await fetch(`http://localhost:${port}/api/upload`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -382,7 +380,7 @@ describe('handleUploadAsset', () => {
     const formData = new FormData();
     formData.append('parentDocName', 'docs/guide.md');
     formData.append('file', new Blob([csvBuffer]), 'data.csv');
-    const res = await fetch(`http://localhost:${port}/api/upload`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -447,12 +445,7 @@ describe('handleUploadAsset — same-dir sha256 dedup (FR-2)', () => {
 
     hocuspocus.configuration.extensions.push(ext);
 
-    port = await new Promise<number>((res) => {
-      server.listen(0, () => {
-        const addr = server.address();
-        res(typeof addr === 'object' && addr ? addr.port : 0);
-      });
-    });
+    ({ port } = await listenOnLoopback(server));
   });
 
   afterEach(async () => {
@@ -471,7 +464,7 @@ describe('handleUploadAsset — same-dir sha256 dedup (FR-2)', () => {
     const formData = new FormData();
     formData.append('parentDocName', parent);
     formData.append('file', new Blob([buf]), filename);
-    return fetch(`http://localhost:${port}/api/upload`, { method: 'POST', body: formData });
+    return fetch(`http://127.0.0.1:${port}/api/upload`, { method: 'POST', body: formData });
   }
 
   test('second upload of identical bytes into same dir → deduped:true, single file on disk', async () => {
@@ -538,5 +531,55 @@ describe('handleUploadAsset — same-dir sha256 dedup (FR-2)', () => {
       deduped: boolean;
     };
     expect(res.deduped).toBe(false);
+  });
+});
+
+describe('resumeSyncOnAuthEvent (reconnect → resume wiring)', () => {
+  const makeEngineStub = (impl?: () => Promise<void>) => {
+    const calls: number[] = [];
+    const engine = {
+      notifyCredentialsChanged: () => {
+        calls.push(Date.now());
+        return impl ? impl() : Promise.resolve();
+      },
+    } as unknown as SyncEngine;
+    return { engine, calls, getSyncEngine: () => engine };
+  };
+
+  const completeEvent: AuthEvent = { type: 'complete', host: 'github.com', login: 'octocat' };
+  const verificationEvent: AuthEvent = {
+    type: 'verification',
+    user_code: 'ABCD-1234',
+    verification_uri: 'https://github.com/login/device',
+    expires_in: 900,
+  };
+  const errorEvent: AuthEvent = { type: 'error', message: 'denied' };
+
+  test('a complete event resumes sync via notifyCredentialsChanged', () => {
+    const stub = makeEngineStub();
+    resumeSyncOnAuthEvent(completeEvent, stub.getSyncEngine);
+    expect(stub.calls.length).toBe(1);
+  });
+
+  test('non-complete events do not resume sync', () => {
+    const stub = makeEngineStub();
+    resumeSyncOnAuthEvent(verificationEvent, stub.getSyncEngine);
+    resumeSyncOnAuthEvent(errorEvent, stub.getSyncEngine);
+    expect(stub.calls.length).toBe(0);
+  });
+
+  test('absent getSyncEngine is a no-op (engine dormant / not yet constructed)', () => {
+    expect(() => resumeSyncOnAuthEvent(completeEvent, undefined)).not.toThrow();
+  });
+
+  test('a null engine is a no-op', () => {
+    expect(() => resumeSyncOnAuthEvent(completeEvent, () => null)).not.toThrow();
+  });
+
+  test('a rejected notifyCredentialsChanged is swallowed (best-effort)', async () => {
+    const stub = makeEngineStub(() => Promise.reject(new Error('boom')));
+    expect(() => resumeSyncOnAuthEvent(completeEvent, stub.getSyncEngine)).not.toThrow();
+    expect(stub.calls.length).toBe(1);
+    await Promise.resolve();
   });
 });

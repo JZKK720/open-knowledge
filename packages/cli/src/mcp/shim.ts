@@ -7,6 +7,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { clientVersionHeaders, SPAWN_ERROR_LOG } from '@inkeep/open-knowledge-core';
 import { startKeepalive as defaultStartKeepalive } from '@inkeep/open-knowledge-core/keepalive';
 import {
+  AutoStartDisabledError,
   isProcessAlive as defaultIsProcessAlive,
   MCP_CONNECTION_ID_HEADER,
   RUNTIME_VERSION,
@@ -190,8 +191,8 @@ export async function resolveMcpHttpUrl(opts: ResolveMcpHttpUrlOptions): Promise
   if (existingPort !== undefined) return mcpUrlForPort('localhost', existingPort);
 
   if (opts.envAutoStart === '0') {
-    throw new Error(
-      'Open Knowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
+    throw new AutoStartDisabledError(
+      'OpenKnowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
     );
   }
 

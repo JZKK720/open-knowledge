@@ -60,6 +60,7 @@ interface EditWikiLinkDialogProps {
   anchor: string | null;
   pages: Set<string>;
   assetPaths: Set<string>;
+  filePaths: Set<string>;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (target: string, alias: string | null, anchor: string | null) => void;
@@ -72,6 +73,7 @@ function EditWikiLinkDialog({
   anchor,
   pages,
   assetPaths,
+  filePaths,
   loading,
   onOpenChange,
   onSave,
@@ -85,8 +87,8 @@ function EditWikiLinkDialog({
   const headingListId = useId();
   const { t } = useLingui();
 
-  const editAssetPath = resolveWikiLinkAssetTarget(editTarget, assetPaths);
-  const isEditTargetResolved = isResolvedWikiLinkTarget(editTarget, pages, assetPaths);
+  const editAssetPath = resolveWikiLinkAssetTarget(editTarget, assetPaths, filePaths);
+  const isEditTargetResolved = isResolvedWikiLinkTarget(editTarget, pages, assetPaths, filePaths);
   const headings = useHeadings(editTarget, isEditTargetResolved && !editAssetPath && open);
 
   const prevOpenRef = useRef(false);
@@ -270,13 +272,21 @@ export function WikiLinkPropPanel({ editor, getPos, onClose, onNavigate }: WikiL
   const anchor = normalizeNullableString(node?.attrs.anchor);
   const label = getWikiLinkText({ target, alias, anchor });
 
-  const { addPage, assetPaths, folderPaths, pages, pagesBySlug, pagesByBasename, loading } =
-    usePageList();
+  const {
+    addPage,
+    assetPaths,
+    filePaths,
+    folderPaths,
+    pages,
+    pagesBySlug,
+    pagesByBasename,
+    loading,
+  } = usePageList();
   const classifiedTarget = classifyWikiLinkTarget(target, anchor);
   const externalTarget = classifiedTarget?.kind === 'external' ? classifiedTarget : null;
   const assetPath =
     classifiedTarget?.kind === 'asset'
-      ? (resolveWikiLinkAssetTarget(classifiedTarget.url, assetPaths) ??
+      ? (resolveWikiLinkAssetTarget(classifiedTarget.url, assetPaths, filePaths) ??
         classifiedTarget.url.replace(/^\//, ''))
       : null;
   const linkIntent = assetPath
@@ -570,6 +580,7 @@ export function WikiLinkPropPanel({ editor, getPos, onClose, onNavigate }: WikiL
         anchor={anchor}
         pages={pages}
         assetPaths={assetPaths}
+        filePaths={filePaths}
         loading={loading}
         onOpenChange={setEditDialogOpen}
         onSave={handleSaveEdit}

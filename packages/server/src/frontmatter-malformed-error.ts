@@ -3,7 +3,7 @@ import { stripDocExtension } from './doc-extensions.ts';
 import { errorResponse } from './http/error-response.ts';
 
 const FIX_HINT =
-  'Frontmatter must be a flat mapping where each value is a string, number, boolean, or array of scalars. Quote string values containing YAML-significant characters (`:`, `#`, leading `-`), e.g. `title: "Foo: bar"`.';
+  'Frontmatter must be a top-level YAML mapping. Quote string values containing YAML-significant characters (`:`, `#`, leading `-`), e.g. `title: "Foo: bar"`.';
 
 export class FrontmatterMalformedError extends Error {
   readonly file: string;
@@ -17,15 +17,37 @@ export class FrontmatterMalformedError extends Error {
   }
 }
 
+export type FrontmatterMalformedClass =
+  | 'yaml-parse-error'
+  | 'non-mapping-top-level'
+  | 'schema-rejection'
+  | 'unknown';
+
+export function classifyParseError(parseError: string): FrontmatterMalformedClass {
+  if (parseError === 'top-level value is not a mapping') return 'non-mapping-top-level';
+  if (parseError.startsWith('value at "') || parseError.startsWith('schema validation failed:')) {
+    return 'schema-rejection';
+  }
+  if (parseError.startsWith('parse threw:') || parseError.startsWith('toJS threw:')) {
+    return 'yaml-parse-error';
+  }
+  if (parseError.length > 0 && parseError !== 'unknown YAML parse error') {
+    return 'yaml-parse-error';
+  }
+  return 'unknown';
+}
+
 export function respondFrontmatterMalformed(
   res: ServerResponse,
   err: FrontmatterMalformedError,
   handler: string,
 ): void {
+  const refusalClass = classifyParseError(err.parseError);
   console.warn(
     JSON.stringify({
       event: 'frontmatter-malformed-write-refused',
       handler,
+      class: refusalClass,
       'doc.name': stripDocExtension(err.file),
       parseError: err.parseError,
     }),

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DocumentListSuccessSchema } from '@inkeep/open-knowledge-core';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { awaitFileWatcherIndexed, createTestServer, type TestServer } from './test-harness';
 
 let server: TestServer;
@@ -38,7 +39,7 @@ beforeAll(async () => {
 
   server = await createTestServer({ contentDir, keepContentDir: false });
   await awaitFileWatcherIndexed(server, 'docs/guide');
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
@@ -46,7 +47,7 @@ afterAll(async () => {
 
 describe('/api/documents sidebar asset rows', () => {
   test('returns referenced local assets as non-document rows', async () => {
-    const res = await fetch(`http://localhost:${server.port}/api/documents`);
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/documents`);
     expect(res.ok).toBe(true);
     const body = DocumentListSuccessSchema.parse(await res.json());
 
@@ -109,9 +110,15 @@ describe('/api/documents sidebar asset rows', () => {
       referencedBy: ['docs/guide'],
     });
 
-    expect(body.documents.some((entry) => entry.path === 'docs/media/unreferenced.png')).toBe(
-      false,
+    const unreferenced = body.documents.find(
+      (entry) => entry.path === 'docs/media/unreferenced.png',
     );
+    expect(unreferenced).toMatchObject({
+      kind: 'file',
+      docName: 'docs/media/unreferenced.png',
+      assetExt: 'png',
+    });
+
     expect(body.documents.some((entry) => entry.path === 'https://example.com/remote.png')).toBe(
       false,
     );

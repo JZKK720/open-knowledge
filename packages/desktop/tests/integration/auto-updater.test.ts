@@ -5,7 +5,9 @@ import {
   buildCheckNowResultFromError,
   type DispatchKind,
   type IpcMainLike,
+  installReached,
   isClassifiedUpdaterError,
+  RELAUNCH_WATCHDOG_MS,
   releaseUrlFor,
   STUCK_HINT_DOWNLOAD_URL,
   STUCK_HINT_THRESHOLD_MS,
@@ -695,14 +697,11 @@ describe('first-launch version notice (Toast B — AC7, D9)', () => {
     expect(rig.state.lastSeenVersion).toBe('0.3.1');
   });
 
-  test('lastSeenVersion is null (first launch) → dispatch whats-new + state advances', () => {
+  test('lastSeenVersion is null (fresh install) → no dispatch, state seeds silently', () => {
     const { rig } = makeRig({ lastSeenVersion: null, appVersion: '0.3.1' });
     const whatsNew = rig.captured.filter((c) => c.channel === 'ok:update:whats-new');
-    expect(whatsNew).toHaveLength(1);
-    expect(whatsNew[0]?.payload).toEqual({
-      version: '0.3.1',
-      releaseUrl: releaseUrlFor('0.3.1'),
-    });
+    expect(whatsNew).toHaveLength(0);
+    expect(rig.dispatches).not.toContain('whats-new-toast-b' as DispatchKind);
     expect(rig.state.lastSeenVersion).toBe('0.3.1');
   });
 
@@ -776,6 +775,208 @@ describe('boot-time stale versionPendingInstall reconciliation', () => {
     });
     expect(state.versionPendingInstall).toBe('0.4.0');
     expect(dispatches).not.toContain('stale-pending-cleared' as DispatchKind);
+  });
+});
+
+describe('boot-time failed-install detection', () => {
+  test('attempted not reached (same-MMP beta) → relaunch-failed w/ downloadUrl, re-arm, stays armed', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0-beta.1',
+    });
+    const failed = rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.payload).toEqual({
+      version: '0.16.0-beta.3',
+      downloadUrl: STUCK_HINT_DOWNLOAD_URL,
+    });
+    expect(rig.state.attemptedInstall).toBe('0.16.0-beta.3');
+    expect(rig.state.versionPendingInstall).toBe('0.16.0-beta.3');
+    expect(rig.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+    expect(rig.dispatches).not.toContain('attempted-install-reconciled' as DispatchKind);
+  });
+
+  test('persistent failure across reboots keeps re-surfacing (attemptedInstall not consumed)', () => {
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.16.0-beta.1',
+      attemptedInstall: '0.16.0-beta.3',
+    };
+    const boot = () => {
+      const captured: CapturedSend[] = [];
+      const dispatches: DispatchKind[] = [];
+      startAutoUpdater({
+        updater: new FakeUpdater(),
+        ipcMain: makeFakeIpc(),
+        readState: () => state,
+        writeState: (next) => {
+          Object.assign(state, next);
+        },
+        getPrimaryWindow: () => makeFakeWindow(captured),
+        getAppVersion: () => '0.16.0-beta.1',
+        isPackaged: true,
+        clock: makeFakeClock(),
+        now: () => new Date(),
+        onDispatch: (k) => dispatches.push(k),
+        logger: {
+          info: mock(() => {}),
+          warn: mock(() => {}),
+          error: mock(() => {}),
+          debug: mock(() => {}),
+        },
+      });
+      return { captured, dispatches };
+    };
+    const first = boot();
+    expect(first.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+    const second = boot();
+    expect(second.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(
+      1,
+    );
+    expect(second.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('attempted reached (running == attempted) → silently cleared, no failure notice', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0-beta.3',
+    });
+    const failed = rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
+    expect(failed).toHaveLength(0);
+    expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.dispatches).toContain('attempted-install-reconciled' as DispatchKind);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('attempted reached (running past attempted, stable over beta) → silently cleared', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.dispatches).toContain('attempted-install-reconciled' as DispatchKind);
+  });
+
+  test('no attemptedInstall → no-op (nothing to reconcile)', () => {
+    const { rig } = makeRig({ attemptedInstall: null, appVersion: '0.16.0-beta.1' });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+    expect(rig.dispatches).not.toContain('attempted-install-reconciled' as DispatchKind);
+  });
+
+  test('update-downloaded arms attemptedInstall alongside versionPendingInstall', () => {
+    const { rig } = makeRig();
+    rig.updater.emit('update-downloaded', { version: '0.16.0-beta.3' });
+    expect(rig.state.versionPendingInstall).toBe('0.16.0-beta.3');
+    expect(rig.state.attemptedInstall).toBe('0.16.0-beta.3');
+  });
+
+  test('persist failure on the failure branch → no broadcast, no dispatch', () => {
+    const updater = new FakeUpdater();
+    const ipc = makeFakeIpc();
+    const clock = makeFakeClock();
+    const captured: CapturedSend[] = [];
+    const primaryWindow = makeFakeWindow(captured);
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.16.0-beta.1',
+      attemptedInstall: '0.16.0-beta.3',
+    };
+    const dispatches: DispatchKind[] = [];
+    startAutoUpdater({
+      updater,
+      ipcMain: ipc,
+      readState: () => state,
+      writeState: () => {
+        throw new Error('EACCES');
+      },
+      getPrimaryWindow: () => primaryWindow,
+      getAppVersion: () => '0.16.0-beta.1',
+      isPackaged: true,
+      clock,
+      now: () => new Date(),
+      onDispatch: (k) => dispatches.push(k),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    expect(captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+    expect(state.attemptedInstall).toBe('0.16.0-beta.3');
+  });
+
+  test('persist failure on the success branch → attemptedInstall stays armed, no dispatch', () => {
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.16.0-beta.3',
+      attemptedInstall: '0.16.0-beta.3',
+    };
+    const dispatches: DispatchKind[] = [];
+    startAutoUpdater({
+      updater: new FakeUpdater(),
+      ipcMain: makeFakeIpc(),
+      readState: () => state,
+      writeState: () => {
+        throw new Error('EACCES');
+      },
+      getPrimaryWindow: () => makeFakeWindow([]),
+      getAppVersion: () => '0.16.0-beta.3',
+      isPackaged: true,
+      clock: makeFakeClock(),
+      now: () => new Date(),
+      onDispatch: (k) => dispatches.push(k),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    expect(state.attemptedInstall).toBe('0.16.0-beta.3');
+    expect(dispatches).not.toContain('attempted-install-reconciled' as DispatchKind);
+  });
+});
+
+describe('installReached (prerelease-aware compare)', () => {
+  test('equal versions → true', () => {
+    expect(installReached('0.16.0-beta.3', '0.16.0-beta.3')).toBe(true);
+    expect(installReached('1.2.3', '1.2.3')).toBe(true);
+  });
+  test('same MMP, running beta is behind attempted beta → false (the PRD-7149 case)', () => {
+    expect(installReached('0.16.0-beta.1', '0.16.0-beta.3')).toBe(false);
+    expect(installReached('0.16.0-beta.2', '0.16.0-beta.10')).toBe(false);
+  });
+  test('same MMP, running beta is ahead → true', () => {
+    expect(installReached('0.16.0-beta.5', '0.16.0-beta.3')).toBe(true);
+  });
+  test('stable outranks a prerelease of the same MMP', () => {
+    expect(installReached('0.16.0', '0.16.0-beta.3')).toBe(true);
+    expect(installReached('0.16.0-beta.3', '0.16.0')).toBe(false);
+  });
+  test('MMP dominates prerelease', () => {
+    expect(installReached('0.17.0-beta.1', '0.16.0-beta.3')).toBe(true);
+    expect(installReached('0.15.9', '0.16.0-beta.1')).toBe(false);
+    expect(installReached('1.0.0', '0.16.0')).toBe(true);
+  });
+  test('unparseable input → true (conservative: assume success, never cry wolf)', () => {
+    expect(installReached('garbage', '0.16.0-beta.3')).toBe(true);
+    expect(installReached('0.16.0-beta.3', 'garbage')).toBe(true);
+  });
+  test('non-numeric prerelease identifiers compare in ASCII order', () => {
+    expect(installReached('1.0.0-beta', '1.0.0-alpha')).toBe(true);
+    expect(installReached('1.0.0-alpha', '1.0.0-beta')).toBe(false);
+  });
+  test('a numeric identifier ranks below a non-numeric one (semver §11.4.3)', () => {
+    expect(installReached('1.0.0-alpha', '1.0.0-1')).toBe(true);
+    expect(installReached('1.0.0-1', '1.0.0-alpha')).toBe(false);
+  });
+  test('length tie-break: more identifiers outrank fewer when all preceding are equal', () => {
+    expect(installReached('1.0.0-beta.1', '1.0.0-beta')).toBe(true);
+    expect(installReached('1.0.0-beta', '1.0.0-beta.1')).toBe(false);
   });
 });
 
@@ -1044,6 +1245,89 @@ describe('ok:update:relaunch-now IPC handler (AC18)', () => {
     expect(rig.logger.warn).toHaveBeenCalled();
   });
 
+  test('broadcasts ok:update:relaunching to EVERY open window so all swap in lockstep', () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', extraWindowCount: 2 });
+    expect(rig.windows).toHaveLength(3);
+    rig.ipc.invoke('ok:update:relaunch-now');
+    for (const win of rig.windows) {
+      const relaunching = win.filter((c) => c.channel === 'ok:update:relaunching');
+      expect(relaunching).toHaveLength(1);
+      expect(relaunching[0]?.payload).toEqual({ version: '0.3.2' });
+    }
+    expect(rig.dispatches.filter((d) => d === 'relaunching-broadcast')).toHaveLength(1);
+  });
+
+  test('quitAndInstall throw → state restored + every window re-armed via ok:update:downloaded + invoke rejects', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', extraWindowCount: 2 });
+    rig.updater.quitAndInstall = mock(() => {
+      throw new Error('SQRLInstallerErrorDomain Code=-9');
+    });
+    await expect(Promise.resolve(rig.ipc.invoke('ok:update:relaunch-now'))).rejects.toThrow(
+      'SQRLInstallerErrorDomain Code=-9',
+    );
+    expect(rig.state.versionPendingInstall).toBe('0.3.2');
+    for (const win of rig.windows) {
+      expect(win.filter((c) => c.channel === 'ok:update:relaunching')).toHaveLength(1);
+      const reArm = win.filter((c) => c.channel === 'ok:update:downloaded');
+      expect(reArm).toHaveLength(1);
+      expect(reArm[0]?.payload).toEqual({ version: '0.3.2' });
+      const failed = win.filter((c) => c.channel === 'ok:update:relaunch-failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.payload).toEqual({
+        version: '0.3.2',
+        message: 'SQRLInstallerErrorDomain Code=-9',
+      });
+    }
+    expect(rig.dispatches).toContain('relaunch-failed-rearm' as DispatchKind);
+    rig.updater.quitAndInstall = mock(() => {});
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    expect(rig.updater.quitAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  test('does NOT broadcast ok:update:relaunching when nothing is pending (gated)', () => {
+    const { rig } = makeRig({ versionPendingInstall: null, extraWindowCount: 2 });
+    rig.ipc.invoke('ok:update:relaunch-now');
+    for (const win of rig.windows) {
+      expect(win.filter((c) => c.channel === 'ok:update:relaunching')).toHaveLength(0);
+    }
+    expect(rig.dispatches).not.toContain('relaunching-broadcast' as DispatchKind);
+  });
+
+  test('broadcasts ok:update:relaunching BEFORE the prepareForRelaunch teardown runs', async () => {
+    const captured: CapturedSend[] = [];
+    const ipc = makeFakeIpc();
+    let state: AppState = { ...emptyState(), versionPendingInstall: '0.3.2' };
+    let relaunchingSeenAtTeardown = -1;
+    const win = makeFakeWindow(captured);
+    startAutoUpdater({
+      updater: new FakeUpdater(),
+      ipcMain: ipc,
+      readState: () => state,
+      writeState: (next) => {
+        state = next;
+      },
+      getPrimaryWindow: () => win,
+      getAllWindows: () => [win],
+      getAppVersion: () => '0.3.1',
+      isPackaged: true,
+      prepareForRelaunch: async () => {
+        relaunchingSeenAtTeardown = captured.filter(
+          (c) => c.channel === 'ok:update:relaunching',
+        ).length;
+      },
+      clock: makeFakeClock(),
+      now: () => new Date(),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    await ipc.invoke('ok:update:relaunch-now');
+    expect(relaunchingSeenAtTeardown).toBe(1);
+  });
+
   test('destroy() removes the IPC handler', () => {
     const { rig, handle } = makeRig();
     handle.destroy();
@@ -1102,6 +1386,171 @@ describe('ok:update:relaunch-now IPC handler (AC18)', () => {
     expect(prepareForRelaunch).toHaveBeenCalledTimes(1);
     expect(rig.updater.quitAndInstall).toHaveBeenCalledTimes(1);
     expect(rig.logger.warn).toHaveBeenCalled();
+  });
+});
+
+describe('async relaunch failure — error event + no-quit watchdog', () => {
+  test('clean quitAndInstall return arms the watchdog at RELAUNCH_WATCHDOG_MS (packaged)', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rig.clock.lastMs).toBe(UPDATE_CHECK_INTERVAL_MS);
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    expect(rig.clock.lastMs).toBe(RELAUNCH_WATCHDOG_MS);
+    expect(rig.clock.lastCallback).not.toBeNull();
+  });
+
+  test('watchdog fire → state restored + every window re-armed + relaunch-failed broadcast', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', extraWindowCount: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rig.clock.lastMs).toBe(UPDATE_CHECK_INTERVAL_MS);
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    expect(rig.state.versionPendingInstall).toBeNull();
+    rig.clock.lastCallback?.();
+    expect(rig.state.versionPendingInstall).toBe('0.3.2');
+    for (const win of rig.windows) {
+      expect(win.filter((c) => c.channel === 'ok:update:downloaded')).toHaveLength(1);
+      const failed = win.filter((c) => c.channel === 'ok:update:relaunch-failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.payload).toEqual({
+        version: '0.3.2',
+        message: 'the update timed out',
+      });
+    }
+    expect(rig.dispatches.filter((d) => d === 'relaunch-watchdog-fired')).toHaveLength(1);
+  });
+
+  test('updater error while in flight → fast fail with the error detail, watchdog cleared', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', extraWindowCount: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rig.clock.lastMs).toBe(UPDATE_CHECK_INTERVAL_MS);
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    rig.updater.emit('error', new Error('ShipIt swap failed'));
+    expect(rig.state.versionPendingInstall).toBe('0.3.2');
+    for (const win of rig.windows) {
+      const failed = win.filter((c) => c.channel === 'ok:update:relaunch-failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.payload).toEqual({ version: '0.3.2', message: 'ShipIt swap failed' });
+    }
+    expect(rig.dispatches.filter((d) => d === 'relaunch-error-event')).toHaveLength(1);
+    expect(rig.dispatches.filter((d) => d === 'error-unclassified')).toHaveLength(1);
+    expect(rig.clock.lastCallback).toBeNull();
+    expect(rig.dispatches).not.toContain('relaunch-watchdog-fired' as DispatchKind);
+  });
+
+  test('CLASSIFIED error while in flight → additive error-classified + relaunch-error-event', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    rig.updater.emit('error', Object.assign(new Error('HTTP 500'), { code: 'HTTP_ERROR_500' }));
+    expect(rig.dispatches).toContain('error-classified' as DispatchKind);
+    expect(rig.dispatches.filter((d) => d === 'relaunch-error-event')).toHaveLength(1);
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(1);
+  });
+
+  test('in-flight error with EMPTY message → fallback detail on the failure notice', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    rig.updater.emit('error', new Error(''));
+    const failed = rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.payload).toEqual({
+      version: '0.3.2',
+      message: 'update error during relaunch',
+    });
+  });
+
+  test('updater error AFTER the watchdog already fired → no second relaunch-failed broadcast', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', extraWindowCount: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rig.clock.lastMs).toBe(UPDATE_CHECK_INTERVAL_MS);
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    rig.clock.lastCallback?.();
+    rig.updater.emit('error', new Error('ShipIt swap failed (late)'));
+    expect(rig.state.versionPendingInstall).toBe('0.3.2');
+    for (const win of rig.windows) {
+      const failed = win.filter((c) => c.channel === 'ok:update:relaunch-failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.payload).toEqual({
+        version: '0.3.2',
+        message: 'the update timed out',
+      });
+      expect(win.filter((c) => c.channel === 'ok:update:downloaded')).toHaveLength(1);
+    }
+    expect(rig.dispatches.filter((d) => d === 'relaunch-watchdog-fired')).toHaveLength(1);
+    expect(rig.dispatches).not.toContain('relaunch-error-event' as DispatchKind);
+  });
+
+  test('restore-persist failure inside failRelaunch → relaunch-failed still broadcasts, re-arm skipped', async () => {
+    const captured: CapturedSend[] = [];
+    const win = makeFakeWindow(captured);
+    const clock = makeFakeClock();
+    let state: AppState = { ...emptyState(), versionPendingInstall: '0.3.2' };
+    let failWrites = false;
+    const ipc = makeFakeIpc();
+    startAutoUpdater({
+      updater: new FakeUpdater(),
+      ipcMain: ipc,
+      readState: () => state,
+      writeState: (next) => {
+        if (failWrites) throw new Error('disk full');
+        state = next;
+      },
+      getPrimaryWindow: () => win,
+      getAllWindows: () => [win],
+      getAppVersion: () => '0.3.1',
+      isPackaged: true,
+      clock,
+      now: () => new Date(),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await ipc.invoke('ok:update:relaunch-now');
+    failWrites = true;
+    clock.lastCallback?.();
+    expect(state.versionPendingInstall).toBeNull();
+    expect(captured.filter((c) => c.channel === 'ok:update:downloaded')).toHaveLength(0);
+    const failed = captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.payload).toEqual({ version: '0.3.2', message: 'the update timed out' });
+  });
+
+  test('updater error with NO relaunch in flight → no relaunch-failed broadcast (normal error path)', () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2' });
+    rig.updater.emit('error', new Error('routine check failure'));
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.state.versionPendingInstall).toBe('0.3.2');
+  });
+
+  test('watchdog NOT armed when isPackaged=false (dev quitAndInstall no-op is not a failure)', async () => {
+    const { rig } = makeRig({ versionPendingInstall: '0.3.2', isPackaged: false });
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    expect(rig.clock.lastCallback).toBeNull();
+    rig.updater.emit('error', new Error('dev error'));
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+  });
+
+  test('destroy() clears the armed watchdog', async () => {
+    const { rig, handle } = makeRig({ versionPendingInstall: '0.3.2' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rig.clock.lastMs).toBe(UPDATE_CHECK_INTERVAL_MS);
+    await rig.ipc.invoke('ok:update:relaunch-now');
+    expect(rig.clock.lastCallback).not.toBeNull();
+    handle.destroy();
+    expect(rig.clock.lastCallback).toBeNull();
   });
 });
 

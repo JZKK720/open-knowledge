@@ -37,6 +37,15 @@ describe('installPackSkill', () => {
     ]);
   });
 
+  test('installs the codebase-wiki pack skill from the source assets', () => {
+    const proj = tmpProject();
+    setUpEditor(proj, '.claude');
+    expect(installPackSkill(proj, 'codebase-wiki')).toEqual(['Claude Code']);
+    expect(
+      existsSync(join(proj, '.claude', 'skills', 'open-knowledge-pack-codebase-wiki', 'SKILL.md')),
+    ).toBe(true);
+  });
+
   test('no-op when no editor is set up (no platform skill present)', () => {
     expect(installPackSkill(tmpProject(), 'knowledge-base')).toEqual([]);
   });

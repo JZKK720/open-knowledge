@@ -79,6 +79,44 @@ describe('renderBanner', () => {
     expect(output).toContain('Ctrl+C');
   });
 
+  test('renders next-steps lines when provided', () => {
+    const output = renderBanner({
+      name: 'open-knowledge',
+      version: VERSION,
+      localUrl: 'http://localhost:3000',
+      nextSteps: ['Open the Editor URL in your browser to start editing.'],
+    });
+    expect(output).toContain('Open the Editor URL in your browser to start editing.');
+    expect(output).toContain('Ctrl+C');
+  });
+
+  test('omits next-steps section when not provided', () => {
+    const output = renderBanner({
+      name: 'open-knowledge',
+      version: VERSION,
+      localUrl: 'http://localhost:3000',
+    });
+    expect(output).not.toContain('Open the Editor URL');
+  });
+
+  test('box lines stay consistent width with next-steps lines', () => {
+    const output = renderBanner({
+      name: 'open-knowledge',
+      version: VERSION,
+      localUrl: 'http://localhost:3000',
+      apiUrl: 'http://localhost:52345',
+      nextSteps: ['Open the Editor URL in your browser to start editing.'],
+    });
+    const stripped = output
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI stripping
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional OSC 8 hyperlink stripping
+      .replace(/\x1b\]8;;[^\x07]*\x07/g, '');
+    const lines = stripped.split('\n').filter((l) => l.trim().length > 0);
+    const uniqueWidths = [...new Set(lines.map((l) => l.length))];
+    expect(uniqueWidths).toHaveLength(1);
+  });
+
   test('uses box-drawing characters', () => {
     const output = renderBanner({
       name: 'open-knowledge',

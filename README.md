@@ -1,65 +1,59 @@
-# Open Knowledge
+# OpenKnowledge
 
-Open Knowledge is a local-first knowledge base for teams that want docs, help-center content, SOPs, and agent-facing knowledge to live in one structured editing system.
+OpenKnowledge is a beautiful, local-first WYSIWYG markdown editor with integrations for Claude, Codex, and other harnesses. For personal notes, knowledge bases, specs, and LLM wikis.
 
-The project includes a desktop app, web app, server, CLI, shared core packages, and docs site. It uses Bun workspaces and Turbo for builds.
+<img
+  src="assets/hero.webp"
+  alt="OpenKnowledge editor with an AI agent drafting a launch recap"
+  width="100%"
+  style="border-radius: 10px"
+/>
 
-## Repository Model
+<div align="center">
+  <a href="https://github.com/inkeep/open-knowledge/releases/latest/download/OpenKnowledge-arm64.dmg">macOS app</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">Web App / CLI</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://x.com/OpenKnowledgeAI">𝕏</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://discord.com/invite/YujKpFN49">Discord</a>
+</div>
 
-This public repository is mirrored from Inkeep's internal monorepo with Copybara. The internal source path is `public/open-knowledge/` in `inkeep/agents-private`.
+# Features
 
-Public pull requests are welcome. When a public PR opens here, automation mirrors it into the internal monorepo for review and merge. After the internal PR lands, Copybara syncs the accepted change back to this repository.
+Key highlights:
+- Full true **WYSIWYG** so that editing markdown files feels like editing a Google Doc or Notion page. 
+- Collaborative **AI-editing** with **Claude, Codex, and Cursor desktop apps**. Can be used with any harness/agent via MCP/CLI, like OpenCode.
+- Out-of-the-box **MCP**, **skills**, and **agentic search** for LLM Wikis, agent second brains, and knowledge graphs.
+- No-code **Team sharing** and **Auto-sync** powered by git/GitHub under the hood.
+- **Embeddable HTML** and rich components for writing engineering specs and visualized reports.
+- A **built-in TUI** in the Desktop app and a Web UI for users who prefer terminals.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contribution flow, including the [Contributor License Agreement](./CLA.md), and [AGENTS.md](./AGENTS.md) for agent-facing development guidance.
+Docs for general usage: <https://openknowledge.ai/docs>.
 
-## Prerequisites
+## Install
 
-- Bun 1.3.13 or newer (pinned in [`.bun-version`](./.bun-version))
-- Node.js 24 or newer (pinned in [`.node-version`](./.node-version))
-- Git
+**macOS:** download the desktop app — open the DMG, drag **OpenKnowledge** to **Applications**, and launch it. [Latest release](https://github.com/inkeep/open-knowledge/releases/latest).
 
-If you use a Node version manager, pin Node 24 with `fnm install`, `volta install node@24`, or `mise install`. Earlier Node versions fail `engines` checks during `bun install`.
-
-## Quick Start
-
-```bash
-bun install
-bun run check
-```
-
-Run the app locally:
-
-```bash
-bun run --filter @inkeep/open-knowledge-app dev
-```
-
-Run the docs site locally:
-
-```bash
-cd docs
-bun run dev
-```
-
-## Monorepo Layout
-
-- `packages/app` - web app and editor UI
-- `packages/cli` - command-line entrypoint
-- `packages/core` - shared domain logic
-- `packages/desktop` - Electron desktop app
-- `packages/plugin` - agent integration package
-- `packages/server` - local server
-- `docs` - documentation site
-
-## Development
+**Linux, Windows, Intel Mac:** run the same editor as a local web app via the CLI ([Node.js 24+](https://nodejs.org) required):
 
 ```bash
-bun run format
-bun run lint
-bun run typecheck
-bun run test
-bun run build
+npm install -g @inkeep/open-knowledge
+cd your-project
+ok init          # scaffold the project + wire up Claude Code, Cursor, and Codex
+ok start --open  # serve the web editor and open it in your browser
 ```
+
+## Contributions
+
+Public pull requests are welcome. When a public PR opens here, automation mirrors it into the internal monorepo for review and merge. 
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
 ## License
 
-Open Knowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`).
+OpenKnowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`).
+
+<p align="center">
+  ⭐️ If you'd like to support this project, consider starring the repo ⭐️
+</p>

@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, posix, win32 } from 'node:path';
 import { __testing, resolveBundledSkillDir } from './build-skill-zip.ts';
 
-const { computeWrapperFolderName, toPosixZipPath } = __testing;
+const { computeWrapperFolderName, extractMetadataVersion, toPosixZipPath } = __testing;
 
 /** Build the `Contents/Resources/cli/dist/assets/skills/<which>` subpath that
  *  a co-installed OK Desktop ships, rooted at an arbitrary `appsRoot`. */
 function desktopSkillDir(appsRoot: string, which: 'discovery' | 'project'): string {
   return join(
     appsRoot,
-    'Open Knowledge.app',
+    'OpenKnowledge.app',
     'Contents',
     'Resources',
     'cli',
@@ -21,6 +21,24 @@ function desktopSkillDir(appsRoot: string, which: 'discovery' | 'project'): stri
     which,
   );
 }
+
+describe('extractMetadataVersion', () => {
+  const FM_BODY = 'name: open-knowledge\nmetadata:\n  version: "1.2.3"\n';
+
+  test('reads metadata.version from a bare-fence SKILL.md', () => {
+    expect(extractMetadataVersion(`---\n${FM_BODY}---\n\n# Skill\n`)).toBe('1.2.3');
+  });
+
+  test('tolerates trailing whitespace on the fence lines (core fence contract)', () => {
+    expect(extractMetadataVersion(`--- \n${FM_BODY}--- \n\n# Skill\n`)).toBe('1.2.3');
+    expect(extractMetadataVersion(`---\t\n${FM_BODY}---\n\n# Skill\n`)).toBe('1.2.3');
+  });
+
+  test('returns undefined when frontmatter or metadata.version is absent', () => {
+    expect(extractMetadataVersion('# No frontmatter\n')).toBeUndefined();
+    expect(extractMetadataVersion('---\nname: open-knowledge\n---\n')).toBeUndefined();
+  });
+});
 
 describe('computeWrapperFolderName', () => {
   test('POSIX: returns last segment', () => {
@@ -100,7 +118,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: true,
       });
-      expect(dir).toContain('Open Knowledge.app');
+      expect(dir).toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -115,7 +133,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: true,
       });
-      expect(dir).toContain('Open Knowledge.app');
+      expect(dir).toContain('OpenKnowledge.app');
       expect(dir.endsWith('project')).toBe(true);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -131,7 +149,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'darwin',
         checkDesktop: false,
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -146,7 +164,7 @@ describe('resolveBundledSkillDir', () => {
         platform: 'linux',
         checkDesktop: true,
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -160,7 +178,7 @@ describe('resolveBundledSkillDir', () => {
         home,
         platform: 'darwin',
       });
-      expect(dir).not.toContain('Open Knowledge.app');
+      expect(dir).not.toContain('OpenKnowledge.app');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -10,7 +10,11 @@ export default defineConfig({
   globalSetup: './tests/smoke/_helpers/stale-build-guard.ts',
   workers: 1,
   fullyParallel: false,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [
+    ['list'],
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/desktop-smoke-results.json' }],
+  ],
   use: {
     trace: 'retain-on-failure',
   },

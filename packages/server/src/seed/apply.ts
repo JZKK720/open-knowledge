@@ -10,21 +10,21 @@ function resolveFileContent(
   templateId: string,
   pack: ReturnType<typeof resolvePack>,
 ): string | undefined {
-  const fmMatch = /^([^/]+)\/\.ok\/frontmatter\.yml$/.exec(templateId);
+  if (pack.rootFiles?.[templateId] !== undefined) {
+    return pack.rootFiles[templateId];
+  }
+
+  const fmMatch = /^(.+)\/\.ok\/frontmatter\.yml$/.exec(templateId);
   if (fmMatch) {
     const folder = pack.folders.find((f) => f.path === fmMatch[1]);
     if (!folder) return undefined;
     return buildStarterFolderFrontmatterYaml(folder);
   }
 
-  const tplMatch = /^([^/]+)\/\.ok\/templates\/([^/]+)\.md$/.exec(templateId);
+  const tplMatch = /^(.+)\/\.ok\/templates\/([^/]+)\.md$/.exec(templateId);
   if (tplMatch) {
     const templateName = tplMatch[2] ?? '';
     return pack.templates[templateName];
-  }
-
-  if (!templateId.includes('/') && pack.rootFiles?.[templateId] !== undefined) {
-    return pack.rootFiles[templateId];
   }
 
   return undefined;

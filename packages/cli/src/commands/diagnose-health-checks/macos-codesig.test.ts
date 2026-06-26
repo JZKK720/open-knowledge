@@ -17,7 +17,7 @@ describe('macos-codesig check', () => {
   test('passes with skip on win32', async () => {
     const def = makeMacosCodesigCheck({
       platform: 'win32',
-      execPath: 'C:\\Program Files\\Open Knowledge\\ok.exe',
+      execPath: 'C:\\Program Files\\OpenKnowledge\\ok.exe',
     });
     const result = await def.run(ctx);
     expect(result.status).toBe('pass');
@@ -38,7 +38,7 @@ describe('macos-codesig check', () => {
     const def = makeMacosCodesigCheck({
       platform: 'darwin',
       execPath:
-        '/private/var/folders/x/abc/T/AppTranslocation/12345/d/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+        '/private/var/folders/x/abc/T/AppTranslocation/12345/d/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
     });
     const result = await def.run(ctx);
     expect(result.status).toBe('fail');
@@ -49,18 +49,18 @@ describe('macos-codesig check', () => {
   test('passes when bundle path is normal and codesign --verify succeeds', async () => {
     const def = makeMacosCodesigCheck({
       platform: 'darwin',
-      execPath: '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      execPath: '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       codesignVerify: () => ({ ok: true, stderr: '' }),
     });
     const result = await def.run(ctx);
     expect(result.status).toBe('pass');
-    expect(result.summary).toContain('/Applications/Open Knowledge.app');
+    expect(result.summary).toContain('/Applications/OpenKnowledge.app');
   });
 
   test('fails when codesign --verify exits non-zero', async () => {
     const def = makeMacosCodesigCheck({
       platform: 'darwin',
-      execPath: '/Applications/Open Knowledge.app/Contents/MacOS/Open Knowledge',
+      execPath: '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge',
       codesignVerify: () => ({ ok: false, stderr: 'invalid signature' }),
     });
     const result = await def.run(ctx);

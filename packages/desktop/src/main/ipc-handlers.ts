@@ -266,60 +266,6 @@ export async function trashItem(deps: TrashItemDeps, absPath: string): Promise<T
   }
 }
 
-type OpenInTerminalReason = 'not-found' | 'spawn-error' | 'timeout' | 'path-escape';
-
-type OpenInTerminalOutcome = { ok: true } | { ok: false; reason: OpenInTerminalReason };
-
-interface OpenInTerminalDeps {
-  readonly platform: NodeJS.Platform;
-  readonly projectPath: string | undefined;
-  readonly realpath: (path: string) => string;
-  readonly spawn: (
-    exec: string,
-    args: ReadonlyArray<string>,
-    timeoutMs: number,
-  ) => Promise<SpawnOutcome>;
-  readonly timeoutMs?: number;
-}
-
-const MACOS_OPEN_BINARY = '/usr/bin/open';
-
-function translateSpawnOutcomeReason(
-  reason: Extract<SpawnOutcome, { ok: false }>['reason'],
-): OpenInTerminalReason {
-  if (reason === 'not-installed') return 'not-found';
-  if (reason === 'invalid-path') return 'path-escape';
-  return reason;
-}
-
-export async function openInTerminal(
-  deps: OpenInTerminalDeps,
-  dirAbsPath: string,
-): Promise<OpenInTerminalOutcome> {
-  if (!validateSpawnPath(dirAbsPath, deps.platform)) {
-    return { ok: false, reason: 'path-escape' };
-  }
-  if (deps.projectPath === undefined) {
-    return { ok: false, reason: 'path-escape' };
-  }
-  let resolved: string;
-  try {
-    resolved = deps.realpath(dirAbsPath);
-  } catch {
-    return { ok: false, reason: 'not-found' };
-  }
-  if (!isPathWithinProject(resolved, deps.projectPath, deps.platform)) {
-    return { ok: false, reason: 'path-escape' };
-  }
-  const outcome = await deps.spawn(
-    MACOS_OPEN_BINARY,
-    ['-a', 'Terminal.app', resolved],
-    deps.timeoutMs ?? SPAWN_TIMEOUT_MS,
-  );
-  if (outcome.ok) return { ok: true };
-  return { ok: false, reason: translateSpawnOutcomeReason(outcome.reason) };
-}
-
 interface RecordHandoffDeps {
   readonly homedir: () => string;
   readonly appendFile: (path: string, content: string) => Promise<void>;

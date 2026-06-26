@@ -82,6 +82,17 @@ afterEach(() => {
 });
 
 describe('handleRollback — rename history mitigation (US-005)', () => {
+  /** Strictly-increasing ISO commit timestamps (1s apart) so checkpoints and
+   *  the rename commit order deterministically without real-time ticks (git
+   *  committer dates are 1-second-granular). */
+  function makeTick(startIso = '2026-05-05T12:00:00.000Z') {
+    let t = Date.parse(startIso);
+    return () => {
+      t += 1000;
+      return new Date(t).toISOString();
+    };
+  }
+
   async function setup() {
     const projectDir = tmpDir;
     const contentDir = resolve(tmpDir, 'content');
@@ -102,16 +113,18 @@ describe('handleRollback — rename history mitigation (US-005)', () => {
       name: 'Test',
       email: 'test@example.com',
     };
+    const at = makeTick();
 
     rmSync(resolve(contentDir, 'placeholder.md'));
     writeFileSync(resolve(contentDir, 'a.md'), '# A pre-rename\n');
-    const commitA = await commitWip(shadow, writer, 'content', 'WIP: a v1');
-    await saveVersion(shadow, 'content', [writer]);
-    await new Promise((r) => setTimeout(r, 1100));
+    const commitA = await commitWip(shadow, writer, 'content', 'WIP: a v1', 'main', { date: at() });
+    await saveVersion(shadow, 'content', [writer], 'main', undefined, { date: at() });
 
     rmSync(resolve(contentDir, 'a.md'));
     writeFileSync(resolve(contentDir, 'b.md'), '# B post-rename\n');
-    const renameCommit = await commitWip(shadow, writer, 'content', 'rename: a -> b');
+    const renameCommit = await commitWip(shadow, writer, 'content', 'rename: a -> b', 'main', {
+      date: at(),
+    });
 
     const index = createEmptyIndex();
     appendRenameLogEntry(
@@ -160,7 +173,7 @@ describe('handleRollback — rename history mitigation (US-005)', () => {
       return captured;
     };
 
-    return { shadow, contentDir, commitA, renameCommit, callRollback, docName, hocuspocus };
+    return { shadow, contentDir, commitA, renameCommit, callRollback, docName, hocuspocus, at };
   }
 
   test('rollback to pre-rename commit (path a.md) → resolves via cycle bound, restores content, name unchanged', async () => {
@@ -199,9 +212,8 @@ describe('handleRollback — rename history mitigation (US-005)', () => {
   });
 
   test('contamination case: SHA from a name-reuse cycle → 404, no shadow commit written', async () => {
-    const { shadow, contentDir, callRollback, docName } = await setup();
+    const { shadow, contentDir, callRollback, docName, at } = await setup();
 
-    await new Promise((r) => setTimeout(r, 1100));
     rmSync(resolve(contentDir, 'b.md'));
     writeFileSync(resolve(contentDir, 'a.md'), '# A new (unrelated)\n');
     const writer: WriterIdentity = {
@@ -209,8 +221,10 @@ describe('handleRollback — rename history mitigation (US-005)', () => {
       name: 'Test',
       email: 'test@example.com',
     };
-    const newACommit = await commitWip(shadow, writer, 'content', 'WIP: new-a');
-    await saveVersion(shadow, 'content', [writer]);
+    const newACommit = await commitWip(shadow, writer, 'content', 'WIP: new-a', 'main', {
+      date: at(),
+    });
+    await saveVersion(shadow, 'content', [writer], 'main', undefined, { date: at() });
 
     const response = await callRollback({ docName, commitSha: newACommit });
     expect(response.status).toBe(404);

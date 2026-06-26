@@ -1,6 +1,7 @@
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/page';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { metaDescription, SITE_NAME, TWITTER_HANDLE } from '@/lib/site';
 import { source } from '@/lib/source';
 import { getMDXComponents } from '@/mdx-components';
 
@@ -10,9 +11,15 @@ export default async function Page(props: PageProps<'/docs/[...slug]'>) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const hideFooter = page.data.footer === false;
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      footer={hideFooter ? { enabled: false } : undefined}
+      article={hideFooter ? { className: 'pb-12' } : undefined}
+    >
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
@@ -37,25 +44,29 @@ export async function generateMetadata(props: PageProps<'/docs/[...slug]'>): Pro
     .filter(Boolean);
 
   const ogImageUrl = `/og/docs/${params.slug.join('/')}`;
+  const description = metaDescription(page.data.description);
 
   return {
     title: page.data.title,
-    description: page.data.description,
+    description,
     keywords,
     alternates: {
       canonical: page.url,
     },
     openGraph: {
       type: 'article',
+      siteName: SITE_NAME,
       title: page.data.title,
-      description: page.data.description,
+      description,
       url: page.url,
       images: [ogImageUrl],
     },
     twitter: {
       card: 'summary_large_image',
+      site: TWITTER_HANDLE,
+      creator: TWITTER_HANDLE,
       title: page.data.title,
-      description: page.data.description,
+      description,
       images: [ogImageUrl],
     },
   };

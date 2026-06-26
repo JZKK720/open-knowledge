@@ -48,7 +48,7 @@ async function showUnknownErrorDialog(deps: EnsureGitDeps, err: Error): Promise<
       buttons: ['Quit'],
       defaultId: 0,
       cancelId: 0,
-      title: 'Open Knowledge could not start',
+      title: 'OpenKnowledge could not start',
       message: 'An unexpected error occurred during startup.',
       detail: err.message,
     });
@@ -88,8 +88,8 @@ export async function ensureGitAvailable(deps: EnsureGitDeps): Promise<EnsureGit
     const title = currentErr instanceof GitTooOldError ? 'Git too old' : 'Git not found';
     const message =
       currentErr instanceof GitTooOldError
-        ? `Open Knowledge requires ${currentErr.guidance.product} ${currentErr.required} or newer.`
-        : `Open Knowledge needs ${currentErr.guidance.product} to track changes to your knowledge base.`;
+        ? `OpenKnowledge requires ${currentErr.guidance.product} ${currentErr.required} or newer.`
+        : `OpenKnowledge needs ${currentErr.guidance.product} to track changes to your knowledge base.`;
     const detail =
       failedInstallUrl === null
         ? currentErr.message

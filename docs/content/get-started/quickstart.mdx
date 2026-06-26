@@ -1,11 +1,14 @@
 ---
 title: Quickstart
-description: Get your Agent maintained knowledge base up and running in less than five minutes.
+description: Set up your agent-maintained knowledge base in less than five minutes.
 ---
+<Tabs groupId="ok-install" persist className="ok-flush-tabs" items={['macOS app', 'Web app (Linux, Windows, Intel Mac)']}>
+
+<Tab>
 
 <Callout type="info" title="Prerequisites">
-  - **macOS.** Windows and Linux are not yet supported.
-  - **`git`.** Open Knowledge initializes a git repo for your project (used for the timeline and recovery features). Pre-installed via Xcode Command Line Tools on most macOS machines; install with `xcode-select --install` if missing.
+  - **macOS on Apple Silicon** (M1 or later).
+  - **`git`.** OpenKnowledge initializes a git repo for your project (used for the timeline and recovery features). Install from [git-scm.com](https://git-scm.com/install/mac).
 </Callout>
 
 <Steps>
@@ -14,64 +17,78 @@ description: Get your Agent maintained knowledge base up and running in less tha
 
 ### Install the desktop app
 
-Download Open Knowledge for macOS. Open the DMG, drag **Open Knowledge** to **Applications**, and launch it.
+Download the latest version of the OpenKnowledge desktop app for macOS.
 
-<DownloadButton href="https://github.com/inkeep/open-knowledge-legacy/releases/latest/download/Open-Knowledge-arm64.dmg" label="Download for macOS" />
-
-_Apple Silicon (M1 and later) only for now; Intel Macs are not yet supported._
+<DownloadButton label="Download for macOS" />
 
 </Step>
 
 <Step>
 
-### Pick a project
+### Create a new project
 
-Click **Pick Existing Project** to choose one, or click **Create New Project** to scaffold a fresh one. You can also **Clone from GitHub** to pull down a remote repo.
-
-The first-launch consent dialog detects every MCP-capable editor on your machine (Claude Code, Cursor, Codex, Claude Desktop) and offers to wire them up to Open Knowledge.
-
-</Step>
-
-<Step>
-
-### Open the project in your AI tool
-
-Click the <OpenWithAiButton /> button and select your preferred tool. This dispatches the current file, folder, or project to your chosen agent with a starter prompt.
-
-If your tool prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+- Open the OpenKnowledge app and click **Create new project**.
+- Type a name for your project (for example, *Team Wiki*).
+- Optionally click **Browse** to change where the project is saved, then click **Create**.
 
 </Step>
 
 <Step>
 
-### Ask the agent to edit a doc
+### Initialize a knowledge base
 
-Opening a project initializes the Open Knowledge MCP tools for that project. From then on, your agent prefers Open Knowledge's tool wrappers over its built-in file operations, so its edits keep your front matter consistent and your links intact.
-
-Try one of these:
-
-> Add a new note explaining how this project handles authentication.
-
-> Search for any docs that mention OAuth.
-
-> List the recent docs.
-
-Or something structural:
-
-> Set up a `specs/` folder and gather all my specifications into it. Give them consistent front matter so I can query them easily.
+From your newly created project, select **Knowledge base** from the landing page, leave **Project root** selected, and click **Initialize**.
 
 </Step>
 
 <Step>
 
-### Look around
+### Open the knowledge base in your AI agent
+
+On a new, empty knowledge base the editor opens to the **"What would you like to create?"** create screen. Type what you want to build into its composer and click **Create with Claude** — use the chevron beside the button to pick a different agent (Codex, Cursor, or a CLI). This hands your project to the agent with your prompt as the starter. Your agent harness may take a few seconds to load the project.
+
+(Once you have docs open, you can also hand the current doc to an agent from the **Ask AI** field at the bottom of the editor, or by right-clicking the project in the sidebar and choosing **Open with AI ▸**.)
+
+Not sure what to write? Paste this into the composer (or use a topic of your choice):
+
+<CopyPrompt>Create a knowledge base about Large Language Models. Include an overview page and separate pages for three key concepts.</CopyPrompt>
+
+<Callout type="info">
+  To avoid having to approve all OpenKnowledge tool calls, set your agent to auto-mode, full-access, or an equivalent setting.
+</Callout>
+
+<Callout type="info">
+  If your agent prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+</Callout>
+
+</Step>
+
+<Step>
+
+### Watch your agent work
+
+If you are working with Cursor, Codex, or Claude Desktop, your agent will open the OpenKnowledge editor in an embedded window. Otherwise, your agent will open the OpenKnowledge editor in your system browser.
+
+You will see your agent's icon in the top right of the editor window. Click on the icon to see the agent's [activity](/docs/features/agent-activity) across files in the knowledge base.
+
+If the agent icon is greyed out, your agent may not have started writing yet. Wait a few seconds and check again.
+
+</Step>
+
+<Step>
+
+### Explore the knowledge base
 
 The editor's sidebar shows every doc in your knowledge base. Each doc has:
 
 - A WYSIWYG body and a source-mode toggle
 - A frontmatter panel for properties
-- A timeline of recent edits with per-burst diffs and selective rollback
-- Backlinks to other docs that reference it
+
+When viewing a document, check out the right side pane for:
+- An outline of the document's structure
+- A list of incoming and outgoing links to other docs
+- A graph view of the document's links in the knowledge base
+- A [timeline](/docs/features/timeline-and-recovery) of recent edits with per-burst diffs and selective rollback
 
 Right-click anywhere in the sidebar (empty space, a folder, or a file) to create, reveal, rename, hide, delete (to Trash), and **Open with AI**. The full feature tour is under [Features](/docs/features/editor).
 
@@ -79,18 +96,95 @@ Right-click anywhere in the sidebar (empty space, a folder, or a file) to create
 
 </Steps>
 
-## Configure it (optional)
+</Tab>
 
-Open Knowledge works out of the box; configuration is optional. When you do want to change something, settings live in three files, and the most specific one wins:
+<Tab>
 
-- **Project** — `.ok/config.yml`, shared with your team via git
-- **User** — `~/.ok/global.yml`, personal to you across every project on your machine
-- **This machine** — `.ok/local/config.yml`, per-machine and not shared (gitignored)
+<Callout type="info" title="Prerequisites">
+  - **Node.js 24+.** OpenKnowledge requires Node.js 24 or higher. Download from [nodejs.org](https://nodejs.org/en/download/).
+  - **`git`.** OpenKnowledge initializes a git repo for your project (used for the timeline and recovery features). Install it from [git-scm.com](https://git-scm.com) or your package manager.
+</Callout>
 
-Change settings in the editor's **Settings** pane (Cmd/Ctrl-,), or edit `.ok/config.yml` directly (it ships with a `$schema` comment for autocomplete and inline descriptions). Full reference: [Configuration](/docs/reference/configuration).
+<Steps>
+
+<Step>
+
+### Install the CLI and open the editor
+
+Install the CLI from npm, initialize a project, and start the editor in your browser:
+
+```bash
+# Install the CLI (puts `ok` on your PATH)
+npm install -g @inkeep/open-knowledge
+
+# Create (or enter) a project folder, then initialize a knowledge base.
+# `ok init` scaffolds .ok/ and wires up Claude Code, Cursor, Codex, and OpenCode.
+mkdir my-knowledge-base && cd my-knowledge-base
+ok init
+
+# Serve the editor and open it in your browser.
+ok start --open
+```
+
+</Step>
+
+<Step>
+
+### Open the knowledge base in your AI agent
+
+`ok init` already registered OpenKnowledge with the AI editors it detected, so your agent can use the OpenKnowledge tools right away. Open your project in your agent — or, from the editor, right-click the project in the sidebar, choose **Open with AI ▸**, and pick one. (The bottom **Ask AI** field is available in the desktop app only.)
+
+In the agent's chat window, add the following to get started or use a topic of your choice:
+
+<CopyPrompt>Create a knowledge base about Large Language Models. Include an overview page and separate pages for three key concepts.</CopyPrompt>
+
+<Callout type="info">
+  To avoid having to approve all OpenKnowledge tool calls, set your agent to auto-mode, full-access, or an equivalent setting.
+</Callout>
+
+<Callout type="info">
+  If your agent prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+</Callout>
+
+</Step>
+
+<Step>
+
+### Watch your agent work
+
+You will see your agent's icon in the top right of the editor window. Click on the icon to see the agent's [activity](/docs/features/agent-activity) across files in the knowledge base.
+
+If the agent icon is greyed out, your agent may not have started writing yet. Wait a few seconds and check again.
+
+</Step>
+
+<Step>
+
+### Explore the knowledge base
+
+The editor's sidebar shows every doc in your knowledge base. Each doc has:
+
+- A WYSIWYG body and a source-mode toggle
+- A frontmatter panel for properties
+
+When viewing a document, check out the right side pane for:
+- An outline of the document's structure
+- A list of incoming and outgoing links to other docs
+- A graph view of the document's links in the knowledge base
+- A [timeline](/docs/features/timeline-and-recovery) of recent edits with per-burst diffs and selective rollback
+
+Right-click anywhere in the sidebar (empty space, a folder, or a file) to create, reveal, rename, hide, delete, and **Open with AI**. The full feature tour is under [Features](/docs/features/editor).
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>
 
 ## What's next
 
-- Per-editor setup details: [Integrations](/docs/integrations/claude-code)
-- Tools the agent has access to: [MCP](/docs/reference/mcp)
-- Configure Open Knowledge: [Configuration](/docs/reference/configuration)
+- Syncing your knowledge base to GitHub: [Syncing](/docs/features/github-sync)
+- Define folders and templates: [Folders and templates](/docs/advanced/folders-and-templates)
+- Configure OpenKnowledge: [Configuration](/docs/reference/configuration)

@@ -722,6 +722,56 @@ describe('parseCheckpoint / formatCheckpointBodyLine (bridge-correctness SPEC §
     const checkpoint = parseCheckpoint(body);
     expect(checkpoint?.kind).toBe('bridge-merge-loss');
   });
+
+  test('round-trips auto-consolidation with foldedRefs + trigger', () => {
+    const line = formatCheckpointBodyLine({
+      kind: 'auto-consolidation',
+      docName: null,
+      size: null,
+      metadata: { foldedRefs: 7, trigger: 'dead-chain' },
+    });
+    const body = `checkpoint: Consolidated 7 inactive sessions\n\n${line}`;
+    const parsed = parseCheckpoint(body);
+    expect(parsed?.kind).toBe('auto-consolidation');
+    if (parsed?.kind === 'auto-consolidation') {
+      expect(parsed.metadata.foldedRefs).toBe(7);
+      expect(parsed.metadata.trigger).toBe('dead-chain');
+    }
+  });
+
+  test('auto-consolidation: malformed metadata returns null (foldedRefs/trigger required)', () => {
+    expect(
+      parseCheckpoint(
+        '\nok-checkpoint-v1: {"kind":"auto-consolidation","metadata":{"foldedRefs":3}}',
+      ),
+    ).toBe(null);
+    expect(
+      parseCheckpoint(
+        '\nok-checkpoint-v1: {"kind":"auto-consolidation","metadata":{"trigger":"boot"}}',
+      ),
+    ).toBe(null);
+  });
+
+  test('auto-consolidation: trigger parses as a bare string (forward-compat with new triggers)', () => {
+    const parsed = parseCheckpoint(
+      '\nok-checkpoint-v1: {"kind":"auto-consolidation","metadata":{"foldedRefs":1,"trigger":"some-future-trigger"}}',
+    );
+    expect(parsed?.kind).toBe('auto-consolidation');
+    if (parsed?.kind === 'auto-consolidation') {
+      expect(parsed.metadata.trigger).toBe('some-future-trigger');
+    }
+  });
+
+  test('D22: a reader lacking the auto-consolidation branch treats it as untyped (null)', () => {
+    const line = formatCheckpointBodyLine({
+      kind: 'auto-consolidation',
+      docName: null,
+      size: null,
+      metadata: { foldedRefs: 2, trigger: 'boot' },
+    });
+    expect(line.startsWith('ok-checkpoint-v1: ')).toBe(true);
+    expect(JSON.parse(line.slice('ok-checkpoint-v1: '.length)).kind).toBe('auto-consolidation');
+  });
 });
 
 describe('formatWipSubject', () => {
@@ -784,7 +834,7 @@ describe('parseOkActor / formatOkActor (US-015, FR-8, D13)', () => {
       client_name: null,
       client_version: null,
       label: null,
-      display_name: 'Open Knowledge (service)',
+      display_name: 'OpenKnowledge (service)',
       color_seed: 'openknowledge-service',
       docs: [],
     };
@@ -891,7 +941,7 @@ describe('OkActorEntry writer_id field + derivation back-compat', () => {
   });
 
   test('parseOkActor falls back to openknowledge-service for unknown classified display_name', () => {
-    const line = 'ok-actor: {"v":1,"display_name":"Open Knowledge (service)","docs":[]}';
+    const line = 'ok-actor: {"v":1,"display_name":"OpenKnowledge (service)","docs":[]}';
     const parsed = parseOkActor(line);
     expect(parsed?.writer_id).toBe('openknowledge-service');
   });
@@ -1123,7 +1173,7 @@ describe('OkActorEntry previous_paths field (timeline rename-history mitigation)
   test('byte-identity: format(parse(legacyBody)) === legacyBody for a corpus of pre-spec lines', () => {
     const corpus = [
       'ok-actor: {"v":1,"writer_id":"agent-conn-abc123","principal":null,"agent_session":"conn-abc123","agent_type":"claude-3-5-sonnet","client_name":"claude-code","client_version":"1.0.0","label":"My agent","display_name":"Claude (abc1)","color_seed":"conn-abc123","docs":["notes.md","ideas.md"]}',
-      'ok-actor: {"v":1,"writer_id":"openknowledge-service","principal":null,"agent_session":null,"agent_type":null,"client_name":null,"client_version":null,"label":null,"display_name":"Open Knowledge (service)","color_seed":"openknowledge-service","docs":[]}',
+      'ok-actor: {"v":1,"writer_id":"openknowledge-service","principal":null,"agent_session":null,"agent_type":null,"client_name":null,"client_version":null,"label":null,"display_name":"OpenKnowledge (service)","color_seed":"openknowledge-service","docs":[]}',
       'ok-actor: {"v":1,"writer_id":"agent-a","principal":null,"agent_session":"a","agent_type":null,"client_name":null,"client_version":null,"label":null,"display_name":"Claude","color_seed":"claude","docs":["a.md"],"summaries":["one","two"]}',
     ];
     for (const legacyLine of corpus) {

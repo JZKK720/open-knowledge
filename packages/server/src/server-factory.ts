@@ -15,8 +15,6 @@ import {
   humanFormat,
   type MarkdownManager,
   type Principal,
-  prependFrontmatter,
-  stripFrontmatter,
 } from '@inkeep/open-knowledge-core';
 import {
   readConfigSafely,
@@ -30,7 +28,7 @@ import { AgentPresenceBroadcaster } from './agent-presence.ts';
 import { AgentSessionManager } from './agent-sessions.ts';
 import { createApiExtension, isSafeDocName } from './api-extension.ts';
 import { assetReferencesChanged } from './asset-references.ts';
-import { seedBasenameIndex } from './asset-walk.ts';
+import { seedBasenameIndex, seedSingleDirBasenameIndex } from './asset-walk.ts';
 import { HocuspocusAuthRejection, parseHocuspocusAuthToken } from './auth-token-schema.ts';
 import { BacklinkIndex } from './backlink-index.ts';
 import { shellEscape } from './bash/shell-escape.ts';
@@ -46,10 +44,23 @@ import { isDocInConflict } from './conflict-errors.ts';
 import { createConflictLifecycleSeedExtension } from './conflict-lifecycle-seed.ts';
 import { type ContentFilter, createContentFilter } from './content-filter.ts';
 import { getDocExtension, stripDocExtension } from './doc-extensions.ts';
+import { runDocLineageGuard } from './doc-lineage-guard.ts';
+import {
+  DEFAULT_EMBEDDINGS_DIMENSIONS,
+  type Embedder,
+  type EmbeddingsKeyStore,
+  loadOpenAiEmbedder,
+  normalizeProviderId,
+  type ResolvedSemanticConfig,
+  readProjectLocalSemanticConfig,
+  SemanticSearchService,
+  secretsFilePath,
+} from './embeddings/index.ts';
 import {
   applyDiskContentToDoc,
   applyExternalChange,
   FILE_WATCHER_ORIGIN,
+  serializeYDocSource,
 } from './external-change.ts';
 import {
   assertNeverDiskEvent,
@@ -69,6 +80,10 @@ import { type HeadWatcherHandle, readBranchFromHead, startHeadWatcher } from './
 import { createLiveDerivedIndexExtension } from './live-derived-index.ts';
 import { getLogger } from './logger.ts';
 import { isAllowedWorkspaceHostHeader, isLoopbackAddress } from './loopback.ts';
+import {
+  createMaintenanceCoordinator,
+  type MaintenanceCoordinator,
+} from './maintenance-coordinator.ts';
 import { recoverPendingManagedRename } from './managed-rename-journal.ts';
 import { mdManager, schema } from './md-manager.ts';
 import {
@@ -82,6 +97,7 @@ import {
   incrementUpstreamImport,
   setRecentlyRemovedDocsSize,
 } from './metrics.ts';
+import { isWithinDir, toPosix } from './path-utils.ts';
 import {
   createPersistenceExtension,
   deleteReconciledBase,
@@ -151,6 +167,10 @@ export interface ServerOptions {
   detectGh?: DetectGhFn;
   tokenStore?: ProbeTokenStore | null;
   checkPushPermissionFn?: (opts: CheckPushPermissionOptions) => Promise<PushPermission>;
+  embeddingsKeyStore?: EmbeddingsKeyStore | null;
+  embedderLoader?: () => Promise<Embedder | null>;
+  singleDocRelPath?: string;
+  ephemeral?: boolean;
 }
 
 export interface ServerInstance {
@@ -159,6 +179,7 @@ export interface ServerInstance {
   cc1Broadcaster: CC1Broadcaster;
   agentFocusBroadcaster: AgentFocusBroadcaster;
   agentPresenceBroadcaster: AgentPresenceBroadcaster;
+  maintenanceCoordinator?: MaintenanceCoordinator;
   contentFilter: ContentFilter;
   basenameIndex: BasenameIndex;
   readonly serverInstanceId: string;
@@ -201,6 +222,8 @@ export function createServer(options: ServerOptions): ServerInstance {
     destroyTimeoutMs = 10_000,
     localOpCliArgs,
     skipStateManifestCheck = false,
+    singleDocRelPath,
+    ephemeral = false,
   } = options;
 
   const log = getLogger('server');
@@ -218,7 +241,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     if (!local.valid) {
       log.warn(
         {},
-        '[config] project-local autoSync.enabled unavailable (config invalid) — falling back to project config',
+        '[config] project-local autoSync.enabled unavailable (config invalid) — falling back to the committed project default',
       );
     }
     const project = readConfigSafely({
@@ -226,7 +249,24 @@ export function createServer(options: ServerOptions): ServerInstance {
       sideline: false,
       warn: (message) => log.warn({ message }, '[config] could not read project config'),
     });
-    return project.value.autoSync?.enabled === true;
+    if (!project.valid) {
+      log.warn(
+        {},
+        '[config] committed autoSync.default unavailable (project config invalid) — defaulting to disabled',
+      );
+    }
+    return project.value.autoSync?.default === true;
+  }
+
+  function readSemanticSearchConfig(): ResolvedSemanticConfig {
+    return readProjectLocalSemanticConfig(projectDir, {
+      configHomedirOverride,
+      onWarn: (message) => log.warn({ message }, '[config] could not read project-local config'),
+    });
+  }
+
+  function semanticProviderFingerprint(cfg: ResolvedSemanticConfig): string {
+    return `${normalizeProviderId(cfg.baseUrl)}|${cfg.model}|${cfg.dimensions ?? DEFAULT_EMBEDDINGS_DIMENSIONS}`;
   }
 
   initTelemetry();
@@ -266,7 +306,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     if (!candidatePath) return null;
     const fullPath = resolve(contentDir, candidatePath);
     const contentDirAbs = resolve(contentDir);
-    if (fullPath !== contentDirAbs && !fullPath.startsWith(`${contentDirAbs}/`)) {
+    if (!isWithinDir(fullPath, contentDirAbs)) {
       return null;
     }
     try {
@@ -281,6 +321,7 @@ export function createServer(options: ServerOptions): ServerInstance {
   let backlinkIndex: BacklinkIndex;
   let tagIndex: TagIndex;
   let shadowRef: ShadowRef;
+  let maintenanceCoordinator: MaintenanceCoordinator | undefined;
   let persistence: ReturnType<typeof createPersistenceExtension>;
   let hocuspocus: Hocuspocus;
   let sessionManager: AgentSessionManager;
@@ -288,6 +329,23 @@ export function createServer(options: ServerOptions): ServerInstance {
   let agentFocusBroadcaster: AgentFocusBroadcaster | null = null;
   let agentPresenceBroadcaster: AgentPresenceBroadcaster | null = null;
   let invalidateReferencedAssetsCache: (() => void) | null = null;
+
+  const initialSemanticConfig = readSemanticSearchConfig();
+  const semanticSearch = new SemanticSearchService({
+    loadEmbedder:
+      options.embedderLoader ??
+      (() => {
+        const cfg = readSemanticSearchConfig();
+        return loadOpenAiEmbedder({
+          keyStore: options.embeddingsKeyStore ?? null,
+          config: { baseUrl: cfg.baseUrl, model: cfg.model, dimensions: cfg.dimensions },
+        });
+      }),
+    cacheDir: join(getLocalDir(projectDir), 'embeddings'),
+    enabled: initialSemanticConfig.enabled,
+    providerFingerprint: semanticProviderFingerprint(initialSemanticConfig),
+  });
+
   let loadedPrincipal: Principal | null = null;
   const forceUnloadSet = new Set<Document>();
   let shutdownAllowsUnload = false;
@@ -347,6 +405,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     contentFilter = createContentFilter({
       projectDir,
       contentDir,
+      singleDocRelPath,
       onAfterRebuild: () => {
         void backlinkIndex.rebuildFromDisk(getActiveBranch()).catch((err) => {
           getLogger('server-factory').warn(
@@ -354,45 +413,71 @@ export function createServer(options: ServerOptions): ServerInstance {
             '[content-filter] backlink-index rebuild failed after onAfterRebuild',
           );
         });
-        try {
-          tagIndex.init();
-        } catch (err) {
+        void tagIndex.init().catch((err) => {
           getLogger('server-factory').warn(
             { err },
             '[content-filter] tag-index rebuild failed after onAfterRebuild',
           );
-        }
-        try {
-          const { prunedFiles, prunedFolders } = reconcileFileIndexAfterFilterRebuild(watcher);
-          const pruned = prunedFiles + prunedFolders;
-          if (pruned > 0) {
-            getLogger('server-factory').info(
-              { pruned, prunedFiles, prunedFolders },
-              '[content-filter] reconciled file indexes after onAfterRebuild',
+        });
+        void reconcileFileIndexAfterFilterRebuild(watcher)
+          .then(({ prunedFiles, prunedFolders }) => {
+            const pruned = prunedFiles + prunedFolders;
+            if (pruned > 0) {
+              getLogger('server-factory').info(
+                { pruned, prunedFiles, prunedFolders },
+                '[content-filter] reconciled file indexes after onAfterRebuild',
+              );
+            } else {
+              getLogger('server-factory').debug(
+                { prunedFiles, prunedFolders },
+                '[content-filter] file index reconcile completed after onAfterRebuild (no entries pruned; rescan may have added entries)',
+              );
+            }
+          })
+          .catch((err) => {
+            getLogger('server-factory').warn(
+              { err },
+              '[content-filter] file index reconcile failed after onAfterRebuild',
             );
-          } else {
-            getLogger('server-factory').debug(
-              { prunedFiles, prunedFolders },
-              '[content-filter] file index reconcile completed after onAfterRebuild (no entries pruned; rescan may have added entries)',
-            );
-          }
-        } catch (err) {
-          getLogger('server-factory').warn(
-            { err },
-            '[content-filter] file index reconcile failed after onAfterRebuild',
-          );
-        }
+          });
       },
     });
     backlinkIndex = new BacklinkIndex({ projectDir, contentDir, contentFilter });
     tagIndex = new TagIndex({ contentDir, contentFilter });
-    try {
-      tagIndex.init();
-    } catch (err) {
-      console.warn('[server-factory] tag-index init failed; continuing with empty index:', err);
-    }
+    void tagIndex.init().catch((err) => {
+      getLogger('server-factory').warn(
+        { err },
+        '[server-factory] tag-index init failed; continuing with empty index',
+      );
+    });
 
     shadowRef = { current: shadowRepo };
+
+    maintenanceCoordinator = gitEnabled
+      ? createMaintenanceCoordinator({
+          getShadow: () => shadowRef.current ?? null,
+          getCurrentBranch: () => headWatcher?.getLastKnownBranch() ?? null,
+          contentRoot: contentRoot ?? '',
+          projectGitDir: resolveGitDir(projectDir) ?? undefined,
+          isWriterLive: (writerId) => {
+            if (!agentPresenceBroadcaster && !sessionManager) {
+              getLogger('server-factory').debug(
+                { writerId },
+                '[server-factory] isWriterLive called before liveness deps populated — treating writer as dead',
+              );
+              return false;
+            }
+            if (agentPresenceBroadcaster?.getPresenceMap()[writerId]) return true;
+            const connId = writerId.startsWith('agent-')
+              ? writerId.slice('agent-'.length)
+              : writerId;
+            for (const _session of sessionManager?.sessionsForConnection(connId) ?? []) {
+              return true;
+            }
+            return false;
+          },
+        })
+      : undefined;
 
     const persistenceOpts: PersistenceOptions = {
       contentDir,
@@ -401,6 +486,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       commitDebounceMs,
       wipRef,
       shadowRef,
+      ephemeral,
       contentRoot,
       backlinkIndex,
       configHomedirOverride,
@@ -409,6 +495,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       resolveSize,
       getPrincipal: () => loadedPrincipal,
       onAgentCommit: () => cc1Broadcaster?.signal('session-activity'),
+      onFlushCommit: () => maintenanceCoordinator?.noteFlushCommit(),
       onDiskFlush: (docName, sv, persistedMarkdown, previousMarkdown) => {
         cc1Broadcaster?.emitDiskAck(docName, sv);
         if (isSystemDoc(docName) || isConfigDoc(docName)) return;
@@ -551,7 +638,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     function resolveDocFilePath(docName: string): string | null {
       if (!isSafeDocName(docName)) return null;
       const filePath = resolve(resolvedContentDir, `${docName}${getDocExtension(docName)}`);
-      if (!filePath.startsWith(`${resolvedContentDir}/`) && filePath !== resolvedContentDir) {
+      if (!isWithinDir(filePath, resolvedContentDir)) {
         return null;
       }
       return filePath;
@@ -567,6 +654,17 @@ export function createServer(options: ServerOptions): ServerInstance {
       },
     };
     hocuspocus.configuration.extensions.push(removalRedirectGuard);
+
+    const docLineageGuard: Extension & { __kind: 'doc-lineage-guard' } = {
+      __kind: 'doc-lineage-guard',
+      async onAuthenticate(payload) {
+        const parsed = parseHocuspocusAuthToken(payload.token);
+        runDocLineageGuard(payload.documentName, parsed?.expectedDocLineageEpoch, {
+          getLoadedDoc: (name) => hocuspocus.documents.get(name),
+        });
+      },
+    };
+    hocuspocus.configuration.extensions.push(docLineageGuard);
 
     const systemDocBroadcastGuard: Extension & { __kind: 'system-doc-broadcast-guard' } = {
       __kind: 'system-doc-broadcast-guard',
@@ -591,8 +689,12 @@ export function createServer(options: ServerOptions): ServerInstance {
       contentFilter,
       serverInstanceId,
       getFileIndex: () => (watcher ? watcher.getFileIndex() : new Map()),
+      getAllFilesIndex: () => (watcher ? watcher.getAllFilesIndex() : new Map()),
+      getFileIndexGeneration: () => watcher?.getFileIndexGeneration() ?? 0,
+      mutateFileIndex: (event) => watcher?.mutateFileIndex(event),
       getFolderIndex: () => (watcher ? watcher.getFolderIndex() : new Map()),
       getAliasMap: () => (watcher ? watcher.getAliasMap() : new Map()),
+      getFolderAliasIndex: () => (watcher ? watcher.getFolderAliasIndex() : new Map()),
       rescanFiles: () => watcher?.rescanFromDisk(),
       enableTestRoutes,
       shadowRef,
@@ -619,6 +721,10 @@ export function createServer(options: ServerOptions): ServerInstance {
       ready,
       recentlyRemovedDocs,
       serializeDoc,
+      semanticSearch,
+      getSemanticSimilarityFloor: () => readSemanticSearchConfig().similarityFloor,
+      embeddingsSecretsFile: secretsFilePath(configHomedirOverride),
+      ephemeral,
       onReferencedAssetsCacheInvalidator: (invalidate) => {
         invalidateReferencedAssetsCache = invalidate;
       },
@@ -665,16 +771,14 @@ export function createServer(options: ServerOptions): ServerInstance {
   function safeRescuePath(shadowGitDir: string, docName: string): string | null {
     const rescueBase = resolve(shadowGitDir, 'rescue');
     const filePath = resolve(rescueBase, `${docName}${getDocExtension(docName)}`);
-    if (!filePath.startsWith(`${rescueBase}/`)) return null;
+    if (!isWithinDir(filePath, rescueBase)) return null;
     return filePath;
   }
 
   function serializeDoc(docName: string): string | null {
     const document = hocuspocus.documents.get(docName);
     if (!document) return null;
-    const ytextSnapshot = document.getText('source').toString();
-    const { frontmatter, body } = stripFrontmatter(ytextSnapshot);
-    return prependFrontmatter(frontmatter, body);
+    return serializeYDocSource(document);
   }
 
   const applyToDoc = (docName: string, content: string): void =>
@@ -736,6 +840,9 @@ export function createServer(options: ServerOptions): ServerInstance {
       case 'asset-delete':
       case 'folder-create':
       case 'folder-delete':
+      case 'file-create':
+      case 'file-update':
+      case 'file-delete':
         return event.relativePath;
       case 'create':
       case 'update':
@@ -825,7 +932,7 @@ export function createServer(options: ServerOptions): ServerInstance {
             case 'merged':
               try {
                 applyToDoc(docName, result.newContent);
-                setReconciledBase(docName, result.newContent);
+                setReconciledBase(docName, theirs);
                 incrementReconcile();
                 clearLifecycleConflict(document);
                 backlinkIndex.updateDocumentFromMarkdown(docName, theirs);
@@ -1034,6 +1141,12 @@ export function createServer(options: ServerOptions): ServerInstance {
           signalChannel('files');
           break;
         }
+        case 'file-create':
+        case 'file-update':
+        case 'file-delete': {
+          signalChannel('files');
+          break;
+        }
         default:
           assertNeverDiskEvent(event);
       }
@@ -1207,6 +1320,8 @@ export function createServer(options: ServerOptions): ServerInstance {
       }
 
       const documentCount = hocuspocus.documents.size;
+
+      maintenanceCoordinator?.destroy();
 
       try {
         try {
@@ -1439,6 +1554,12 @@ export function createServer(options: ServerOptions): ServerInstance {
           log.warn({ err: e }, '[rename-log] boot-time GC/rebuild failed; index loaded without GC');
         }
       }
+
+      try {
+        await maintenanceCoordinator?.runBootMaintenance();
+      } catch (e) {
+        log.warn({ err: e }, '[shadow-maintenance] boot maintenance failed (non-fatal)');
+      }
     }
 
     if (shadowRef.current) {
@@ -1575,7 +1696,9 @@ export function createServer(options: ServerOptions): ServerInstance {
       degraded.push('cc1-push');
     }
 
-    for (const configDocName of CONFIG_DOC_NAMES) {
+    const configDocNamesToBind = ephemeral ? [] : CONFIG_DOC_NAMES;
+
+    for (const configDocName of configDocNamesToBind) {
       try {
         const connection = await hocuspocus.openDirectConnection(configDocName);
         configDocConnections.set(configDocName, connection);
@@ -1593,7 +1716,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       [CONFIG_DOC_NAME_PROJECT_LOCAL, resolveConfigPath('project-local', projectDir)],
       [CONFIG_DOC_NAME_USER, resolveConfigPath('user', projectDir, configHomedirOverride)],
     ]);
-    for (const configDocName of CONFIG_DOC_NAMES) {
+    for (const configDocName of configDocNamesToBind) {
       const absPath = configPathByDoc.get(configDocName);
       if (!absPath) continue;
       try {
@@ -1627,6 +1750,11 @@ export function createServer(options: ServerOptions): ServerInstance {
               log.warn({ err, enabled }, '[sync] failed to apply autoSync.enabled from config');
             });
           }
+          const semCfg = readSemanticSearchConfig();
+          semanticSearch.applyConfig({
+            enabled: semCfg.enabled,
+            providerFingerprint: semanticProviderFingerprint(semCfg),
+          });
         });
         configFileWatcherCleanups.push({ docName: configDocName, cleanup });
         log.info({ docName: configDocName, path: absPath }, '[config-file-watcher] started');
@@ -1660,67 +1788,68 @@ export function createServer(options: ServerOptions): ServerInstance {
         : [okignorePath, gitignorePath];
       const ignoreLog = log;
       ignoreLog.info(
-        { okignorePath, gitignorePath, gitInfoExcludePath },
+        { okignorePath, gitignorePath, gitInfoExcludePath, ephemeral },
         '[ignore-watcher] starting multi-path watcher for .okignore + .gitignore (+ .git/info/exclude when present)',
       );
-      const ignoreCleanup = await startMultiPathConfigFileWatcher(
-        ignorePaths,
-        (changedPath, content) => {
-          void (async () => {
-            if (changedPath === okignorePath) {
-              try {
-                const document = hocuspocus.documents.get(CONFIG_DOC_NAME_OKIGNORE) ?? null;
-                const outcome = applyExternalConfigChange(
-                  document,
-                  CONFIG_DOC_NAME_OKIGNORE,
-                  content,
-                  persistence.configPersistenceCtx,
-                );
-                ignoreLog.info(
-                  { docName: CONFIG_DOC_NAME_OKIGNORE, outcome },
-                  '[ignore-watcher] applyExternalConfigChange outcome',
-                );
-              } catch (err) {
-                ignoreLog.error(
-                  { err, changedPath: relative(projectDir, changedPath) },
-                  '[ignore-watcher] applyExternalConfigChange failed; rebuild proceeds independently',
-                );
+      const ignoreCleanup = ephemeral
+        ? null
+        : await startMultiPathConfigFileWatcher(ignorePaths, (changedPath, content) => {
+            void (async () => {
+              if (changedPath === okignorePath) {
+                try {
+                  const document = hocuspocus.documents.get(CONFIG_DOC_NAME_OKIGNORE) ?? null;
+                  const outcome = applyExternalConfigChange(
+                    document,
+                    CONFIG_DOC_NAME_OKIGNORE,
+                    content,
+                    persistence.configPersistenceCtx,
+                  );
+                  ignoreLog.info(
+                    { docName: CONFIG_DOC_NAME_OKIGNORE, outcome },
+                    '[ignore-watcher] applyExternalConfigChange outcome',
+                  );
+                } catch (err) {
+                  ignoreLog.error(
+                    { err, changedPath: relative(projectDir, changedPath) },
+                    '[ignore-watcher] applyExternalConfigChange failed; rebuild proceeds independently',
+                  );
+                }
               }
-            }
 
-            const result = await contentFilter.rebuildIgnorePatterns();
-            if (result.ok) {
-              ignoreLog.info(
-                {
-                  changedPath: relative(projectDir, changedPath),
-                  patternCount: result.patternCount,
-                  nestedFileCount: result.nestedFileCount,
-                  durationMs: result.durationMs,
-                },
-                '[ignore-watcher] rebuild succeeded — broadcasting files channel',
+              const result = await contentFilter.rebuildIgnorePatterns();
+              if (result.ok) {
+                ignoreLog.info(
+                  {
+                    changedPath: relative(projectDir, changedPath),
+                    patternCount: result.patternCount,
+                    nestedFileCount: result.nestedFileCount,
+                    durationMs: result.durationMs,
+                  },
+                  '[ignore-watcher] rebuild succeeded — broadcasting files channel',
+                );
+                cc1Broadcaster?.signal('files');
+              } else {
+                const projectRelPath = relative(projectDir, changedPath) || '.';
+                ignoreLog.warn(
+                  { changedPath: projectRelPath, error: result.error.message },
+                  '[ignore-watcher] rebuild failed — emitting config-ignore-nested-error',
+                );
+                cc1Broadcaster?.emitConfigIgnoreNestedError(projectRelPath, result.error.message);
+              }
+            })().catch((err) => {
+              ignoreLog.error(
+                { err, changedPath: relative(projectDir, changedPath) || '.' },
+                '[ignore-watcher] handler threw',
               );
-              cc1Broadcaster?.signal('files');
-            } else {
-              const projectRelPath = relative(projectDir, changedPath) || '.';
-              ignoreLog.warn(
-                { changedPath: projectRelPath, error: result.error.message },
-                '[ignore-watcher] rebuild failed — emitting config-ignore-nested-error',
-              );
-              cc1Broadcaster?.emitConfigIgnoreNestedError(projectRelPath, result.error.message);
-            }
-          })().catch((err) => {
-            ignoreLog.error(
-              { err, changedPath: relative(projectDir, changedPath) || '.' },
-              '[ignore-watcher] handler threw',
-            );
+            });
           });
-        },
-      );
-      configFileWatcherCleanups.push({ docName: '__ignore-files__', cleanup: ignoreCleanup });
-      ignoreLog.info(
-        { okignorePath, gitignorePath },
-        '[ignore-watcher] multi-path watcher started',
-      );
+      if (ignoreCleanup) {
+        configFileWatcherCleanups.push({ docName: '__ignore-files__', cleanup: ignoreCleanup });
+        ignoreLog.info(
+          { okignorePath, gitignorePath },
+          '[ignore-watcher] multi-path watcher started',
+        );
+      }
     } catch (err) {
       log.warn(
         { err, projectDir, contentDir },
@@ -1758,21 +1887,43 @@ export function createServer(options: ServerOptions): ServerInstance {
         }
       }
       watcher = await startWatcher(contentDir, onDiskEvent, contentFilter);
-      tagIndex.init();
+      try {
+        await tagIndex.init();
+      } catch (err) {
+        log.error(
+          { err },
+          '[tag-index] startup re-init failed; tag index updates incrementally via watcher events',
+        );
+        degraded.push('tag-index');
+      }
       let seedSkipCount = 0;
       try {
-        seedBasenameIndex({
-          contentDir,
-          contentFilter,
-          basenameIndex,
-          onSkip: (reason, code, path) => {
-            seedSkipCount++;
-            log.warn(
-              { reason, code, path },
-              `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
-            );
-          },
-        });
+        if (singleDocRelPath !== undefined) {
+          seedSingleDirBasenameIndex({
+            contentDir,
+            basenameIndex,
+            onSkip: (reason, code, path) => {
+              seedSkipCount++;
+              log.warn(
+                { reason, code, path },
+                `[basename-index] skipped entry during single-file seed (${reason}${code ? ` ${code}` : ''})`,
+              );
+            },
+          });
+        } else {
+          await seedBasenameIndex({
+            contentDir,
+            contentFilter,
+            basenameIndex,
+            onSkip: (reason, code, path) => {
+              seedSkipCount++;
+              log.warn(
+                { reason, code, path },
+                `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
+              );
+            },
+          });
+        }
         if (seedSkipCount > 0) {
           log.warn(
             { count: seedSkipCount },
@@ -1880,7 +2031,7 @@ export function createServer(options: ServerOptions): ServerInstance {
             try {
               let reseedSkipCount = 0;
               basenameIndex.clear();
-              seedBasenameIndex({
+              await seedBasenameIndex({
                 contentDir,
                 contentFilter,
                 basenameIndex,
@@ -1982,7 +2133,7 @@ export function createServer(options: ServerOptions): ServerInstance {
                 '[backlinks] branch-switch rebuild failed; backlinks may be stale',
               );
             }
-            tagIndex.init();
+            await tagIndex.init();
 
             if (shadowRef.current && info.batchKind === 'cross-branch') {
               let restoredCount = 0;
@@ -2110,7 +2261,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       for (const file of files) {
         try {
           const absPath = join(projectDir, file);
-          const contentRelPath = relative(contentDir, absPath);
+          const contentRelPath = toPosix(relative(contentDir, absPath));
           if (contentRelPath.startsWith('..')) continue;
           const docName = stripDocExtension(contentRelPath);
           const document = hocuspocus.documents.get(docName);
@@ -2201,6 +2352,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     cc1Broadcaster,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     contentFilter,
     basenameIndex,
     serverInstanceId,

@@ -5,6 +5,7 @@ import type {
   EditorId,
   LocalOpOkInitResponse,
   OkFolderState,
+  TerminalCli,
 } from '@inkeep/open-knowledge-core';
 import type {
   FindEnclosingGitRootResult,
@@ -16,11 +17,15 @@ import type { SeedApplyResult, SeedListPacksResult, SeedPlanResult } from '../ma
 import type { KeyringSmokeResult } from '../utility/keyring-smoke.ts';
 import type {
   CheckTargetExistsResult,
+  ClaudeReadiness,
+  CliReadiness,
   HeadBranchInfo,
   OkDesktopConfig,
   OkLocalOpAuthReposResponse,
   OkLocalOpAuthStatusResponse,
+  OkPtyCreateResult,
   OkServerRestartOutcome,
+  OkSharePayloadFields,
   OkThemeSource,
   OkUpdateChannel,
   SeedApplyOptions,
@@ -67,6 +72,11 @@ interface ProjectOpenRequest {
   entryPoint: EntryPoint;
   pendingDeepLinkTarget?: { kind: 'doc' | 'folder'; path: string };
   pendingBranch?: string | null;
+  pendingShareBranchSwitch?: {
+    share: OkSharePayloadFields;
+    projectPath: string;
+    currentBranch: string | null;
+  };
   pendingMultiCandidate?: boolean;
 }
 
@@ -238,11 +248,12 @@ export type EditorActiveTargetSnapshot =
 
 export interface EditorViewMenuStateSnapshot {
   readonly showHiddenFiles: boolean;
-  readonly showAllFiles: boolean;
   readonly canExpandAll: boolean;
   readonly canCollapseAll: boolean;
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
+  readonly terminalVisible?: boolean;
+  readonly terminalLive?: boolean;
 }
 
 export interface RequestChannels {
@@ -287,12 +298,6 @@ export interface RequestChannels {
           reason: 'not-found' | 'permission-denied' | 'system-error' | 'path-escape';
           detail?: string;
         };
-  };
-  'ok:shell:open-in-terminal': {
-    args: [dirAbsPath: string];
-    result:
-      | { ok: true }
-      | { ok: false; reason: 'not-found' | 'spawn-error' | 'timeout' | 'path-escape' };
   };
   'ok:clipboard:write-text': { args: [text: string]; result: undefined };
   'ok:project:get-info': { args: []; result: OkDesktopConfig };
@@ -348,7 +353,7 @@ export interface RequestChannels {
     result: undefined;
   };
   /** Persisted last-used parent directory, or a platform-sensible default
-   *  (`~/Documents/Open Knowledge/`) on first launch. */
+   *  (`~/Documents/OpenKnowledge/`) on first launch. */
   'ok:fs:default-projects-root': { args: []; result: string };
   /** Classify the candidate path: missing (`free`), present but empty,
    *  or present with entries. Stat errors fall through to `free`. */
@@ -466,5 +471,34 @@ export interface RequestChannels {
   'ok:editor:view-menu-state-changed': {
     args: [state: Partial<EditorViewMenuStateSnapshot>];
     result: undefined;
+  };
+
+  'ok:pty:create': {
+    args: [opts: { cols: number; rows: number }];
+    result: OkPtyCreateResult;
+  };
+  'ok:pty:input': {
+    args: [req: { ptyId: string; data: string }];
+    result: undefined;
+  };
+  'ok:pty:resize': {
+    args: [req: { ptyId: string; cols: number; rows: number }];
+    result: undefined;
+  };
+  'ok:pty:kill': {
+    args: [req: { ptyId: string }];
+    result: undefined;
+  };
+  'ok:pty:drain': {
+    args: [req: { ptyId: string; bytes: number }];
+    result: undefined;
+  };
+  'ok:terminal:claude-assist': {
+    args: [req: { action: 'preflight' | 'rewire' }];
+    result: ClaudeReadiness;
+  };
+  'ok:terminal:cli-preflight': {
+    args: [req: { cli: TerminalCli }];
+    result: CliReadiness;
   };
 }

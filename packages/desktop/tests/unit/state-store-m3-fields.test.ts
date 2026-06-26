@@ -29,6 +29,16 @@ describe('parseAppState M3 fields — coercion', () => {
     expect(parsed?.stuckHintShown).toBe(true);
   });
 
+  test('attemptedInstall: round-trips a string, coerces non-string + absent to null', () => {
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstall: '0.16.0-beta.3' })?.attemptedInstall,
+    ).toBe('0.16.0-beta.3');
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstall: 42 })?.attemptedInstall,
+    ).toBeNull();
+    expect(parseAppState({ recentProjects: [] })?.attemptedInstall).toBeNull();
+  });
+
   test('M1-forward-compat: pre-M3 blob without M3 keys returns valid state with defaults', () => {
     const raw = {
       recentProjects: [

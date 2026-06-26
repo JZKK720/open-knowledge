@@ -13,6 +13,7 @@ import {
   textPlusStructured,
   textResult,
 } from './shared.ts';
+import { buildWikiBody } from './wiki-body.ts';
 
 export const DESCRIPTION = [
   'Procedural guides for the three-layer wiki workflow + brownfield onboarding. Returns a numbered plan (instructional text, not data) — you execute it. Dispatches on `kind`:',
@@ -21,9 +22,10 @@ export const DESCRIPTION = [
   '- `kind: "research"` — gather sources and write provisional findings for a question. Requires `topic`.',
   '- `kind: "consolidate"` — fold provisional material into a canonical article. Requires `topic`.',
   '- `kind: "discover"` — extract conventions from an existing repo (folder frontmatter + templates + link graph). No payload.',
+  '- `kind: "wiki"` — generate (or refresh) a navigable, diagram-rich, source-grounded wiki of this codebase into the `wiki/` knowledge base (the `codebase-wiki` pack). No payload; tune via natural-language `audience`/`depth` in your request.',
   '',
   '**Parameters:**',
-  '- `kind` — `ingest` | `research` | `consolidate` | `discover`.',
+  '- `kind` — `ingest` | `research` | `consolidate` | `discover` | `wiki`.',
   '- `source` — Required for `ingest`: the URL / file path / identifier to capture.',
   '- `topic` — Required for `research` / `consolidate`: the topic, question, or anchor URL.',
   '- `cwd` (optional) — Project root (see `cwd` description below).',
@@ -40,7 +42,7 @@ export function register(server: ServerInstance, deps: WorkflowToolDeps): void {
       description: DESCRIPTION,
       inputSchema: {
         kind: z
-          .enum(['ingest', 'research', 'consolidate', 'discover'])
+          .enum(['ingest', 'research', 'consolidate', 'discover', 'wiki'])
           .describe('Which workflow guide to return.'),
         source: z
           .string()
@@ -61,7 +63,7 @@ export function register(server: ServerInstance, deps: WorkflowToolDeps): void {
       }),
     },
     async (args: {
-      kind: 'ingest' | 'research' | 'consolidate' | 'discover';
+      kind: 'ingest' | 'research' | 'consolidate' | 'discover' | 'wiki';
       source?: string;
       topic?: string;
       cwd?: string;
@@ -95,6 +97,13 @@ export function register(server: ServerInstance, deps: WorkflowToolDeps): void {
           const context = await resolveProjectConfigContext(deps.resolveCwd, deps.config, args.cwd);
           if (!context.ok) return textResult(`Error: ${context.error}`, true);
           return textPlusStructured(buildDiscoverBody(context.config.content.dir), {
+            previewUrl: null,
+          });
+        }
+        case 'wiki': {
+          const context = await resolveProjectConfigContext(deps.resolveCwd, deps.config, args.cwd);
+          if (!context.ok) return textResult(`Error: ${context.error}`, true);
+          return textPlusStructured(buildWikiBody(context.config.content.dir), {
             previewUrl: null,
           });
         }

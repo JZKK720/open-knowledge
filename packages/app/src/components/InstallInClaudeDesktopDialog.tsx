@@ -16,7 +16,7 @@ import { dispatchExternalLinkClick } from '@/lib/external-link';
 import { cn } from '@/lib/utils';
 
 const INSTALL_COMMAND = 'npx @inkeep/open-knowledge install-skill';
-const DOCS_URL = 'https://openknowledge.ai/docs/integrations/claude-desktop';
+const DOCS_URL = 'https://openknowledge.ai/docs/integrations/claude-code';
 
 interface InstallInClaudeDesktopDialogProps {
   open: boolean;
@@ -187,18 +187,18 @@ export function InstallInClaudeDesktopDialog({
           <DialogTitle className="flex items-center gap-2">
             <Download aria-hidden="true" className="h-4 w-4" />
             {reinstall ? (
-              <Trans comment="Dialog title — installing the Open Knowledge skill into the Claude Desktop App">
+              <Trans comment="Dialog title — installing the OpenKnowledge skill into the Claude Desktop App">
                 Reinstall for Claude Chat & Cowork
               </Trans>
             ) : (
-              <Trans comment="Dialog title — installing the Open Knowledge skill into the Claude Desktop App">
+              <Trans comment="Dialog title — installing the OpenKnowledge skill into the Claude Desktop App">
                 Install for Claude Chat & Cowork
               </Trans>
             )}
           </DialogTitle>
           <DialogDescription>
             <Trans>
-              Adds the Open Knowledge skill to the{' '}
+              Adds the OpenKnowledge skill to the{' '}
               <strong className="font-medium text-foreground">Claude Desktop App</strong> so it's
               available in Chat and Cowork sessions.
             </Trans>

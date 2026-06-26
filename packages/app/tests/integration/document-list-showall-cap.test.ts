@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DocumentListSuccessSchema } from '@inkeep/open-knowledge-core';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { awaitFileWatcherIndexed, createTestServer, type TestServer } from './test-harness';
 
 const FIXTURE_FILE_COUNT = 25;
@@ -16,20 +17,20 @@ beforeAll(async () => {
   }
   server = await createTestServer({ contentDir, keepContentDir: false });
   await awaitFileWatcherIndexed(server, 'file-00');
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
 });
 
 async function fetchShowAll() {
-  const res = await fetch(`http://localhost:${server.port}/api/documents?showAll=true`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/documents?showAll=true`);
   expect(res.ok).toBe(true);
   return DocumentListSuccessSchema.parse(await res.json());
 }
 
 async function fetchDefaultRaw(): Promise<Record<string, unknown>> {
-  const res = await fetch(`http://localhost:${server.port}/api/documents`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/documents`);
   expect(res.ok).toBe(true);
   return (await res.json()) as Record<string, unknown>;
 }

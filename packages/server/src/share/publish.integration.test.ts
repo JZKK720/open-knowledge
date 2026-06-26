@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listenOnLoopback } from '../loopback-rig-test-helpers.ts';
 import type { SyncEngine } from '../sync-engine.ts';
 
 function makeFakeSyncEngine(): { engine: SyncEngine; refreshRemoteCalls: () => number } {
@@ -21,6 +22,7 @@ function makeFakeSyncEngine(): { engine: SyncEngine; refreshRemoteCalls: () => n
 
 interface TestRig {
   port: number;
+  baseUrl: string;
   projectDir: string;
   server: Server;
   cleanup: () => Promise<void>;
@@ -72,15 +74,11 @@ async function bootRig(options: RigOptions): Promise<TestRig> {
   });
   hocuspocus.configuration.extensions.push(ext);
 
-  const port = await new Promise<number>((resolveListen) => {
-    server.listen(0, () => {
-      const addr = server.address();
-      resolveListen(typeof addr === 'object' && addr ? addr.port : 0);
-    });
-  });
+  const { port, baseUrl } = await listenOnLoopback(server);
 
   return {
     port,
+    baseUrl,
     projectDir,
     server,
     cleanup: async () => {
@@ -91,7 +89,7 @@ async function bootRig(options: RigOptions): Promise<TestRig> {
 }
 
 async function getJson(port: number, path: string): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(`http://localhost:${port}${path}`);
+  const res = await fetch(`http://127.0.0.1:${port}${path}`);
   return { status: res.status, body: await res.json() };
 }
 
@@ -100,7 +98,7 @@ async function postJson(
   path: string,
   body: unknown,
 ): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(`http://localhost:${port}${path}`, {
+  const res = await fetch(`http://127.0.0.1:${port}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -157,7 +155,7 @@ describe('GET /api/share/publish/owners', () => {
 
   test('rejects POST with 405', async () => {
     rig = await bootRig({ cliArgs: fixtureCliArgs('{}') });
-    const res = await fetch(`http://localhost:${rig.port}/api/share/publish/owners`, {
+    const res = await fetch(`${rig.baseUrl}/api/share/publish/owners`, {
       method: 'POST',
     });
     expect(res.status).toBe(405);
@@ -202,9 +200,7 @@ describe('GET /api/share/publish/name-check', () => {
         `process.stderr.write("FIXTURE INVOKED — should not happen for invalid owner");process.exit(99);`,
       ],
     });
-    const res = await fetch(
-      `http://localhost:${rig.port}/api/share/publish/name-check?owner=-bad&name=foo`,
-    );
+    const res = await fetch(`${rig.baseUrl}/api/share/publish/name-check?owner=-bad&name=foo`);
     expect(res.status).toBe(400);
   });
 
@@ -213,7 +209,7 @@ describe('GET /api/share/publish/name-check', () => {
       cliArgs: [process.execPath, '-e', `process.exit(99);`],
     });
     const res = await fetch(
-      `http://localhost:${rig.port}/api/share/publish/name-check?owner=alice&name=with%2Fslash`,
+      `${rig.baseUrl}/api/share/publish/name-check?owner=alice&name=with%2Fslash`,
     );
     expect(res.status).toBe(400);
   });
@@ -322,7 +318,7 @@ describe('POST /api/share/publish', () => {
     rig = await bootRig({
       cliArgs: [process.execPath, '-e', `process.exit(99);`],
     });
-    const res = await fetch(`http://localhost:${rig.port}/api/share/publish`, {
+    const res = await fetch(`${rig.baseUrl}/api/share/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner: 'alice', name: 'demo', visibility: 'lobster' }),
@@ -334,7 +330,7 @@ describe('POST /api/share/publish', () => {
     rig = await bootRig({
       cliArgs: [process.execPath, '-e', `process.exit(99);`],
     });
-    const res = await fetch(`http://localhost:${rig.port}/api/share/publish`, {
+    const res = await fetch(`${rig.baseUrl}/api/share/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner: 'alice', name: 'with space', visibility: 'private' }),
@@ -344,7 +340,7 @@ describe('POST /api/share/publish', () => {
 
   test('GET method rejected with 405', async () => {
     rig = await bootRig({ cliArgs: fixtureCliArgs('{}') });
-    const res = await fetch(`http://localhost:${rig.port}/api/share/publish`);
+    const res = await fetch(`${rig.baseUrl}/api/share/publish`);
     expect(res.status).toBe(405);
   });
 

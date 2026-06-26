@@ -1,13 +1,13 @@
 ---
 title: Core Concepts
-description: "How Open Knowledge works: the three-layer model, the file system as the database, links and backlinks, the well-connected knowledge base, and attribution."
+description: "How OpenKnowledge works: the three-layer model, the file system as the database, links and backlinks, the well-connected knowledge base, and attribution."
 ---
 
 This page is the precise reference for the ideas the rest of the docs build on. If you want the persuasive tour instead, start with the [Overview](../get-started/overview.mdx); if you want to start using it, see the [Quickstart](../get-started/quickstart.mdx).
 
 ## Three layers
 
-Open Knowledge is three layers working together: a surface you edit, an engine that keeps it consistent, and the files underneath.
+OpenKnowledge is three layers working together: a surface you edit, an engine that keeps it consistent, and the files underneath.
 
 <Cards>
   <Card title="The editor" href="../features/editor.mdx">
@@ -23,11 +23,11 @@ Open Knowledge is three layers working together: a surface you edit, an engine t
 
 All three layers operate on the **same files**. You can edit through the editor, an agent can edit through the knowledge engine's MCP tools, and you can always drop down to any text editor and change the markdown by hand. Nothing locks you out.
 
-Because the knowledge engine is exposed over [MCP](https://modelcontextprotocol.io), it is **agent-agnostic**. Bring Claude Code, Cursor, Codex, Gemini, or any MCP-capable client, and any model you have access to.
+Because the knowledge engine is exposed over [MCP](https://modelcontextprotocol.io), it is **agent-agnostic**. Bring Claude Code, Cursor, Codex, OpenCode, Gemini, or any MCP-capable client, and any model you have access to.
 
 ## The file system is the database
 
-The third layer is the content itself. Open Knowledge has **no database dependency**. Your knowledge base is plain markdown files in your own project directory, and the only persistence layer is the file system, version-controlled by git.
+The third layer is the content itself. OpenKnowledge has **no database dependency**. Your knowledge base is plain markdown files in your own project directory, and the only persistence layer is the file system, version-controlled by git.
 
 This means:
 
@@ -39,7 +39,7 @@ The set of files the engine treats as your knowledge base is the configured cont
 
 ## Links and backlinks
 
-Internal cross-references are written with **standard markdown links**: `[text](./relative/path.md)` or `[text](/absolute/from/content-root.md)`. Whenever document A links to document B, Open Knowledge automatically records the inverse on B: a **backlink** from B back to A.
+Internal cross-references are written with **standard markdown links**: `[text](./relative/path.md)` or `[text](/absolute/from/content-root.md)`. Whenever document A links to document B, OpenKnowledge automatically records the inverse on B: a **backlink** from B back to A.
 
 You never write backlinks by hand. They are computed from the links you already write, and together they form the **link graph**: the network of relationships across your knowledge base.
 
@@ -75,12 +75,12 @@ Agents use these to repair and densify the graph as they work, instead of lettin
 Every factual claim should trace back to a source **inside** the knowledge base. External material is pulled in and cited locally rather than linked off to the open web, so the knowledge base stays self-contained and auditable. This is the backbone of the source-grounded workflows: see [Karpathy's LLM wiki workflow](../workflows/karpathy-llm-wiki.mdx) and the [Entity vault (GBrain-compatible) workflow](../workflows/entity-vault.mdx).
 
 <Callout type="info">
-  Open Knowledge is unopinionated about which workflow you adopt; these are supported patterns, not requirements. Grounding, backlinks, and the graph tools work the same regardless of how you choose to organize.
+  OpenKnowledge is unopinionated about which workflow you adopt; these are supported patterns, not requirements. Grounding, backlinks, and the graph tools work the same regardless of how you choose to organize.
 </Callout>
 
 ## Attribution and collaboration
 
-Every change made through Open Knowledge is tracked, with **attribution** to whoever made it: a human author or a specific AI agent. The change history is persisted in the file system with no dependency beyond git.
+Every change made through OpenKnowledge is tracked, with **attribution** to whoever made it: a human author or a specific AI agent. The change history is persisted in the file system with no dependency beyond git.
 
 That gives you:
 

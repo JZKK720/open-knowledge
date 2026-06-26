@@ -35,6 +35,10 @@ import { MissingOkConfigError } from './missing-ok-config-error.ts';
 import { createServer, type ServerInstance, type ServerOptions } from './server-factory.ts';
 import { installServerMemoryGauge } from './server-memory-telemetry.ts';
 import { initTelemetry, shutdownTelemetry, withSpan } from './telemetry.ts';
+import {
+  initToleranceTelemetryWriter,
+  teardownToleranceTelemetryWriter,
+} from './tolerance-telemetry-writer.ts';
 import { acquireUiLock, releaseUiLock, UiLockCollisionError, updateUiLockPort } from './ui-lock.ts';
 
 const LEGACY_RUNTIME_FILENAMES = [
@@ -119,6 +123,9 @@ export interface BootServerOptions
     | 'lockKind'
     | 'detectGh'
     | 'tokenStore'
+    | 'embeddingsKeyStore'
+    | 'singleDocRelPath'
+    | 'ephemeral'
   > {
   config: Config;
   skipAutoInit?: boolean;
@@ -150,9 +157,9 @@ export interface BootedServer {
 const PINO_REDACT_MAX_DEPTH = 5;
 
 export async function bootServer(opts: BootServerOptions): Promise<BootedServer> {
+  const sinkProjectDir = opts.projectDir ?? opts.contentDir;
   const localSinkConfig = resolveLocalSinkConfig({
-    projectDir: opts.projectDir ?? opts.contentDir,
-    contentDir: opts.contentDir,
+    projectDir: sinkProjectDir,
   });
   if (localSinkConfig) {
     const denylist = localSinkConfig.telemetry.attributeDenylist;
@@ -168,6 +175,7 @@ export async function bootServer(opts: BootServerOptions): Promise<BootedServer>
     });
   }
   initTelemetry({ localSink: localSinkConfig?.telemetry });
+  initToleranceTelemetryWriter(sinkProjectDir);
   installServerMemoryGauge();
 
   const { kind: worktreeKind, gitdir: worktreeGitdir } = computeWorktreeAttributes(
@@ -222,7 +230,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
 
   const preflight = opts.gitPreflight ?? assertGitAvailable;
   try {
-    preflight();
+    if (opts.gitEnabled !== false) preflight();
   } catch (err) {
     if (err instanceof GitNotAvailableError || err instanceof GitTooOldError) {
       const detectedVersion = err instanceof GitTooOldError ? err.detected : '';
@@ -240,6 +248,10 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
       process.stderr.write(`${err.message}\n`);
     }
     await shutdownTelemetry();
+    await Promise.race([
+      teardownToleranceTelemetryWriter(),
+      new Promise<void>((resolve) => setTimeout(resolve, DESTROY_STEP_TIMEOUT_MS)),
+    ]);
     throw err;
   }
 
@@ -271,6 +283,9 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     skipStateManifestCheck: opts.skipStateManifestCheck,
     detectGh: opts.detectGh,
     tokenStore: opts.tokenStore,
+    embeddingsKeyStore: opts.embeddingsKeyStore,
+    singleDocRelPath: opts.singleDocRelPath,
+    ephemeral: opts.ephemeral,
   });
 
   const {
@@ -282,6 +297,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
   } = serverInstance;
 
   const mcpHost = (() => {
@@ -290,13 +306,15 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
   })();
   let boundPort = opts.port ?? 0;
-  const mcpHttpHandler = createMcpHttpHandler({
-    contentDir: opts.contentDir,
-    projectDir: opts.projectDir ?? opts.contentDir,
-    config: opts.config,
-    getServerUrl: () => `http://${mcpHost}:${boundPort}`,
-    log,
-  });
+  const mcpHttpHandler = opts.ephemeral
+    ? undefined
+    : createMcpHttpHandler({
+        contentDir: opts.contentDir,
+        projectDir: opts.projectDir ?? opts.contentDir,
+        config: opts.config,
+        getServerUrl: () => `http://${mcpHost}:${boundPort}`,
+        log,
+      });
 
   const httpServer = createHttpServer();
   httpServer.headersTimeout = 30_000;
@@ -355,9 +373,11 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     sessionManager,
     agentFocusBroadcaster,
     agentPresenceBroadcaster,
+    maintenanceCoordinator,
     keepaliveGraceMs: opts.keepaliveGraceMs,
     contentAssetMiddleware,
     reactShellMiddleware,
+    ephemeral: opts.ephemeral,
   });
 
   let destroy: () => Promise<void> = async () => {
@@ -463,7 +483,9 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     }
 
     await runStep('mount.shutdown', () => mount.shutdown());
-    await runStep('mcpHttpHandler.close', () => mcpHttpHandler.close());
+    if (mcpHttpHandler !== undefined) {
+      await runStep('mcpHttpHandler.close', () => mcpHttpHandler.close());
+    }
     await runStep(
       'mount.wss.close',
       () =>
@@ -490,6 +512,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
       await runStep('releaseUiLock', async () => releaseUiLock(lockDir));
     }
     await runStep('shutdownTelemetry', () => shutdownTelemetry());
+    await runStep('teardownToleranceTelemetry', () => teardownToleranceTelemetryWriter());
     await runStep('flushLogFileSinks', () => loggerFactory.flushAllFileSinks());
 
     if (errors.length > 0) {

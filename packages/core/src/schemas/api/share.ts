@@ -162,6 +162,87 @@ export function isBranchNotFoundGitError(error: unknown): boolean {
   return /couldn'?t find remote ref|Remote branch .+ not found/i.test(message);
 }
 
+export type GitAuthFailureSubclass =
+  | 'no-credential'
+  | '401'
+  | '403'
+  | 'scope-mismatch'
+  | 'ssh-auth'
+  | 'unknown-auth';
+
+export type ClassifiedGitAuthError =
+  | { kind: 'auth'; subclass: GitAuthFailureSubclass }
+  | { kind: 'non-auth' };
+
+const GIT_AUTH_NO_CREDENTIAL_PATTERNS: RegExp[] = [
+  /could not read (username|password)/i,
+  /terminal prompts disabled/i,
+];
+
+const GIT_AUTH_SCOPE_MISMATCH_PATTERNS: RegExp[] = [
+  /insufficient scopes/i,
+  /missing.*scope/i,
+  /required scope/i,
+];
+
+const GIT_AUTH_SSH_PATTERNS: RegExp[] = [
+  /permission denied.*\(publickey\)/i,
+  /host key verification failed/i,
+];
+
+const GIT_AUTH_GENERAL_PATTERNS: RegExp[] = [
+  /\b(401|403)\b/,
+  /authentication failed/i,
+  /authorization failed/i,
+  /invalid credentials/i,
+  /credential helper/i,
+  /bad credentials/i,
+  /token.*expired/i,
+  /expired.*token/i,
+  /fatal:.*repository.*not found/i,
+];
+
+function gitAuthExtractStderr(error: unknown): string {
+  if (error === null || typeof error !== 'object') return '';
+  const git = (error as { git?: unknown }).git;
+  return git == null ? '' : String(git);
+}
+
+export function classifyGitAuthError(error: unknown): ClassifiedGitAuthError {
+  if (error === null || error === undefined) return { kind: 'non-auth' };
+  const message = error instanceof Error ? error.message : String(error);
+  const combined = `${message}\n${gitAuthExtractStderr(error)}`;
+
+  if (GIT_AUTH_NO_CREDENTIAL_PATTERNS.some((re) => re.test(combined))) {
+    return { kind: 'auth', subclass: 'no-credential' };
+  }
+  if (GIT_AUTH_SCOPE_MISMATCH_PATTERNS.some((re) => re.test(combined))) {
+    return { kind: 'auth', subclass: 'scope-mismatch' };
+  }
+  if (GIT_AUTH_SSH_PATTERNS.some((re) => re.test(combined))) {
+    return { kind: 'auth', subclass: 'ssh-auth' };
+  }
+  if (GIT_AUTH_GENERAL_PATTERNS.some((re) => re.test(combined))) {
+    if (/\b401\b/.test(combined) || /token.*expired/i.test(combined)) {
+      return { kind: 'auth', subclass: '401' };
+    }
+    if (/\b403\b/.test(combined)) {
+      return { kind: 'auth', subclass: '403' };
+    }
+    return { kind: 'auth', subclass: 'unknown-auth' };
+  }
+  return { kind: 'non-auth' };
+}
+
+export function isLoginFixableGitAuthError(classified: ClassifiedGitAuthError): boolean {
+  if (classified.kind !== 'auth') return false;
+  return (
+    classified.subclass === 'no-credential' ||
+    classified.subclass === '401' ||
+    classified.subclass === 'unknown-auth'
+  );
+}
+
 const BranchInfoSharedFields = {
   shareTargetExists: z.boolean(),
   dirtyConflicts: z

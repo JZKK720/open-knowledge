@@ -90,10 +90,7 @@ test.describe('chrome-modernization theme-sync smoke', () => {
       await editorPage.evaluate(async (t) => {
         await window.okDesktop?.setThemeSource?.(t);
       }, target);
-      await expect(async () => {
-        const after = await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource);
-        expect(after).toBe(target);
-      }).toPass({ timeout: 1_000 });
+      expect(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe(target);
     }
   });
 
@@ -268,6 +265,11 @@ test.describe('chrome-modernization theme-sync smoke', () => {
       }
     });
 
+    await editorPage.evaluate(() => {
+      window.okDesktop?.signalThemeApplied?.({ reducedTransparency: false });
+    });
+    await editorPage.waitForTimeout(600);
+
     const reducedTrueBefore = await app.evaluate(() => {
       const g = globalThis as unknown as { __okSetVibrancyCalls?: unknown[] };
       return g.__okSetVibrancyCalls?.length ?? 0;
@@ -313,9 +315,6 @@ test.describe('chrome-modernization theme-sync smoke', () => {
     await editorPage.evaluate(async () => {
       await window.okDesktop?.setThemeSource?.('light');
     });
-    await expect(async () => {
-      const after = await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource);
-      expect(after).toBe('light');
-    }).toPass({ timeout: 1_000 });
+    expect(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light');
   });
 });

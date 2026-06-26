@@ -8,7 +8,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, normalize, resolve, sep } from 'node:path';
-import { stringify as stringifyYaml } from 'yaml';
+import {
+  composeTemplateFile,
+  stripFrontmatter,
+  TEMPLATE_IDENTITY_KEY,
+  type TemplateIdentity,
+  unwrapFrontmatterFences,
+} from '@inkeep/open-knowledge-core';
 import { validateSubstitution } from './substitution.ts';
 
 type TemplateWriteResult =
@@ -67,14 +73,24 @@ export function applyTemplateWrite(input: WriteTemplateInput): TemplateWriteResu
   const subsCheck = validateSubstitutionAllowlist(input.body);
   if (!subsCheck.ok) return { ok: false, error: subsCheck.error };
 
+  const reservedCheck = validateNoReservedDocKey(input.body);
+  if (!reservedCheck.ok) return { ok: false, error: reservedCheck.error };
+
   const { templatesDir, filePath } = templatePaths(
     input.projectDir,
     validation.folderRel,
     input.name,
   );
 
-  const fmYaml = serializeFrontmatter(input.frontmatter);
-  const content = fmYaml ? `---\n${fmYaml}---\n${input.body}` : input.body;
+  const identity: TemplateIdentity = {};
+  if (input.frontmatter.title !== undefined) identity.title = input.frontmatter.title;
+  if (input.frontmatter.description !== undefined) {
+    identity.description = input.frontmatter.description;
+  }
+  if (Array.isArray(input.frontmatter.tags) && input.frontmatter.tags.length > 0) {
+    identity.tags = input.frontmatter.tags;
+  }
+  const content = composeTemplateFile(identity, input.body);
 
   try {
     mkdirSync(templatesDir, { recursive: true });
@@ -368,13 +384,22 @@ function relPathOf(projectDir: string, abs: string): string {
   return normalize(rel).split(sep).join('/');
 }
 
-function serializeFrontmatter(fm: TemplateFrontmatter): string {
-  const obj: Record<string, unknown> = {};
-  if (fm.title !== undefined) obj.title = fm.title;
-  if (fm.description !== undefined) obj.description = fm.description;
-  if (Array.isArray(fm.tags) && fm.tags.length > 0) obj.tags = fm.tags;
-  if (Object.keys(obj).length === 0) return '';
-  return stringifyYaml(obj);
+function validateNoReservedDocKey(
+  body: string,
+): { ok: true } | { ok: false; error: { code: string; message: string } } {
+  const { frontmatter } = stripFrontmatter(body);
+  if (frontmatter === '') return { ok: true };
+  const inner = unwrapFrontmatterFences(frontmatter);
+  if (new RegExp(`^${TEMPLATE_IDENTITY_KEY}:`, 'm').test(inner)) {
+    return {
+      ok: false,
+      error: {
+        code: 'TEMPLATE_RESERVED_KEY',
+        message: `Template starter content may not declare a top-level \`${TEMPLATE_IDENTITY_KEY}:\` frontmatter key — it is reserved for the template's identity.`,
+      },
+    };
+  }
+  return { ok: true };
 }
 
 function isEmpty(absDir: string): boolean {

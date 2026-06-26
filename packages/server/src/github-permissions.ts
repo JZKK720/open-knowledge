@@ -131,6 +131,12 @@ async function runProbe(opts: CheckPushPermissionOptions): Promise<PushPermissio
     detectGh,
     tokenStore,
   );
+
+  if (tokenSource === 'anonymous') {
+    log.info({ host }, '[permissions] no credential resolved — denying push (read-only)');
+    return { kind: 'denied', reason: 'no-collaborator' };
+  }
+
   const url = `${githubApiBase(host)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
   log.info(
@@ -196,23 +202,19 @@ function outcomeAttributes(result: PushPermission): ProbeOutcomeAttributes {
 
 let _outcomeCounter: Counter | null = null;
 function outcomeCounter(): Counter {
-  if (!_outcomeCounter) {
-    _outcomeCounter = getMeter().createCounter('ok.permissions.probe.outcome_total', {
-      description:
-        'Push-permission probe outcomes. Bounded labels: outcome ∈ {allowed,denied,unknown}; denied_reason ∈ {no-collaborator,private-no-access,repo-not-found,none}; error_class ∈ {network,timeout,rate-limit,token-invalid,malformed-response,none}.',
-    });
-  }
+  _outcomeCounter ||= getMeter().createCounter('ok.permissions.probe.outcome_total', {
+    description:
+      'Push-permission probe outcomes. Bounded labels: outcome ∈ {allowed,denied,unknown}; denied_reason ∈ {no-collaborator,private-no-access,repo-not-found,none}; error_class ∈ {network,timeout,rate-limit,token-invalid,malformed-response,none}.',
+  });
   return _outcomeCounter;
 }
 
 let _durationHist: Histogram | null = null;
 function durationHist(): Histogram {
-  if (!_durationHist) {
-    _durationHist = getMeter().createHistogram('ok.permissions.probe.duration_ms', {
-      description: 'Push-permission probe wall-clock duration.',
-      unit: 'ms',
-    });
-  }
+  _durationHist ||= getMeter().createHistogram('ok.permissions.probe.duration_ms', {
+    description: 'Push-permission probe wall-clock duration.',
+    unit: 'ms',
+  });
   return _durationHist;
 }
 

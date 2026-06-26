@@ -59,6 +59,7 @@ export const HistorySuccessSchema = z
     entries: z.array(HistoryEntrySchema),
     total: z.number().int().nonnegative().optional(),
     truncated: z.boolean().optional(),
+    hasMore: z.boolean().optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type HistorySuccess = z.infer<typeof HistorySuccessSchema>;
@@ -72,23 +73,6 @@ export const HistoryVersionSuccessSchema = z
   })
   .loose() satisfies StandardSchemaV1;
 export type HistoryVersionSuccess = z.infer<typeof HistoryVersionSuccessSchema>;
-
-export const DiffLineSchema = z
-  .object({
-    type: z.enum(['added', 'removed', 'unchanged']),
-    text: z.string(),
-  })
-  .loose() satisfies StandardSchemaV1;
-export type DiffLine = z.infer<typeof DiffLineSchema>;
-
-export const DiffSuccessSchema = z
-  .object({
-    lines: z.array(DiffLineSchema),
-    additions: z.number().int().nonnegative(),
-    deletions: z.number().int().nonnegative(),
-  })
-  .loose() satisfies StandardSchemaV1;
-export type DiffSuccess = z.infer<typeof DiffSuccessSchema>;
 
 export const WorkspaceSuccessSchema = z
   .object({

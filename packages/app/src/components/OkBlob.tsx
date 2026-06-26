@@ -179,9 +179,8 @@ export function OkBlob({
 
       const normX = Math.max(-1, Math.min(1, dx / HEAD_DIST_SCALE));
       const normY = Math.max(-1, Math.min(1, dy / HEAD_DIST_SCALE));
-      const targetRotY = normX * MAX_HEAD_ROTATION;
       const targetRotX = -normY * MAX_HEAD_ROTATION;
-
+      const targetRotY = normX * MAX_HEAD_ROTATION;
       let targetEyeX = 0;
       let targetEyeY = 0;
       if (dist >= 1) {

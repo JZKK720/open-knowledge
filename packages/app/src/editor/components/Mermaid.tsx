@@ -14,23 +14,21 @@ interface RenderState {
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 function loadMermaid() {
-  if (!mermaidPromise) {
-    mermaidPromise = import('mermaid')
-      .then((mod) => {
-        const m = mod.default;
-        m.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          theme: 'default',
-          suppressErrorRendering: true,
-        });
-        return m;
-      })
-      .catch((err) => {
-        mermaidPromise = null;
-        throw err;
+  mermaidPromise ||= import('mermaid')
+    .then((mod) => {
+      const m = mod.default;
+      m.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'default',
+        suppressErrorRendering: true,
       });
-  }
+      return m;
+    })
+    .catch((err) => {
+      mermaidPromise = null;
+      throw err;
+    });
   return mermaidPromise;
 }
 

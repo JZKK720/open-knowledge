@@ -10,12 +10,16 @@ import type {
   OkMcpWiringShowPayload,
   OkMenuAction,
   OkOnboardingShowPayload,
+  OkPtyData,
+  OkPtyExit,
   OkServerReclaimedInfo,
   OkServerRestartedInfo,
   OkServerVersionDriftInfo,
   OkShareReceivedPayload,
   OkThemeSource,
   OkUpdateDownloadedInfo,
+  OkUpdateRelaunchFailedInfo,
+  OkUpdateRelaunchingInfo,
   OkUpdateStuckHintInfo,
   OkWhatsNewInfo,
 } from '../shared/bridge-contract.ts';
@@ -150,12 +154,18 @@ function readConfigFromArgv(): OkDesktopConfig {
   const projectName = parseArg('project-name') ?? '';
   const modeRaw = parseArg('mode') ?? 'editor';
   const mode: OkDesktopConfig['mode'] = modeRaw === 'navigator' ? 'navigator' : 'editor';
+  const singleFile = parseArg('single-file') === '1';
+  const initialDoc = parseArg('initial-doc') ?? null;
+  const e2eSmoke = parseArg('e2e-smoke') === '1';
   return Object.freeze({
     collabUrl,
     apiOrigin,
     projectPath,
     projectName,
     mode,
+    e2eSmoke,
+    singleFile,
+    initialDoc,
   });
 }
 
@@ -181,6 +191,20 @@ const bridge: OkDesktopBridge = {
     // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
     ipcRenderer.on('ok:update:downloaded', listener);
     return () => ipcRenderer.removeListener('ok:update:downloaded', listener);
+  },
+
+  onUpdateRelaunching(cb: (info: OkUpdateRelaunchingInfo) => void) {
+    const listener = (_event: IpcRendererEvent, info: OkUpdateRelaunchingInfo) => cb(info);
+    // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+    ipcRenderer.on('ok:update:relaunching', listener);
+    return () => ipcRenderer.removeListener('ok:update:relaunching', listener);
+  },
+
+  onUpdateRelaunchFailed(cb: (info: OkUpdateRelaunchFailedInfo) => void) {
+    const listener = (_event: IpcRendererEvent, info: OkUpdateRelaunchFailedInfo) => cb(info);
+    // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+    ipcRenderer.on('ok:update:relaunch-failed', listener);
+    return () => ipcRenderer.removeListener('ok:update:relaunch-failed', listener);
   },
 
   onWhatsNew(cb: (info: OkWhatsNewInfo) => void) {
@@ -283,7 +307,6 @@ const bridge: OkDesktopBridge = {
     showAssetMenu: (params) => invoke('ok:shell:show-asset-menu', params),
     showItemInFolder: (path: string) => invoke('ok:shell:show-item-in-folder', path),
     trashItem: (absPath: string) => invoke('ok:shell:trash-item', absPath),
-    openInTerminal: (dirAbsPath: string) => invoke('ok:shell:open-in-terminal', dirAbsPath),
   },
 
   clipboard: {
@@ -472,6 +495,35 @@ const bridge: OkDesktopBridge = {
       ipcRenderer.on('ok:sidebar:collapse-all', listener);
       return () => ipcRenderer.removeListener('ok:sidebar:collapse-all', listener);
     },
+  },
+
+  terminal: {
+    create: (opts) => invoke('ok:pty:create', opts),
+    input: (ptyId, data) => {
+      invoke('ok:pty:input', { ptyId, data }).catch(() => {});
+    },
+    resize: (ptyId, cols, rows) => {
+      invoke('ok:pty:resize', { ptyId, cols, rows }).catch(() => {});
+    },
+    kill: (ptyId) => invoke('ok:pty:kill', { ptyId }),
+    drain: (ptyId, bytes) => {
+      invoke('ok:pty:drain', { ptyId, bytes }).catch(() => {});
+    },
+    onData(cb) {
+      const listener = (_event: IpcRendererEvent, msg: OkPtyData) => cb(msg);
+      // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+      ipcRenderer.on('ok:pty:data', listener);
+      return () => ipcRenderer.removeListener('ok:pty:data', listener);
+    },
+    onExit(cb) {
+      const listener = (_event: IpcRendererEvent, msg: OkPtyExit) => cb(msg);
+      // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+      ipcRenderer.on('ok:pty:exit', listener);
+      return () => ipcRenderer.removeListener('ok:pty:exit', listener);
+    },
+    claudePreflight: () => invoke('ok:terminal:claude-assist', { action: 'preflight' }),
+    cliPreflight: (cli) => invoke('ok:terminal:cli-preflight', { cli }),
+    rewireClaudeMcp: () => invoke('ok:terminal:claude-assist', { action: 'rewire' }),
   },
 
   platform: process.platform as 'darwin' | 'win32' | 'linux',

@@ -33,6 +33,7 @@ async function bootTestServer(
   writeFileSync(join(okDir, 'config.yml'), '', 'utf-8');
   writeFileSync(join(okDir, '.gitignore'), '', 'utf-8');
   const booted = await bootServer({
+    host: '127.0.0.1',
     contentDir,
     attachUiSibling: false,
     idleShutdownMs: null,
@@ -87,7 +88,7 @@ describe('keepalive WS close → grace timer → clearPresence (US-004)', () => 
     expect(broadcaster.getPresenceMap()[presenceKey]).toBeDefined();
 
     const ws = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
+      `ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());
@@ -123,7 +124,7 @@ describe('keepalive WS close → grace timer → clearPresence (US-004)', () => 
     });
 
     const ws1 = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
+      `ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws1.once('open', () => resolve());
@@ -133,7 +134,7 @@ describe('keepalive WS close → grace timer → clearPresence (US-004)', () => 
 
     await wait(50);
     const ws2 = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
+      `ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws2.once('open', () => resolve());
@@ -162,7 +163,7 @@ describe('keepalive WS close → grace timer → clearPresence (US-004)', () => 
       ts: Date.now(),
     });
 
-    const ws = new WsClient(`ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}`);
+    const ws = new WsClient(`ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}`);
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());
       ws.once('error', (err) => reject(err));
@@ -181,7 +182,7 @@ describe('keepalive WS close → grace timer → clearPresence (US-004)', () => 
     const presenceKey = toBroadcasterKey(connectionId);
 
     const ws = new WsClient(
-      `ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
+      `ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}&connectionId=${connectionId}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());

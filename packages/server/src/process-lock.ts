@@ -42,7 +42,7 @@ export class ProcessLockCollisionError extends Error {
   readonly lockName: LockName;
   constructor(existing: ProcessLockMetadata, lockPath: string, lockName: LockName) {
     super(
-      `Open Knowledge ${lockName} already running on port ${existing.port} ` +
+      `OpenKnowledge ${lockName} already running on port ${existing.port} ` +
         `(pid ${existing.pid}, started ${existing.startedAt}). ` +
         `Stop it first or use a different directory. Lock: ${lockPath}`,
     );

@@ -123,11 +123,13 @@ describe('buildPackSkills', () => {
     expect(buildPackSkills(fixture({ discovery: '# d\n', project: '# p\n' }))).toEqual([]);
   });
 
-  test('repo assets — all six starter packs are present to build', () => {
+  test('repo assets — all eight starter packs are present to build', () => {
     const packsDir = join(defaultPaths().skillsDir, 'packs');
     const expected = [
+      'codebase-wiki',
       'entity-vault',
       'knowledge-base',
+      'okf',
       'plain-notes',
       'software-lifecycle',
       'worldbuilding',

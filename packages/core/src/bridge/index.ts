@@ -5,6 +5,8 @@ export {
   type FrontmatterBinding,
   type FrontmatterBindingPatchResult,
   type FrontmatterBindingPatchSuccess,
+  type FrontmatterBindingPathResult,
+  type FrontmatterBindingPathSuccess,
   type FrontmatterBindingRenameResult,
   type FrontmatterBindingRenameSuccess,
   type FrontmatterBindingReorderResult,
@@ -23,7 +25,18 @@ export {
 } from './bridge-invariant.ts';
 export { type DiffChange, diffLinesFast } from './diff-lines.ts';
 export {
+  type DocBoundarySplit,
+  projectMergeBoundarySpace,
+  reattachLeadingDocBoundary,
+  splitLeadingDocBoundary,
+} from './doc-boundary-space.ts';
+export {
   applyPatchToFm,
+  applyPathDeleteToFm,
+  applyPathRenameToFm,
+  applyPathReorderSeqToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
   applyRenameToFm,
   applyReorderToFm,
   detectFmRegion,
@@ -54,3 +67,12 @@ export {
   normalizeBridge,
 } from './normalize.ts';
 export { defaultScheduler, type Scheduler } from './scheduler.ts';
+export {
+  classifySeverity,
+  emitToleranceFire,
+  findFirstDivergenceIndex,
+  setToleranceTelemetryHook,
+  type ToleranceClassSeverity,
+  type ToleranceFireRecord,
+  type ToleranceTelemetryHook,
+} from './tolerance-telemetry.ts';

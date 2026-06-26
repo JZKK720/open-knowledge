@@ -37,7 +37,7 @@ const HistoryEntryOutputSchema = z.object({
     .describe('Checkpoint metadata when this entry is a checkpoint, else null.'),
 });
 
-export const DESCRIPTION = [
+const DESCRIPTION = [
   '[Requires: Hocuspocus server] List version history for a document, or the activity timeline for a folder.',
   'Returns timeline entries from the shadow repo, sorted by timestamp descending.',
   'Each entry carries a `version` (40-char commit SHA) you pass straight to `restore_version({ document, version })` — same field name on both sides.',

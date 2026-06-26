@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
+import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import { createTestServer, type TestServer } from './test-harness';
 
 interface LinkGraphResponse {
@@ -47,14 +48,14 @@ beforeAll(async () => {
 
   server = await createTestServer({ contentDir, keepContentDir: true });
   await wait(1500);
-});
+}, HARNESS_BOOT_TIMEOUT_MS);
 
 afterAll(async () => {
   await server.cleanup();
 });
 
 async function fetchLinkGraph(): Promise<LinkGraphResponse> {
-  const res = await fetch(`http://localhost:${server.port}/api/link-graph`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/link-graph`);
   return res.json() as Promise<LinkGraphResponse>;
 }
 

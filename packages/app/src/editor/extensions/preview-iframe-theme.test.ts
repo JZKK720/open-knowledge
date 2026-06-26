@@ -7,7 +7,6 @@ import {
   parsePreviewHeightMessage,
 } from './preview-iframe-header';
 
-const POLICIES = ['cdn-allowlist', 'inline-only'] as const;
 const THEMES: readonly PreviewTheme[] = ['light', 'dark'];
 const INITIAL_CLASS_STATEMENT = "d.classList.add('dark');";
 
@@ -16,54 +15,50 @@ function count(s: string, sub: string): number {
 }
 
 describe('buildPreviewIframeHeader — theme token injection', () => {
-  for (const policy of POLICIES) {
-    for (const theme of THEMES) {
-      const header = buildPreviewIframeHeader(policy, theme);
+  for (const theme of THEMES) {
+    const header = buildPreviewIframeHeader(theme);
 
-      test(`[${policy}/${theme}] injects both :root and :root.dark token blocks`, () => {
-        expect(header).toContain(':root{');
-        expect(header).toContain(':root.dark{');
-      });
+    test(`[${theme}] injects both :root and :root.dark token blocks`, () => {
+      expect(header).toContain(':root{');
+      expect(header).toContain(':root.dark{');
+    });
 
-      test(`[${policy}/${theme}] delivers every token in both light and dark`, () => {
-        for (const t of PREVIEW_THEME_TOKENS) {
-          expect(header).toContain(`${t.name}:${t.light}`);
-          expect(header).toContain(`${t.name}:${t.dark}`);
-        }
-      });
+    test(`[${theme}] delivers every token in both light and dark`, () => {
+      for (const t of PREVIEW_THEME_TOKENS) {
+        expect(header).toContain(`${t.name}:${t.light}`);
+        expect(header).toContain(`${t.name}:${t.dark}`);
+      }
+    });
 
-      test(`[${policy}/${theme}] sets color-scheme so native controls theme`, () => {
-        expect(header).toContain('color-scheme:light');
-        expect(header).toContain('color-scheme:dark');
-      });
+    test(`[${theme}] sets color-scheme so native controls theme`, () => {
+      expect(header).toContain('color-scheme:light');
+      expect(header).toContain('color-scheme:dark');
+    });
 
-      test(`[${policy}/${theme}] injects themed body defaults`, () => {
-        expect(header).toContain('background:var(--background)');
-        expect(header).toContain('color:var(--foreground)');
-      });
+    test(`[${theme}] injects themed body defaults`, () => {
+      expect(header).toContain('background:var(--background)');
+      expect(header).toContain('color:var(--foreground)');
+    });
 
-      test(`[${policy}/${theme}] wires the postMessage theme listener`, () => {
-        expect(header).toContain('<script>');
-        expect(header).toContain("addEventListener('message'");
-        const messageKey = Object.keys(buildPreviewThemeMessage('light'))[0];
-        expect(header).toContain(`e.data.${messageKey}`);
-      });
-    }
+    test(`[${theme}] wires the postMessage theme listener`, () => {
+      expect(header).toContain('<script>');
+      expect(header).toContain("addEventListener('message'");
+      const messageKey = Object.keys(buildPreviewThemeMessage('light'))[0];
+      expect(header).toContain(`e.data.${messageKey}`);
+    });
   }
 
   test('dark bakes one extra initial-class statement vs light', () => {
-    const light = buildPreviewIframeHeader('cdn-allowlist', 'light');
-    const dark = buildPreviewIframeHeader('cdn-allowlist', 'dark');
+    const light = buildPreviewIframeHeader('light');
+    const dark = buildPreviewIframeHeader('dark');
     expect(count(light, INITIAL_CLASS_STATEMENT)).toBe(1);
     expect(count(dark, INITIAL_CLASS_STATEMENT)).toBe(2);
   });
 
-  test('per policy, light and dark headers differ ONLY by the baked class', () => {
-    for (const policy of POLICIES) {
-      const light = buildPreviewIframeHeader(policy, 'light');
-      const dark = buildPreviewIframeHeader(policy, 'dark');
-      expect(dark.replace(INITIAL_CLASS_STATEMENT, '')).toBe(light);
-    }
+  test('light and dark headers differ ONLY by the baked class', () => {
+    const light = buildPreviewIframeHeader('light');
+    const dark = buildPreviewIframeHeader('dark');
+    expect(dark.replace(INITIAL_CLASS_STATEMENT, '')).toBe(light);
   });
 });
 
@@ -75,20 +70,18 @@ describe('buildPreviewThemeMessage', () => {
 });
 
 describe('buildPreviewIframeHeader — auto-height reporting', () => {
-  for (const policy of POLICIES) {
-    for (const theme of THEMES) {
-      const header = buildPreviewIframeHeader(policy, theme);
+  for (const theme of THEMES) {
+    const header = buildPreviewIframeHeader(theme);
 
-      test(`[${policy}/${theme}] the bootstrap script reports content height`, () => {
-        expect(header).toContain('okPreviewHeight');
-        expect(header).toContain('getBoundingClientRect');
-        expect(header).toContain('ResizeObserver');
-      });
-    }
+    test(`[${theme}] the bootstrap script reports content height`, () => {
+      expect(header).toContain('okPreviewHeight');
+      expect(header).toContain('getBoundingClientRect');
+      expect(header).toContain('ResizeObserver');
+    });
   }
 
   test('the theme listener honors only the parent window', () => {
-    expect(buildPreviewIframeHeader('cdn-allowlist', 'light')).toContain('e.source!==parent');
+    expect(buildPreviewIframeHeader('light')).toContain('e.source!==parent');
   });
 });
 

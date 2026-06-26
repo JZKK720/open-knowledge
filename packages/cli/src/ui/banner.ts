@@ -9,6 +9,7 @@ interface BannerOptions {
   localUrl: string;
   networkUrl?: string;
   apiUrl?: string;
+  nextSteps?: string[];
 }
 
 export function renderBanner(opts: BannerOptions): string {
@@ -39,6 +40,13 @@ export function renderBanner(opts: BannerOptions): string {
       plain: `${netLabel}${opts.networkUrl}`,
       colored: `${netLabel}${link(info(opts.networkUrl), opts.networkUrl)}`,
     });
+  }
+
+  if (opts.nextSteps && opts.nextSteps.length > 0) {
+    lines.push({ plain: '', colored: '' });
+    for (const step of opts.nextSteps) {
+      lines.push({ plain: step, colored: dim(step) });
+    }
   }
 
   lines.push({ plain: '', colored: '' });

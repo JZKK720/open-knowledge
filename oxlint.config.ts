@@ -7,6 +7,13 @@ export default defineConfig({
   },
   jsPlugins: ['oxlint-plugin-eslint'],
   rules: {
+    'eslint/logical-assignment-operators': [
+      'error',
+      'always',
+      {
+        enforceForIfStatements: true,
+      },
+    ],
     'eslint-js/no-restricted-syntax': [
       'error',
       {

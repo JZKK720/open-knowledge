@@ -9,12 +9,12 @@ const LOCK_SCAN_MAX_ENTRIES = 2000;
 const OK_LOCK_DIR_ARG_PREFIX = '--ok-lock-dir-b64=';
 const OK_PROJECT_PATH_ARG_PREFIX = '--ok-project-path=';
 const OK_PROCESS_PGREP_QUERY =
-  'cli\\.mjs|open-knowledge|Open Knowledge(\\.app| Helper)|--ok-lock-dir-b64=|--ok-project-path=|(^|[ /])ok[ ]+(start|mcp|ui)([ ]|$)|packages/(cli|app)|hocuspocus|vite';
+  'cli\\.mjs|open-knowledge|Open ?Knowledge(\\.app| Helper)|--ok-lock-dir-b64=|--ok-project-path=|(^|[ /])ok[ ]+(start|mcp|ui)([ ]|$)|packages/(cli|app)|hocuspocus|vite';
 
 const OK_PROCESS_PATTERNS: RegExp[] = [
   /cli\.mjs/,
   /(^|[\s/])(open-knowledge|ok)\s+(start|mcp|ui)(\s|$)/,
-  /Open Knowledge(?:\.app| Helper)/,
+  /Open ?Knowledge(?:\.app| Helper)/,
   /(^|[\s/])bun([\s/]).*?(run dev|packages\/app|vite|hocuspocus)/,
   /(^|[\s/])node([\s/]).*?(packages\/(cli|app)|vite|hocuspocus)/,
   /(^|\s)--ok-lock-dir-b64=/,

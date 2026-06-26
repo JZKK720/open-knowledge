@@ -1,13 +1,12 @@
-import { json } from '@codemirror/lang-json';
-import { type Language, StreamLanguage } from '@codemirror/language';
-import { toml } from '@codemirror/legacy-modes/mode/toml';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { codeLanguageForExtension } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { basicDarkInit, basicLightInit } from '@uiw/codemirror-theme-basic';
 import { basicSetup } from 'codemirror';
 import { useTheme } from 'next-themes';
 import { useEffect, useRef, useState } from 'react';
+import { loadCodeMirrorLanguageForExtension } from './text-viewer-languages';
 
 const darkTheme = basicDarkInit({
   settings: {
@@ -22,17 +21,6 @@ const lightTheme = basicLightInit({
     gutterBackground: 'var(--muted)',
   },
 });
-
-function pickLanguageExtension(extension: string): Language | null {
-  switch (extension.toLowerCase()) {
-    case 'json':
-      return json().language;
-    case 'toml':
-      return StreamLanguage.define(toml);
-    default:
-      return null;
-  }
-}
 
 interface TextViewerProps {
   src: string;
@@ -56,7 +44,18 @@ function useAssetText(src: string): FetchState {
       .then(async (resp) => {
         if (!resp.ok) {
           const status = resp.status;
-          throw new Error(t`Failed to load file (HTTP ${status})`);
+          if (status === 413) {
+            throw new Error(
+              t`This file is too large to open in the built-in text editor (1 MB limit). Use Open file below to open it in another app.`,
+            );
+          }
+          if (status === 404) {
+            throw new Error(t`This file could not be found.`);
+          }
+          if (status === 400) {
+            throw new Error(t`This file can't be opened in the text editor.`);
+          }
+          throw new Error(t`Something went wrong opening this file (HTTP ${status}).`);
         }
         return resp.text();
       })
@@ -89,25 +88,32 @@ export function TextViewer({ src, fileName, extension }: TextViewerProps) {
     if (!containerRef.current) return;
     if (loadedContent === null) return;
 
-    const language = pickLanguageExtension(extension);
+    const normalized = extension.toLowerCase();
+    const canonical = codeLanguageForExtension(normalized);
     const theme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
-    const extensions = [
-      basicSetup,
-      ...(language ? [language] : []),
-      EditorView.editable.of(true),
-      EditorState.readOnly.of(true),
-      EditorView.lineWrapping,
-      theme,
-    ];
-
-    const view = new EditorView({
-      state: EditorState.create({ doc: loadedContent, extensions }),
-      parent: containerRef.current,
+    let aborted = false;
+    let view: EditorView | null = null;
+    void loadCodeMirrorLanguageForExtension(normalized, canonical).then((language) => {
+      if (aborted) return;
+      if (!containerRef.current) return;
+      const extensions = [
+        basicSetup,
+        ...(language ? [language] : []),
+        EditorView.editable.of(true),
+        EditorState.readOnly.of(true),
+        EditorView.lineWrapping,
+        theme,
+      ];
+      view = new EditorView({
+        state: EditorState.create({ doc: loadedContent, extensions }),
+        parent: containerRef.current,
+      });
+      viewRef.current = view;
     });
-    viewRef.current = view;
 
     return () => {
-      view.destroy();
+      aborted = true;
+      view?.destroy();
       viewRef.current = null;
     };
   }, [loadedContent, extension, resolvedTheme]);

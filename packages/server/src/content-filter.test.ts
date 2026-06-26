@@ -129,6 +129,50 @@ describe('ContentFilter', () => {
     });
   });
 
+  describe('nested ignore depth semantics', () => {
+    test('non-anchored nested pattern matches at any depth below its directory', () => {
+      mkdirSync(join(projectDir, 'agents', 'agents-api', '.blob-storage'), { recursive: true });
+      writeFileSync(join(projectDir, 'agents', '.gitignore'), '.blob-storage/\n');
+
+      const filter = createContentFilter({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('agents/agents-api/.blob-storage/doc.md')).toBe(true);
+      expect(filter.isDirExcluded('agents/agents-api/.blob-storage')).toBe(true);
+      expect(filter.isDirExcluded('agents/.blob-storage')).toBe(true);
+      expect(filter.isDirExcluded('other/.blob-storage')).toBe(false);
+    });
+
+    test('async factory: non-anchored nested pattern matches at any depth', async () => {
+      mkdirSync(join(projectDir, 'agents', 'agents-api', '.blob-storage'), { recursive: true });
+      writeFileSync(join(projectDir, 'agents', '.gitignore'), '.blob-storage/\n');
+
+      const filter = await createContentFilterAsync({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('agents/agents-api/.blob-storage/doc.md')).toBe(true);
+      expect(filter.isDirExcluded('agents/agents-api/.blob-storage')).toBe(true);
+    });
+
+    test('anchored nested pattern stays scoped to its own level (no over-match)', () => {
+      mkdirSync(join(projectDir, 'pkg', 'src', 'generated'), { recursive: true });
+      writeFileSync(join(projectDir, 'pkg', '.gitignore'), 'src/generated/\n');
+
+      const filter = createContentFilter({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('pkg/src/generated/api.md')).toBe(true);
+      expect(filter.isExcluded('pkg/nested/src/generated/api.md')).toBe(false);
+    });
+
+    test('non-anchored nested negation un-ignores at any depth', () => {
+      mkdirSync(join(projectDir, 'logs', 'sub'), { recursive: true });
+      writeFileSync(join(projectDir, 'logs', '.gitignore'), '*.md\n!keep.md\n');
+
+      const filter = createContentFilter({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('logs/debug.md')).toBe(true);
+      expect(filter.isExcluded('logs/sub/keep.md')).toBe(false);
+    });
+  });
+
   describe('non-git graceful degradation', () => {
     test('works with no .gitignore and no .okignore', () => {
       const filter = createContentFilter({ projectDir, contentDir: projectDir });
@@ -457,6 +501,83 @@ describe('ContentFilter', () => {
       expect(filter.isPathIgnored('.git/config', BYPASS)).toBe(true);
       expect(filter.isPathIgnored('node_modules/pkg/index.js', BYPASS)).toBe(true);
 
+      expect(filter.isExcluded('.DS_Store', BYPASS)).toBe(true);
+      expect(filter.isExcluded('notes/.DS_Store', BYPASS)).toBe(true);
+      expect(filter.isExcluded('a/b/c/.DS_Store', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.localized', BYPASS)).toBe(true);
+      expect(filter.isExcluded('notes/.localized', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.DS_Store', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('notes/.DS_Store', BYPASS)).toBe(true);
+      expect(filter.isExcluded('archive.DS_Store', BYPASS)).toBe(false);
+      expect(filter.isExcluded('notes/my.DS_Store.md', BYPASS)).toBe(false);
+
+      expect(filter.isExcluded('.env', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.env.local', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.env.production', BYPASS)).toBe(true);
+      expect(filter.isExcluded('packages/server/.env', BYPASS)).toBe(true);
+      expect(filter.isExcluded('aws-prod-root-key.pem', BYPASS)).toBe(true);
+      expect(filter.isExcluded('SERVER.PEM', BYPASS)).toBe(true);
+      expect(filter.isExcluded('secrets/cert.key', BYPASS)).toBe(true);
+      expect(filter.isExcluded('artifacts/cert.p12', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_rsa', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_rsa.pub', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.aws/credentials', BYPASS)).toBe(true);
+      expect(filter.isExcluded('credentials', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.env', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('packages/.env.local', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('aws-prod-root-key.pem', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('id_rsa', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.ssh', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.aws', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.gnupg', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.kube', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.docker', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('home/user/.ssh', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('home/user/.kube', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('home/user/.docker', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.ssh/id_ed25519', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.kube/config', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.docker/config.json', BYPASS)).toBe(true);
+      expect(filter.isExcluded('home/user/.aws/credentials', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.ssh/known_hosts', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_ed25519', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_ecdsa', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_dsa', BYPASS)).toBe(true);
+      expect(filter.isExcluded('id_ed25519.pub', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('id_ed25519', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.netrc', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.npmrc', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.pgpass', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.git-credentials', BYPASS)).toBe(true);
+      expect(filter.isExcluded('notes/.netrc', BYPASS)).toBe(true);
+      expect(filter.isExcluded('packages/.npmrc', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.netrc', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.git-credentials', BYPASS)).toBe(true);
+      expect(filter.isExcluded('certs/server.pfx', BYPASS)).toBe(true);
+      expect(filter.isExcluded('certs/SERVER.PFX', BYPASS)).toBe(true);
+      expect(filter.isExcluded('app/release.keystore', BYPASS)).toBe(true);
+      expect(filter.isExcluded('release.jks', BYPASS)).toBe(true);
+      expect(filter.isExcluded('windows-id.ppk', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('release.jks', BYPASS)).toBe(true);
+      expect(filter.isExcluded('docs/.environment.md', BYPASS)).toBe(false);
+      expect(filter.isExcluded('docs/keymap.md', BYPASS)).toBe(false);
+      expect(filter.isExcluded('packages/foo/keynote.md', BYPASS)).toBe(false);
+      expect(filter.isExcluded('docs/.npmrc.example', BYPASS)).toBe(false);
+      expect(filter.isExcluded('docs/mynetrc.md', BYPASS)).toBe(false);
+
+      expect(filter.isExcluded('.ENV', BYPASS)).toBe(true);
+      expect(filter.isExcluded('packages/server/.Env.Production', BYPASS)).toBe(true);
+      expect(filter.isExcluded('ID_RSA', BYPASS)).toBe(true);
+      expect(filter.isExcluded('ID_ED25519', BYPASS)).toBe(true);
+      expect(filter.isExcluded('CREDENTIALS', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.GIT-CREDENTIALS', BYPASS)).toBe(true);
+      expect(filter.isPathIgnored('.ENV', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('.SSH', BYPASS)).toBe(true);
+      expect(filter.isDirExcluded('home/user/.AWS', BYPASS)).toBe(true);
+      expect(filter.isExcluded('.SSH/known_hosts', BYPASS)).toBe(true);
+      expect(filter.isExcluded('docs/.Environment.md', BYPASS)).toBe(false);
+      expect(filter.isExcluded('docs/KEYMAP.md', BYPASS)).toBe(false);
+
       expect(filter.isDirExcluded('dist', BYPASS)).toBe(false);
       expect(filter.isDirExcluded('build', BYPASS)).toBe(false);
       expect(filter.isDirExcluded('coverage', BYPASS)).toBe(false);
@@ -652,6 +773,17 @@ describe('ContentFilter', () => {
       expect(filter.isExcluded('docs/data.csv')).toBe(false);
       expect(filter.isExcluded('docs/notes.txt')).toBe(false);
       expect(filter.isExcluded('docs/config.json')).toBe(false);
+    });
+
+    test('.base and .canvas files are admitted when a sibling .md exists', () => {
+      mkdirSync(join(projectDir, 'vault'));
+      writeFileSync(join(projectDir, 'vault', 'note.md'), '# Note');
+
+      const filter = createContentFilter({ projectDir, contentDir: projectDir });
+
+      expect(filter.isExcluded('vault/Characters.base')).toBe(false);
+      expect(filter.isExcluded('vault/Board.canvas')).toBe(false);
+      expect(filter.isExcluded('standalone/Characters.base')).toBe(true);
     });
 
     test('.okignore exclusion takes precedence over sibling-asset rule', () => {
@@ -1149,18 +1281,16 @@ describe('ContentFilter', () => {
       expect(filter.isExcluded('apps/web/dist/index.md', { bypassFilters: true })).toBe(false);
     });
 
-    test('admits non-md/non-asset extensions (.ts, .py, .sh, .yaml)', () => {
+    test('admits non-md/non-asset extensions (.ts, .py, .sh) only under bypass', () => {
       const filter = createContentFilter({ projectDir, contentDir: projectDir });
 
       expect(filter.isExcluded('src/index.ts')).toBe(true);
       expect(filter.isExcluded('scripts/build.sh')).toBe(true);
       expect(filter.isExcluded('analysis.py')).toBe(true);
-      expect(filter.isExcluded('config.yaml')).toBe(true);
 
       expect(filter.isExcluded('src/index.ts', { bypassFilters: true })).toBe(false);
       expect(filter.isExcluded('scripts/build.sh', { bypassFilters: true })).toBe(false);
       expect(filter.isExcluded('analysis.py', { bypassFilters: true })).toBe(false);
-      expect(filter.isExcluded('config.yaml', { bypassFilters: true })).toBe(false);
     });
 
     test('STOP rule preserved — reserved system + config doc names stay hidden in bypass mode', () => {
@@ -1208,6 +1338,101 @@ describe('ContentFilter', () => {
         expect(filter.isDirExcluded(p)).toBe(filter.isDirExcluded(p, { bypassFilters: false }));
         expect(filter.isPathIgnored(p)).toBe(filter.isPathIgnored(p, { bypassFilters: false }));
       }
+    });
+  });
+
+  describe('singleDocRelPath (single-file scope, D3)', () => {
+    test('isExcluded admits only the target doc; every sibling excluded', () => {
+      writeFileSync(join(projectDir, 'notes.md'), '# notes');
+      writeFileSync(join(projectDir, 'other.md'), '# other');
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+
+      expect(filter.isExcluded('notes.md')).toBe(false);
+      expect(filter.isExcluded('other.md')).toBe(true);
+      expect(filter.isExcluded('sub/deep.md')).toBe(true);
+    });
+
+    test('isDirExcluded prunes every directory for a bare-basename target', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isDirExcluded('sub')).toBe(true);
+      expect(filter.isDirExcluded('sub/nested')).toBe(true);
+    });
+
+    test('isDirExcluded descends only the ancestor chain of a nested target', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'a/b/doc.md',
+      });
+      expect(filter.isDirExcluded('a')).toBe(false);
+      expect(filter.isDirExcluded('a/b')).toBe(false);
+      expect(filter.isDirExcluded('a/other')).toBe(true);
+      expect(filter.isDirExcluded('other')).toBe(true);
+      expect(filter.isExcluded('a/b/doc.md')).toBe(false);
+      expect(filter.isExcluded('a/b/sibling.md')).toBe(true);
+    });
+
+    test('isPathIgnored is UNAFFECTED — referenced sibling assets still serve (STOP_IF)', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isPathIgnored('sibling.png')).toBe(false);
+      expect(filter.isPathIgnored('notes.md')).toBe(false);
+      expect(filter.isPathIgnored('.git/config')).toBe(true);
+      expect(filter.isPathIgnored('__system__.md')).toBe(true);
+    });
+
+    test('scope holds even under bypassFilters (single-file sidebar is hidden, but defense-in-depth)', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isExcluded('other.md', { bypassFilters: true })).toBe(true);
+      expect(filter.isExcluded('notes.md', { bypassFilters: true })).toBe(false);
+      expect(filter.isDirExcluded('sub', { bypassFilters: true })).toBe(true);
+    });
+
+    test('split projectDir/contentDir (ephemeral shape) scopes correctly', async () => {
+      const realParent = await mkdtemp(join(tmpdir(), 'content-filter-real-'));
+      try {
+        writeFileSync(join(realParent, 'notes.md'), '# notes');
+        writeFileSync(join(realParent, 'secret.md'), '# secret');
+        const filter = createContentFilter({
+          projectDir,
+          contentDir: realParent,
+          singleDocRelPath: 'notes.md',
+        });
+        expect(filter.isExcluded('notes.md')).toBe(false);
+        expect(filter.isExcluded('secret.md')).toBe(true);
+        expect(filter.isPathIgnored('sibling.png')).toBe(false);
+      } finally {
+        await rm(realParent, { recursive: true, force: true });
+      }
+    });
+
+    test('async factory mirrors the sync single-file scope', async () => {
+      writeFileSync(join(projectDir, 'notes.md'), '# notes');
+      writeFileSync(join(projectDir, 'other.md'), '# other');
+      const filter = await createContentFilterAsync({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isExcluded('notes.md')).toBe(false);
+      expect(filter.isExcluded('other.md')).toBe(true);
+      expect(filter.isDirExcluded('sub')).toBe(true);
+      expect(filter.isPathIgnored('sibling.png')).toBe(false);
     });
   });
 });

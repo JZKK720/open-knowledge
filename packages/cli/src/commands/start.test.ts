@@ -17,10 +17,12 @@ import {
   connectUiSibling,
   decideUiSpawn,
   deriveServerProcessTitle,
+  formatShutdownNotice,
   isServerLockCollision,
   OkDirMissingError,
   resolveCollabPort,
   resolveHost,
+  resolveStartConsoleLevel,
   shouldConnectToExistingServer,
   spawnOkUi,
   startCommand,
@@ -44,6 +46,37 @@ describe('resolveHost', () => {
 
   test('explicit undefined --host falls through to env (precedence: flag > env > default)', () => {
     expect(resolveHost({ host: undefined }, { HOST: '0.0.0.0' })).toBe('0.0.0.0');
+  });
+});
+
+describe('formatShutdownNotice', () => {
+  test('SIGINT includes the headline, the wait notice, and the force-quit hint', () => {
+    const lines = formatShutdownNotice('SIGINT');
+    expect(lines[0]).toContain('Stopping OpenKnowledge');
+    expect(lines.some((l) => l.includes('few seconds'))).toBe(true);
+    expect(lines.some((l) => l.includes('force quit'))).toBe(true);
+  });
+
+  test('SIGTERM omits the force-quit hint (no interactive second-press path)', () => {
+    const lines = formatShutdownNotice('SIGTERM');
+    expect(lines[0]).toContain('Stopping OpenKnowledge');
+    expect(lines.some((l) => l.includes('few seconds'))).toBe(true);
+    expect(lines.some((l) => l.includes('force quit'))).toBe(false);
+  });
+});
+
+describe('resolveStartConsoleLevel', () => {
+  test('returns "warn" when no level is pinned (quiet terminal by default)', () => {
+    expect(resolveStartConsoleLevel({})).toBe('warn');
+  });
+
+  test('returns null (leave env untouched) when LOG_LEVEL is set', () => {
+    expect(resolveStartConsoleLevel({ LOG_LEVEL: 'info' })).toBeNull();
+    expect(resolveStartConsoleLevel({ LOG_LEVEL: 'debug' })).toBeNull();
+  });
+
+  test('returns null when OK_CONSOLE_LEVEL is already set', () => {
+    expect(resolveStartConsoleLevel({ OK_CONSOLE_LEVEL: 'info' })).toBeNull();
   });
 });
 
@@ -815,7 +848,7 @@ describe('bootStartServer (integration)', () => {
       skipUiAutoSpawn: true,
     });
 
-    const ws = new WebSocket(`ws://localhost:${booted.port}/collab/keepalive?pid=${process.pid}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${booted.port}/collab/keepalive?pid=${process.pid}`);
     try {
       await new Promise<void>((done, fail) => {
         const onOpen = () => {

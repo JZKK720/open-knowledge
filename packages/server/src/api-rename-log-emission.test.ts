@@ -8,6 +8,7 @@ import simpleGit from 'simple-git';
 import { createApiExtension } from './api-extension.ts';
 import { BacklinkIndex } from './backlink-index.ts';
 import { recordContributor, swapContributors } from './contributor-tracker.ts';
+import { _resetDocExtensionsForTests } from './doc-extensions.ts';
 import type { FileIndexEntry } from './file-watcher.ts';
 import { loadRenameLogIndex, type RenameLogEntry, resetRenameLogIndexCache } from './rename-log.ts';
 import { initShadowRepo, type ShadowRef } from './shadow-repo.ts';
@@ -84,6 +85,7 @@ beforeEach(async () => {
   shadowRef = { current: shadow };
 
   swapContributors();
+  _resetDocExtensionsForTests();
   resetRenameLogIndexCache();
 });
 
@@ -158,6 +160,23 @@ describe('rename log emission inside withManagedRenameRecovery (US-006)', () => 
     expect(e.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  test('same-base extension change succeeds without a self-rename log entry', async () => {
+    writeFileSync(resolve(contentDir, 'a.md'), '# A\n');
+
+    const response = await callRename({
+      kind: 'file',
+      fromPath: 'a',
+      toPath: 'a.mdx',
+      agentId: 'claude-1',
+      agentName: 'Claude',
+    });
+    expect(response.status).toBe(200);
+
+    expect(existsSync(resolve(contentDir, 'a.mdx'))).toBe(true);
+    expect(existsSync(resolve(contentDir, 'a.md'))).toBe(false);
+    expect(loadEntries()).toHaveLength(0);
+  });
+
   test('anonymous rename produces a service-writer log entry (FR13)', async () => {
     writeFileSync(resolve(contentDir, 'a.md'), '# A\n');
 
@@ -171,7 +190,7 @@ describe('rename log emission inside withManagedRenameRecovery (US-006)', () => 
     const entries = loadEntries();
     expect(entries).toHaveLength(1);
     expect(entries[0].actor.writerId).toBe('openknowledge-service');
-    expect(entries[0].actor.displayName).toBe('Open Knowledge (service)');
+    expect(entries[0].actor.displayName).toBe('OpenKnowledge (service)');
   });
 
   test('folder rename of 3 docs produces 3 entries with shared groupId (FR5)', async () => {

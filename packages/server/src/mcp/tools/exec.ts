@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { argsOf, extractReferencedPaths, nonFlagArgs } from '../../bash/extract-paths.ts';
 import { createBashInstance, execBash, StdoutOverflowError } from '../../bash/index.ts';
@@ -31,12 +31,16 @@ import {
 } from './shared.ts';
 
 const SOFT_CAP_LINES = 500;
-const SOFT_CAP_BYTES = 50 * 1024;
+export const WIRE_BODY_COPIES = 2;
+export const RESULT_BODY_BUDGET_BYTES = 64 * 1024;
+const PER_COPY_DECORATION_HEADROOM_BYTES = 8 * 1024;
+const SOFT_CAP_BYTES =
+  Math.floor(RESULT_BODY_BUDGET_BYTES / WIRE_BODY_COPIES) - PER_COPY_DECORATION_HEADROOM_BYTES;
 
 const BINARY_EXT_RE = /\.(png|jpe?g|gif|webp|svg|pdf|zip|tar|gz|tgz|mp4|mov|mp3|wav|ico|bmp)$/i;
 
 export const DESCRIPTION = [
-  '**STOP — when the project has `.ok/`, do NOT use native `Read`/`Grep`/`Glob` on in-scope `.md`/`.mdx`; use `exec` (this tool).** Native tools skip the frontmatter, backlinks, shadow-repo activity, and git history `exec` returns per wiki file. Reserve native tools for source code, non-markdown, and projects without `.ok/`. (Full rule + escape hatch: the `open-knowledge` skill / MCP `instructions`.)',
+  '**STOP — when the project has `.ok/`, do NOT use native `Read`/`Grep`/`Glob` on in-scope `.md`/`.mdx`; use `exec` (this tool).** Native tools skip the frontmatter, backlinks, shadow-repo activity, and git history `exec` returns per wiki file. Reserve native tools for source code, non-markdown, and projects without `.ok/`. (Full rule + escape hatch: the `open-knowledge` skill.)',
   '',
   'Run a read-only bash-like command against the project content directory. Returns raw stdout plus enriched metadata for every wiki file referenced (frontmatter, backlink/forward-link counts, shadow-repo activity with agent/human attribution).',
   '',
@@ -67,7 +71,6 @@ type ExecEnrichedEntry = EnrichedEntry & {
 export interface ExecStructuredResult {
   enrichedPaths: ExecEnrichedEntry[];
   cwd?: string;
-  stdout?: string;
   warnings?: string[];
   stdoutTruncated?: boolean;
   error?: { category: ErrorCategory; message: string };
@@ -221,6 +224,7 @@ function buildStdoutProvenance(
   stages: Stage[],
   dirByPath: Map<string, DirectoryMeta>,
   fileByPath: Map<string, EnrichedMeta>,
+  rebase: (p: string) => string,
 ): string {
   let stage: Stage | null = null;
   for (let i = stages.length - 1; i >= 0; i--) {
@@ -245,13 +249,15 @@ function buildStdoutProvenance(
     let n = dirArg.replace(/\/+/g, '/');
     if (n.startsWith('./')) n = n.slice(2);
     if (n.endsWith('/')) n = n.slice(0, -1);
-    if (!n || !dirByPath.has(n)) return '';
-    return `${n}/:\n`;
+    if (!n) return '';
+    const key = rebase(n);
+    if (!dirByPath.has(key)) return '';
+    return `${key}/:\n`;
   }
 
-  const wikiFiles = pathArgs.filter((p) => /\.(md|mdx)$/.test(p) && fileByPath.has(p));
+  const wikiFiles = pathArgs.filter((p) => /\.(md|mdx)$/.test(p) && fileByPath.has(rebase(p)));
   if (wikiFiles.length !== 1) return '';
-  return `==> ${wikiFiles[0]} <==\n`;
+  return `==> ${rebase(wikiFiles[0])} <==\n`;
 }
 
 function formatEnrichedBlock(enriched: EnrichedEntry[]): string {
@@ -323,7 +329,12 @@ export async function buildExecResult(
   if (!context.ok) {
     return errorCategoryResult('shell_construct_blocked', `exec failed: ${context.error}`);
   }
-  const { cwd, config, url: resolvedServerUrl } = context;
+  const { cwd, executionCwd, config, url: resolvedServerUrl } = context;
+
+  const rebaseToProject =
+    executionCwd === cwd
+      ? (p: string) => p
+      : (p: string) => relative(cwd, resolve(executionCwd, p));
 
   const parsed = parseCommand(args.command);
   if ('error' in parsed) {
@@ -332,9 +343,9 @@ export async function buildExecResult(
   const stages = augmentStagesWithExcludes(parsed.stages);
   const effectiveCommand = serializeStages(stages);
 
-  const pre = await snapshotMtimes(cwd);
+  const pre = await snapshotMtimes(executionCwd);
 
-  const bash = createBashInstance(cwd);
+  const bash = createBashInstance(executionCwd);
   let stdout = '';
   let stderr = '';
   try {
@@ -354,7 +365,7 @@ export async function buildExecResult(
     );
   }
 
-  const post = await snapshotMtimes(cwd);
+  const post = await snapshotMtimes(executionCwd);
   const mtimeDiff = diffMtimes(pre.snapshot, post.snapshot);
   if (mtimeDiff.changed.length > 0) {
     return errorCategoryResult(
@@ -366,7 +377,7 @@ export async function buildExecResult(
   const capped = applySoftCap(stdout);
 
   const rawPaths = extractReferencedPaths(stdout, stages);
-  const paths = rawPaths.filter((p) => resolveWithinRoot(cwd, p).ok);
+  const paths = rawPaths.filter((p) => resolveWithinRoot(executionCwd, p).ok).map(rebaseToProject);
   const { files, dirs } = await classifyPaths(cwd, paths);
   const isSinglePathCat = stages.length === 1 && stages[0].command === 'cat' && files.length === 1;
   const fileEnriched: EnrichedMeta[] = await Promise.all(
@@ -447,22 +458,21 @@ export async function buildExecResult(
   }
 
   const bannerText = banners.length > 0 ? `${banners.join('\n')}\n\n` : '';
-  const provenance = buildStdoutProvenance(stages, dirByPath, fileByPath);
+  const provenance = buildStdoutProvenance(stages, dirByPath, fileByPath, rebaseToProject);
   const stdoutText = provenance + capped.text;
   const enrichmentBlock = formatEnrichedBlock(enriched);
   const content = `${bannerText}${stdoutText}${enrichmentBlock}`;
 
-  const { resolve } = await buildListResolver({
+  const { resolve: resolvePreviewUrl } = await buildListResolver({
     config,
     resolveCwd: async () => cwd,
   });
-  const enrichedWithPreview: ExecEnrichedEntry[] = withPreviewUrls(enriched, resolve);
+  const enrichedWithPreview: ExecEnrichedEntry[] = withPreviewUrls(enriched, resolvePreviewUrl);
 
   const structured: ExecStructuredResult = {
     enrichedPaths: enrichedWithPreview,
-    stdout: stdoutText,
     stdoutTruncated: capped.truncated,
-    cwd,
+    cwd: executionCwd,
     ...(banners.length > 0 ? { warnings: banners } : {}),
   };
   return textPlusStructured(content, structured);
@@ -490,10 +500,6 @@ export function register(server: ServerInstance, deps: ExecDeps): void {
         enrichedPaths: looseObjectArray.describe(
           'Per-referenced-file metadata: frontmatter, backlink/forward-link counts, recent shadow-repo activity, and a route-only previewUrl.',
         ),
-        stdout: z
-          .string()
-          .optional()
-          .describe('Raw command stdout (soft-cap truncated), without banners or enrichment.'),
         stdoutTruncated: z
           .boolean()
           .optional()

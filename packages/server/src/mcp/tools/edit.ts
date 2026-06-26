@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { renderInventoryFooter, stripFrontmatter } from '@inkeep/open-knowledge-core';
+import {
+  type FrontmatterPatch,
+  renderInventoryFooter,
+  stripFrontmatter,
+  unwrapFrontmatterFences,
+} from '@inkeep/open-knowledge-core';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import { resolveContentDir, resolveLockDir } from '../../config/paths.ts';
@@ -7,7 +12,7 @@ import { mergePatch } from '../../content/frontmatter-merge.ts';
 import type { TemplateFrontmatter } from '../../content/templates-write.ts';
 import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
-import { formatContentDivergenceLine, parseContentDivergence } from './content-divergence.ts';
+import { formatAdvisoryLines, parseAdvisoryWarnings } from './advisory-warnings.ts';
 import { resolveWithinRoot } from './path-safety.ts';
 import { buildPreviewAttachWarning, resolvePreviewUrl, START_UI_TEXT_HINT } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
@@ -36,8 +41,6 @@ import {
   TEMPLATE_PATH_DESCRIBE,
 } from './verb-schemas.ts';
 
-type FrontmatterPatch = Record<string, string | number | boolean | string[] | null>;
-
 const BASE_DESCRIPTION = [
   'Edit one thing in place. Pass EXACTLY ONE of `document`, `folder`, or `template`. Within each: a body edit (`find` + `replace`) OR a `frontmatter` merge-patch — not both in one call.',
   '',
@@ -46,10 +49,10 @@ const BASE_DESCRIPTION = [
   '- `template` — Edit a template: `{ path: "<folder>/<name>", ... }`; body `find`/`replace`/`occurrence?` or metadata `frontmatter`.',
   '- `summary` — Optional one-line user-outcome (≤80 chars) recorded in the timeline for any `document`, `folder`, or `template` edit. Avoid secrets or PII — persisted to git history.',
   '',
-  'Responses may include `structuredContent.document.contentDivergence` when the converged Y.Text doesn\'t match the bytes your edit composed to. The edit still landed; re-read the doc with `exec("cat <path>")` to see what converged.',
+  'Responses may include `structuredContent.document.warnings` — advisory entries discriminated by `kind`: `content-divergence` / `disk-edit-reconciled` (write-integrity — re-read the doc with `exec("cat <path>")`) and `mermaid-parse-error` (the edit landed but that fence will not render — fix it and re-edit).',
 ].join('\n');
 
-export const DESCRIPTION = `${BASE_DESCRIPTION}\n${renderInventoryFooter()}`;
+const DESCRIPTION = `${BASE_DESCRIPTION}\n${renderInventoryFooter()}`;
 
 interface EditDeps {
   serverUrl: ServerUrlOrResolver;
@@ -247,13 +250,13 @@ function composeWritePreviewResult(
       ? (result.summary as { value: string; truncatedFrom?: number; hint?: string })
       : undefined;
   const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
-  const contentDivergence = parseContentDivergence(result.warning);
+  const advisoryWarnings = parseAdvisoryWarnings(result.warnings);
 
   const lines: string[] = [leadLine];
   if (noPreviewAnywhere && !preview) lines.push(START_UI_TEXT_HINT);
   if (summaryHint) lines.push(summaryHint);
-  if (contentDivergence) {
-    lines.push(formatContentDivergenceLine(contentDivergence));
+  if (advisoryWarnings) {
+    lines.push(...formatAdvisoryLines(advisoryWarnings));
   }
   const text = lines.join('\n');
   if (
@@ -261,13 +264,13 @@ function composeWritePreviewResult(
     !noPreviewAnywhere &&
     !noPreviewOnThisDoc &&
     !summaryResult &&
-    !contentDivergence
+    !advisoryWarnings
   ) {
     return textResult(text);
   }
   const document: Record<string, unknown> = {};
   if (summaryResult) document.summary = summaryResult;
-  if (contentDivergence) document.contentDivergence = contentDivergence;
+  if (advisoryWarnings) document.warnings = advisoryWarnings;
   const warning = noPreviewAnywhere ? buildPreviewAttachWarning(preview, autoOpen) : undefined;
   return textPlusStructured(text, nestDocResult(preview, warning, document));
 }
@@ -285,10 +288,7 @@ function templateFilePath(
 }
 
 function parseTemplateFrontmatter(raw: string): TemplateFrontmatter {
-  const inner = raw
-    .replace(/^---\r?\n/, '')
-    .replace(/\r?\n?---\r?\n?$/, '')
-    .trim();
+  const inner = unwrapFrontmatterFences(raw).trim();
   if (inner === '') return { title: '' };
   const parsed: unknown = parseYaml(inner);
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return { title: '' };

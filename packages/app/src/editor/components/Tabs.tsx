@@ -13,21 +13,25 @@ interface TabSummary {
   panelId: string | null;
 }
 
-const TABS_SELECTOR = '[data-component-type="tabs"]';
-const RENDERER_SELECTOR = '[data-node-view-content-react] > .react-renderer';
+const SLOT_SELECTOR =
+  ':scope > .component-children > [data-node-view-content-react] > .react-renderer';
 
-function readTabSlots(root: HTMLElement): TabSummary[] {
-  const ownerTabs = root.closest(TABS_SELECTOR);
-  if (!ownerTabs) return [];
-  const all = Array.from(root.querySelectorAll<HTMLElement>(RENDERER_SELECTOR));
-  const ours = all.filter((r) => r.parentElement?.closest(TABS_SELECTOR) === ownerTabs);
-  return ours.map((r, i) => {
+export function readTabSlots(root: HTMLElement): TabSummary[] {
+  const renderers = Array.from(root.querySelectorAll<HTMLElement>(SLOT_SELECTOR));
+  return renderers.map((r, i) => {
     const tabEl = r.querySelector<HTMLElement>('[data-tab-label]');
     const fromAttr = tabEl?.getAttribute('data-tab-label');
     const label = fromAttr?.trim() || `Tab ${i + 1}`;
     const panelId = tabEl?.getAttribute('data-tab-id') ?? null;
     return { index: i, label, panelId };
   });
+}
+
+export function findNthTabGearButton(root: HTMLElement, index: number): HTMLButtonElement | null {
+  const renderers = Array.from(root.querySelectorAll<HTMLElement>(SLOT_SELECTOR));
+  const target = renderers[index];
+  if (!target) return null;
+  return target.querySelector<HTMLButtonElement>('[data-jsx-gear]');
 }
 
 export function Tabs({ id, children }: TabsProps) {
@@ -125,7 +129,15 @@ export function Tabs({ id, children }: TabsProps) {
                 aria-controls={s.panelId ?? undefined}
                 tabIndex={s.index === safeActive ? 0 : -1}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setActiveIndex(s.index)}
+                onClick={() => {
+                  if (s.index !== safeActive) {
+                    setActiveIndex(s.index);
+                    return;
+                  }
+                  const root = contentRef.current;
+                  if (!root) return;
+                  findNthTabGearButton(root, s.index)?.click();
+                }}
               >
                 {s.label}
               </button>

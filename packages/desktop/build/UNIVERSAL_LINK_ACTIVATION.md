@@ -4,7 +4,7 @@
 
 ## What this document covers
 
-The macOS share-receive flow routes inbound `https://openknowledge.ai/d/<encoded>` clicks (Slack, iMessage, email previews) directly into the installed Open Knowledge app via Apple's Handoff / Universal Links mechanism. Four load-bearing artifacts in this directory must stay aligned for that to work:
+The macOS share-receive flow routes inbound `https://openknowledge.ai/d/<encoded>` clicks (Slack, iMessage, email previews) directly into the installed OpenKnowledge app via Apple's Handoff / Universal Links mechanism. Four load-bearing artifacts in this directory must stay aligned for that to work:
 
 1. **`build/entitlements.mac.plist`** — declares the `com.apple.developer.associated-domains` entitlement with `applinks:openknowledge.ai` + `applinks:www.openknowledge.ai`. This is what the kernel checks when AppKit is asked to deliver an inbound Universal Link to the app. **Applied to the MAIN binary only** (`mac.entitlements` in `electron-builder.yml`).
 2. **`build/entitlements.mac.inherit.plist`** — helper-only plist for helper processes (Renderer / GPU / Plugin / utility-process.fork children). Excludes `com.apple.developer.associated-domains` because that entitlement is restricted (requires an embedded provisioning profile to claim, and helpers do not carry one — macOS 26.4.x AMFI SIGKILLs helpers that claim restricted entitlements without a profile, producing the `exit_code=9` failure mode that blocks project open). Wired via `mac.entitlementsInherit` in `electron-builder.yml`. The contract test at `tests/unit/entitlements-helper-split.test.ts` prevents drift.
@@ -39,7 +39,7 @@ security cms -D -i packages/desktop/build/embedded.provisionprofile | plutil -p 
 Confirm the output contains (verbatim):
 
 ```
-"AppIDName" => "Open Knowledge"
+"AppIDName" => "OpenKnowledge"
 "TeamIdentifier" => [ "6NZGSG335T" ]
 "application-identifier" => "6NZGSG335T.com.inkeep.open-knowledge"
 "com.apple.developer.associated-domains" => "*"
@@ -53,7 +53,7 @@ The `"*"` wildcard for `com.apple.developer.associated-domains` is the most perm
 
 ```sh
 cd public/open-knowledge && bun run build:desktop  # with CSC_LINK + CSC_KEY_PASSWORD set
-codesign -d --entitlements - 'packages/desktop/dist-desktop/mac-arm64/Open Knowledge.app' 2>&1 | head -40
+codesign -d --entitlements - 'packages/desktop/dist-desktop/mac-arm64/OpenKnowledge.app' 2>&1 | head -40
 ```
 
 Should include:
@@ -87,12 +87,12 @@ If `swcutil dl` shows a 404 or stale entry past the deploy window, the AASA file
 
 1. Send yourself a share URL via iMessage or paste into Apple Notes: `https://openknowledge.ai/d/<encoded>`.
 2. Click the URL.
-3. Open Knowledge should launch (or focus its existing window) and route to the shared doc via the Q1/Q2/Q3 receive dialog (US-014). The first click after install may bounce to the splash page once — Apple's known AASA gate for Developer-ID apps (WWDC20 forum thread 649189). The splash page's "Open in Open Knowledge" button (custom-scheme fallback per D7) handles that case.
+3. OpenKnowledge should launch (or focus its existing window) and route to the shared doc via the Q1/Q2/Q3 receive dialog (US-014). The first click after install may bounce to the splash page once — Apple's known AASA gate for Developer-ID apps (WWDC20 forum thread 649189). The splash page's "Open in OpenKnowledge" button (custom-scheme fallback per D7) handles that case.
 
 If the click goes to the browser indefinitely (not just the first time):
 - `swcutil dl -d openknowledge.ai` may show a stale negative cache.
 - Verify the entitlement is present in the running `.app` via `codesign -d --entitlements -` (see step 3).
-- Verify `NSUserActivityTypes` is in `Open Knowledge.app/Contents/Info.plist` via `plutil -p 'packages/desktop/dist-desktop/mac-arm64/Open Knowledge.app/Contents/Info.plist' | grep -A2 NSUserActivityTypes`.
+- Verify `NSUserActivityTypes` is in `OpenKnowledge.app/Contents/Info.plist` via `plutil -p 'packages/desktop/dist-desktop/mac-arm64/OpenKnowledge.app/Contents/Info.plist' | grep -A2 NSUserActivityTypes`.
 
 ## AASA cache warm-up timing
 
@@ -111,7 +111,7 @@ The committed profile (`build/embedded.provisionprofile`) carries `ExpirationDat
 To re-generate:
 
 1. Sign in to https://developer.apple.com/account/resources/profiles/list as the Apple Account Holder.
-2. Find the existing "Open Knowledge Developer-ID" profile.
+2. Find the existing "OpenKnowledge Developer-ID" profile.
 3. Click "Edit" → re-generate against the same App ID + Developer-ID certificate.
 4. Download the `.provisionprofile` binary + commit to `packages/desktop/build/embedded.provisionprofile`.
 5. Re-run the verification checklist above.
@@ -126,11 +126,11 @@ The profile binary is missing or doesn't grant `com.apple.developer.associated-d
 
 Apple's `swcd` cached a "no AASA" response. The cache is 8 days. Force-refresh on the test machine with `sudo swcutil reset` (nuclear) or wait it out. In production, accept the warm-up window + rely on the splash custom-scheme fallback (per D7).
 
-### Universal Link clicks open Safari instead of Open Knowledge
+### Universal Link clicks open Safari instead of OpenKnowledge
 
 1. Run `sudo swcutil dl -d openknowledge.ai` — if the response shows entries for the bundle ID, AASA propagated correctly.
-2. Verify `Open Knowledge.app/Contents/embedded.provisionprofile` exists in the packaged app.
-3. Verify the entitlement landed via `codesign -d --entitlements - 'Open Knowledge.app'`.
+2. Verify `OpenKnowledge.app/Contents/embedded.provisionprofile` exists in the packaged app.
+3. Verify the entitlement landed via `codesign -d --entitlements - 'OpenKnowledge.app'`.
 4. Check console.app for `LSOpenURLsWithRole error -10810` — that means `NSUserActivityTypes` is missing from Info.plist.
 
 ### Renderer-side: `continue-activity` fires but receive dialog doesn't render

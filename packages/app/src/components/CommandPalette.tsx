@@ -1,4 +1,4 @@
-// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge-legacy/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
+// biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — file uses raw <button>/<input>/<textarea> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 
 import { SHOW_INSTALL_SKILL } from '@inkeep/open-knowledge-core';
 import { Plural, Trans, useLingui } from '@lingui/react/macro';
@@ -11,13 +11,16 @@ import {
   FolderPlus,
   Hash,
   LayoutGrid,
+  Loader2,
   Network,
   Package,
   Plus,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import {
   type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
   type SetStateAction,
   useDeferredValue,
   useEffect,
@@ -35,13 +38,16 @@ import {
 } from '@/components/command-palette-recents';
 import {
   buildWorkspaceEntries,
+  classifyOmnibarSearchHint,
   fetchWorkspaceSearchEntries,
   matchesCommandQuery,
+  SEMANTIC_RESULT_LIMIT,
   searchWorkspaceEntries,
   splitTextByQueryMatches,
   type WorkspaceEntry,
   type WorkspaceSearchEntry,
 } from '@/components/command-palette-search';
+import { computeSemanticModeView } from '@/components/command-palette-semantic';
 import {
   fetchDocsForTag,
   fetchTagsList,
@@ -66,12 +72,15 @@ import {
 } from '@/components/ui/command';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import type { TagSummaryEntry } from '@/editor/extensions/tag-suggestion';
+import { getFileIcon } from '@/editor/registry/file-icons';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
+import { useSemanticSearchStatus } from '@/hooks/use-semantic-search-status';
 import type { OkDesktopBridge, RecentProjectEntry } from '@/lib/desktop-bridge-types';
 import { hashFromDocName } from '@/lib/doc-hash';
 import { runWithToast as runWithToastBase } from '@/lib/error-state';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { formatShortcut, matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
+import { useSingleFileMode } from '@/lib/single-file-mode';
 import { SETTINGS_OPEN_HASH } from '@/lib/use-settings-route';
 import { useWorkspace } from '@/lib/use-workspace';
 import { cn } from '@/lib/utils.ts';
@@ -79,6 +88,8 @@ import { buildHandoffInput, useHandoffDispatch } from './handoff/useHandoffDispa
 import { useInstalledAgents } from './handoff/useInstalledAgents';
 
 const COMMAND_PALETTE_SEARCH_TIMEOUT_MS = 3000;
+const COMMAND_PALETTE_SEARCH_WARMING_POLL_MS = 600;
+const COMMAND_PALETTE_SEARCH_MAX_WARMING_POLLS = 20;
 
 export const runWithToast = (
   fn: () => Promise<void>,
@@ -106,16 +117,18 @@ function resolveCreateInitialDir(
   return defaultInitialDir(activeDocName);
 }
 
-function NavigationItem({
+export function NavigationItem({
   entry,
   query = '',
   onSelect,
+  disabled = false,
 }: {
   entry: WorkspaceEntry | WorkspaceSearchEntry | OmnibarRecentEntry;
   query?: string;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
-  const Icon = entry.kind === 'folder' ? FolderOpen : FileText;
+  const Icon = getFileIcon(entry);
   const title =
     'title' in entry && entry.title ? entry.title : (entry.path.split('/').pop() ?? entry.path);
   const snippet = 'snippet' in entry ? entry.snippet : undefined;
@@ -124,6 +137,7 @@ function NavigationItem({
     <CommandItem
       value={`${entry.kind} ${entry.path}`}
       onSelect={onSelect}
+      disabled={disabled}
       data-testid={`command-palette-nav-${entry.kind}-${entry.path}`}
       className="items-start"
     >
@@ -142,6 +156,40 @@ function NavigationItem({
         ) : null}
       </div>
     </CommandItem>
+  );
+}
+
+function SearchHint({
+  mode,
+  inExclusiveMode,
+  paletteModeKind,
+}: {
+  mode: ReturnType<typeof classifyOmnibarSearchHint>;
+  inExclusiveMode: boolean;
+  paletteModeKind: 'normal' | 'tag-list' | 'tag-docs';
+}) {
+  if (inExclusiveMode) return null;
+  if (paletteModeKind !== 'normal') return null;
+  if (mode === 'idle' || mode === 'content') return null;
+  return (
+    <div
+      aria-live="polite"
+      data-testid={`command-palette-search-hint-${mode}`}
+      className="border-t px-3 py-2 text-muted-foreground text-xs"
+    >
+      {mode === 'name-only' ? (
+        <Trans>
+          Search matches file names, paths, and folders. Open a file to search its body (⌘F).
+        </Trans>
+      ) : mode === 'truncated' ? (
+        <Trans>
+          Results capped — this workspace has more files than search can index. A missing file may
+          be a cap artifact, not a typo.
+        </Trans>
+      ) : (
+        <Trans>No matches. Some files are excluded from search (hidden or ignored files).</Trans>
+      )}
+    </div>
   );
 }
 
@@ -179,11 +227,20 @@ export function computeVisibleSearchResults({
 
 export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPaletteProps) {
   const { t } = useLingui();
+  const singleFile = useSingleFileMode();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const trimmedDeferredQuery = deferredQuery.trim();
   const [searchResults, setSearchResults] = useState<WorkspaceSearchEntry[]>([]);
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  );
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  const [searchIndexWarming, setSearchIndexWarming] = useState(false);
+  const [isSemanticMode, setIsSemanticMode] = useState(false);
+  const [semanticResults, setSemanticResults] = useState<WorkspaceSearchEntry[]>([]);
+  const [semanticFiredQuery, setSemanticFiredQuery] = useState<string | null>(null);
+  const [semanticStatus, setSemanticStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
     'idle',
   );
   const [projectRecents, setProjectRecents] = useState<RecentProjectEntry[]>([]);
@@ -202,14 +259,44 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   const tagsListFetchedRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const semanticAbortRef = useRef<AbortController | null>(null);
+  const semanticTimerRef = useRef<number | null>(null);
   const { activeDocName, activeTarget } = useDocumentContext();
-  const { pages, pageTitles, pageMeta, folderPaths } = usePageList();
+  const {
+    pages,
+    pageTitles,
+    pageMeta,
+    folderPaths,
+    filePaths,
+    loading: pagesLoading,
+  } = usePageList();
   const workspace = useWorkspace();
   const { states: installStates, refresh: refreshInstallStates } = useInstalledAgents();
   const { dispatch: dispatchHandoff } = useHandoffDispatch();
+  const { status: semanticCapability, refresh: refreshSemanticStatus } = useSemanticSearchStatus({
+    enabled: open,
+  });
+  const semanticCapable =
+    (semanticCapability?.enabled ?? false) && (semanticCapability?.keyPresent ?? false);
+  const semanticIndexedCount = semanticCapability?.embedded ?? 0;
+  const semanticTotalCount = semanticCapability?.total ?? 0;
+  const semanticIndexing =
+    semanticCapable && semanticTotalCount > 0 && semanticIndexedCount < semanticTotalCount;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshSemanticStatus is behaviorally stable; re-arm only on the gating booleans.
+  useEffect(() => {
+    if (!open || !isSemanticMode || !semanticIndexing) return;
+    const id = window.setInterval(() => refreshSemanticStatus(), 2500);
+    return () => window.clearInterval(id);
+  }, [open, isSemanticMode, semanticIndexing]);
   const handoffInput = buildHandoffInput({ docName: activeDocName, workspace });
 
-  const workspaceEntries = buildWorkspaceEntries(pages, folderPaths, pageTitles, pageMeta);
+  const workspaceEntries = buildWorkspaceEntries(
+    pages,
+    folderPaths,
+    pageTitles,
+    pageMeta,
+    filePaths,
+  );
   const validRecentKeys = new Set(
     workspaceEntries.map((entry) => makeOmnibarRecentKey(entry.kind, entry.path)),
   );
@@ -255,6 +342,16 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     tagsListFetchedRef.current = false;
     setTagDocs([]);
     setTagDocsStatus('idle');
+    setIsSemanticMode(false);
+    semanticAbortRef.current?.abort();
+    semanticAbortRef.current = null;
+    if (semanticTimerRef.current !== null) {
+      window.clearTimeout(semanticTimerRef.current);
+      semanticTimerRef.current = null;
+    }
+    setSemanticResults([]);
+    setSemanticFiredQuery(null);
+    setSemanticStatus('idle');
   }, [open, bridge, refreshInstallStates, t]);
 
   useEffect(() => {
@@ -263,10 +360,24 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   }, [query]);
 
   const knownTagNames = new Set(tagsList.map((tag) => tag.name));
-  const paletteMode = parseTagPaletteQuery(deferredQuery, knownTagNames);
+  const paletteMode = isSemanticMode
+    ? ({ kind: 'normal', query: deferredQuery } as const)
+    : parseTagPaletteQuery(deferredQuery, knownTagNames);
   const isTagMode = paletteMode.kind !== 'normal';
+  const inExclusiveMode = isTagMode || isSemanticMode;
   const tagListQuery = paletteMode.kind === 'tag-list' ? paletteMode.query : '';
   const tagDocsName = paletteMode.kind === 'tag-docs' ? paletteMode.tagName : '';
+  const semanticQueryText = query.trim();
+  const semanticView = isSemanticMode
+    ? computeSemanticModeView({
+        query: semanticQueryText,
+        firedQuery: semanticFiredQuery,
+        status: semanticStatus,
+        resultCount: semanticResults.length,
+      })
+    : null;
+  const semanticSubmitQuery = semanticView?.submit?.query ?? '';
+  const semanticResultsLabel = semanticView?.results.forQuery ?? '';
 
   useEffect(() => {
     if (!open || !isTagMode) return;
@@ -319,40 +430,82 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   }, [open, tagDocsTarget]);
 
   useEffect(() => {
-    if (!open || !trimmedDeferredQuery || isTagMode) {
+    if (!open || !trimmedDeferredQuery || inExclusiveMode || pagesLoading) {
       setSearchResults([]);
       setSearchStatus('idle');
+      setSearchTruncated(false);
+      setSearchIndexWarming(false);
       return;
     }
 
-    const controller = new AbortController();
+    let cancelled = false;
+    let everWarming = false;
+    let warmingPolls = 0;
+    let activeController: AbortController | null = null;
+    let timeoutTimer: number | undefined;
+    let retryTimer: number | undefined;
     setSearchStatus('loading');
-    let timedOut = false;
-    const timeout = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
+
+    const scheduleWarmingRetry = (): boolean => {
+      if (cancelled || warmingPolls >= COMMAND_PALETTE_SEARCH_MAX_WARMING_POLLS) return false;
+      warmingPolls += 1;
+      retryTimer = window.setTimeout(run, COMMAND_PALETTE_SEARCH_WARMING_POLL_MS);
+      return true;
+    };
+
+    const settleErrorOrRetry = () => {
+      if (cancelled) return;
+      if (everWarming && scheduleWarmingRetry()) return;
       setSearchResults([]);
       setSearchStatus('error');
-    }, COMMAND_PALETTE_SEARCH_TIMEOUT_MS);
+      setSearchTruncated(false);
+      setSearchIndexWarming(false);
+    };
 
-    void fetchWorkspaceSearchEntries(trimmedDeferredQuery, { signal: controller.signal })
-      .then((results) => {
-        window.clearTimeout(timeout);
-        setSearchResults(results);
-        setSearchStatus('success');
-      })
-      .catch((error: unknown) => {
-        window.clearTimeout(timeout);
-        if (error instanceof Error && error.name === 'AbortError' && !timedOut) return;
-        setSearchResults([]);
-        setSearchStatus('error');
-      });
+    function run() {
+      const controller = new AbortController();
+      activeController = controller;
+      timeoutTimer = window.setTimeout(() => {
+        controller.abort();
+        settleErrorOrRetry();
+      }, COMMAND_PALETTE_SEARCH_TIMEOUT_MS);
+
+      void fetchWorkspaceSearchEntries(trimmedDeferredQuery, { signal: controller.signal })
+        .then(({ entries, truncated, ready }) => {
+          window.clearTimeout(timeoutTimer);
+          if (cancelled) return;
+          if (!ready) {
+            if (!everWarming) {
+              everWarming = true;
+              setSearchResults([]);
+              setSearchTruncated(false);
+              setSearchIndexWarming(true);
+              setSearchStatus('success');
+            }
+            if (!scheduleWarmingRetry()) setSearchIndexWarming(false);
+            return;
+          }
+          setSearchResults(entries);
+          setSearchTruncated(truncated);
+          setSearchIndexWarming(false);
+          setSearchStatus('success');
+        })
+        .catch((error: unknown) => {
+          window.clearTimeout(timeoutTimer);
+          if (cancelled) return;
+          if (error instanceof Error && error.name === 'AbortError') return;
+          settleErrorOrRetry();
+        });
+    }
+    run();
 
     return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
+      cancelled = true;
+      window.clearTimeout(timeoutTimer);
+      window.clearTimeout(retryTimer);
+      activeController?.abort();
     };
-  }, [open, trimmedDeferredQuery, isTagMode]);
+  }, [open, trimmedDeferredQuery, inExclusiveMode, pagesLoading]);
 
   const runAction = (fn: () => Promise<void> | void, fallback = t`Command failed.`) => {
     onOpenChange(false);
@@ -379,25 +532,34 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   }
 
   const showRecentNavigation =
-    !isTagMode && trimmedDeferredQuery === '' && visibleRecents.length > 0;
+    !inExclusiveMode && trimmedDeferredQuery === '' && visibleRecents.length > 0;
   const visibleSearchResults = computeVisibleSearchResults({
     searchResults,
     fallbackSearchResults,
     searchStatus,
   });
-  const showNavigation = !isTagMode && visibleSearchResults.length > 0;
+  const showNavigation = !inExclusiveMode && visibleSearchResults.length > 0;
+  const showSearchPreparing =
+    !inExclusiveMode &&
+    trimmedDeferredQuery !== '' &&
+    (pagesLoading || searchIndexWarming) &&
+    !showNavigation;
   const showSearchLoading =
-    !isTagMode && trimmedDeferredQuery !== '' && searchStatus === 'loading' && !showNavigation;
+    !inExclusiveMode &&
+    trimmedDeferredQuery !== '' &&
+    searchStatus === 'loading' &&
+    !showNavigation &&
+    !showSearchPreparing;
   const showCreateFile =
-    !isTagMode && matchesCommandQuery(t`New file`, deferredQuery, ['create file']);
+    !inExclusiveMode && matchesCommandQuery(t`New file`, deferredQuery, ['create file']);
   const showCreateFolder =
-    !isTagMode && matchesCommandQuery(t`New folder`, deferredQuery, ['create folder']);
+    !inExclusiveMode && matchesCommandQuery(t`New folder`, deferredQuery, ['create folder']);
   const showGraphCommand =
-    !isTagMode &&
+    !inExclusiveMode &&
     activeDocName !== null &&
     matchesCommandQuery(t`Open graph`, deferredQuery, ['graph panel network']);
   const showInitializeStarterPack =
-    !isTagMode &&
+    !inExclusiveMode &&
     matchesCommandQuery(t`Initialize starter pack`, deferredQuery, [
       'scaffold',
       'seed',
@@ -405,27 +567,30 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
       'starter',
     ]);
   const showCreateProject =
-    !isTagMode &&
+    !inExclusiveMode &&
     bridge !== null &&
     matchesCommandQuery(t`New project`, deferredQuery, ['create new project scaffold']);
   const showProjectOpenFolder =
-    !isTagMode &&
+    !inExclusiveMode &&
     bridge !== null &&
     matchesCommandQuery(t`Open folder on disk`, deferredQuery, ['project']);
   const showProjectSwitch =
-    !isTagMode &&
+    !inExclusiveMode &&
+    !singleFile &&
     bridge !== null &&
-    matchesCommandQuery(t`Switch Project`, deferredQuery, ['switch project navigator projects']);
+    matchesCommandQuery(t`Switch project`, deferredQuery, ['switch project navigator projects']);
   const showSettings =
-    !isTagMode && matchesCommandQuery(t`Settings`, deferredQuery, ['preferences config']);
+    !inExclusiveMode &&
+    !singleFile &&
+    matchesCommandQuery(t`Settings`, deferredQuery, ['preferences config']);
   const showInstallClaudeDesktop =
     SHOW_INSTALL_SKILL &&
-    !isTagMode &&
+    !inExclusiveMode &&
     matchesCommandQuery(t`Install for Claude Chat & Cowork (Desktop App)`, deferredQuery, [
       'claude desktop install cowork',
     ]);
   const showProjectRecents =
-    !isTagMode &&
+    !inExclusiveMode &&
     bridge !== null &&
     switchableProjects.length > 0 &&
     (trimmedDeferredQuery === '' ||
@@ -434,7 +599,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
       ));
   const isEmbedded = useIsEmbedded();
   const showAgentGroup =
-    !isTagMode &&
+    !inExclusiveMode &&
     !isEmbedded &&
     handoffInput !== null &&
     (trimmedDeferredQuery === '' ||
@@ -454,10 +619,11 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     paletteMode.kind === 'tag-docs' && tagDocsStatus === 'success' && tagDocs.length === 0;
 
   const hasAnyResults =
-    isTagMode ||
+    inExclusiveMode ||
     showRecentNavigation ||
     showNavigation ||
     showSearchLoading ||
+    showSearchPreparing ||
     showCreateFile ||
     showCreateFolder ||
     showGraphCommand ||
@@ -474,6 +640,91 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     setQuery(`${TAG_QUERY_PREFIX}${tagName}`);
   }
 
+  function resetSemanticState() {
+    semanticAbortRef.current?.abort();
+    semanticAbortRef.current = null;
+    if (semanticTimerRef.current !== null) {
+      window.clearTimeout(semanticTimerRef.current);
+      semanticTimerRef.current = null;
+    }
+    setSemanticResults([]);
+    setSemanticFiredQuery(null);
+    setSemanticStatus('idle');
+  }
+
+  function enterSemanticMode() {
+    setIsSemanticMode(true);
+    if (query.startsWith(TAG_QUERY_PREFIX)) setQuery(query.slice(TAG_QUERY_PREFIX.length));
+    resetSemanticState();
+    inputRef.current?.focus();
+  }
+
+  function exitSemanticMode() {
+    setIsSemanticMode(false);
+    setQuery('');
+    resetSemanticState();
+    inputRef.current?.focus();
+  }
+
+  function fireSemanticSearch(raw: string) {
+    const q = raw.trim();
+    if (!q) return;
+    if (pagesLoading) return;
+    semanticAbortRef.current?.abort();
+    if (semanticTimerRef.current !== null) window.clearTimeout(semanticTimerRef.current);
+    const controller = new AbortController();
+    semanticAbortRef.current = controller;
+    setSemanticStatus('loading');
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      setSemanticStatus('error');
+    }, COMMAND_PALETTE_SEARCH_TIMEOUT_MS);
+    semanticTimerRef.current = timeout;
+    void fetchWorkspaceSearchEntries(q, {
+      signal: controller.signal,
+      semantic: true,
+      limit: SEMANTIC_RESULT_LIMIT,
+    })
+      .then(({ entries }) => {
+        clearThisFire(timeout, controller);
+        setSemanticResults(entries);
+        setSemanticFiredQuery(q);
+        setSemanticStatus('success');
+      })
+      .catch((error: unknown) => {
+        clearThisFire(timeout, controller);
+        if (error instanceof Error && error.name === 'AbortError' && !timedOut) return;
+        console.debug('[semantic-search] fire failed', { timedOut, error });
+        setSemanticStatus('error');
+      });
+  }
+
+  function clearThisFire(timeout: number, controller: AbortController) {
+    window.clearTimeout(timeout);
+    if (semanticTimerRef.current === timeout) semanticTimerRef.current = null;
+    if (semanticAbortRef.current === controller) semanticAbortRef.current = null;
+  }
+
+  function onSemanticInputKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (!isSemanticMode || e.key !== 'Enter') return;
+    if (semanticView?.submit) {
+      e.preventDefault();
+      e.stopPropagation();
+      fireSemanticSearch(semanticView.submit.query);
+    } else if (semanticStatus === 'loading') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
+  function onPaletteEscapeKeyDown(e: KeyboardEvent) {
+    if (!isSemanticMode) return;
+    e.preventDefault();
+    exitSemanticMode();
+  }
+
   return (
     <>
       <CommandDialog
@@ -487,12 +738,16 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
           className:
             '[&_[cmdk-input-wrapper]_svg]:h-4 [&_[cmdk-input-wrapper]_svg]:w-4 [&_[cmdk-item]_svg]:h-4 [&_[cmdk-item]_svg]:w-4',
         }}
+        onEscapeKeyDown={onPaletteEscapeKeyDown}
       >
         <CommandInput
           ref={inputRef}
           value={query}
           onValueChange={setQuery}
-          placeholder={t`Search files, folders, or commands`}
+          onKeyDown={onSemanticInputKeyDown}
+          placeholder={
+            isSemanticMode ? t`Search by meaning` : t`Search files, folders, or commands`
+          }
         />
         {/* Filter-pills row — Slack-style. Always visible so the
             available filters are discoverable without typing a magic
@@ -502,6 +757,10 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
           <button
             type="button"
             onClick={() => {
+              if (isSemanticMode) {
+                setIsSemanticMode(false);
+                resetSemanticState();
+              }
               setQuery(isTagMode ? '' : TAG_QUERY_PREFIX);
               inputRef.current?.focus();
             }}
@@ -520,8 +779,141 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
               <Trans>By tag</Trans>
             </span>
           </button>
+          {/* Shown only when semantic search is set up for this project (enabled
+              + key). Enters an exclusive "by meaning" mode — a deliberate-submit
+              vector search, distinct from the per-keystroke lexical filters. */}
+          {semanticCapable ? (
+            <button
+              type="button"
+              onClick={() => (isSemanticMode ? exitSemanticMode() : enterSemanticMode())}
+              data-testid="command-palette-filter-semantic"
+              data-active={isSemanticMode}
+              aria-pressed={isSemanticMode}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                isSemanticMode
+                  ? 'border-primary/30 bg-primary/10 text-primary'
+                  : 'border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              )}
+            >
+              <Sparkles className="size-3.5" />
+              <span>
+                <Trans>By meaning</Trans>
+              </span>
+            </button>
+          ) : null}
         </div>
         <CommandList ref={listRef} className="subtle-scrollbar">
+          {isSemanticMode && semanticView ? (
+            <>
+              {/* Coverage banner — the first by-meaning search lazily kicks off the
+                  background embed, so the corpus may be partly (or not yet) indexed.
+                  Surface it so the user knows results may be incomplete; the count
+                  ticks up via the poll above. */}
+              {semanticIndexing ? (
+                <div
+                  className="flex items-center gap-2 px-3 py-2 text-muted-foreground text-xs"
+                  role="status"
+                  aria-live="polite"
+                  data-testid="command-palette-semantic-indexing"
+                >
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <Trans>
+                    Indexing your pages — {semanticIndexedCount} of {semanticTotalCount} ready.
+                    Results may be incomplete.
+                  </Trans>
+                </div>
+              ) : null}
+
+              {/* Submit / retry row — the action ↵ performs while the query is
+                  dirty or after an error. Rendered first so it is the default
+                  highlight; the input's keydown makes ↵ deterministic regardless. */}
+              {semanticView.submit ? (
+                <CommandGroup>
+                  <CommandItem
+                    value="semantic-submit"
+                    onSelect={() => fireSemanticSearch(semanticSubmitQuery)}
+                    data-testid="command-palette-semantic-submit"
+                  >
+                    {semanticView.submit.kind === 'retry' ? (
+                      <span className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                        <Sparkles />
+                        <Trans>Couldn't reach the embeddings provider — press ↵ to retry</Trans>
+                      </span>
+                    ) : (
+                      <>
+                        <Sparkles />
+                        <span className="min-w-0 flex-1 truncate">
+                          <Trans>Search "{semanticSubmitQuery}" by meaning</Trans>
+                        </span>
+                        <CommandShortcut>↵</CommandShortcut>
+                      </>
+                    )}
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
+
+              {semanticView.notice === 'empty' ? (
+                <CommandEmpty data-testid="command-palette-semantic-empty">
+                  <Trans>Type a query, then press ↵ to search your pages by meaning.</Trans>
+                </CommandEmpty>
+              ) : null}
+              {semanticView.notice === 'searching' ? (
+                <div
+                  className="flex items-center justify-center gap-2 py-6 text-muted-foreground text-sm"
+                  role="status"
+                  aria-live="polite"
+                  data-testid="command-palette-semantic-searching"
+                >
+                  <Loader2 className="size-4 animate-spin" />
+                  <Trans>Searching by meaning</Trans>
+                </div>
+              ) : null}
+              {semanticView.notice === 'no-results' ? (
+                <CommandEmpty data-testid="command-palette-semantic-no-results">
+                  <Trans>No pages matched "{semanticQueryText}" by meaning.</Trans>
+                </CommandEmpty>
+              ) : null}
+
+              {/* Held (sticky) results in the server's fusion order — no omnibar
+                  fuzzy/recency re-ranking. Dimmed + labeled with the query they
+                  were fetched for while the typed query has moved past them. */}
+              {semanticView.results.show ? (
+                <CommandGroup
+                  heading={
+                    semanticView.results.dimmed
+                      ? t`Showing results for "${semanticResultsLabel}"`
+                      : t`By meaning`
+                  }
+                >
+                  <div
+                    data-testid="command-palette-semantic-results"
+                    data-dimmed={semanticView.results.dimmed}
+                  >
+                    {semanticResults.map((entry) => (
+                      <NavigationItem
+                        key={makeOmnibarRecentKey(entry.kind, entry.path)}
+                        entry={entry}
+                        disabled={semanticView.results.dimmed}
+                        onSelect={() => navigateToEntry(entry)}
+                      />
+                    ))}
+                  </div>
+                </CommandGroup>
+              ) : null}
+            </>
+          ) : null}
+          {showSearchPreparing ? (
+            <div
+              className="flex items-center justify-center gap-2 py-6 text-muted-foreground text-sm"
+              role="status"
+              aria-live="polite"
+              data-testid="command-palette-search-preparing"
+            >
+              <Loader2 className="size-4 animate-spin" />
+              <Trans>Preparing search</Trans>
+            </div>
+          ) : null}
           {showSearchLoading && !showNavigation ? (
             <CommandEmpty>
               <Trans>Searching</Trans>
@@ -806,7 +1198,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
                 >
                   <LayoutGrid />
                   <span>
-                    <Trans>Switch Project</Trans>
+                    <Trans>Switch project</Trans>
                   </span>
                   <CommandShortcut>{formatShortcut('switch-project')}</CommandShortcut>
                 </CommandItem>
@@ -906,6 +1298,20 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
             </CommandGroup>
           ) : null}
         </CommandList>
+
+        {/* Search-hint affordance, rendered OUTSIDE `<CommandList>` (which
+            cmdk gives `role="listbox"`; only option/group children are
+            valid there) but still INSIDE `CommandDialog` so it shares the
+            dialog's framing. Absent when at least one server hit carries a
+            body snippet. The empty-query branch (`'idle'`) renders nothing
+            so the Recents view is unaffected. */}
+        <SearchHint
+          mode={classifyOmnibarSearchHint(trimmedDeferredQuery, visibleSearchResults, {
+            truncated: searchTruncated,
+          })}
+          inExclusiveMode={inExclusiveMode}
+          paletteModeKind={paletteMode.kind}
+        />
       </CommandDialog>
 
       <NewItemDialog

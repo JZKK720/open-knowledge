@@ -25,6 +25,8 @@ Object.assign(globalThis, {
   Node: win.Node,
   NodeList: win.NodeList,
   NodeFilter: win.NodeFilter,
+  DocumentFragment: win.DocumentFragment,
+  DOMRect: win.DOMRect,
   Event: win.Event,
   CustomEvent: win.CustomEvent,
   EventTarget: win.EventTarget,
@@ -35,6 +37,11 @@ Object.assign(globalThis, {
   PointerEvent: win.PointerEvent,
   DataTransfer: win.DataTransfer,
   MutationObserver: win.MutationObserver,
+  ResizeObserver: class MinimalResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
   getComputedStyle: win.getComputedStyle.bind(win),
   requestAnimationFrame: win.requestAnimationFrame.bind(win),
   cancelAnimationFrame: win.cancelAnimationFrame.bind(win),
@@ -54,6 +61,8 @@ const matchMediaStub = (query: string): MediaQueryList =>
 
 (globalThis as { matchMedia?: typeof matchMediaStub }).matchMedia = matchMediaStub;
 (win as { matchMedia?: typeof matchMediaStub }).matchMedia = matchMediaStub;
+
+win.HTMLElement.prototype.scrollIntoView ||= () => {};
 
 if (typeof (globalThis as { MessageChannel?: unknown }).MessageChannel === 'undefined') {
   class MinimalMessagePort {

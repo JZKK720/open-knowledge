@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listenOnLoopback } from './loopback-rig-test-helpers.ts';
 
 interface TestRig {
   port: number;
@@ -71,12 +72,7 @@ async function bootRig(
   });
   hocuspocus.configuration.extensions.push(ext);
 
-  const port = await new Promise<number>((resolveListen) => {
-    server.listen(0, () => {
-      const addr = server.address();
-      resolveListen(typeof addr === 'object' && addr ? addr.port : 0);
-    });
-  });
+  const { port } = await listenOnLoopback(server);
 
   return {
     port,
@@ -92,7 +88,7 @@ async function bootRig(
 function buildUrl(port: number, branch: string, path: string, kind?: 'doc' | 'folder'): string {
   const params = new URLSearchParams({ branch, path });
   if (kind) params.set('kind', kind);
-  return `http://localhost:${port}/api/git/branch-info?${params.toString()}`;
+  return `http://127.0.0.1:${port}/api/git/branch-info?${params.toString()}`;
 }
 
 async function getBranchInfo(
@@ -272,7 +268,7 @@ describe('GET /api/git/branch-info', () => {
       commitAll(projectDir, 'init');
     });
 
-    const res = await fetch(`http://localhost:${rig.port}/api/git/branch-info?branch=main`);
+    const res = await fetch(`http://127.0.0.1:${rig.port}/api/git/branch-info?branch=main`);
     expect(res.status).toBe(400);
   });
 
@@ -283,7 +279,7 @@ describe('GET /api/git/branch-info', () => {
       commitAll(projectDir, 'init');
     });
 
-    const res = await fetch(`http://localhost:${rig.port}/api/git/branch-info?path=a.md`);
+    const res = await fetch(`http://127.0.0.1:${rig.port}/api/git/branch-info?path=a.md`);
     expect(res.status).toBe(400);
   });
 
@@ -387,7 +383,7 @@ describe('GET /api/git/branch-info', () => {
     });
 
     const res = await fetch(
-      `http://localhost:${rig.port}/api/git/branch-info?branch=main&path=&kind=folder`,
+      `http://127.0.0.1:${rig.port}/api/git/branch-info?branch=main&path=&kind=folder`,
     );
     expect(res.status).toBe(200);
     const json = (await res.json()) as Record<string, unknown>;
@@ -401,7 +397,7 @@ describe('GET /api/git/branch-info', () => {
       commitAll(projectDir, 'init');
     });
 
-    const res = await fetch(`http://localhost:${rig.port}/api/git/branch-info?branch=main&path=`);
+    const res = await fetch(`http://127.0.0.1:${rig.port}/api/git/branch-info?branch=main&path=`);
     expect(res.status).toBe(400);
   });
 

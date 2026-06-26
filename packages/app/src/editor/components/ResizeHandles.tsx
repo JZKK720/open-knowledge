@@ -120,6 +120,10 @@ export function ResizeHandles({ targetRef, onResize, onResizeEnd, bounds }: Resi
       latestHeight: rect.height,
       hasMoved: false,
     };
+    const captureTarget = e.currentTarget;
+    try {
+      captureTarget.setPointerCapture(e.pointerId);
+    } catch {}
     document.body.style.setProperty('cursor', handle.cursor);
     document.body.style.setProperty('user-select', 'none');
     function onPointerMove(ev: PointerEvent) {

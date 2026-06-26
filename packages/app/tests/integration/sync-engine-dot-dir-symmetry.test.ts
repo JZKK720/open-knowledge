@@ -25,7 +25,7 @@ function makeRepo(): { projectDir: string; originDir: string } {
   mkdirSync(join(projectDir, '.cursor', 'skills', 'open-knowledge'), { recursive: true });
   writeFileSync(
     join(projectDir, '.cursor', 'skills', 'open-knowledge', 'SKILL.md'),
-    '# Open Knowledge Skill\n',
+    '# OpenKnowledge Skill\n',
     'utf-8',
   );
   writeFileSync(join(projectDir, 'regular.md'), '# Regular\n', 'utf-8');

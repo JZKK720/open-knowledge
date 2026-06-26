@@ -23,6 +23,7 @@ import {
   resolveClaudeDesktopConfigPath,
   resolveCodexConfigPath,
   resolveCursorConfigPath,
+  resolveOpenCodeConfigPath,
 } from './editors.ts';
 
 const PUBLISHED_CHAIN_ENTRY = { command: '/bin/sh', args: ['-l', '-c', CHAIN_V1] } as const;
@@ -59,7 +60,7 @@ describe('LAUNCH_UI_CHAIN_V1 (published launch.json recipe shell chain)', () => 
     const binDir = join(
       home,
       'Applications',
-      'Open Knowledge.app',
+      'OpenKnowledge.app',
       'Contents',
       'Resources',
       'cli',
@@ -106,11 +107,13 @@ describe('runInit', () => {
   let fakeHome: string;
   const originalPlatform = process.platform;
   const originalHome = process.env.HOME;
+  const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
   const originalArgv1 = process.argv[1];
 
   const claudeConfigPath = () => resolveClaudeCodeConfigPath({ home: fakeHome });
   const cursorConfigPath = () => resolveCursorConfigPath({ home: fakeHome });
   const codexConfigPath = () => resolveCodexConfigPath({ home: fakeHome, env: {} });
+  const opencodeConfigPath = () => resolveOpenCodeConfigPath({ home: fakeHome, env: {} });
   const devRepoRoot = () => join(testDir, 'local-open-knowledge');
   const devCliEntryPath = () => join(devRepoRoot(), 'packages', 'cli', 'src', 'cli.ts');
   const enableDevMcp = () => {
@@ -168,6 +171,7 @@ describe('runInit', () => {
     mkdirSync(fakeHome, { recursive: true });
     mkdirSync(join(fakeHome, '.claude'), { recursive: true });
     process.env.HOME = fakeHome;
+    delete process.env.XDG_CONFIG_HOME;
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   });
 
@@ -180,6 +184,11 @@ describe('runInit', () => {
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalXdgConfigHome === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
     }
     process.argv[1] = originalArgv1;
     rmSync(testDir, { recursive: true, force: true });
@@ -442,6 +451,79 @@ describe('runInit', () => {
     });
   });
 
+  describe('OpenCode', () => {
+    const PUBLISHED_OPENCODE_ENTRY = {
+      type: 'local',
+      enabled: true,
+      command: ['/bin/sh', '-l', '-c', CHAIN_V1],
+    } as const;
+
+    it('writes ~/.config/opencode/opencode.json under the mcp key', async () => {
+      mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
+      const result = await runInitForTest({ editors: ['opencode'] });
+
+      expect(result.editors).toHaveLength(1);
+      expect(result.editors[0].editorId).toBe('opencode');
+      expect(result.editors[0].action).toBe('written');
+
+      const configPath = opencodeConfigPath();
+      expect(existsSync(configPath)).toBe(true);
+
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+      expect(config.mcp[result.editors[0].serverName]).toEqual(PUBLISHED_OPENCODE_ENTRY);
+    });
+
+    it('writes a project-scoped opencode.json at the project root', async () => {
+      const _result = await runInitForTest({ editors: ['opencode'], scope: 'project' });
+
+      const projectConfigPath = join(testDir, 'opencode.json');
+      expect(existsSync(projectConfigPath)).toBe(true);
+
+      const config = JSON.parse(readFileSync(projectConfigPath, 'utf-8'));
+      expect(config.mcp['open-knowledge']).toEqual(PUBLISHED_OPENCODE_ENTRY);
+    });
+
+    it('writes the dev MCP entry with an environment block', async () => {
+      mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
+      enableDevMcp();
+      const result = await runInitForTest({ editors: ['opencode'], devMcp: true });
+
+      expect(result.editors).toHaveLength(1);
+      expect(result.editors[0].action).toBe('written');
+
+      const config = JSON.parse(readFileSync(opencodeConfigPath(), 'utf-8'));
+      expect(config.mcp[result.editors[0].serverName]).toEqual({
+        type: 'local',
+        enabled: true,
+        command: ['node', join(devRepoRoot(), 'packages', 'cli', 'dist', 'cli.mjs'), 'mcp'],
+        environment: { MCP_DEBUG: '1', OK_LOG_FILE: '/tmp/ok-mcp.log' },
+      });
+    });
+
+    it('preserves existing OpenCode mcp entries', async () => {
+      mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
+      writeFileSync(
+        opencodeConfigPath(),
+        JSON.stringify({ mcp: { other: { type: 'local', command: ['node', 'x'] } } }, null, 2),
+      );
+
+      const result = await runInitForTest({ editors: ['opencode'] });
+      expect(result.editors[0].action).toBe('written');
+
+      const config = JSON.parse(readFileSync(opencodeConfigPath(), 'utf-8'));
+      expect(config.mcp.other).toEqual({ type: 'local', command: ['node', 'x'] });
+      expect(config.mcp[result.editors[0].serverName]).toEqual(PUBLISHED_OPENCODE_ENTRY);
+    });
+
+    it('writes the shared .agents/skills/ skill once when Codex + OpenCode are both selected', async () => {
+      const result = await runInitForTest({ editors: ['codex', 'opencode'], scope: 'project' });
+      const sharedSkill = join(testDir, '.agents', 'skills', 'open-knowledge', 'SKILL.md');
+      const sharedEntries = result.projectSkills.filter((s) => s.path === sharedSkill);
+      expect(sharedEntries).toHaveLength(1);
+      expect(existsSync(sharedSkill)).toBe(true);
+    });
+  });
+
   describe('Claude Desktop', () => {
     it('writes the same simple global open-knowledge entry as the local editors', async () => {
       const fakeHome = join(testDir, 'fakehome');
@@ -574,6 +656,7 @@ describe('runInit', () => {
       mkdirSync(dirname(resolveClaudeDesktopConfigPath({ home: fakeHome })), { recursive: true });
       mkdirSync(dirname(cursorConfigPath()), { recursive: true });
       mkdirSync(dirname(codexConfigPath()), { recursive: true });
+      mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
 
       const result = await runInitForTest({ editors: [...ALL_EDITOR_IDS] });
 
@@ -586,6 +669,7 @@ describe('runInit', () => {
       expect(existsSync(resolveClaudeDesktopConfigPath({ home: fakeHome }))).toBe(true);
       expect(existsSync(cursorConfigPath())).toBe(true);
       expect(existsSync(codexConfigPath())).toBe(true);
+      expect(existsSync(opencodeConfigPath())).toBe(true);
     });
 
     it('overwrites across all targeted editors', async () => {
@@ -892,7 +976,7 @@ describe('runInit', () => {
         'Some pre-existing content the user wrote themselves.',
         '',
         '<!-- open-knowledge:begin -->',
-        '## Legacy Open Knowledge section',
+        '## Legacy OpenKnowledge section',
         'Pretend this was injected by an older ok init version.',
         '<!-- open-knowledge:end -->',
         '',
@@ -1538,9 +1622,11 @@ describe('detectInstalledEditors', () => {
   let fakeHome: string;
   const originalPlatform = process.platform;
   const originalHome = process.env.HOME;
+  const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 
   const cursorConfigPath = () => resolveCursorConfigPath({ home: fakeHome });
   const codexConfigPath = () => resolveCodexConfigPath({ home: fakeHome, env: {} });
+  const opencodeConfigPath = () => resolveOpenCodeConfigPath({ home: fakeHome, env: {} });
 
   beforeEach(() => {
     testDir = resolve(
@@ -1551,6 +1637,7 @@ describe('detectInstalledEditors', () => {
     fakeHome = join(testDir, 'fakehome');
     mkdirSync(fakeHome, { recursive: true });
     process.env.HOME = fakeHome;
+    delete process.env.XDG_CONFIG_HOME;
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   });
 
@@ -1563,6 +1650,11 @@ describe('detectInstalledEditors', () => {
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalXdgConfigHome === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
     }
     rmSync(testDir, { recursive: true, force: true });
   });
@@ -1611,6 +1703,7 @@ describe('detectInstalledEditors', () => {
     mkdirSync(dirname(resolveClaudeDesktopConfigPath({ home: fakeHome })), { recursive: true });
     mkdirSync(dirname(cursorConfigPath()), { recursive: true });
     mkdirSync(dirname(codexConfigPath()), { recursive: true });
+    mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
     const detected = detectInstalledEditors(testDir, fakeHome);
     expect(detected).toEqual(expect.arrayContaining([...ALL_EDITOR_IDS]));
     expect(detected).toHaveLength(ALL_EDITOR_IDS.length);

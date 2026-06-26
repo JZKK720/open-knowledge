@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -9,6 +10,7 @@ import {
   realpathSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { homedir as osHomedir, hostname as osHostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -18,6 +20,7 @@ import {
   detectInstalledEditors,
   EDITOR_TARGETS,
   getOkArtifactPaths,
+  isOwnManagedEntry,
   type McpInstallOptions,
   type ProjectAiIntegrationsResult,
   previewContent,
@@ -33,10 +36,13 @@ import {
   CLIENT_VERSION_HEADER,
   PROTOCOL_VERSION,
   SPAWN_ERROR_LOG,
+  TERMINAL_CLIS,
+  type TerminalCli,
 } from '@inkeep/open-knowledge-core';
 import {
   assertGitAvailable,
   classifyFsPath,
+  createEphemeralProjectDir,
   ensureProjectGit,
   findEnclosingGitRoot,
   findEnclosingProjectRoot,
@@ -45,13 +51,13 @@ import {
   initContent,
   isProcessAlive,
   normalizeFsPath,
+  prepareSingleFileOpen,
   RUNTIME_VERSION,
   readServerLock,
   readServerPackageVersion,
   recordSkillInstallEvent,
   resolveBundledSkillDir,
   resolveLockDir,
-  spawnDetached,
   withSpan,
   writeTargetVersion,
 } from '@inkeep/open-knowledge-server';
@@ -61,15 +67,17 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  autoUpdater as electronAutoUpdater,
   ipcMain,
   Menu,
   nativeImage,
   nativeTheme,
+  screen,
   session,
   shell,
   utilityProcess,
 } from 'electron';
-import type { OkMenuAction } from '../shared/bridge-contract.ts';
+import type { ClaudeReadiness, CliReadiness, OkMenuAction } from '../shared/bridge-contract.ts';
 import { type EntryPoint, isEntryPoint } from '../shared/entry-point.ts';
 import type {
   EditorActiveTargetSnapshot,
@@ -80,6 +88,7 @@ import type {
 } from '../shared/ipc-channels.ts';
 import { createHandler } from '../shared/ipc-handler.ts';
 import { registerPendingDelivery, sendToRenderer } from '../shared/ipc-send.ts';
+import { resolveShell } from '../utility/pty-host.ts';
 import { buildAboutPanelOptions } from './about-panel.ts';
 import { appendOkIgnoreSync } from './append-okignore.ts';
 import { openAssetSafely, revealAssetSafely } from './asset-allowlist.ts';
@@ -103,7 +112,14 @@ import {
   type BundleReplaceWatcherHandle,
   startBundleReplaceWatcher,
 } from './bundle-replace-detector.ts';
+import { cascadePosition } from './cascade-position.ts';
 import { checkTargetExists as checkTargetExistsImpl } from './check-target-exists.ts';
+import {
+  cliProbeArgs,
+  resolveClaudeReadiness,
+  resolveCliOnPath,
+  runLoginShellProbe,
+} from './claude-readiness.ts';
 import { requestUserConsent, walkExceedsCap } from './consent-dialog.ts';
 import {
   CreateNewProjectError,
@@ -112,7 +128,7 @@ import {
   runCreateNew,
 } from './create-new-project.ts';
 import { createDebugIpc, type DebugIpcHandle } from './debug-ipc.ts';
-import { getLogger, getRootDesktopLogger } from './desktop-logger.ts';
+import { flushDesktopLogger, getLogger, getRootDesktopLogger } from './desktop-logger.ts';
 import { promptForExistingFolder } from './dialog-helpers.ts';
 import {
   type DriverUtilityLike,
@@ -123,6 +139,8 @@ import { EMBED_HOST_PATTERNS, rewriteEmbedRequestHeaders } from './embed-referer
 import { discoverProject, validateFolderPick } from './folder-admission.ts';
 import { ensureGitAvailable } from './git-preflight-handler.ts';
 import { readCanonicalGitHubRemoteUrl } from './git-remote.ts';
+import { formatInstanceAppName, resolveInstanceLabel } from './instance-identity.ts';
+import { deriveInstanceUserDataDir } from './instance-isolation.ts';
 import { handleBuildAndOpen, handleDetectClaudeDesktop } from './ipc/install-skill.ts';
 import {
   createLocalOpState,
@@ -138,7 +156,6 @@ import { handleSeedApply, handleSeedListPacks, handleSeedPlan } from './ipc/seed
 import { handleSharingSetMode, handleSharingStatus } from './ipc/sharing.ts';
 import {
   detectProtocol as detectProtocolImpl,
-  openInTerminal as openInTerminalImpl,
   recordHandoff as recordHandoffImpl,
   showItemInFolder as showItemInFolderImpl,
   spawnCursor as spawnCursorImpl,
@@ -151,6 +168,7 @@ import {
   checkAndRepairMcpWiringOnStartup,
   type McpStartupRepairResult,
   type McpWiringCliSurface,
+  type McpWiringDispatchTarget,
   type RunMcpWiringHandle,
   runMcpWiringOnFirstLaunch,
 } from './mcp-wiring.ts';
@@ -160,8 +178,10 @@ import { runOkInit } from './ok-init.ts';
 import {
   type OnboardingFlowKind,
   recordCreateNewBannerShown,
+  recordFirstRunShareHandoff,
   recordOnboardingFlow,
 } from './onboarding-telemetry.ts';
+import { type EnsureCliOnPathResult, ensureCliOnPath } from './path-install.ts';
 import { installStdioBrokenPipeGuard } from './process-safety-net.ts';
 import {
   checkAndRepairProjectMcpOnProjectOpen,
@@ -178,9 +198,12 @@ import { removeGitFolder } from './remove-git-folder.ts';
 import { attachRendererConsoleCapture } from './renderer-console-capture.ts';
 import { resolveDetachedSpawnArgs } from './resolve-detached-spawn-args.ts';
 import { resolveShareTarget as resolveShareTargetMain } from './resolve-share-target.ts';
+import { startFirstRunHandshake } from './share-handoff.ts';
 import { handleShellOpenExternal } from './shell-allowlist.ts';
 import { createShowGateRegistry, type ShowGateRegistry } from './show-gate.ts';
 import { reclaimProjectSkillsOnProjectOpen, reclaimUserSkillsOnLaunch } from './skill-reclaim.ts';
+import { attachSpellcheckContextMenu } from './spellcheck-context-menu.ts';
+import { popSpellcheckMenu } from './spellcheck-menu.ts';
 import {
   type AppState,
   addRecentProject,
@@ -195,7 +218,22 @@ import {
   saveAppStateToDir,
   setLastUsedProjectParent,
   setProjectSessionState,
+  setSpellCheckEnabled as setSpellCheckEnabledState,
 } from './state-store.ts';
+import { isTerminalConsented, isTerminalConsentedWithGrace } from './terminal-consent.ts';
+import { type TerminalReaper, wireWindowTerminalReap } from './terminal-lifecycle.ts';
+import {
+  clampPtyDimension,
+  createTerminalManager,
+  DEFAULT_PTY_COLS,
+  DEFAULT_PTY_ROWS,
+  type PtyUtilityLike,
+} from './terminal-manager.ts';
+import {
+  recordConcurrentSessions,
+  recordShellExit,
+  recordTerminalSession,
+} from './terminal-telemetry.ts';
 import { applyThemeApplied } from './theme-applied-handler.ts';
 import { applyThemeSource, isOkThemeSource } from './theme-handler.ts';
 import {
@@ -209,10 +247,12 @@ import {
   type ShareDeepLinkBranchSwitchPayload,
   type ShareNavigatorPayload,
 } from './url-scheme.ts';
+import { migrateLegacyUserDataDir } from './userdata-migration.ts';
 import { buildUtilityForkEnv } from './utility-fork-env.ts';
 import { mergeViewMenuState } from './view-menu-state.ts';
 import {
   type BrowserWindowLike,
+  setWindowInstanceLabel,
   type UtilityProcessLike,
   WindowManager,
 } from './window-manager.ts';
@@ -241,6 +281,44 @@ const DEFAULT_WIN_OPTS: BrowserWindowConstructorOptions = {
     sandbox: true,
   },
 };
+
+const cascadeOrder: BrowserWindow[] = [];
+
+function pickCascadeAnchor(): BrowserWindow | null {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (
+    focused &&
+    cascadeOrder.includes(focused) &&
+    !focused.isDestroyed() &&
+    !focused.isFullScreen()
+  ) {
+    return focused;
+  }
+  for (let i = cascadeOrder.length - 1; i >= 0; i--) {
+    const win = cascadeOrder[i];
+    if (win && !win.isDestroyed() && !win.isFullScreen()) return win;
+  }
+  return null;
+}
+
+function applyCascadePosition(win: BrowserWindow): void {
+  const anchor = pickCascadeAnchor();
+  if (anchor) {
+    const anchorBounds = anchor.getBounds();
+    const { width, height } = win.getBounds();
+    const pos = cascadePosition({
+      anchor: { x: anchorBounds.x, y: anchorBounds.y },
+      size: { width, height },
+      workArea: screen.getDisplayMatching(anchorBounds).workArea,
+    });
+    if (pos) win.setPosition(pos.x, pos.y);
+  }
+  cascadeOrder.push(win);
+  win.on('closed', () => {
+    const idx = cascadeOrder.indexOf(win);
+    if (idx !== -1) cascadeOrder.splice(idx, 1);
+  });
+}
 
 function probeWsUpgrade(url: string, timeoutMs: number): Promise<boolean> {
   return new Promise<boolean>((resolveProbe) => {
@@ -310,8 +388,41 @@ export function getPendingSchemaIncompatibility(): SchemaIncompatibilityDiagnost
 export function clearPendingSchemaIncompatibility(): void {
   pendingSchemaIncompatibility = null;
 }
+
+function setSpellCheckEnabledAppWide(enabled: boolean): void {
+  session.defaultSession.setSpellCheckerEnabled(enabled);
+  appState = setSpellCheckEnabledState(appState, enabled);
+  saveAppState(appState);
+  refreshApplicationMenu();
+}
+
+function attachSpellcheckMenuToWindow(win: BrowserWindow): void {
+  session.defaultSession.setSpellCheckerEnabled(appState.spellCheckEnabled);
+  const openExternalSafely = handleShellOpenExternal({
+    openExternal: (url) => shell.openExternal(url),
+  });
+  attachSpellcheckContextMenu(win.webContents, {
+    isSpellCheckEnabled: () => appState.spellCheckEnabled,
+    setSpellCheckEnabled: setSpellCheckEnabledAppWide,
+    addToDictionary: (word) => {
+      session.defaultSession.addWordToSpellCheckerDictionary(word);
+    },
+    openExternal: (url) => {
+      void openExternalSafely(url).catch((err: unknown) => {
+        getLogger('spellcheck-menu').warn(
+          { err: err instanceof Error ? err.message : String(err), url },
+          'context-menu search openExternal failed',
+        );
+      });
+    },
+    popMenu: (input) => {
+      popSpellcheckMenu({ Menu, window: win }, input);
+    },
+  });
+}
 let navigatorWindow: BrowserWindowLike | null = null;
 let wm: WindowManager;
+let terminalReaper: TerminalReaper | null = null;
 const showGate: ShowGateRegistry = createShowGateRegistry({
   log: {
     warn: (obj, msg) => {
@@ -339,11 +450,12 @@ let editorActiveTarget: EditorActiveTargetSnapshot = { kind: null };
 
 let editorViewMenuState: EditorViewMenuStateSnapshot = {
   showHiddenFiles: false,
-  showAllFiles: false,
   canExpandAll: true,
   canCollapseAll: true,
   sidebarVisible: true,
   docPanelVisible: true,
+  terminalVisible: false,
+  terminalLive: false,
 };
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL ?? null;
@@ -375,7 +487,10 @@ function runDriverBootSmokeInProduction(): void {
 }
 
 function withDebugFlagIfAllowed(args: readonly string[]): string[] {
-  return isDebugKeyringSmokeAllowed() ? [...args, '--ok-debug-keyring-smoke=1'] : [...args];
+  const withDebug = isDebugKeyringSmokeAllowed()
+    ? [...args, '--ok-debug-keyring-smoke=1']
+    : [...args];
+  return process.env.OK_DESKTOP_E2E_SMOKE === '1' ? [...withDebug, '--ok-e2e-smoke=1'] : withDebug;
 }
 
 function ensureDebugIpc(): DebugIpcHandle {
@@ -427,6 +542,9 @@ function ensureWindowManager() {
       win.on('page-title-updated', (e) => {
         e.preventDefault();
       });
+      applyCascadePosition(win);
+      attachSpellcheckMenuToWindow(win);
+      if (terminalReaper) wireWindowTerminalReap(win, terminalReaper);
       return win as unknown as BrowserWindowLike;
     },
     forkUtility: (entry, args, opts) => {
@@ -439,8 +557,14 @@ function ensureWindowManager() {
     utilityEntryPath,
     ...(bundleCliMjsPath !== null
       ? {
-          spawnDetachedServer: async ({ contentDir, reactShellDistDir }) => {
-            const lockDir = getLocalDir(contentDir);
+          spawnDetachedServer: async ({
+            contentDir,
+            reactShellDistDir,
+            singleFile,
+            projectDir,
+          }) => {
+            const projectRoot = projectDir ?? contentDir;
+            const lockDir = getLocalDir(projectRoot);
             if (!existsSync(lockDir)) {
               try {
                 mkdirSync(lockDir, { recursive: true });
@@ -486,6 +610,7 @@ function ensureWindowManager() {
               contentDir,
               spawnErrorLogFd,
               env: buildUtilityForkEnv(process.env),
+              ...(singleFile !== undefined ? { singleFile, projectDir } : {}),
             });
             let childRef: ReturnType<typeof spawn>;
             try {
@@ -547,6 +672,8 @@ function ensureWindowManager() {
           },
         }
       : {}),
+    createEphemeralProjectDir,
+    removeDir: (dir: string) => fsPromises.rm(dir, { recursive: true, force: true }),
     rendererEntryPath,
     rendererDevUrl,
     appVersion: app.getVersion(),
@@ -607,6 +734,7 @@ function openNavigator(pendingPayload?: ShareNavigatorPayload) {
       win.on('closed', () => {
         navigatorWindow = null;
       });
+      attachSpellcheckMenuToWindow(win);
       return win as unknown as BrowserWindowLike;
     },
     rendererEntryPath: app.isPackaged
@@ -710,21 +838,6 @@ async function openProject(
       err: err instanceof Error ? err.message : String(err),
     });
   });
-  void reclaimProjectSkillsOnProjectOpen({
-    projectDir: resolvedProjectDir,
-    executablePath: app.getPath('exe'),
-    isPackaged: app.isPackaged,
-    platform: process.platform,
-    forceEnv: process.env.OK_M6B_FORCE ?? null,
-    reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
-    deps: {
-      resolveBundledSkillDir: () => resolveBundledSkillDir('project', { checkDesktop: false }),
-    },
-  }).catch((err) => {
-    console.warn('[main] project-skill reclaim failed', {
-      err: err instanceof Error ? err.message : String(err),
-    });
-  });
   let didEnsureGit = false;
   let flowKind: OnboardingFlowKind;
   let contentDirChanged = false;
@@ -745,7 +858,7 @@ async function openProject(
       cancelId: 0,
       defaultId: 0,
       title: 'Open existing project?',
-      message: `Open Knowledge wants to open the existing project at ${discovery.projectDir} (because it contains an .ok/ config). The folder you picked, ${pickedName}, is inside that project. Open ${ancestorName}?`,
+      message: `OpenKnowledge wants to open the existing project at ${discovery.projectDir} (because it contains an .ok/ config). The folder you picked, ${pickedName}, is inside that project. Open ${ancestorName}?`,
     });
     if (response === 0) {
       recordOnboardingFlow({
@@ -881,6 +994,25 @@ async function openProject(
     }
   }
 
+  if (discovery.kind === 'managed' || discovery.kind === 'managed-requires-confirmation') {
+    void reclaimProjectSkillsOnProjectOpen({
+      projectDir: resolvedProjectDir,
+      executablePath: app.getPath('exe'),
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      forceEnv: process.env.OK_M6B_FORCE ?? null,
+      reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
+      createIfWired: true,
+      deps: {
+        resolveBundledSkillDir: () => resolveBundledSkillDir('project', { checkDesktop: false }),
+      },
+    }).catch((err) => {
+      console.warn('[main] project-skill reclaim failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   recordOnboardingFlow({
     flowKind,
     entryPoint,
@@ -976,13 +1108,77 @@ async function openProjectOrFallbackToNavigator(
         `${projectPath}\n\n` +
         `Another process${typeof holderPid === 'number' ? ` (pid ${holderPid})` : ''} ` +
         `is holding the server lock and didn't release it after a SIGTERM. ` +
-        `Quit it manually and try again, or restart Open Knowledge.`;
+        `Quit it manually and try again, or restart OpenKnowledge.`;
     } else if (kind === 'lock-collision') {
-      dialogTitle = 'Open Knowledge is already running for this project';
+      dialogTitle = 'OpenKnowledge is already running for this project';
       dialogBody = `${projectPath}\n\n${errorMessage}`;
     }
     dialog.showErrorBox(dialogTitle, dialogBody);
     openNavigator();
+  }
+}
+
+async function openEphemeralFile(filePath: string): Promise<void> {
+  ensureWindowManager();
+
+  let plan: ReturnType<typeof prepareSingleFileOpen>;
+  try {
+    plan = prepareSingleFileOpen(filePath);
+  } catch (err) {
+    dialog.showErrorBox(
+      'Cannot open this file',
+      `${filePath}\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  if (plan.mode === 'project') {
+    await openProjectOrFallbackToNavigator(plan.projectRoot, 'deep-link', {
+      kind: 'doc',
+      path: plan.docName,
+    });
+    return;
+  }
+
+  try {
+    const ctx = await wm.createEphemeralWindow({
+      canonicalFilePath: plan.canonicalFilePath,
+      contentDir: plan.contentDir,
+      docName: plan.docName,
+    });
+    getLogger('project').info(
+      { file: plan.canonicalFilePath, apiOrigin: ctx.apiOrigin },
+      'ephemeral single-file window created',
+    );
+    attachAssetSafetyNet(ctx.window.webContents, {
+      editorOrigin: ctx.apiOrigin,
+      openAsset: (relPath) =>
+        openAssetSafely(
+          {
+            projectPath: ctx.projectPath,
+            platform: process.platform,
+            openPath: (canonical) => shell.openPath(canonical),
+          },
+          relPath,
+        ),
+      openExternal: handleShellOpenExternal({
+        openExternal: (url) => shell.openExternal(url),
+      }),
+    });
+    tryCloseNavigator(navigatorWindow, { projectPath: plan.contentDir });
+    refreshApplicationMenu();
+  } catch (err) {
+    getLogger('project').error(
+      { file: plan.canonicalFilePath, err: err instanceof Error ? err.message : String(err) },
+      'ephemeral single-file open failed',
+    );
+    dialog.showErrorBox(
+      'Could not open file',
+      `${filePath}\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    if (BrowserWindow.getAllWindows().length === 0) {
+      openNavigator();
+    }
   }
 }
 
@@ -1031,13 +1227,16 @@ async function runApplicationMenuRefresh(): Promise<void> {
             mcpWiringHandle?.destroy();
             mcpWiringHandle = null;
             try {
-              mcpWiringHandle = armMcpWiring({ forceShow: true });
+              mcpWiringHandle = armMcpWiring({
+                forceShow: true,
+                immediateDispatchTarget: pickLoadedRendererForMcpDialog(),
+              });
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               console.error('[main] reconfigureMcpWiring failed', { err: message });
               dialog.showErrorBox(
                 'Configure AI Tool Integrations failed',
-                `Open Knowledge couldn't re-arm the MCP consent dialog:\n\n${message}`,
+                `OpenKnowledge couldn't re-arm the MCP consent dialog:\n\n${message}`,
               );
             }
           }
@@ -1071,23 +1270,28 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onRename: () => sendMenuActionToFocused('rename'),
     onDuplicate: () => sendMenuActionToFocused('duplicate'),
     onMoveToTrash: () => sendMenuActionToFocused('move-to-trash'),
+    onCloseActiveTabOrWindow: () => sendMenuActionToFocused('close-active-tab-or-window'),
     onRevealInFinder: () => sendMenuActionToFocused('reveal-in-finder'),
-    onOpenInTerminal: () => sendMenuActionToFocused('open-in-terminal'),
     onSendToAi: () => sendMenuActionToFocused('send-to-ai'),
     onCopyFullPath: () => sendMenuActionToFocused('copy-full-path'),
     onCopyRelativePath: () => sendMenuActionToFocused('copy-relative-path'),
     showHiddenFilesChecked: editorViewMenuState.showHiddenFiles,
-    showAllFilesChecked: editorViewMenuState.showAllFiles,
     canExpandAll: editorViewMenuState.canExpandAll,
     canCollapseAll: editorViewMenuState.canCollapseAll,
     sidebarVisible: editorViewMenuState.sidebarVisible,
     docPanelVisible: editorViewMenuState.docPanelVisible,
+    terminalVisible: editorViewMenuState.terminalVisible,
+    terminalLive: editorViewMenuState.terminalLive,
     onToggleShowHiddenFiles: () => sendMenuActionToFocused('toggle-show-hidden-files'),
-    onToggleShowAllFiles: () => sendMenuActionToFocused('toggle-show-all-files'),
     onToggleSidebar: () => sendMenuActionToFocused('toggle-sidebar'),
     onToggleDocPanel: () => sendMenuActionToFocused('toggle-doc-panel'),
+    onToggleTerminal: () => sendMenuActionToFocused('toggle-terminal'),
+    onNewTerminal: () => sendMenuActionToFocused('new-terminal'),
+    onKillTerminal: () => sendMenuActionToFocused('kill-terminal'),
     onExpandAll: () => sendMenuActionToFocused('expand-all-tree'),
     onCollapseAll: () => sendMenuActionToFocused('collapse-all-tree'),
+    spellCheckEnabled: appState.spellCheckEnabled,
+    onToggleSpellCheck: () => setSpellCheckEnabledAppWide(!appState.spellCheckEnabled),
   });
 }
 
@@ -1136,7 +1340,12 @@ function createProjectMcpReclaimCliSurface(): ProjectMcpReclaimCliSurface {
   };
 }
 
-function createMcpWiringOpts(opts: { forceShow?: boolean } = {}) {
+interface ArmMcpWiringOpts {
+  forceShow?: boolean;
+  immediateDispatchTarget?: McpWiringDispatchTarget;
+}
+
+function createMcpWiringOpts(opts: ArmMcpWiringOpts = {}) {
   return {
     isPackaged: app.isPackaged,
     executablePath: app.getPath('exe'),
@@ -1147,28 +1356,101 @@ function createMcpWiringOpts(opts: { forceShow?: boolean } = {}) {
     forceEnv: process.env.OK_M6B_FORCE ?? null,
     reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
     forceShow: opts.forceShow ?? false,
+    immediateDispatchTarget: opts.immediateDispatchTarget,
   };
 }
 
-function armMcpWiring(opts: { forceShow?: boolean } = {}): RunMcpWiringHandle {
+function armMcpWiring(opts: ArmMcpWiringOpts = {}): RunMcpWiringHandle {
   return runMcpWiringOnFirstLaunch(createMcpWiringOpts(opts));
 }
 
-function dispatchStartupReclaimToastWhenReady(results: { mcp: McpStartupRepairResult }): void {
-  const { mcp } = results;
+function formatUnknownError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function probeLoginShellOnPath(args?: readonly string[]): Promise<number | null> {
+  return runLoginShellProbe(
+    (file, spawnArgs) => {
+      const child = spawn(file, [...spawnArgs], { stdio: 'ignore', shell: false });
+      return {
+        onExit: (cb) => {
+          child.on('exit', (code) => cb(code));
+        },
+        onError: (cb) => {
+          child.on('error', (err) => cb(err));
+        },
+        kill: () => {
+          child.kill('SIGKILL');
+        },
+      };
+    },
+    resolveShell(process.env),
+    {
+      setTimer: (cb, ms) => setTimeout(cb, ms),
+      clearTimer: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
+    },
+    undefined,
+    args,
+  );
+}
+
+function isProjectClaudeMcpOwn(projectRoot: string | undefined): boolean {
+  if (projectRoot === undefined) return false;
+  const target = EDITOR_TARGETS.claude;
+  const projectPath = target.projectConfigPath?.(projectRoot);
+  if (projectPath === undefined) return false;
+  const classified = classifyExistingMcpEntry(target, projectRoot, undefined, projectPath);
+  return classified.kind === 'present' && isOwnManagedEntry(classified.entry);
+}
+
+function resolveTerminalClaudeReadiness(projectRoot: string | undefined): Promise<ClaudeReadiness> {
+  return resolveClaudeReadiness({
+    probeClaude: () => probeLoginShellOnPath(),
+    classifyMcpEntry: () =>
+      createMcpWiringCliSurface().classifyExistingMcpEntry('claude', osHomedir()).kind,
+    isProjectMcpPreApprovable: () => isProjectClaudeMcpOwn(projectRoot),
+  });
+}
+
+function resolveTerminalCliOnPath(cli: TerminalCli): Promise<CliReadiness> {
+  return resolveCliOnPath({
+    probe: () => probeLoginShellOnPath(cliProbeArgs(TERMINAL_CLIS[cli].bin)),
+  });
+}
+
+function pickLoadedRendererForMcpDialog(): McpWiringDispatchTarget | undefined {
+  const isUsable = (win: BrowserWindow): boolean =>
+    !win.isDestroyed() && !win.webContents.isLoading();
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && isUsable(focused)) return focused.webContents;
+  return BrowserWindow.getAllWindows().find(isUsable)?.webContents;
+}
+
+function dispatchStartupReclaimToastWhenReady(results: {
+  mcp: McpStartupRepairResult;
+  path: EnsureCliOnPathResult;
+}): void {
+  const { mcp, path } = results;
+  const pathLeg =
+    path.status === 'installed'
+      ? ({ status: 'installed', summary: path.summary } as const)
+      : path.status === 'failed-all'
+        ? ({ status: 'failed', summary: path.error } as const)
+        : ({ status: 'none' } as const);
   if (mcp.status === 'failed') {
     dispatchToastWhenReady({
       kind: 'startup-reclaim',
       mcp: { status: 'failed', editors: mcp.failedEditors.map((f) => f.editor) },
-      path: { status: 'none' },
+      path: pathLeg,
     });
     return;
   }
-  if (mcp.status !== 'repaired') return;
+  const hasMcp = mcp.status === 'repaired';
+  if (!hasMcp && pathLeg.status === 'none') return;
   dispatchToastWhenReady({
     kind: 'startup-reclaim',
-    mcp: { status: 'repaired', editors: mcp.repairedEditors },
-    path: { status: 'none' },
+    mcp: hasMcp ? { status: 'repaired', editors: mcp.repairedEditors } : { status: 'none' },
+    path: pathLeg,
   });
 }
 
@@ -1236,6 +1518,112 @@ function registerIpcHandlers() {
       recentGitRoots.delete(oldest);
     }
   };
+
+  const terminalManager = createTerminalManager({
+    forkPtyHost: () =>
+      utilityProcess.fork(join(__dirname, 'utility/pty-host.js')) as unknown as PtyUtilityLike,
+    sendData: (wc, payload) => sendToRenderer(wc, 'ok:pty:data', payload),
+    sendExit: (wc, payload) => sendToRenderer(wc, 'ok:pty:exit', payload),
+    newPtyId: () => randomUUID(),
+    setTimer: (cb, ms) => setTimeout(cb, ms),
+    clearTimer: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
+    logger: { warn: (data) => getLogger('terminal').warn(data, 'unexpected pty-host message') },
+    recordShellExit,
+    recordTerminalSession,
+    recordConcurrentSessions,
+  });
+  terminalReaper = terminalManager;
+
+  handle('ok:pty:create', async (event, opts) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const ctx =
+      win && wm ? wm.getContextForBrowserWindow(win as unknown as BrowserWindowLike) : null;
+    const projectPath = ctx?.projectPath ?? null;
+    if (!win || !wm || !projectPath) {
+      logIpcError({
+        event: 'ipc.error',
+        channel: 'ok:pty:create',
+        reason: 'no-project',
+        handler: 'createPty',
+      });
+      return { ok: false, reason: 'no-project' };
+    }
+    if (!isTerminalConsented(projectPath) && !(await isTerminalConsentedWithGrace(projectPath))) {
+      logIpcError({
+        event: 'ipc.error',
+        channel: 'ok:pty:create',
+        reason: 'not-consented',
+        handler: 'createPty',
+      });
+      return { ok: false, reason: 'not-consented' };
+    }
+    return terminalManager.create({
+      windowId: win.id,
+      webContents: win.webContents,
+      projectRoot: projectPath,
+      cols: clampPtyDimension(opts.cols, DEFAULT_PTY_COLS),
+      rows: clampPtyDimension(opts.rows, DEFAULT_PTY_ROWS),
+    });
+  });
+  handle('ok:pty:input', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.input({ windowId: win.id, ptyId: req.ptyId, data: req.data });
+    return undefined;
+  });
+  handle('ok:pty:resize', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) {
+      terminalManager.resize({
+        windowId: win.id,
+        ptyId: req.ptyId,
+        cols: clampPtyDimension(req.cols, DEFAULT_PTY_COLS),
+        rows: clampPtyDimension(req.rows, DEFAULT_PTY_ROWS),
+      });
+    }
+    return undefined;
+  });
+  handle('ok:pty:kill', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.kill({ windowId: win.id, ptyId: req.ptyId });
+    return undefined;
+  });
+  handle('ok:pty:drain', async (event, req) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) terminalManager.drain({ windowId: win.id, ptyId: req.ptyId, bytes: req.bytes });
+    return undefined;
+  });
+  handle('ok:terminal:claude-assist', async (event, req) => {
+    let rewireError: string | undefined;
+    if (req.action === 'rewire' && process.platform === 'darwin' && app.isPackaged) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      mcpWiringHandle?.destroy();
+      mcpWiringHandle = null;
+      try {
+        mcpWiringHandle = armMcpWiring({
+          forceShow: true,
+          immediateDispatchTarget: win?.webContents,
+        });
+      } catch (err) {
+        rewireError = formatUnknownError(err);
+        getLogger('terminal').warn({ err: rewireError }, 'claude mcp rewire failed');
+      }
+    }
+    const callerWin = BrowserWindow.fromWebContents(event.sender);
+    const projectRoot =
+      callerWin && wm
+        ? wm.getContextForBrowserWindow(callerWin as unknown as BrowserWindowLike)?.projectPath
+        : undefined;
+    const readiness = await resolveTerminalClaudeReadiness(projectRoot);
+    return rewireError === undefined ? readiness : { ...readiness, rewireError };
+  });
+
+  handle('ok:terminal:cli-preflight', async (_event, req): Promise<CliReadiness> => {
+    if (!(req.cli in TERMINAL_CLIS)) {
+      getLogger('terminal').warn({ cli: req.cli }, 'cli-preflight: unknown cli discriminant');
+      return { onPath: 'unknown' };
+    }
+    return resolveTerminalCliOnPath(req.cli);
+  });
 
   handle('ok:dialog:open-folder', async (_event, opts) => {
     return promptForExistingFolder(dialog, opts);
@@ -1490,51 +1878,6 @@ function registerIpcHandlers() {
     return result;
   });
 
-  handle('ok:shell:open-in-terminal', async (event, dirAbsPath) => {
-    const callerWin = BrowserWindow.fromWebContents(event.sender);
-    const callerProjectPath =
-      callerWin && wm
-        ? wm.getContextForBrowserWindow(callerWin as unknown as BrowserWindowLike)?.projectPath
-        : undefined;
-    const start = performance.now();
-    const result = await withSpan(
-      'ok.shell.open_in_terminal',
-      {
-        attributes: {
-          'ok.shell.path': normalizeFsPath(dirAbsPath),
-          'ok.shell.path.role': classifyFsPath(dirAbsPath),
-        },
-      },
-      async (span) => {
-        const outcome = await openInTerminalImpl(
-          {
-            platform: process.platform,
-            projectPath: callerProjectPath,
-            realpath: (p) => realpathSync(p),
-            spawn: spawnDetached,
-          },
-          dirAbsPath,
-        );
-        span.setAttribute('ok.shell.outcome', outcome.ok ? 'ok' : 'failure');
-        if (!outcome.ok) {
-          span.setAttribute('ok.shell.reason', outcome.reason);
-        }
-        return outcome;
-      },
-    );
-    const elapsedMs = performance.now() - start;
-    _openInTerminalDurationHist().record(elapsedMs, {
-      'ok.shell.outcome': result.ok ? 'ok' : 'failure',
-    });
-    if (!result.ok) {
-      _openInTerminalFailureCounter().add(1, { 'ok.shell.reason': result.reason });
-      console.warn('[main] open-in-terminal refused', {
-        reason: result.reason,
-      });
-    }
-    return result;
-  });
-
   handle('ok:editor:active-target-changed', async (_event, target) => {
     editorActiveTarget = target;
     refreshApplicationMenu();
@@ -1592,6 +1935,9 @@ function registerIpcHandlers() {
       projectPath: ctx.projectPath,
       projectName: ctx.projectName,
       mode: 'editor' as const,
+      e2eSmoke: process.env.OK_DESKTOP_E2E_SMOKE === '1',
+      singleFile: ctx.ephemeral !== undefined,
+      initialDoc: null,
     };
   });
 
@@ -1673,12 +2019,27 @@ function registerIpcHandlers() {
         return undefined;
       }
     }
+    if (request.pendingShareBranchSwitch !== undefined && wm) {
+      const existing = wm.focusWindowForProject(request.path) as
+        | (BrowserWindowLike & { webContents: BrowserWindowLike['webContents'] })
+        | null;
+      if (existing) {
+        sendToRenderer(existing.webContents, 'ok:share:received', {
+          kind: 'project-branch-switch' as const,
+          share: request.pendingShareBranchSwitch.share,
+          projectPath: request.pendingShareBranchSwitch.projectPath,
+          currentBranch: request.pendingShareBranchSwitch.currentBranch,
+        });
+        return undefined;
+      }
+    }
     await openProjectOrFallbackToNavigator(
       request.path,
       request.entryPoint,
       request.pendingDeepLinkTarget,
       request.pendingBranch,
       request.pendingMultiCandidate,
+      request.pendingShareBranchSwitch,
     );
     return undefined;
   });
@@ -2083,6 +2444,31 @@ installStdioBrokenPipeGuard(process, {
   },
 });
 
+if (!app.isPackaged && process.env.OK_INSTANCE) {
+  const relocatedUserData = deriveInstanceUserDataDir(
+    app.getPath('userData'),
+    process.env.OK_INSTANCE,
+  );
+  if (relocatedUserData) {
+    mkdirSync(relocatedUserData, { recursive: true });
+    app.setPath('userData', relocatedUserData);
+    getRootDesktopLogger().info(
+      {
+        event: 'desktop.parallel-instance',
+        instance: process.env.OK_INSTANCE,
+        userData: relocatedUserData,
+      },
+      'relocated userData for parallel dev instance',
+    );
+  }
+}
+
+const instanceLabel = resolveInstanceLabel(app.getPath('userData'));
+if (instanceLabel) {
+  app.setName(formatInstanceAppName(app.getName(), instanceLabel));
+  setWindowInstanceLabel(instanceLabel);
+}
+
 if (isDriverBootSmokeMode(process.env)) {
   app.whenReady().then(() => {
     runDriverBootSmokeInProduction();
@@ -2116,7 +2502,7 @@ function bootPrimaryInstance(): void {
     attachRendererConsoleCapture(contents);
   });
 
-  registerProtocolHandler({
+  const protocolControl = registerProtocolHandler({
     app: {
       on: (event, cb) => {
         app.on(event as Parameters<typeof app.on>[0], cb as Parameters<typeof app.on>[1]);
@@ -2146,6 +2532,7 @@ function bootPrimaryInstance(): void {
       }
       return ctx.window as unknown as object;
     },
+    openEphemeralFile: (filePath) => openEphemeralFile(filePath),
     sendDeepLink: (win, payload) => {
       const w = win as BrowserWindowLike;
       sendToRenderer(w.webContents, 'ok:deep-link', payload);
@@ -2191,19 +2578,22 @@ function bootPrimaryInstance(): void {
   app
     .whenReady()
     .then(async () => {
+      const userDataMigrationLog = getLogger('userdata-migration');
+      const userDataMigration = await migrateLegacyUserDataDir({
+        userDataDir: app.getPath('userData'),
+        platform: process.platform,
+        logger: { event: (payload) => userDataMigrationLog.info(payload, payload.event) },
+      });
+      if (userDataMigration.status === 'failed') {
+        userDataMigrationLog.warn(
+          { status: userDataMigration.status, error: userDataMigration.error },
+          'userData migration failed; starting as first run',
+        );
+      }
+
       app.setAboutPanelOptions(buildAboutPanelOptions(app.getVersion()));
 
-      const gitOutcome = await ensureGitAvailable({
-        assertGitAvailable,
-        showMessageBox: async (opts) =>
-          dialog.showMessageBox({ ...opts, buttons: [...opts.buttons] }),
-        openExternal: (url) => shell.openExternal(url),
-        log: { warn: (msg, obj) => console.warn(msg, obj) },
-      });
-      if (gitOutcome === 'aborted') {
-        app.quit();
-        return;
-      }
+      const isTrueFirstRun = !existsSync(join(app.getPath('userData'), 'state.json'));
 
       const result = await runBootstrap({
         loadAppState,
@@ -2237,15 +2627,49 @@ function bootPrimaryInstance(): void {
       });
 
       mcpWiringHandle = armMcpWiring();
-      void checkAndRepairMcpWiringOnStartup(createMcpWiringOpts()).then((mcp) => {
-        dispatchStartupReclaimToastWhenReady({ mcp });
-      });
+      void Promise.allSettled([
+        checkAndRepairMcpWiringOnStartup(createMcpWiringOpts()),
+        ensureCliOnPath({
+          executablePath: app.getPath('exe'),
+          isPackaged: app.isPackaged,
+          platform: process.platform,
+          forceEnv: process.env.OK_M6B_FORCE ?? null,
+          reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
+          home: osHomedir(),
+          bundleVersion: app.getVersion(),
+          logger: {
+            event: (payload) => getLogger('path-install').info(payload, payload.event),
+          },
+        }),
+      ])
+        .then(([mcpSettled, pathSettled]) => {
+          if (mcpSettled.status === 'rejected') {
+            console.warn('[main] MCP startup repair threw', {
+              error: formatUnknownError(mcpSettled.reason),
+            });
+          }
+          const mcp: McpStartupRepairResult =
+            mcpSettled.status === 'fulfilled'
+              ? mcpSettled.value
+              : { status: 'failed', failedEditors: [] };
+          const path: EnsureCliOnPathResult =
+            pathSettled.status === 'fulfilled'
+              ? pathSettled.value
+              : { status: 'failed-all', error: formatUnknownError(pathSettled.reason) };
+          dispatchStartupReclaimToastWhenReady({ mcp, path });
+        })
+        .catch((err) => {
+          console.warn('[main] startup reclaim dispatch threw', {
+            error: formatUnknownError(err),
+          });
+        });
 
       const decision = bootRestoreDecision({
         pendingRestore: appState.pendingWindowRestore,
         lastOpenedProject: appState.lastOpenedProject,
         optionHeld: process.argv.includes('--navigator'),
         pathExists: existsSync,
+        urlLaunch: protocolControl.urlLaunchOwnsWindow(),
       });
       if (decision.clearSnapshot) {
         appState = { ...appState, pendingWindowRestore: null };
@@ -2255,14 +2679,66 @@ function bootPrimaryInstance(): void {
           });
         }
       }
+
+      const skipGitPreflight = decision.action === 'none' && protocolControl.singleFileLaunch();
+      if (!skipGitPreflight) {
+        const gitOutcome = await ensureGitAvailable({
+          assertGitAvailable,
+          showMessageBox: async (opts) =>
+            dialog.showMessageBox({ ...opts, buttons: [...opts.buttons] }),
+          openExternal: (url) => shell.openExternal(url),
+          log: { warn: (msg, obj) => console.warn(msg, obj) },
+        });
+        if (gitOutcome === 'aborted') {
+          app.quit();
+          return;
+        }
+      }
+
       if (decision.action === 'restore') {
         for (const projectPath of decision.projects) {
           void openProjectOrFallbackToNavigator(projectPath, 'recents');
         }
       } else if (decision.action === 'lastOpened') {
         void openProjectOrFallbackToNavigator(decision.project, 'recents');
-      } else {
+      } else if (decision.action === 'navigator') {
         openNavigator();
+      } else {
+        protocolControl.drainQueuedUrls();
+      }
+
+      if (isTrueFirstRun && decision.action === 'navigator') {
+        startFirstRunHandshake({
+          isFirstRun: () => true,
+          createServer: (handler) => {
+            const httpServer = createHttpServer((req, res) => handler(req, res));
+            return {
+              listen: (port, host, cb) => {
+                httpServer.listen(port, host, cb);
+              },
+              on: (event, cb) => {
+                httpServer.on(event, cb);
+              },
+              address: () => httpServer.address(),
+              close: () => {
+                httpServer.close();
+              },
+            };
+          },
+          openExternal: (url) => {
+            void shell.openExternal(url).catch((err) => {
+              console.warn('[main] deferred-share openExternal failed', {
+                err: err instanceof Error ? err.message : String(err),
+              });
+            });
+          },
+          routeShareUrl: (url) => protocolControl.routeUrl(url),
+          recordOutcome: (outcome) => recordFirstRunShareHandoff(outcome),
+          log: {
+            warn: (obj, msg) => console.warn(msg, obj),
+            info: (obj, msg) => console.info(msg, obj),
+          },
+        });
       }
 
       void reclaimUserSkillsOnLaunch({
@@ -2287,6 +2763,16 @@ function bootPrimaryInstance(): void {
       });
 
       autoUpdaterHandle = await bootAutoUpdater(() => import('electron-updater'), {
+        logger: {
+          info: (msg: string, ctx?: object) =>
+            getLogger('updater').info((ctx ?? {}) as Record<string, unknown>, msg),
+          warn: (msg: string, ctx?: object) =>
+            getLogger('updater').warn((ctx ?? {}) as Record<string, unknown>, msg),
+          error: (msg: string, ctx?: object) =>
+            getLogger('updater').error((ctx ?? {}) as Record<string, unknown>, msg),
+          debug: (msg: string, ctx?: object) =>
+            getLogger('updater').debug((ctx ?? {}) as Record<string, unknown>, msg),
+        },
         ipcMain,
         readState: () => appState,
         writeState: (next) => {
@@ -2336,6 +2822,7 @@ function bootPrimaryInstance(): void {
             });
           }
           await wm?.stopAllOwnedServers();
+          flushDesktopLogger();
         },
         showCheckNowResult: (result) => {
           const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -2346,8 +2833,8 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: 'Up to Date',
-              message: "You're on the latest version of Open Knowledge.",
-              detail: `Open Knowledge ${result.currentVersion} is the most current version available.`,
+              message: "You're on the latest version of OpenKnowledge.",
+              detail: `OpenKnowledge ${result.currentVersion} is the most current version available.`,
             });
           } else if (result.kind === 'available') {
             void dialog.showMessageBox(target, {
@@ -2355,7 +2842,7 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: 'Update Available',
-              message: `Open Knowledge ${result.latestVersion} is available.`,
+              message: `OpenKnowledge ${result.latestVersion} is available.`,
               detail: `It's downloading in the background. You'll be prompted to relaunch when the install is ready.`,
             });
           } else {
@@ -2364,7 +2851,7 @@ function bootPrimaryInstance(): void {
               buttons: ['OK'],
               defaultId: 0,
               title: "Couldn't Check for Updates",
-              message: "Open Knowledge couldn't check for updates right now.",
+              message: "OpenKnowledge couldn't check for updates right now.",
               detail: result.message,
             });
           }
@@ -2389,13 +2876,25 @@ function bootPrimaryInstance(): void {
       console.error(JSON.stringify({ event: 'whenReady-unhandled-rejection', message, stack }));
     });
 
+  app.on('before-quit', () => {
+    getLogger('lifecycle').info({}, 'before-quit');
+    flushDesktopLogger();
+  });
+  electronAutoUpdater.on('before-quit-for-update', () => {
+    getLogger('updater').info({}, 'before-quit-for-update — update install will relaunch the app');
+    flushDesktopLogger();
+  });
+
   app.on('will-quit', () => {
+    getLogger('lifecycle').info({}, 'will-quit');
+    terminalReaper?.killAll();
     autoUpdaterHandle?.destroy();
     autoUpdaterHandle = null;
     bundleReplaceWatcherHandle?.stop();
     bundleReplaceWatcherHandle = null;
     mcpWiringHandle?.destroy();
     mcpWiringHandle = null;
+    flushDesktopLogger();
   });
 
   app.on('window-all-closed', () => {
@@ -2414,53 +2913,18 @@ function bootPrimaryInstance(): void {
 let _trashItemDurationHistCache: ReturnType<ReturnType<typeof getMeter>['createHistogram']> | null =
   null;
 function _trashItemDurationHist() {
-  if (!_trashItemDurationHistCache) {
-    _trashItemDurationHistCache = getMeter().createHistogram('ok.shell.trash_item.duration_ms', {
-      description: 'Duration of ok:shell:trash-item IPC dispatches in milliseconds',
-      unit: 'ms',
-    });
-  }
+  _trashItemDurationHistCache ||= getMeter().createHistogram('ok.shell.trash_item.duration_ms', {
+    description: 'Duration of ok:shell:trash-item IPC dispatches in milliseconds',
+    unit: 'ms',
+  });
   return _trashItemDurationHistCache;
 }
 
 let _trashItemFailureCounterCache: ReturnType<ReturnType<typeof getMeter>['createCounter']> | null =
   null;
 function _trashItemFailureCounter() {
-  if (!_trashItemFailureCounterCache) {
-    _trashItemFailureCounterCache = getMeter().createCounter('ok.shell.trash_item.failures', {
-      description: 'Count of ok:shell:trash-item handler failures, labeled by reason',
-    });
-  }
+  _trashItemFailureCounterCache ||= getMeter().createCounter('ok.shell.trash_item.failures', {
+    description: 'Count of ok:shell:trash-item handler failures, labeled by reason',
+  });
   return _trashItemFailureCounterCache;
-}
-
-let _openInTerminalDurationHistCache: ReturnType<
-  ReturnType<typeof getMeter>['createHistogram']
-> | null = null;
-function _openInTerminalDurationHist() {
-  if (!_openInTerminalDurationHistCache) {
-    _openInTerminalDurationHistCache = getMeter().createHistogram(
-      'ok.shell.open_in_terminal.duration_ms',
-      {
-        description: 'Duration of ok:shell:open-in-terminal IPC dispatches in milliseconds',
-        unit: 'ms',
-      },
-    );
-  }
-  return _openInTerminalDurationHistCache;
-}
-
-let _openInTerminalFailureCounterCache: ReturnType<
-  ReturnType<typeof getMeter>['createCounter']
-> | null = null;
-function _openInTerminalFailureCounter() {
-  if (!_openInTerminalFailureCounterCache) {
-    _openInTerminalFailureCounterCache = getMeter().createCounter(
-      'ok.shell.open_in_terminal.failures',
-      {
-        description: 'Count of ok:shell:open-in-terminal handler failures, labeled by reason',
-      },
-    );
-  }
-  return _openInTerminalFailureCounterCache;
 }

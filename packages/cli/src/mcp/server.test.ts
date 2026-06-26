@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { sanitizeClientName } from '@inkeep/open-knowledge-server';
 import {
+  countWorktrees,
   findProjectDir,
-  resolveCwdWithFallback,
+  resolveStickyProjectDir,
   rootUriToFsPath,
   tryListRootsFallback,
 } from './server.ts';
@@ -40,33 +41,33 @@ describe('findProjectDir', () => {
   });
 
   test('throws with a clear message when no `.ok/config.yml` ancestor exists', () => {
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('rejects a regular file named `.ok` and keeps walking up', () => {
     writeFileSync(resolve(tmpDir, '.ok'), 'oops');
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('rejects a dangling symlink at `.ok` and keeps walking up', () => {
     symlinkSync(resolve(tmpDir, 'does-not-exist'), resolve(tmpDir, '.ok'));
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('rejects an empty `.ok/` directory with no config.yml and keeps walking up', () => {
     mkdirSync(resolve(tmpDir, '.ok'), { recursive: true });
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('rejects a folder-rule-style `.ok/frontmatter.yml` without config.yml', () => {
     mkdirSync(resolve(tmpDir, '.ok'), { recursive: true });
     writeFileSync(resolve(tmpDir, '.ok', 'frontmatter.yml'), 'title: oops\n', 'utf-8');
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('rejects a directory at `.ok/config.yml` (not a file) and keeps walking up', () => {
     mkdirSync(resolve(tmpDir, '.ok', 'config.yml'), { recursive: true });
-    expect(() => findProjectDir(tmpDir)).toThrow(/No Open Knowledge project found/);
+    expect(() => findProjectDir(tmpDir)).toThrow(/No OpenKnowledge project found/);
   });
 
   test('walks past a folder-rule `.ok/` sidecar to the real project root above', () => {
@@ -243,7 +244,7 @@ describe('tryListRootsFallback', () => {
   });
 });
 
-describe('resolveCwdWithFallback', () => {
+describe('resolveStickyProjectDir', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -256,46 +257,82 @@ describe('resolveCwdWithFallback', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  test('prefers explicit cwd over the fallback', async () => {
+  test('explicit cwd wins over the fallback and becomes the next sticky anchor', async () => {
     let fallbackCalls = 0;
-    const result = await resolveCwdWithFallback(tmpDir, async () => {
+    const r = await resolveStickyProjectDir(tmpDir, undefined, async () => {
       fallbackCalls += 1;
       return undefined;
     });
-    expect(result).toBe(resolve(tmpDir));
+    expect(r.projectDir).toBe(resolve(tmpDir));
+    expect(r.viaRootGuess).toBe(false);
+    expect(r.nextSticky).toBe(resolve(tmpDir));
     expect(fallbackCalls).toBe(0);
   });
 
-  test('uses the fallback when cwd is omitted', async () => {
-    const result = await resolveCwdWithFallback(undefined, async () => tmpDir);
-    expect(result).toBe(resolve(tmpDir));
+  test('reuses the sticky anchor when cwd is omitted, never consulting the fallback', async () => {
+    let fallbackCalls = 0;
+    const r = await resolveStickyProjectDir(undefined, resolve(tmpDir), async () => {
+      fallbackCalls += 1;
+      return undefined;
+    });
+    expect(r.projectDir).toBe(resolve(tmpDir));
+    expect(r.viaRootGuess).toBe(false); // sticky is the agent's named intent, not a guess
+    expect(r.nextSticky).toBe(resolve(tmpDir));
+    expect(fallbackCalls).toBe(0);
   });
 
-  test('throws when cwd is omitted and the fallback returns undefined', async () => {
-    await expect(resolveCwdWithFallback(undefined, async () => undefined)).rejects.toThrow(
-      /`cwd` is required/,
-    );
+  test('falls through to the root guess only with no explicit and no sticky, flagging viaRootGuess; a guess never sticks', async () => {
+    const r = await resolveStickyProjectDir(undefined, undefined, async () => tmpDir);
+    expect(r.projectDir).toBe(resolve(tmpDir));
+    expect(r.viaRootGuess).toBe(true);
+    expect(r.nextSticky).toBeUndefined();
+  });
+
+  test('returns no project (no throw) when cwd omitted, no sticky, and the fallback returns undefined', async () => {
+    const r = await resolveStickyProjectDir(undefined, undefined, async () => undefined);
+    expect(r.projectDir).toBeUndefined();
+    expect(r.viaRootGuess).toBe(false);
+    expect(r.nextSticky).toBeUndefined();
   });
 
   test('throws (via findProjectDir) when explicit cwd has no .ok ancestor', async () => {
     const noOkDir = await mkdtemp(resolve(tmpdir(), 'ok-mcp-no-project-'));
     try {
-      await expect(resolveCwdWithFallback(noOkDir, async () => undefined)).rejects.toThrow(
-        /No Open Knowledge project found/,
-      );
+      await expect(
+        resolveStickyProjectDir(noOkDir, undefined, async () => undefined),
+      ).rejects.toThrow(/No OpenKnowledge project found/);
     } finally {
       await rm(noOkDir, { recursive: true, force: true });
     }
   });
 
-  test('throws (via findProjectDir) when the fallback returns a non-OK path', async () => {
+  test('throws (via findProjectDir) when the root guess returns a non-OK path', async () => {
     const noOkDir = await mkdtemp(resolve(tmpdir(), 'ok-mcp-fallback-no-project-'));
     try {
-      await expect(resolveCwdWithFallback(undefined, async () => noOkDir)).rejects.toThrow(
-        /No Open Knowledge project found/,
-      );
+      await expect(
+        resolveStickyProjectDir(undefined, undefined, async () => noOkDir),
+      ).rejects.toThrow(/No OpenKnowledge project found/);
     } finally {
       await rm(noOkDir, { recursive: true, force: true });
+    }
+  });
+
+  test('re-validates the sticky anchor on reuse: a deleted sticky path throws instead of resolving silently', async () => {
+    const goneDir = await mkdtemp(resolve(tmpdir(), 'ok-mcp-sticky-gone-'));
+    await rm(goneDir, { recursive: true, force: true });
+    await expect(
+      resolveStickyProjectDir(undefined, goneDir, async () => undefined),
+    ).rejects.toThrow(/No OpenKnowledge project found/);
+  });
+});
+
+describe('countWorktrees', () => {
+  test('returns 0 for a non-git directory (no ambiguity → no nudge)', async () => {
+    const dir = await mkdtemp(resolve(tmpdir(), 'ok-mcp-no-git-'));
+    try {
+      expect(await countWorktrees(dir)).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });
