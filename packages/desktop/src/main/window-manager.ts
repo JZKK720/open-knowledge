@@ -23,8 +23,15 @@ function isValidLockPidLocal(value: unknown): value is number {
   return true;
 }
 
+let windowInstanceLabel: string | null = null;
+
+export function setWindowInstanceLabel(label: string | null): void {
+  windowInstanceLabel = label;
+}
+
 function formatEditorTitle(projectName: string): string {
-  return `${projectName} — OpenKnowledge`;
+  const suffix = windowInstanceLabel ? ` (${windowInstanceLabel})` : '';
+  return `${projectName} — OpenKnowledge${suffix}`;
 }
 
 export interface BrowserWindowLike {

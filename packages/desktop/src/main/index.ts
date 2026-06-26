@@ -139,6 +139,7 @@ import { EMBED_HOST_PATTERNS, rewriteEmbedRequestHeaders } from './embed-referer
 import { discoverProject, validateFolderPick } from './folder-admission.ts';
 import { ensureGitAvailable } from './git-preflight-handler.ts';
 import { readCanonicalGitHubRemoteUrl } from './git-remote.ts';
+import { formatInstanceAppName, resolveInstanceLabel } from './instance-identity.ts';
 import { deriveInstanceUserDataDir } from './instance-isolation.ts';
 import { handleBuildAndOpen, handleDetectClaudeDesktop } from './ipc/install-skill.ts';
 import {
@@ -251,6 +252,7 @@ import { buildUtilityForkEnv } from './utility-fork-env.ts';
 import { mergeViewMenuState } from './view-menu-state.ts';
 import {
   type BrowserWindowLike,
+  setWindowInstanceLabel,
   type UtilityProcessLike,
   WindowManager,
 } from './window-manager.ts';
@@ -2455,6 +2457,12 @@ if (!app.isPackaged && process.env.OK_INSTANCE) {
       'relocated userData for parallel dev instance',
     );
   }
+}
+
+const instanceLabel = resolveInstanceLabel(app.getPath('userData'));
+if (instanceLabel) {
+  app.setName(formatInstanceAppName(app.getName(), instanceLabel));
+  setWindowInstanceLabel(instanceLabel);
 }
 
 if (isDriverBootSmokeMode(process.env)) {
