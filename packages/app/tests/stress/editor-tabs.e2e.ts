@@ -407,20 +407,19 @@ test.describe('Editor tabs', () => {
     await expect(page).toHaveURL(new RegExp(`#/__asset__/${assetPath.replace('.', '\\.')}$`));
   });
 
-  test('sidebar asset click fills an active new tab even when that asset is already open', async ({
+  test('sidebar asset click focuses the existing asset tab when that asset is already open', async ({
     page,
     api,
     workerServer,
   }) => {
     test.skip(
       true,
-      'Asset setup currently times out before tab assertions; duplicate target behavior is covered by editor-tabs.test.ts.',
+      'Asset setup currently times out before tab assertions; focus-existing behavior is covered by editor-tabs.test.ts.',
     );
     const id = testId();
     const docName = `asset-new-tab-doc-${id}`;
     const assetPath = `asset-new-tab-${id}.png`;
     const assetTabId = `\u0000asset:${assetPath}`;
-    const duplicateAssetTabId = `${assetTabId}\u0000doc-tab:1`;
 
     await seedReferencedAssetDoc(api, workerServer, docName, assetPath);
 
@@ -435,17 +434,17 @@ test.describe('Editor tabs', () => {
 
     await sidebarTreeItem(page, assetPath).click();
 
-    await expect(assetTabs).toHaveCount(2);
+    await expect(assetTabs).toHaveCount(1);
     await expect(activateNewTabButtons(page)).toHaveCount(0);
     await expect(activeEditorTabButtons(page, assetPath)).toHaveCount(1);
-    await expect.poll(() => editorTabOrder(page)).toEqual([assetPath, assetPath]);
+    await expect.poll(() => editorTabOrder(page)).toEqual([assetPath]);
     await expectPersistedTabSession(page, {
-      openTabs: [assetTabId, duplicateAssetTabId],
-      activeTabId: duplicateAssetTabId,
+      openTabs: [assetTabId],
+      activeTabId: assetTabId,
     });
   });
 
-  test('sidebar folder click fills an active new tab even when that folder is already open', async ({
+  test('sidebar folder click focuses the existing folder tab when that folder is already open', async ({
     page,
     api,
   }) => {
@@ -454,7 +453,6 @@ test.describe('Editor tabs', () => {
     const nestedDoc = `${folder}/nested-${id}`;
     const folderLabel = `${folder}/`;
     const folderTabId = `\u0000folder:${folder}`;
-    const duplicateFolderTabId = `${folderTabId}\u0000doc-tab:1`;
 
     await seedMarkdownDocs(api, [{ name: nestedDoc, markdown: `# Nested ${id}` }]);
 
@@ -469,17 +467,20 @@ test.describe('Editor tabs', () => {
 
     await sidebarTreeItem(page, folder).click();
 
-    await expect(folderTabs).toHaveCount(2);
+    await expect(folderTabs).toHaveCount(1);
     await expect(activateNewTabButtons(page)).toHaveCount(0);
     await expect(activeEditorTabButtons(page, folderLabel)).toHaveCount(1);
-    await expect.poll(() => editorTabOrder(page)).toEqual([folderLabel, folderLabel]);
+    await expect.poll(() => editorTabOrder(page)).toEqual([folderLabel]);
     await expectPersistedTabSession(page, {
-      openTabs: [folderTabId, duplicateFolderTabId],
-      activeTabId: duplicateFolderTabId,
+      openTabs: [folderTabId],
+      activeTabId: folderTabId,
     });
   });
 
-  test('sidebar click replaces active bar.md with a second foo.md tab', async ({ page, api }) => {
+  test('sidebar click focuses the existing foo.md tab instead of duplicating it', async ({
+    page,
+    api,
+  }) => {
     const id = testId();
     const fooDoc = `foo-${id}`;
     const barDoc = `bar-${id}`;
@@ -505,13 +506,13 @@ test.describe('Editor tabs', () => {
 
     await sidebarTreeItem(page, fooLabel).click();
 
-    await expect(fooTabs).toHaveCount(2);
-    await expect(barTabs).toHaveCount(0);
-    await expectInactiveTab(fooTabs.nth(0));
-    await expectActiveTab(fooTabs.nth(1));
+    await expect(fooTabs).toHaveCount(1);
+    await expect(barTabs).toHaveCount(1);
+    await expectActiveTab(fooTabs.first());
+    await expectInactiveTab(barTabs.first());
   });
 
-  test('sidebar click from a restored foo.md/bar.md session replaces bar.md with a duplicate foo.md tab', async ({
+  test('sidebar click from a restored foo.md/bar.md session focuses the existing foo.md tab', async ({
     page,
     api,
   }) => {
@@ -542,60 +543,59 @@ test.describe('Editor tabs', () => {
 
     await sidebarTreeItem(page, fooLabel).click();
 
-    await expect(fooTabs).toHaveCount(2);
-    await expect(barTabs).toHaveCount(0);
-    await expectInactiveTab(fooTabs.nth(0));
-    await expectActiveTab(fooTabs.nth(1));
+    await expect(fooTabs).toHaveCount(1);
+    await expect(barTabs).toHaveCount(1);
+    await expectActiveTab(fooTabs.first());
+    await expectInactiveTab(barTabs.first());
     await expectPersistedTabSession(page, {
-      openTabs: [fooDoc, `${fooDoc}\u0000doc-tab:1`],
-      activeTabId: `${fooDoc}\u0000doc-tab:1`,
+      openTabs: [fooDoc, barDoc],
+      activeTabId: fooDoc,
     });
   });
 
-  test('refresh preserves three tabs when two point at the same file', async ({ page, api }) => {
+  test('refresh preserves a restored session where two tabs point at the same file', async ({
+    page,
+    api,
+  }) => {
     const id = testId();
     const fooDoc = `foo-refresh-${id}`;
     const barDoc = `bar-refresh-${id}`;
     const fooLabel = `${fooDoc}.md`;
     const barLabel = `${barDoc}.md`;
+    const duplicateFooTabId = `${fooDoc}\u0000doc-tab:1`;
 
     await seedMarkdownDocs(api, [
       { name: fooDoc, markdown: `# Foo Refresh ${id}` },
       { name: barDoc, markdown: `# Bar Refresh ${id}` },
     ]);
 
+    await installLocalTabSession(page, {
+      openTabs: [fooDoc, barDoc, duplicateFooTabId],
+      activeDocName: fooDoc,
+      activeTabId: fooDoc,
+    });
+
     await page.goto(`/#/${fooDoc}`);
     const fooTabs = editorTabButtons(page, fooLabel);
     const barTabs = editorTabButtons(page, barLabel);
-    await expect(fooTabs).toHaveCount(1, { timeout: 10_000 });
-    await expectActiveTab(fooTabs.first());
-
-    await editorNewTabButton(page).click();
-    await sidebarTreeItem(page, barLabel).click();
-    await expect(fooTabs).toHaveCount(1);
+    await expect(fooTabs).toHaveCount(2, { timeout: 10_000 });
     await expect(barTabs).toHaveCount(1);
-    await expectActiveTab(barTabs.first());
-
-    await editorNewTabButton(page).click();
-    await sidebarTreeItem(page, fooLabel).click();
-    await expect(fooTabs).toHaveCount(2);
-    await expect(barTabs).toHaveCount(1);
-    await expectInactiveTab(fooTabs.nth(0));
-    await expectActiveTab(fooTabs.nth(1));
+    await expectActiveTab(fooTabs.nth(0));
+    await expectInactiveTab(fooTabs.nth(1));
     await expectPersistedTabSession(page, {
-      openTabs: [fooDoc, barDoc, `${fooDoc}\u0000doc-tab:1`],
-      activeTabId: `${fooDoc}\u0000doc-tab:1`,
+      openTabs: [fooDoc, barDoc, duplicateFooTabId],
+      activeTabId: fooDoc,
     });
 
     await page.reload();
 
     await expect(fooTabs).toHaveCount(2, { timeout: 10_000 });
     await expect(barTabs).toHaveCount(1);
-    await expectInactiveTab(fooTabs.nth(0));
-    await expectActiveTab(fooTabs.nth(1));
+    await expectActiveTab(fooTabs.nth(0));
+    await expectInactiveTab(fooTabs.nth(1));
     await expectPersistedTabSession(page, {
-      openTabs: [fooDoc, barDoc, `${fooDoc}\u0000doc-tab:1`],
-      activeTabId: `${fooDoc}\u0000doc-tab:1`,
+      openTabs: [fooDoc, barDoc, duplicateFooTabId],
+      activeTabId: fooDoc,
     });
   });
 
@@ -663,7 +663,7 @@ test.describe('Editor tabs', () => {
     await expectInactiveTab(barTabs.first());
   });
 
-  test('sidebar click replaces the active .mdx tab with a duplicate of an already-open .mdx tab', async ({
+  test('sidebar click focuses the existing .mdx tab instead of duplicating it', async ({
     page,
     api,
     workerServer,
@@ -702,10 +702,10 @@ test.describe('Editor tabs', () => {
     await sidebarTreeItem(page, `bar-${id}.mdx`).click();
 
     const barTabs = editorTabButtons(page, barLabel);
-    await expect(barTabs).toHaveCount(2);
-    await expect(editorTabButtons(page, helloLabel)).toHaveCount(0);
-    await expectInactiveTab(barTabs.nth(0));
-    await expectActiveTab(barTabs.nth(1));
+    await expect(barTabs).toHaveCount(1);
+    await expect(editorTabButtons(page, helloLabel)).toHaveCount(1);
+    await expectActiveTab(barTabs.first());
+    await expectInactiveTab(editorTabButtons(page, helloLabel).first());
   });
 
   test('clicking the second duplicate .mdx tab activates that exact tab instance', async ({

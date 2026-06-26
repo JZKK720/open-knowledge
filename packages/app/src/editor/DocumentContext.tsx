@@ -38,7 +38,6 @@ import {
   localTabSessionStorageKey,
   nextActiveTabAfterClose,
   nextActiveTabAfterCloseMany,
-  nextAvailableDocTabId,
   normalizePinnedTabIds,
   openDocTab,
   openTab,
@@ -823,25 +822,12 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       const entry = p.open(docName);
       if (!entry) return;
       consumePrewarmClick(docName, entry.poolEventId);
-      const replacementDocTabId = replacingBlankTab
-        ? nextAvailableDocTabId(openTabsRef.current, docName)
-        : null;
-      const opened = replacingBlankTab
-        ? {
-            activeTabId: replacementDocTabId ?? docTabId(docName),
-            tabs: addOpenTab(
-              openTabsRef.current,
-              replacementDocTabId ?? docTabId(docName),
-              MAX_POOL,
-              pinnedTabIdsRef.current,
-            ),
-          }
-        : openDocTab(openTabsRef.current, docName, {
-            behavior,
-            currentTabId: currentActiveTabId,
-            limit: MAX_POOL,
-            pinnedTabIds: pinnedTabIdsRef.current,
-          });
+      const opened = openDocTab(openTabsRef.current, docName, {
+        behavior,
+        currentTabId: currentActiveTabId,
+        limit: MAX_POOL,
+        pinnedTabIds: pinnedTabIdsRef.current,
+      });
       commitOpenTabs(opened.tabs);
       removeActiveNewTab(opened.activeTabId);
       commitActiveTabId(opened.activeTabId);

@@ -99,28 +99,6 @@ export function docTabId(docName: string): string {
   return docName;
 }
 
-function duplicateTabId(tabId: string, instance: number): string {
-  return `${baseTabId(tabId)}${TAB_INSTANCE_SEPARATOR}${instance}`;
-}
-
-export function nextAvailableDocTabId(tabs: readonly string[], docName: string): string {
-  return nextAvailableTabId(tabs, docTabId(docName));
-}
-
-export function nextAvailableTabId(tabs: readonly string[], tabId: string): string {
-  const normalized = normalizeOpenTabs(tabs, Number.MAX_SAFE_INTEGER);
-  const canonicalTabId = baseTabId(tabId);
-  if (!normalized.includes(canonicalTabId)) return canonicalTabId;
-
-  let instance = 1;
-  let nextTabId: string;
-  do {
-    nextTabId = duplicateTabId(canonicalTabId, instance);
-    instance++;
-  } while (normalized.includes(nextTabId));
-  return nextTabId;
-}
-
 export function folderTabId(folderPath: string): string {
   return `${FOLDER_TAB_PREFIX}${folderPath}`;
 }
@@ -347,6 +325,13 @@ export function openTab(
       activeTabId: currentTabId,
     };
   }
+  const existingTabId = normalized.find((openTabId) => baseTabId(openTabId) === canonicalTabId);
+  if (existingTabId) {
+    return {
+      tabs: normalized,
+      activeTabId: existingTabId,
+    };
+  }
   if (behavior !== 'replace-active') {
     return {
       tabs: addOpenTab(normalized, canonicalTabId, limit, pinnedTabIds),
@@ -354,11 +339,9 @@ export function openTab(
     };
   }
 
-  const nextTabId = nextAvailableTabId(normalized, canonicalTabId);
-
   return {
-    tabs: replaceOpenTab(normalized, currentTabId, nextTabId, limit, pinnedTabIds),
-    activeTabId: nextTabId,
+    tabs: replaceOpenTab(normalized, currentTabId, canonicalTabId, limit, pinnedTabIds),
+    activeTabId: canonicalTabId,
   };
 }
 
