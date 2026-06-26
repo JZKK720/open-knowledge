@@ -22,7 +22,8 @@ const features: Feature[] = [
   {
     icon: Plug,
     title: 'Built in MCP',
-    description: 'Plug your docs straight into Claude, Cursor and Codex. No copy-paste, no export.',
+    description:
+      'Plug your docs straight into Claude, Cursor, Codex, and OpenCode. No copy-paste, no export.',
   },
   {
     icon: History,

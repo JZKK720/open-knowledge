@@ -699,10 +699,12 @@ export async function runInit(options: InitCommandOptions = {}): Promise<InitCom
     }
   }
 
+  const writtenSkillPaths = new Set<string>();
   for (const target of projectTargets) {
-    if (target.projectSkillPath) {
-      projectSkillResults.push(writeProjectSkill(target, projectRoot));
-    }
+    const skillPath = target.projectSkillPath?.(projectRoot);
+    if (!skillPath || writtenSkillPaths.has(skillPath)) continue;
+    writtenSkillPaths.add(skillPath);
+    projectSkillResults.push(writeProjectSkill(target, projectRoot));
   }
 
   const projectScopeUnsupportedLabels =

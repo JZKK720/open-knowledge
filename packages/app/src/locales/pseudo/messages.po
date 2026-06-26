@@ -4182,6 +4182,14 @@ msgstr ""
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr ""
 
+#: src/components/BottomComposer.tsx
+msgid "OpenCode (CLI)"
+msgstr ""
+
+#: src/components/BottomComposer.tsx
+msgid "OpenCode CLI"
+msgstr ""
+
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr ""

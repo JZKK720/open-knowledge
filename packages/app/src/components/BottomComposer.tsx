@@ -286,11 +286,13 @@ export function BottomComposer({
     claude: t`Claude (CLI)`,
     codex: t`Codex (CLI)`,
     cursor: t`Cursor (CLI)`,
+    opencode: t`OpenCode (CLI)`,
   };
   const cliAriaLabels: Record<TerminalCli, string> = {
     claude: t`Claude CLI`,
     codex: t`Codex CLI`,
     cursor: t`Cursor CLI`,
+    opencode: t`OpenCode CLI`,
   };
   const cliRows =
     terminalLaunch !== null

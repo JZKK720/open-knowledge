@@ -12,6 +12,7 @@ import {
   resolveCodexConfigPath,
   resolveCursorConfigPath,
   resolveEditorTargets,
+  resolveOpenCodeConfigPath,
 } from './editors.ts';
 
 describe('resolveAppSupportPath', () => {
@@ -139,6 +140,46 @@ describe('resolveCodexConfigPath', () => {
         env: { CODEX_HOME: '/tmp/custom-codex-home' },
       }),
     ).toBe('/tmp/custom-codex-home/config.toml');
+  });
+});
+
+describe('resolveOpenCodeConfigPath', () => {
+  it('builds the XDG default on Linux', () => {
+    expect(resolveOpenCodeConfigPath({ home: '/home/alice', platformName: 'linux', env: {} })).toBe(
+      '/home/alice/.config/opencode/opencode.json',
+    );
+  });
+
+  it('honors XDG_CONFIG_HOME when present', () => {
+    expect(
+      resolveOpenCodeConfigPath({
+        home: '/home/alice',
+        platformName: 'linux',
+        env: { XDG_CONFIG_HOME: '/tmp/xdg' },
+      }),
+    ).toBe('/tmp/xdg/opencode/opencode.json');
+  });
+
+  it('uses ~/.config on macOS (OpenCode is XDG-convention, not Application Support)', () => {
+    expect(
+      resolveOpenCodeConfigPath({ home: '/Users/alice', platformName: 'darwin', env: {} }),
+    ).toBe('/Users/alice/.config/opencode/opencode.json');
+  });
+
+  it('uses %APPDATA% on Windows', () => {
+    expect(
+      resolveOpenCodeConfigPath({
+        home: 'C:\\Users\\alice',
+        platformName: 'win32',
+        env: { APPDATA: 'C:\\Users\\alice\\AppData\\Roaming' },
+      }),
+    ).toBe('C:\\Users\\alice\\AppData\\Roaming\\opencode\\opencode.json');
+  });
+
+  it('falls back to AppData\\Roaming on Windows without APPDATA', () => {
+    expect(
+      resolveOpenCodeConfigPath({ home: 'C:\\Users\\alice', platformName: 'win32', env: {} }),
+    ).toBe('C:\\Users\\alice\\AppData\\Roaming\\opencode\\opencode.json');
   });
 });
 
@@ -284,6 +325,34 @@ describe('isEntryUpToDate', () => {
       { command: '/bin/sh', args: ['-l', '-c', 'echo hi'] }, // wrong body
       'oops',
       42,
+    ]) {
+      expect(isEntryUpToDate(bad)).toBe(false);
+    }
+  });
+
+  it('true for the OpenCode published entry shape (array command, no args key)', () => {
+    expect(
+      isEntryUpToDate({ type: 'local', enabled: true, command: ['/bin/sh', '-l', '-c', CHAIN_V1] }),
+    ).toBe(true);
+  });
+
+  it('true for an OpenCode entry whose body drifts but keeps the sentinel', () => {
+    expect(
+      isEntryUpToDate({
+        type: 'local',
+        enabled: true,
+        command: ['/bin/sh', '-l', '-c', `${CHAIN_VERSION_SENTINEL}\n# drift tolerated\nexit 127`],
+      }),
+    ).toBe(true);
+  });
+
+  it('false for stale or malformed OpenCode-shaped entries', () => {
+    for (const bad of [
+      { type: 'local', command: ['/bin/sh', '-l', '-c', 'echo hi'] }, // wrong body
+      { type: 'local', command: ['/bin/zsh', '-l', '-c', CHAIN_V1] }, // wrong shell
+      { type: 'local', command: ['/bin/sh', '-c', '-l', CHAIN_V1] }, // wrong arg order
+      { type: 'local', command: ['/bin/sh', '-l', '-c'] }, // missing body
+      { type: 'remote', command: ['/bin/sh', '-l', '-c', CHAIN_V1] }, // wrong type
     ]) {
       expect(isEntryUpToDate(bad)).toBe(false);
     }

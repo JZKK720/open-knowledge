@@ -201,6 +201,7 @@ export const ListNode = Node.create({
           ordered: false,
           bulletMarker: match[1],
         }),
+        joinPredicate: (_match, node) => node.attrs.ordered === false,
       }),
       wrappingInputRule({
         find: /^\s*(\d+)([.)])\s$/,
@@ -210,6 +211,7 @@ export const ListNode = Node.create({
           start: Number(match[1]),
           listMarkerDelimiter: match[2],
         }),
+        joinPredicate: (_match, node) => node.attrs.ordered === true,
       }),
       new InputRule({
         find: /^\s*[-*+]\s\[([ xX])\]\s$/,

@@ -23,7 +23,7 @@ OpenKnowledge is three layers working together: a surface you edit, an engine th
 
 All three layers operate on the **same files**. You can edit through the editor, an agent can edit through the knowledge engine's MCP tools, and you can always drop down to any text editor and change the markdown by hand. Nothing locks you out.
 
-Because the knowledge engine is exposed over [MCP](https://modelcontextprotocol.io), it is **agent-agnostic**. Bring Claude Code, Cursor, Codex, Gemini, or any MCP-capable client, and any model you have access to.
+Because the knowledge engine is exposed over [MCP](https://modelcontextprotocol.io), it is **agent-agnostic**. Bring Claude Code, Cursor, Codex, OpenCode, Gemini, or any MCP-capable client, and any model you have access to.
 
 ## The file system is the database
 

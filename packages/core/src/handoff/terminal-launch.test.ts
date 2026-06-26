@@ -78,6 +78,7 @@ describe('buildCliLaunchCommand', () => {
     expect(buildCliLaunchCommand('claude', 'hi')).toBe("claude 'hi'\r");
     expect(buildCliLaunchCommand('codex', 'hi')).toBe("codex 'hi'\r");
     expect(buildCliLaunchCommand('cursor', 'hi')).toBe("cursor-agent 'hi'\r");
+    expect(buildCliLaunchCommand('opencode', 'hi')).toBe("opencode 'hi'\r");
   });
 
   it('escapes the prompt identically for every CLI regardless of fixed args', () => {
@@ -104,10 +105,13 @@ describe('claude MCP pre-approval', () => {
     );
   });
 
-  it('never added for codex/cursor, even when opted in (claude-only flag)', () => {
+  it('never added for codex/cursor/opencode, even when opted in (claude-only flag)', () => {
     expect(buildCliLaunchCommand('codex', 'hi', { mcpPreApprove: true })).toBe("codex 'hi'\r");
     expect(buildCliLaunchCommand('cursor', 'hi', { mcpPreApprove: true })).toBe(
       "cursor-agent 'hi'\r",
+    );
+    expect(buildCliLaunchCommand('opencode', 'hi', { mcpPreApprove: true })).toBe(
+      "opencode 'hi'\r",
     );
   });
 

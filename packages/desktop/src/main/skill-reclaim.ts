@@ -27,6 +27,7 @@ const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   { hostDir: '.claude', editorId: 'claude' },
   { hostDir: '.cursor', editorId: 'cursor' },
   { hostDir: '.agents', editorId: 'codex' },
+  { hostDir: '.agents', editorId: 'opencode' },
 ];
 
 const OK_MCP_MARKER = '# ok-mcp-v1';

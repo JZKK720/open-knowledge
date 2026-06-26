@@ -41,11 +41,21 @@ export interface McpInstallOptions {
 export function isEntryUpToDate(entry: unknown): boolean {
   if (typeof entry !== 'object' || entry === null) return false;
   const e = entry as Record<string, unknown>;
-  if (e.command !== '/bin/sh') return false;
-  if (!Array.isArray(e.args)) return false;
-  if (e.args[0] !== '-l' || e.args[1] !== '-c') return false;
-  const body = e.args[2];
-  return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
+
+  if (e.command === '/bin/sh') {
+    if (!Array.isArray(e.args)) return false;
+    if (e.args[0] !== '-l' || e.args[1] !== '-c') return false;
+    const body = e.args[2];
+    return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
+  }
+
+  if (e.type === 'local' && Array.isArray(e.command)) {
+    if (e.command[0] !== '/bin/sh' || e.command[1] !== '-l' || e.command[2] !== '-c') return false;
+    const body = e.command[3];
+    return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
+  }
+
+  return false;
 }
 
 export function resolveDevCliDistPath(entryPath: string = process.argv[1]): string {
@@ -85,6 +95,23 @@ export function buildManagedServerEntry(options: McpInstallOptions = {}): Record
   return {
     command: '/bin/sh',
     args: ['-l', '-c', CHAIN_V1],
+  };
+}
+
+function buildOpenCodeEntry(options: McpInstallOptions = {}): Record<string, unknown> {
+  if (options.mode === 'dev') {
+    return {
+      type: 'local',
+      enabled: true,
+      command: [DEV_MCP_SERVER_COMMAND, resolveDevCliDistPath(), 'mcp'],
+      environment: { ...DEV_MCP_ENV },
+    };
+  }
+
+  return {
+    type: 'local',
+    enabled: true,
+    command: ['/bin/sh', '-l', '-c', CHAIN_V1],
   };
 }
 
@@ -174,12 +201,30 @@ export function resolveCodexConfigPath(options: AppSupportOptions = {}): string 
   return pathApiForPlatform(platformName).join(resolveCodexHomePath(options), 'config.toml');
 }
 
+function resolveOpenCodeConfigDir(options: AppSupportOptions = {}): string {
+  const platformName = options.platformName ?? process.platform;
+  const home = options.home ?? homedir();
+  const env = options.env ?? process.env;
+  const pathApi = pathApiForPlatform(platformName);
+  if (platformName === 'win32') {
+    const appData = env.APPDATA ?? pathApi.join(home, 'AppData', 'Roaming');
+    return pathApi.join(appData, 'opencode');
+  }
+  const xdgConfigHome = env.XDG_CONFIG_HOME ?? pathApi.join(home, '.config');
+  return pathApi.join(xdgConfigHome, 'opencode');
+}
+
+export function resolveOpenCodeConfigPath(options: AppSupportOptions = {}): string {
+  const platformName = options.platformName ?? process.platform;
+  return pathApiForPlatform(platformName).join(resolveOpenCodeConfigDir(options), 'opencode.json');
+}
+
 export interface EditorMcpTarget {
   id: EditorId;
   label: string;
   configPath: (cwd: string, home?: string) => string;
   format: 'json' | 'toml';
-  topLevelKey: 'mcpServers' | 'servers' | 'mcp_servers';
+  topLevelKey: 'mcpServers' | 'servers' | 'mcp_servers' | 'mcp';
   serverName: (cwd: string) => string;
   buildEntry: (cwd: string, options?: McpInstallOptions) => Record<string, unknown>;
   scope: 'project' | 'global';
@@ -237,6 +282,19 @@ export const EDITOR_TARGETS: Record<EditorId, EditorMcpTarget> = {
     scope: 'global',
     detectPath: (_cwd, home) => dirname(resolveCodexConfigPath({ home })),
     projectConfigPath: (cwd) => join(cwd, '.codex', 'config.toml'),
+    projectSkillPath: (cwd) => join(cwd, '.agents', 'skills', 'open-knowledge', 'SKILL.md'),
+  },
+  opencode: {
+    id: 'opencode',
+    label: EDITOR_LABELS.opencode,
+    configPath: (_cwd, home) => resolveOpenCodeConfigPath({ home }),
+    format: 'json',
+    topLevelKey: 'mcp',
+    serverName: () => MCP_SERVER_NAME,
+    buildEntry: (_cwd, options) => buildOpenCodeEntry(options),
+    scope: 'global',
+    detectPath: (_cwd, home) => dirname(resolveOpenCodeConfigPath({ home })),
+    projectConfigPath: (cwd) => join(cwd, 'opencode.json'),
     projectSkillPath: (cwd) => join(cwd, '.agents', 'skills', 'open-knowledge', 'SKILL.md'),
   },
 };

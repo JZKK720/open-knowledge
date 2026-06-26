@@ -4187,6 +4187,14 @@ msgstr "Open with AI {targetDisplayName}, {hint}"
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 
+#: src/components/BottomComposer.tsx
+msgid "OpenCode (CLI)"
+msgstr "OpenCode (CLI)"
+
+#: src/components/BottomComposer.tsx
+msgid "OpenCode CLI"
+msgstr "OpenCode CLI"
+
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr "Opening..."

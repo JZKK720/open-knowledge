@@ -61,6 +61,9 @@ export const sharedExtensions = [
     bulletList: false,
     orderedList: false,
     listItem: false,
+    listKeymap: {
+      listTypes: [{ itemName: 'listItem', wrapperNames: ['list'] }],
+    },
     italic: false,
     bold: false,
     strike: false,

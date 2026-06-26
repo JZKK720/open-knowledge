@@ -2,13 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { KNOWN_TARGETS, VISIBLE_TARGETS } from './targets.ts';
 
 describe('KNOWN_TARGETS', () => {
-  test('has exactly four targets in v0 (PQ2 + PQ3 LOCKED)', () => {
-    expect(KNOWN_TARGETS.length).toBe(4);
+  test('has exactly five targets (four GUI + terminal-only OpenCode)', () => {
+    expect(KNOWN_TARGETS.length).toBe(5);
   });
 
   test('ids cover the full HandoffTarget union', () => {
     const ids = new Set(KNOWN_TARGETS.map((t) => t.id));
-    expect(ids).toEqual(new Set(['claude-cowork', 'claude-code', 'codex', 'cursor']));
+    expect(ids).toEqual(new Set(['claude-cowork', 'claude-code', 'codex', 'cursor', 'opencode']));
+  });
+
+  test('opencode is terminal-only — no URL scheme', () => {
+    const opencode = KNOWN_TARGETS.find((t) => t.id === 'opencode');
+    expect(opencode?.schemes).toEqual([]);
   });
 
   test('claude-cowork + claude-code share the claude: scheme (single install state)', () => {
@@ -37,6 +42,7 @@ describe('KNOWN_TARGETS', () => {
     expect(byId.get('claude-code')).toBe('Claude');
     expect(byId.get('codex')).toBe('Codex');
     expect(byId.get('cursor')).toBe('Cursor');
+    expect(byId.get('opencode')).toBe('OpenCode');
   });
 });
 
@@ -44,6 +50,11 @@ describe('VISIBLE_TARGETS (UI render allow-list)', () => {
   test('hides claude-cowork from the UI', () => {
     const ids = new Set(VISIBLE_TARGETS.map((t) => t.id));
     expect(ids.has('claude-cowork')).toBe(false);
+  });
+
+  test('hides the terminal-only opencode target from the GUI deep-link list', () => {
+    const ids = new Set(VISIBLE_TARGETS.map((t) => t.id));
+    expect(ids.has('opencode')).toBe(false);
   });
 
   test('keeps the remaining three targets visible', () => {

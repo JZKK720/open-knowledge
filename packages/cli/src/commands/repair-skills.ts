@@ -28,6 +28,7 @@ const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   { hostDir: '.claude', editorId: 'claude' },
   { hostDir: '.cursor', editorId: 'cursor' },
   { hostDir: '.agents', editorId: 'codex' },
+  { hostDir: '.agents', editorId: 'opencode' },
 ];
 
 const USER_SKILL_DIR_NAME = 'open-knowledge-discovery';

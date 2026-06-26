@@ -180,6 +180,73 @@ test.describe('OQ1: Tab/Shift-Tab scoping by cursor context', () => {
     await expect.poll(() => getYText(page)).toMatch(/^- \[ \] sf\n- \[ \] ?$/m);
   });
 
+  test('Backspace on the empty line after a list merges back in (no stray bullet)', async ({
+    page,
+    api,
+  }) => {
+    const docName = uniqueDocName('bksp-after-list');
+    await openDoc(api, page, docName);
+    await seedMarkdown(api, page, docName, '- item one\n');
+
+    await page.locator('.ProseMirror').focus();
+    await page.locator('.ProseMirror li').first().click();
+    await page.keyboard.press('End');
+    await waitForPmSelectionInNode(page, 'listItem');
+
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Backspace');
+
+    await expect.poll(() => getYText(page).then((t) => t.trim())).toBe('- item one');
+    const ytext = await getYText(page);
+    expect(ytext).not.toMatch(/^- *$/m);
+  });
+
+  test('Backspace on an empty nested item removes it (does not toggle the bullet)', async ({
+    page,
+    api,
+  }) => {
+    const docName = uniqueDocName('bksp-nested-empty');
+    await openDoc(api, page, docName);
+    await seedMarkdown(api, page, docName, '- top\n  - sub\n');
+
+    await page.locator('.ProseMirror').focus();
+    await page.locator('.ProseMirror li li').first().click();
+    await page.keyboard.press('End');
+    await waitForPmSelectionInNode(page, 'listItem');
+
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Backspace');
+
+    await expect.poll(() => getYText(page)).toMatch(/^- top\n {2}- sub\n?$/m);
+    const ytext = await getYText(page);
+    expect(ytext.match(/- sub/g)?.length).toBe(1);
+    expect(ytext).not.toMatch(/- *\n {2}- *\n {2}- /);
+  });
+
+  test('Typing "1. " below a bullet list starts a numbered list, not another bullet', async ({
+    page,
+    api,
+  }) => {
+    const docName = uniqueDocName('ordered-after-bullet');
+    await openDoc(api, page, docName);
+    await seedMarkdown(api, page, docName, '- bullet item\n');
+
+    await page.locator('.ProseMirror').focus();
+    await page.locator('.ProseMirror li').first().click();
+    await page.keyboard.press('End');
+    await waitForPmSelectionInNode(page, 'listItem');
+
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('1. numbered item');
+
+    await expect.poll(() => getYText(page)).toMatch(/^1\. numbered item$/m);
+    const ytext = await getYText(page);
+    expect(ytext).toContain('- bullet item');
+    expect(ytext).not.toMatch(/^- *$/m);
+  });
+
   test.fixme('Tab inside a codeBlock inserts a literal tab character', async ({ page, api }) => {
     const docName = uniqueDocName('tab-codeblock');
     await openDoc(api, page, docName);

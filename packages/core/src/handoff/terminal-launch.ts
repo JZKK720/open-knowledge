@@ -5,7 +5,7 @@ export function shellSingleQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
-export type TerminalCli = 'claude' | 'codex' | 'cursor';
+export type TerminalCli = 'claude' | 'codex' | 'cursor' | 'opencode';
 
 export interface TerminalCliInfo {
   /** PATH binary launched in the PTY. Interpolated (alongside any opted-in
@@ -51,12 +51,19 @@ export const TERMINAL_CLIS = {
     docsUrl: 'https://cursor.com/docs/cli/overview',
     handoffTarget: 'cursor',
   },
+  opencode: {
+    bin: 'opencode',
+    displayName: 'OpenCode',
+    docsUrl: 'https://opencode.ai/docs',
+    handoffTarget: 'opencode',
+  },
 } as const satisfies Record<TerminalCli, TerminalCliInfo>;
 
 export const TERMINAL_CLI_IDS = [
   'claude',
   'codex',
   'cursor',
+  'opencode',
 ] as const satisfies readonly TerminalCli[];
 
 export interface BuildCliLaunchOptions {

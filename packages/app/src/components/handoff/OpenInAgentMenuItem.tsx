@@ -11,6 +11,7 @@ import type { CSSProperties, ReactNode, SVGProps } from 'react';
 import { ClaudeIcon } from '@/components/icons/claude';
 import { CodexBrandIcon } from '@/components/icons/codex';
 import { CursorIcon } from '@/components/icons/cursor';
+import { OpenCodeIcon } from '@/components/icons/opencode';
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -27,6 +28,7 @@ const TARGET_ICON_KEY: Record<TargetData['id'], string> = {
   'claude-code': 'claude',
   codex: 'openai',
   cursor: 'cursor',
+  opencode: 'opencode',
 };
 
 export function TargetIcon({
@@ -50,6 +52,8 @@ export function TargetIcon({
   if (id === 'codex')
     return <CodexBrandIcon style={mergedStyle} className={mergedClass} {...props} />;
   if (id === 'cursor') return <CursorIcon style={mergedStyle} className={mergedClass} {...props} />;
+  if (id === 'opencode')
+    return <OpenCodeIcon style={mergedStyle} className={mergedClass} {...props} />;
   return null;
 }
 
