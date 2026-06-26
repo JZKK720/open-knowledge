@@ -1,6 +1,6 @@
-# Setting up Open Knowledge
+# Setting up OpenKnowledge
 
-This repository is an Open Knowledge (OK) project: its `.md` / `.mdx` files are CRDT documents, and agents work with them through the Open Knowledge MCP server. If your agent's `mcp__open-knowledge__*` tools aren't available, the project just isn't connected on this machine yet. Connect it at whatever depth you need — each rung adds capability, and you can stop at the first one that covers your task.
+This repository is an OpenKnowledge (OK) project: its `.md` / `.mdx` files are CRDT documents, and agents work with them through the OpenKnowledge MCP server. If your agent's `mcp__open-knowledge__*` tools aren't available, the project just isn't connected on this machine yet. Connect it at whatever depth you need — each rung adds capability, and you can stop at the first one that covers your task.
 
 **Canonical, always-current instructions:** <https://openknowledge.ai/docs/get-started/quickstart>. The rungs below are a quick orientation; the docs are authoritative (release channels and download links move, so this file deliberately points there rather than pinning them).
 

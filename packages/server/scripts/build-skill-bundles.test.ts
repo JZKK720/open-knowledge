@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -127,6 +135,43 @@ describe('buildSkillBundles', () => {
       project: '# p\n',
     });
     expect(() => buildSkillBundles(paths)).toThrow(/missing\.md/);
+  });
+});
+
+describe('repo assets — progressive-disclosure references', () => {
+  test('the project bundle ships a non-empty references/ dir', () => {
+    const refsDir = join(defaultPaths().skillsDir, 'project', 'references');
+    expect(existsSync(refsDir)).toBe(true);
+    const refs = readdirSync(refsDir).filter((f) => f.endsWith('.md'));
+    expect(refs.length).toBeGreaterThan(0);
+  });
+
+  test('every reference is pointed to from the core and every pointer resolves', () => {
+    const projectDir = join(defaultPaths().skillsDir, 'project');
+    const core = readFileSync(join(projectDir, 'SKILL.md'), 'utf-8');
+    const refsDir = join(projectDir, 'references');
+    const onDisk = new Set(readdirSync(refsDir).filter((f) => f.endsWith('.md')));
+    const pointed = new Set(
+      [...core.matchAll(/references\/([A-Za-z0-9._-]+\.md)/g)].map((m) => m[1]),
+    );
+    for (const name of pointed) {
+      expect({ pointer: name, exists: existsSync(join(refsDir, name)) }).toEqual({
+        pointer: name,
+        exists: true,
+      });
+    }
+    for (const name of onDisk) {
+      expect({ reference: name, pointed: pointed.has(name) }).toEqual({
+        reference: name,
+        pointed: true,
+      });
+    }
+  });
+
+  test('project core body is within the 20,000-byte gate (spec V4/R-IS1)', () => {
+    const raw = readFileSync(join(defaultPaths().skillsDir, 'project', 'SKILL.md'), 'utf-8');
+    const body = raw.replace(/^---\n[\s\S]*?\n---\n/, '');
+    expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(20_000);
   });
 });
 

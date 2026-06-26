@@ -1,18 +1,18 @@
 ---
 name: open-knowledge-write-skill
-description: "Use when the user wants to create, author, write, or design a new Agent Skill (a SKILL.md) — for Open Knowledge or for their editors — including requests like 'help me write a skill', 'make a skill that…', 'turn this workflow into a skill', or improving an existing skill's triggering and discipline. Also use when capturing reusable agent guidance that should live as an installable skill rather than a one-off prompt. Covers choosing scope (project vs global), the SKILL.md frontmatter contract, progressive-disclosure structure, evaluating the skill, and installing it into the user's editors."
-compatibility: "Open Knowledge project recommended (uses the `write` / `edit` / `install` MCP verbs). Authoring + validation are pure file ops; live preview + eval want a running server (`ok start`)."
+description: "Use when the user wants to create, author, write, or design a new Agent Skill (a SKILL.md) — for OpenKnowledge or for their editors — including requests like 'help me write a skill', 'make a skill that…', 'turn this workflow into a skill', or improving an existing skill's triggering and discipline. Also use when capturing reusable agent guidance that should live as an installable skill rather than a one-off prompt. Covers choosing scope (project vs global), the SKILL.md frontmatter contract, progressive-disclosure structure, evaluating the skill, and installing it into the user's editors."
+compatibility: "OpenKnowledge project recommended (uses the `write` / `edit` / `install` MCP verbs). Authoring + validation are pure file ops; live preview + eval want a running server (`ok start`)."
 metadata:
   version: "0.9.1"
   author: "Inkeep"
   repository: "https://github.com/inkeep/open-knowledge"
 ---
 
-# Writing an Open Knowledge skill
+# Writing an OpenKnowledge skill
 
 You are helping the user author an **Agent Skill** — a `SKILL.md` file (plus
 optional `references/` and `scripts/`) that teaches an AI agent how to do a
-recurring task. In Open Knowledge a skill is a first-class, versioned,
+recurring task. In OpenKnowledge a skill is a first-class, versioned,
 installable artifact: you author it with the `write` / `edit` skill verbs, then
 `install` it into the user's editors.
 
@@ -22,6 +22,15 @@ reliably, and a body short and concrete enough that the agent actually does what
 it says. Work the stages below in order, but jump to where the user already is.
 
 ## Stage 1 — Capture intent and classify the skill
+
+**Gate — does this already exist? Check BEFORE you build.** Scan the installed
+skills (the host surfaces the full catalog when this skill loads) for one whose
+role or triggers already cover the task. If an existing skill covers most of it,
+STOP and **recommend reuse** — a near-duplicate with overlapping triggers
+mis-fires and dilutes both. Build a new skill only when it is genuinely distinct,
+or a deliberately tighter companion whose `description` explicitly hands off to
+the existing one. Surface the overlap and decide WITH the user before drafting or
+writing anything — never discover it after the skill is written.
 
 Ask only what you can't infer:
 
@@ -158,7 +167,9 @@ build, so they have no history to restore.
 
 ## Reminders
 
-- Prefer ONE good skill over many overlapping ones; split only when triggers diverge.
+- Prefer ONE good skill over many overlapping ones; split only when triggers diverge. (The Stage 1 gate is where you ENFORCE this — don't leave overlap to discover later.)
+- Scope is the only placement decision — don't fold harness/format/toolchain assumptions into it, and don't bake one into the scope question's wording. You are authoring an OpenKnowledge skill: write it with `write({ skill })` and project it with `install`; never hand-write skill files into editor dirs (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`) — `install` owns those and overwrites them. If you load this flow, author through it.
+- Ground claims about how skills behave (versioning, install targets, scope semantics) in this guide or the tool descriptions — don't assert system facts from assumption.
 - Avoid blanket ALWAYS/NEVER rules without a stated reason — they read as noise and
   get ignored. Explain the why.
 - A skill that ships executable `scripts/` is projected verbatim into another
