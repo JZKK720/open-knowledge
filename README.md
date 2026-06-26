@@ -1,6 +1,6 @@
 # OpenKnowledge
 
-OpenKnowledge is a beautiful, local-first WYSIWYG markdown editor with integrations for Claude, Codex, and other harnesses. For personal notes, team knowledge bases, and LLM wikis.
+OpenKnowledge is a beautiful, local-first WYSIWYG markdown editor with integrations for Claude, Codex, and other harnesses. For personal notes, knowledge bases, specs, and LLM wikis.
 
 <img
   src="assets/hero.webp"
