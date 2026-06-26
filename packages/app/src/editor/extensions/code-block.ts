@@ -8,6 +8,14 @@ import { type LowlightLike, LowlightPlugin } from './code-block-lowlight-plugin'
 const lowlight = createLowlight(common) as unknown as LowlightLike;
 
 export const CodeBlockFidelity = BaseCodeBlockFidelity.extend({
+  addOptions() {
+    return {
+      ...this.parent?.(),
+      enableTabIndentation: true,
+      tabSize: 2,
+    } as ReturnType<NonNullable<typeof this.parent>>;
+  },
+
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockView);
   },

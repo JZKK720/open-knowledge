@@ -247,7 +247,7 @@ test.describe('OQ1: Tab/Shift-Tab scoping by cursor context', () => {
     expect(ytext).not.toMatch(/^- *$/m);
   });
 
-  test.fixme('Tab inside a codeBlock inserts a literal tab character', async ({ page, api }) => {
+  test.fixme('Tab inside a codeBlock inserts 2 spaces', async ({ page, api }) => {
     const docName = uniqueDocName('tab-codeblock');
     await openDoc(api, page, docName);
     await seedMarkdown(api, page, docName, '```\nfirst\n```\n');
@@ -258,9 +258,9 @@ test.describe('OQ1: Tab/Shift-Tab scoping by cursor context', () => {
 
     await page.keyboard.press('Tab');
 
-    await expect.poll(() => getYText(page)).toMatch(/first\t/);
+    await expect.poll(() => getYText(page)).toMatch(/first {2}/);
     const ytext = await getYText(page);
-    expect(ytext).toMatch(/first\t/);
+    expect(ytext).toMatch(/first {2}/);
     expect(ytext).toContain('```');
     expect(ytext).not.toMatch(/^- /m);
   });

@@ -18,11 +18,12 @@ describe('sharedExtensions module graph', () => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
 
-  const dispatchEscape = (editor: Editor) =>
+  const dispatchKey = (editor: Editor, key: string, opts: { shiftKey?: boolean } = {}) =>
     editor.view.dom.dispatchEvent(
       new KeyboardEvent('keydown', {
-        key: 'Escape',
-        code: 'Escape',
+        key,
+        code: key,
+        shiftKey: opts.shiftKey ?? false,
         bubbles: true,
         cancelable: true,
       }),
@@ -45,7 +46,7 @@ describe('sharedExtensions module graph', () => {
       editor.commands.setNodeSelection(0);
       expect(editor.state.selection.$from.depth).toBe(0);
 
-      dispatchEscape(editor);
+      dispatchKey(editor, 'Escape');
       await flushRaf();
 
       expect(document.activeElement).not.toBe(editor.view.dom);
@@ -70,11 +71,55 @@ describe('sharedExtensions module graph', () => {
       editor.commands.setTextSelection({ from: 1, to: 6 });
       expect(document.activeElement).toBe(editor.view.dom);
 
-      dispatchEscape(editor);
+      dispatchKey(editor, 'Escape');
       await flushRaf();
 
       expect(document.activeElement).toBe(editor.view.dom);
       expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    } finally {
+      editor.destroy();
+      container.remove();
+    }
+  });
+
+  test('Tab inside a code block inserts 2 spaces (Prettier/Biome convention; the TabFocusTrap fall-through must NOT swallow it)', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({
+      element: container,
+      content: '<pre><code></code></pre>',
+      extensions: sharedExtensions,
+      editable: true,
+    });
+
+    try {
+      editor.commands.focus();
+      editor.commands.setTextSelection(1);
+      dispatchKey(editor, 'Tab');
+      expect(editor.getText().replace(/\n+$/, '')).toBe('  ');
+    } finally {
+      editor.destroy();
+      container.remove();
+    }
+  });
+
+  test('Shift-Tab inside a code block removes up to 2 leading spaces (symmetric unindent)', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({
+      element: container,
+      content: '<pre><code>    hello</code></pre>',
+      extensions: sharedExtensions,
+      editable: true,
+    });
+
+    try {
+      editor.commands.focus();
+      editor.commands.setTextSelection(7);
+      dispatchKey(editor, 'Tab', { shiftKey: true });
+      expect(editor.getText().replace(/\n+$/, '')).toBe('  hello');
+      dispatchKey(editor, 'Tab', { shiftKey: true });
+      expect(editor.getText().replace(/\n+$/, '')).toBe('hello');
     } finally {
       editor.destroy();
       container.remove();

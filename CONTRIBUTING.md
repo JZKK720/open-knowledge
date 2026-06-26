@@ -16,16 +16,9 @@ Review and merge decisions happen in the internal mirror so that public and inte
 A short orientation, because the flow is unusual:
 
 - **Within ~1 minute** a bot will post a sticky comment on your PR indicating that an internal mirror PR has been opened. The link in that comment points to a private repo and won't be accessible to you; that's expected.
-- **Automated review** runs on every public PR via an LLM-based code review (Claude). Full lint, type checks, and tests run internally after the bridge mirrors your changes. If internal checks fail, a maintainer will summarize the failure on the public PR and ask for changes.
+- **Automated review** runs on every public PR via an LLM-based code review (Claude). Full lint, type checks, and tests run internally after the bridge mirrors your changes — results are not surfaced back to your public PR.
 - **Maintainer review happens in the internal mirror.** Reviewer comments are **not auto-mirrored back to your PR**. If you don't hear back within a few business days, please comment on your PR to nudge — that's the right thing to do, not annoying.
-- **Stale automation may comment on inactive PRs.** If your PR is still relevant, reply with the current status. A human maintainer can keep active work moving even when review is happening internally.
 - **Your PR will be closed (not merged)** once the change has been merged internally and synced back. The mirrored commit on `main` is attributed to our sync bot for technical reasons, but the PR history and internal commit preserve your original authorship.
-
-## Contributor License Agreement
-
-External contributors must sign the [Inkeep Individual Contributor License Agreement](./CLA.md). After you open a PR, the CLA assistant will comment with a signing link. You only need to sign once for future contributions.
-
-For corporate CLAs, see [CLA.md](./CLA.md).
 
 ## Development Setup
 
@@ -87,26 +80,6 @@ bun run test
 - Commit `bun.lock` when dependency changes require it.
 - Run `bun run notices` and include `THIRD_PARTY_NOTICES.md` changes when dependency changes affect third-party notices.
 - Do not include secrets, credentials, customer data, local machine paths, or generated debug artifacts.
-- Follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
-- Report vulnerabilities through [SECURITY.md](./SECURITY.md), not in public issues.
-
-## Changesets
-
-Every behavior-changing PR needs a `.changeset/<kebab-name>.md` file. The body becomes the user-facing release note, so write what changed for users rather than a commit-message summary. Skip changesets for docs-only edits, test-only edits, or CI-only edits that do not change runtime behavior.
-
-Create a changeset with:
-
-```bash
-bun run changeset
-```
-
-Open Knowledge is pre-1.0. Use these bump levels:
-
-- `patch` for bug fixes, UI improvements, and small additions to existing surfaces.
-- `minor` for breaking API, schema, or CLI changes, and for large new surfaces such as a new CLI command, MCP tool, or editor feature.
-- Never declare `major` while Open Knowledge is pre-1.0.
-
-The packages release in a fixed group, so do not write inline references to sibling package versions in the changeset body. Release tooling computes those versions at publish time.
 
 ## Force-Push and Maintainer Iteration
 
