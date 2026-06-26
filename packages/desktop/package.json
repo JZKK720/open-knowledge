@@ -20,6 +20,7 @@
     "postinstall": "node scripts/postinstall.mjs",
     "rebuild:native": "electron-builder install-app-deps",
     "smoke:mock-update": "OK_UPDATER_FORCE_DEV=1 node scripts/smoke-mock-update.mjs",
+    "instances": "node scripts/launch-instances.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun --conditions=development test"
   },
