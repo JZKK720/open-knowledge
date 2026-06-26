@@ -1,4 +1,3 @@
-
 import {
   buildClaudeUrl,
   buildCodexUrl,
@@ -92,6 +91,12 @@ export async function dispatchHandoff(
         },
         fetchImpl,
       );
+    case 'opencode':
+      return {
+        ok: false,
+        reason: 'invalid-payload',
+        detail: 'opencode is terminal-only; launch via requestTerminalLaunch',
+      };
     default: {
       const _exhaustive: never = payload.target;
       return {

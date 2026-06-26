@@ -1,4 +1,3 @@
-
 import {
   existsSync as fsExistsSync,
   mkdirSync as fsMkdirSync,
@@ -28,6 +27,7 @@ const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   { hostDir: '.claude', editorId: 'claude' },
   { hostDir: '.cursor', editorId: 'cursor' },
   { hostDir: '.agents', editorId: 'codex' },
+  { hostDir: '.agents', editorId: 'opencode' },
 ];
 
 const OK_MCP_MARKER = '# ok-mcp-v1';
@@ -104,7 +104,6 @@ function removeLegacyUserSkillDirs(home: string, fs: SkillFsOps, logger: SkillRe
     }
   }
 }
-
 
 type UserSkillReclaimEntry =
   | { kind: 'central'; path: string; status: 'written' | 'overwritten' | 'failed'; error?: string }
@@ -191,8 +190,7 @@ export async function reclaimUserSkillsOnLaunch(
         outcome: 'failed',
         reason: `bundle-missing:${error}`,
       })
-      .catch(() => {
-      });
+      .catch(() => {});
     return { status: 'skipped', reason: 'bundle-missing' };
   }
 
@@ -330,7 +328,6 @@ export async function reclaimUserSkillsOnLaunch(
 
   return { status: 'done', version, entries };
 }
-
 
 type ProjectSkillReclaimEntry = {
   editorId: string;

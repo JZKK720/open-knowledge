@@ -1,4 +1,3 @@
-
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HandoffTarget } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
@@ -62,9 +61,12 @@ const RECIPES = {
     binaryName: 'cursor',
     urlScheme: 'cursor:',
   },
-} as const satisfies Record<HandoffTarget, Recipe>;
+} as const satisfies Record<Exclude<HandoffTarget, 'opencode'>, Recipe>;
 
-const TARGET_VALUES = Object.keys(RECIPES) as [HandoffTarget, ...HandoffTarget[]];
+const TARGET_VALUES = Object.keys(RECIPES) as [
+  Exclude<HandoffTarget, 'opencode'>,
+  ...Exclude<HandoffTarget, 'opencode'>[],
+];
 const HandoffRequestSchema = z.object({
   target: z.enum(TARGET_VALUES),
   url: z.string().min(1).max(4096),

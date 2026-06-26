@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,8 +45,7 @@ describe('M1 smoke', () => {
     } finally {
       try {
         entry.deletePassword();
-      } catch {
-      }
+      } catch {}
     }
   });
 
@@ -275,8 +273,9 @@ describe('M1 smoke', () => {
         typeName: 'EditorId',
         canonicalPath: editorsConstantPath,
         canonicalRe: /type\s+EditorId\s*=([^;]+);/,
-        expectedLiteralCount: 4,
-        inlineRe: /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'/,
+        expectedLiteralCount: 5,
+        inlineRe:
+          /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'\s*\|\s*'opencode'/,
         mirrors: [
           ['cli/commands/editors.ts', cliEditorsPath],
           ['desktop/shared/ipc-channels.ts', ipcChannelsPath],

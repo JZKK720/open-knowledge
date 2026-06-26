@@ -1,4 +1,3 @@
-
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
@@ -327,8 +326,7 @@ function probeWsUpgrade(url: string, timeoutMs: number): Promise<boolean> {
       settled = true;
       try {
         ws.close();
-      } catch {
-      }
+      } catch {}
       resolveProbe(ok);
     };
     const ws = new WebSocket(url);
@@ -477,8 +475,7 @@ function runDriverBootSmokeInProduction(): void {
     quit: () => {
       try {
         app.quit();
-      } catch {
-      }
+      } catch {}
     },
     setTimeout: (fn, ms) => {
       setTimeout(fn, ms);
@@ -616,8 +613,7 @@ function ensureWindowManager() {
             } catch (spawnErr) {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {
-              }
+              } catch {}
               throw Object.assign(
                 new Error(
                   `spawnDetachedServer: child_process.spawn threw synchronously: ${
@@ -658,8 +654,7 @@ function ensureWindowManager() {
             } finally {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {
-              }
+              } catch {}
             }
             childRef.unref();
             const pid = childRef.pid;
@@ -1294,7 +1289,6 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onToggleSpellCheck: () => setSpellCheckEnabledAppWide(!appState.spellCheckEnabled),
   });
 }
-
 
 function sendMenuActionToFocused(action: OkMenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -2129,7 +2123,6 @@ function registerIpcHandlers() {
     }
   });
 
-
   handle('ok:fs:default-projects-root', async () => {
     return resolveDefaultProjectsRoot(appState.lastUsedProjectParent, app.getPath('documents'));
   });
@@ -2444,7 +2437,6 @@ installStdioBrokenPipeGuard(process, {
     );
   },
 });
-
 
 if (!app.isPackaged && process.env.OK_INSTANCE) {
   const relocatedUserData = deriveInstanceUserDataDir(
