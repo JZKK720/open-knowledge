@@ -90,6 +90,7 @@ function makeBridge(preflight: ClaudeReadiness = WIRED, cliReadiness: CliReadine
     bridge: {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge,
     terminal,
     pushData: (m: OkPtyData) => {
@@ -158,6 +159,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
 
     render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
@@ -234,6 +236,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
     const pushData = (m: OkPtyData) => {
       for (const f of dataSubs) f(m);
@@ -273,6 +276,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
     const pushData = (m: OkPtyData) => {
       for (const f of dataSubs) f(m);
@@ -315,6 +319,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
     const pushData = (m: OkPtyData) => {
       for (const f of dataSubs) f(m);

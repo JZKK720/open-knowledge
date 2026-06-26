@@ -116,6 +116,7 @@ export interface OkDesktopConfig {
   readonly projectPath: string;
   readonly projectName: string;
   readonly mode: OkDesktopMode;
+  readonly e2eSmoke: boolean;
   readonly singleFile: boolean;
   readonly initialDoc: string | null;
 }

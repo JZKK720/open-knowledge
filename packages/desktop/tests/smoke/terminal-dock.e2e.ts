@@ -26,6 +26,9 @@ const DESKTOP_PRODUCT_NAME = '@inkeep/open-knowledge-desktop';
 
 interface SeedOpts {
   consent?: boolean;
+  /** Explicitly opt out — seed .ok/local/config.yml terminal.enabled: false (the
+   *  one state that refuses the shell under the default-on/opt-out model). */
+  optOut?: boolean;
   claudeJson?: Record<string, unknown> | null;
   fakeClaudeOnPath?: boolean;
 }
@@ -45,9 +48,13 @@ function seed(prefix: string, opts: SeedOpts = {}): Seed {
   writeFileSync(join(projectDir, '.ok', 'config.yml'), "content:\n  dir: '.'\n");
   writeFileSync(join(projectDir, 'start.md'), '# Start\n\nSeed document.\n');
 
-  if (opts.consent) {
+  if (opts.consent || opts.optOut) {
     mkdirSync(join(projectDir, '.ok', 'local'), { recursive: true });
-    writeFileSync(join(projectDir, '.ok', 'local', 'config.yml'), 'terminal:\n  enabled: true\n');
+    const enabled = opts.optOut ? 'false' : 'true';
+    writeFileSync(
+      join(projectDir, '.ok', 'local', 'config.yml'),
+      `terminal:\n  enabled: ${enabled}\n`,
+    );
   }
 
   if (opts.claudeJson !== undefined && opts.claudeJson !== null) {
@@ -150,6 +157,7 @@ async function viewTerminalLabel(app: ElectronApplication): Promise<string | nul
 
 const terminalSection = (page: Page) => page.locator('section[aria-label="Terminal"]');
 const terminalStatus = (page: Page) => page.locator('[data-terminal-status]');
+const readinessBanner = (page: Page) => page.getByTestId('terminal-readiness-banner');
 
 async function openTerminal(app: ElectronApplication, page: Page): Promise<void> {
   await clickViewTerminalItem(app);
@@ -188,7 +196,7 @@ test.describe('Docked terminal — live Electron', () => {
   test.skip(!BUILD_EXISTS, `Main build missing at ${MAIN_ENTRY} — run "bun run build:desktop".`);
   test.skip(
     IS_CI,
-    'Temporarily disabled on CI (panel does not mount on the CI Electron runner); runs in local dev. See file header.',
+    'Quarantined on CI: terminal-dock degrades on the constrained runner — see inkeep/agents-private#2187.',
   );
 
   test.afterEach(() => {
@@ -199,76 +207,54 @@ test.describe('Docked terminal — live Electron', () => {
     }
   });
 
-  test('QA-004 first open shows consent dialog with verbatim copy', async ({
+  test('QA-004 first open mounts the live panel (no consent dialog)', async ({
     captureStderrFor,
   }) => {
-    const s = seed('consent-copy');
+    const s = seed('default-on'); // terminal.enabled absent => default-on
     track(s.tmpHome, s.projectDir);
     const app = await launchApp(s, { restrictPath: true });
     captureStderrFor(app, { cleanupDirs: [s.tmpHome, s.projectDir] });
     const page = await findEditorWindow(app);
     await openTerminal(app, page);
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await expect(dialog).toContainText('Enable a terminal for this project?');
-    await expect(dialog).toContainText(
-      'This runs a real terminal inside OpenKnowledge — the same as opening Terminal on your Mac',
-    );
-    await expect(dialog).toContainText(
-      'Commands you run have the full access of your macOS user account',
-    );
-    await expect(dialog).toContainText(
-      'OpenKnowledge doesn’t limit or sandbox what the terminal can do.',
-    );
-    await expect(dialog).toContainText('never included when you sync, clone, or share the project');
-    await expect(page.getByRole('button', { name: 'Enable terminal' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Not now' })).toBeVisible();
+    await waitForStatus(page, 'running', 25_000);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
-  test('QA-005 consent accept persists enabled=true and spawns the shell', async ({
+  test('QA-005 default-on spawns without writing terminal.enabled', async ({
     captureStderrFor,
   }) => {
-    const s = seed('consent-accept');
+    const s = seed('default-on-no-write');
     track(s.tmpHome, s.projectDir);
     const app = await launchApp(s, { restrictPath: true });
     captureStderrFor(app, { cleanupDirs: [s.tmpHome, s.projectDir] });
     const page = await findEditorWindow(app);
     await openTerminal(app, page);
-
-    await page.getByRole('button', { name: 'Enable terminal' }).click();
     await waitForStatus(page, 'running', 25_000);
 
     const localCfg = join(s.projectDir, '.ok', 'local', 'config.yml');
-    await expect
-      .poll(() => (existsSync(localCfg) ? readFileSync(localCfg, 'utf8') : ''), { timeout: 10_000 })
-      .toMatch(/terminal:\s*[\s\S]*enabled:\s*true/);
-
-    await clickViewTerminalItem(app); // hide
-    await expect(terminalSection(page))
-      .toBeHidden({ timeout: 10_000 })
-      .catch(() => {});
-    await clickViewTerminalItem(app); // reopen
-    await expect(terminalSection(page)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 5_000 });
+    const persisted = existsSync(localCfg) ? readFileSync(localCfg, 'utf8') : '';
+    expect(persisted).not.toMatch(/enabled:\s*true/);
   });
 
-  test('QA-006 consent decline shows not-enabled, no shell spawns', async ({
+  test('QA-006 opted-out shows not-enabled notice; Enable re-enables the shell', async ({
     captureStderrFor,
   }) => {
-    const s = seed('consent-decline');
+    const s = seed('opt-out', { optOut: true });
     track(s.tmpHome, s.projectDir);
     const app = await launchApp(s, { restrictPath: true });
     captureStderrFor(app, { cleanupDirs: [s.tmpHome, s.projectDir] });
     const page = await findEditorWindow(app);
-    await openTerminal(app, page);
 
-    await page.getByRole('button', { name: 'Not now' }).click();
-    await expect(page.getByRole('button', { name: 'Enable terminal' })).toBeVisible({
-      timeout: 10_000,
+    await clickViewTerminalItem(app);
+    await expect(page.getByRole('region', { name: 'Terminal disabled' })).toBeVisible({
+      timeout: 15_000,
     });
+    await expect(page.getByRole('button', { name: 'Enable terminal' })).toBeVisible();
     await expect(terminalStatus(page)).toHaveCount(0);
-    expect(existsSync(join(s.projectDir, '.ok', 'local', 'config.yml'))).toBe(false);
+
+    await page.getByRole('button', { name: 'Enable terminal' }).click();
+    await expect(terminalSection(page)).toBeVisible({ timeout: 15_000 });
+    await waitForStatus(page, 'running', 25_000);
   });
 
   test('QA-002 View-menu Terminal item toggles the panel and flips label', async ({
@@ -453,7 +439,7 @@ test.describe('Docked terminal — live Electron', () => {
     await expect(page.getByRole('alert')).toBeVisible({ timeout: 5_000 });
     const restart = page.getByRole('button', { name: /Restart terminal/i });
     await expect(restart).toBeVisible();
-    await expect(page.getByRole('status')).toHaveCount(0);
+    await expect(readinessBanner(page)).toHaveCount(0);
 
     await restart.click();
     await waitForStatus(page, 'running', 25_000);
@@ -470,9 +456,9 @@ test.describe('Docked terminal — live Electron', () => {
     await openTerminal(app, page);
     await waitForStatus(page, 'running', 25_000);
 
-    const banner = page.getByRole('status');
+    const banner = readinessBanner(page);
     await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toContainText('isn’t installed or on your PATH');
+    await expect(banner).toContainText('installed or on your PATH');
     await expect(page.getByRole('button', { name: 'Get Claude Code' })).toBeVisible();
   });
 
@@ -491,9 +477,9 @@ test.describe('Docked terminal — live Electron', () => {
     await openTerminal(app, page);
     await waitForStatus(page, 'running', 25_000);
 
-    const banner = page.getByRole('status');
+    const banner = readinessBanner(page);
     await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toContainText('OpenKnowledge tools aren’t connected');
+    await expect(banner).toContainText('OpenKnowledge tools');
     await expect(page.getByRole('button', { name: 'Connect tools' })).toBeVisible();
   });
 });

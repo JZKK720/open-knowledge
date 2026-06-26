@@ -156,12 +156,14 @@ function readConfigFromArgv(): OkDesktopConfig {
   const mode: OkDesktopConfig['mode'] = modeRaw === 'navigator' ? 'navigator' : 'editor';
   const singleFile = parseArg('single-file') === '1';
   const initialDoc = parseArg('initial-doc') ?? null;
+  const e2eSmoke = parseArg('e2e-smoke') === '1';
   return Object.freeze({
     collabUrl,
     apiOrigin,
     projectPath,
     projectName,
     mode,
+    e2eSmoke,
     singleFile,
     initialDoc,
   });

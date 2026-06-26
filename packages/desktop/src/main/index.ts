@@ -487,7 +487,10 @@ function runDriverBootSmokeInProduction(): void {
 }
 
 function withDebugFlagIfAllowed(args: readonly string[]): string[] {
-  return isDebugKeyringSmokeAllowed() ? [...args, '--ok-debug-keyring-smoke=1'] : [...args];
+  const withDebug = isDebugKeyringSmokeAllowed()
+    ? [...args, '--ok-debug-keyring-smoke=1']
+    : [...args];
+  return process.env.OK_DESKTOP_E2E_SMOKE === '1' ? [...withDebug, '--ok-e2e-smoke=1'] : withDebug;
 }
 
 function ensureDebugIpc(): DebugIpcHandle {
@@ -1932,6 +1935,7 @@ function registerIpcHandlers() {
       projectPath: ctx.projectPath,
       projectName: ctx.projectName,
       mode: 'editor' as const,
+      e2eSmoke: process.env.OK_DESKTOP_E2E_SMOKE === '1',
       singleFile: ctx.ephemeral !== undefined,
       initialDoc: null,
     };

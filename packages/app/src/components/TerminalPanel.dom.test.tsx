@@ -122,7 +122,11 @@ function makeBridge(createResult: CreateResult, preflight: ClaudeReadiness = WIR
     rewireClaudeMcp,
   };
   return {
-    bridge: { terminal, shell: { openExternal } } as unknown as OkDesktopBridge,
+    bridge: {
+      terminal,
+      shell: { openExternal },
+      config: { e2eSmoke: false },
+    } as unknown as OkDesktopBridge,
     terminal,
     openExternal,
     rewireClaudeMcp,
@@ -457,7 +461,7 @@ describe('TerminalPanel', () => {
       onData: mock(() => mock(() => {})),
       onExit: mock(() => mock(() => {})),
     };
-    const bridge = { terminal } as unknown as OkDesktopBridge;
+    const bridge = { terminal, config: { e2eSmoke: false } } as unknown as OkDesktopBridge;
 
     const { unmount } = render(<TerminalPanel bridge={bridge} />);
     await waitFor(() => expect(terminal.create).toHaveBeenCalledTimes(1));
@@ -549,6 +553,7 @@ describe('TerminalPanel', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
 
     render(<TerminalPanel bridge={bridge} />);
@@ -663,6 +668,7 @@ describe('TerminalPanel', () => {
     const bridge = {
       terminal,
       shell: { openExternal: mock(async () => {}) },
+      config: { e2eSmoke: false },
     } as unknown as OkDesktopBridge;
     const pushExit = (m: OkPtyExit) => {
       for (const f of exitSubs) f(m);

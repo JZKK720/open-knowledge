@@ -135,17 +135,20 @@ function TerminalSession({
 
     term.open(container);
 
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        console.warn('[terminal] WebGL context lost, falling back to DOM renderer');
-        webgl.dispose();
-      });
-      term.loadAddon(webgl);
-    } catch (err) {
-      const expected = err instanceof Error && /webgl2?|context/i.test(err.message);
-      const log = expected ? console.warn : console.error;
-      log('[terminal] WebGL addon failed, using DOM renderer:', err);
+    const useDomRenderer = bridge.config.e2eSmoke === true;
+    if (!useDomRenderer) {
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          console.warn('[terminal] WebGL context lost, falling back to DOM renderer');
+          webgl.dispose();
+        });
+        term.loadAddon(webgl);
+      } catch (err) {
+        const expected = err instanceof Error && /webgl2?|context/i.test(err.message);
+        const log = expected ? console.warn : console.error;
+        log('[terminal] WebGL addon failed, using DOM renderer:', err);
+      }
     }
 
     fit.fit();
