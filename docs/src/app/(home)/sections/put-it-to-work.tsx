@@ -22,13 +22,13 @@ const cards: UseCaseCard[] = [
     visual: <KnowledgeBaseGraphic />,
     title: 'Knowledge base',
     description:
-      'A living wiki for your team — docs, notes, and decisions in plain markdown, kept current by everyone who works on them.',
+      'A living wiki for you and your team — skills, docs, notes in plain markdown, kept automatically in sync.',
   },
   {
     visual: <EngSpecsGraphic />,
     title: 'Engineering specs',
     description:
-      'Specs, RFCs and runbooks living next to the code, edited by humans and coding agents in the same loop.',
+      'Specs, PRDs, and roadmaps living next to the code, edited by humans and coding agents in the same loop.',
   },
 ];
 

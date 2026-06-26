@@ -16,19 +16,17 @@ const features: Feature[] = [
   {
     icon: Hexagon,
     title: 'Agent skills',
-    description:
-      'Your agents know how to navigate, edit and grow your knowledge base out of the box.',
+    description: 'Agents know how to navigate, edit and grow your knowledge base out of the box.',
   },
   {
     icon: Plug,
     title: 'Native MCP',
-    description: 'Plug your knowledge base straight into Claude, Cursor, Codex, and other agents.',
+    description: 'Plug your knowledge base into Claude, Cursor, Codex, and other agents.',
   },
   {
     icon: Search,
     title: 'Agentic Search',
-    description:
-      'Help agents find the right content with built-in embeddings and hierarchical RAG.',
+    description: 'Help agents find the right content with embeddings and hierarchical RAG.',
   },
 ];
 
