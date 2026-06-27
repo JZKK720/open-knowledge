@@ -336,10 +336,24 @@ function TerminalSession({
       };
       void bridge.terminal
         .claudePreflight()
-        .then((fresh) => writeClaude(fresh.mcpPreApprovable === true))
+        .then((fresh) => {
+          if (cancelled) return;
+          if (fresh.claude === 'present') {
+            writeClaude(fresh.mcpPreApprovable === true);
+            return;
+          }
+          setReadiness(
+            fresh.claude === 'not-found'
+              ? fresh
+              : { claude: 'not-found', mcp: fresh.mcp, mcpPreApprovable: false },
+          );
+          lastLaunchedNonceRef.current = nonce;
+        })
         .catch((err) => {
-          console.warn('[terminal] claude pre-approval recheck failed', { err });
-          writeClaude(false);
+          if (cancelled) return;
+          console.warn('[terminal] claude pre-approval recheck failed', { nonce, err });
+          setReadiness({ claude: 'not-found', mcp: 'needs-rewire', mcpPreApprovable: false });
+          lastLaunchedNonceRef.current = nonce;
         });
       return () => {
         cancelled = true;
@@ -355,22 +369,27 @@ function TerminalSession({
       bridge.terminal.input(livePtyId, buildCliLaunchCommand(cli, prompt));
       lastLaunchedNonceRef.current = nonce; // commit only after the write lands
     };
-    void bridge.terminal
-      .cliPreflight(cli)
-      .then((res) => {
-        if (cancelled) return;
-        if (res.onPath === 'not-found') {
-          setMissingCli(cli);
-          lastLaunchedNonceRef.current = nonce; // banner handles remediation; consume
-          return;
+    const suppress = () => {
+      if (cancelled) return;
+      setMissingCli(cli);
+      lastLaunchedNonceRef.current = nonce; // banner handles remediation; consume
+    };
+    void (async () => {
+      try {
+        let res = await bridge.terminal.cliPreflight(cli);
+        if (res.onPath === 'unknown') {
+          if (cancelled) return;
+          res = await bridge.terminal.cliPreflight(cli);
         }
-        writeLaunch();
-      })
-      .catch((err) => {
+        if (cancelled) return;
+        if (res.onPath === 'present') writeLaunch();
+        else suppress();
+      } catch (err) {
         if (cancelled) return;
         console.warn('[terminal] cliPreflight failed', { cli, err });
-        writeLaunch();
-      });
+        suppress();
+      }
+    })();
     return () => {
       cancelled = true;
     };

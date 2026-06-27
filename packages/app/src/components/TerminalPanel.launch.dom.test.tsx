@@ -252,7 +252,7 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     expect(terminal.claudePreflight.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('a launch-time preflight REJECTION falls back to a bare launch (security fail-safe)', async () => {
+  test('a launch-time preflight REJECTION suppresses the write + surfaces the readiness banner (parity with codex/cursor)', async () => {
     const dataSubs: Array<(m: OkPtyData) => void> = [];
     let calls = 0;
     const terminal = {
@@ -285,10 +285,13 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-    await waitFor(() => expect(launchWrites(terminal.input).length).toBe(1));
-    expect(launchWrites(terminal.input)[0]).toBe("claude 'hi'\r");
-    expect(launchWrites(terminal.input)[0]).not.toContain('--settings');
+    expect(launchWrites(terminal.input).length).toBe(0);
+    await screen.findByText(/Claude Code \(claude\) isn't installed/);
   });
 
   test('a same-nonce effect re-run during the launch preflight window does not drop the launch', async () => {
@@ -397,16 +400,34 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     expect(launchWrites(terminal.input, 'codex').length).toBe(0);
   });
 
-  test('cursor probe UNKNOWN does not block the launch (parity with claude unknown)', async () => {
+  test('cursor probe UNKNOWN re-probes once; still-unknown suppresses + shows the banner', async () => {
     const { bridge, terminal, pushData } = makeBridge(WIRED, { onPath: 'unknown' });
     render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'cursor', nonce: 1 }} />);
 
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
-    await waitFor(() => expect(launchWrites(terminal.input, 'cursor-agent').length).toBe(1));
+    await waitFor(() => expect(terminal.cliPreflight).toHaveBeenCalledTimes(2));
+    await screen.findByText(/Cursor \(cursor-agent\) isn't installed/);
+    expect(launchWrites(terminal.input, 'cursor-agent').length).toBe(0);
   });
 
-  test('cliPreflight IPC rejection fail-opens: the launch is still written (the .catch path)', async () => {
+  test('cursor probe UNKNOWN then PRESENT on re-probe: launches with the preserved prompt', async () => {
+    let calls = 0;
+    const { bridge, terminal, pushData } = makeBridge(WIRED);
+    terminal.cliPreflight = mock(async () => {
+      calls += 1;
+      return calls === 1 ? { onPath: 'unknown' as const } : { onPath: 'present' as const };
+    });
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'cursor', nonce: 1 }} />);
+
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(terminal.cliPreflight).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(launchWrites(terminal.input, 'cursor-agent').length).toBe(1));
+    expect(launchWrites(terminal.input, 'cursor-agent')[0]).toBe("cursor-agent 'hi'\r");
+  });
+
+  test('cliPreflight IPC rejection suppresses the write (no raw command-not-found)', async () => {
     const { bridge, terminal, pushData } = makeBridge(WIRED);
     terminal.cliPreflight = mock(async () => {
       throw new Error('ipc channel closed');
@@ -416,7 +437,46 @@ describe('TerminalPanel "Open in terminal" launch', () => {
     await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
     act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
     await waitFor(() => expect(terminal.cliPreflight).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(launchWrites(terminal.input, 'codex').length).toBe(1));
-    expect(launchWrites(terminal.input, 'codex')[0]).toBe("codex 'hi'\r");
+    await screen.findByText(/Codex \(codex\) isn't installed/);
+    expect(launchWrites(terminal.input, 'codex').length).toBe(0);
+  });
+
+  test('claude present at mount but not-found on the fresh recheck: suppresses the write', async () => {
+    let calls = 0;
+    const { bridge, terminal, pushData } = makeBridge(WIRED);
+    terminal.claudePreflight = mock(async () => {
+      calls += 1;
+      return calls === 1
+        ? WIRED
+        : { claude: 'not-found' as const, mcp: 'needs-rewire' as const, mcpPreApprovable: false };
+    });
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(launchWrites(terminal.input).length).toBe(0);
+    await screen.findByText(/Claude Code \(claude\) isn't installed/);
+  });
+
+  test('claude present at mount but UNKNOWN on the fresh recheck: suppresses + surfaces the banner', async () => {
+    let calls = 0;
+    const { bridge, terminal, pushData } = makeBridge(WIRED);
+    terminal.claudePreflight = mock(async () => {
+      calls += 1;
+      return calls === 1
+        ? WIRED
+        : { claude: 'unknown' as const, mcp: 'needs-rewire' as const, mcpPreApprovable: false };
+    });
+    render(<TerminalPanel bridge={bridge} launch={{ prompt: 'hi', cli: 'claude', nonce: 1 }} />);
+
+    await waitFor(() => expect(terminal.onData).toHaveBeenCalledTimes(1));
+    act(() => pushData({ ptyId: 'pty-1', data: '$ ' }));
+    await waitFor(() => expect(terminal.claudePreflight).toHaveBeenCalledTimes(2));
+    expect(launchWrites(terminal.input).length).toBe(0);
+    await screen.findByText(/Claude Code \(claude\) isn't installed/);
   });
 });
