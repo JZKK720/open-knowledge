@@ -1676,6 +1676,11 @@
     "msOK6I": [
       "Repositories you've already cloned may keep syncing through git's own saved credentials, even after you disconnect."
     ],
+    "mu1O0q": [
+      "Open Knowledge can manage ",
+      ["0"],
+      " editor skill(s) for this project. Import moves them into .ok/skills and replaces the .claude, .codex, etc. copies with symlinks — one place to edit, in sync everywhere. If those folders are committed to git, review the change first; symlinks can behave differently on some editors and on Windows."
+    ],
     "mwMF9u": ["Open CodeMirror search in source editor mode."],
     "mxY24F": ["Duplicate the focused file-tree item when focus is in the Files sidebar."],
     "n2lRue": ["Commit or stash changes to switch:"],
@@ -2051,11 +2056,6 @@
     "y1t8bQ": ["Settings sections"],
     "y3aU20": ["Save changes"],
     "y46m5r": ["The desktop app isn't responding. Refresh and try again."],
-    "y48eD2": [
-      "Open Knowledge can manage ",
-      ["0"],
-      " editor skill(s) for this project — import them into the knowledge base?"
-    ],
     "y5FUYi": ["Suggestion menu open"],
     "y8B54M": ["Couldn't send your prompt — please try again."],
     "yCX4jp": [" Your selection could not be restored."],

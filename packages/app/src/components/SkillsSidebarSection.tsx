@@ -432,8 +432,10 @@ function SkillImportPrompt() {
     <div className="mx-2 mb-1 rounded-md border border-border/60 bg-muted/40 p-2 text-xs">
       <p className="mb-2 text-muted-foreground">
         <Trans>
-          Open Knowledge can manage {state.importable} editor skill(s) for this project — import
-          them into the knowledge base?
+          Open Knowledge can manage {state.importable} editor skill(s) for this project. Import
+          moves them into .ok/skills and replaces the .claude, .codex, etc. copies with symlinks —
+          one place to edit, in sync everywhere. If those folders are committed to git, review the
+          change first; symlinks can behave differently on some editors and on Windows.
         </Trans>
       </p>
       <div className="flex gap-1.5">

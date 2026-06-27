@@ -4305,7 +4305,7 @@ msgstr ""
 
 #. placeholder {0}: state.importable
 #: src/components/SkillsSidebarSection.tsx
-msgid "Open Knowledge can manage {0} editor skill(s) for this project — import them into the knowledge base?"
+msgid "Open Knowledge can manage {0} editor skill(s) for this project. Import moves them into .ok/skills and replaces the .claude, .codex, etc. copies with symlinks — one place to edit, in sync everywhere. If those folders are committed to git, review the change first; symlinks can behave differently on some editors and on Windows."
 msgstr ""
 
 #: src/components/GraphPanel.tsx
