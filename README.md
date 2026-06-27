@@ -1,6 +1,13 @@
-# OpenKnowledge
+<p>
+  <a  href="https://openknowledge.ai"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/ok-wordmark-dark.svg">
+    <img src="assets/ok-wordmark.svg" alt="OpenKnowledge" width="260">
+  </picture></a>
+</p>
 
-OpenKnowledge is a beautiful, local-first WYSIWYG markdown editor with integrations for Claude, Codex, and other harnesses. For personal notes, knowledge bases, specs, and LLM wikis.
+<p>
+<b>OpenKnowledge</b> is a beautiful WYSIWYG markdown editing app with integrations for Claude, Codex, and other harnesses. For notes, knowledge bases, specs, and LLM wikis. Private, local, and free.
+</p>
 
 <img
   src="assets/hero.webp"
@@ -9,27 +16,29 @@ OpenKnowledge is a beautiful, local-first WYSIWYG markdown editor with integrati
   style="border-radius: 10px"
 />
 
-<div align="center">
+<div >
+  <a href="https://openknowledge.ai">Site</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://github.com/inkeep/open-knowledge/releases/latest/download/OpenKnowledge-arm64.dmg">macOS app</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">Web App / CLI</a>
+  <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">Web App + CLI</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://x.com/OpenKnowledgeAI">𝕏</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://discord.com/invite/YujKpFN49">Discord</a>
 </div>
 
+<br/>
+
 # Features
 
-Key highlights:
+Highlights:
 - Full true **WYSIWYG** so that editing markdown files feels like editing a Google Doc or Notion page. 
 - Collaborative **AI-editing** with **Claude, Codex, and Cursor desktop apps**. Can be used with any harness/agent via MCP/CLI, like OpenCode.
 - Out-of-the-box **MCP**, **skills**, and **agentic search** for LLM Wikis, agent second brains, and knowledge graphs.
 - No-code **Team sharing** and **Auto-sync** powered by git/GitHub under the hood.
 - **Embeddable HTML** and rich components for writing engineering specs and visualized reports.
 - A **built-in TUI** in the Desktop app and a Web UI for users who prefer terminals.
-
-Docs for general usage: <https://openknowledge.ai/docs>.
 
 ## Install
 
@@ -44,9 +53,21 @@ ok init          # scaffold the project + wire up Claude Code, Cursor, and Codex
 ok start --open  # serve the web editor and open it in your browser
 ```
 
+## Usage
+
+Use OpenKnowledge by opening any existing folder on your computer that contains markdown or mdx files. Can be used with existing codebases, wikis, Obsidian vaults, etc.
+
+Think of it as Notion meets VSCode. 
+
+You can also start from scratch with one of the starter packs, which include e.g. a quickstart for an LLM Wiki.
+
+The app will automatically initialize your project with MCP and skill configs for agent harnesses detected on your computer. Git sync and sharing can optionally be enabled.
+
+Docs for general usage: <https://openknowledge.ai/docs>.
+
 ## Contributions
 
-Public pull requests are welcome. When a public PR opens here, automation mirrors it into the internal monorepo for review and merge. 
+Public pull requests or issues are welcome!
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
@@ -54,6 +75,14 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
 OpenKnowledge is licensed under the [GNU General Public License v3.0 or later](./LICENSE) (`GPL-3.0-or-later`).
 
+## Support
+
+Feel free to file an issue or ask questions on the <a href="https://discord.com/invite/YujKpFN49">Discord</a> community.
+
 <p align="center">
   ⭐️ If you'd like to support this project, consider starring the repo ⭐️
+</p>
+
+<p align="center">
+  Follow us on <a href="https://x.com/OpenKnowledgeAI">𝕏</a> for product updates.
 </p>
