@@ -7,6 +7,8 @@ import type {
 } from '@inkeep/open-knowledge-server';
 import {
   ensureProjectGit,
+  GitNotAvailableError,
+  GitTooOldError,
   initContent,
   installUserSkill,
   MCP_SERVER_NAME,
@@ -1136,9 +1138,14 @@ export function initCommand(): Command {
             sharing,
           });
         } catch (err) {
+          if (err instanceof GitNotAvailableError || err instanceof GitTooOldError) {
+            process.stderr.write(`${err.message}\n`);
+            process.exitCode = 78;
+            return;
+          }
           if (err instanceof ProjectGitInitError) {
             process.stderr.write(
-              "open-knowledge requires git to initialize a parent repo. Install git or run 'git init' yourself, then re-run.\n",
+              "open-knowledge could not initialize a git repo for this project. Re-run, or run 'git init' yourself in the project folder.\n",
             );
             if (err.stderr) process.stderr.write(`${err.stderr.trim()}\n`);
             process.exitCode = 1;

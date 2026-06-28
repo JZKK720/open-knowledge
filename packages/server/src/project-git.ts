@@ -2,6 +2,13 @@ import { execFile } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
+import {
+  assertGitAvailable,
+  type GitDetected,
+  GitNotAvailableError,
+  GitTooOldError,
+} from './git-preflight.ts';
+import { emitPreflightFailureSpan } from './git-preflight-telemetry.ts';
 import { getLogger } from './logger.ts';
 
 const execFileAsync = promisify(execFile);
@@ -21,9 +28,9 @@ export interface EnsureProjectGitResult {
   repaired?: boolean;
 }
 
-async function isInsideExistingWorkTree(cwd: string): Promise<boolean> {
+async function isInsideExistingWorkTree(gitBin: string, cwd: string): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
+    const { stdout } = await execFileAsync(gitBin, ['rev-parse', '--is-inside-work-tree'], {
       cwd,
     });
     return stdout.trim() === 'true';
@@ -47,13 +54,43 @@ export async function ensureProjectGit(projectRoot: string): Promise<EnsureProje
     }
     log.info({}, 'detected partial .git/ — running git init to repair');
     needsRepair = true;
-  } else if (await isInsideExistingWorkTree(abs)) {
+  }
+
+  let detected: GitDetected;
+  try {
+    detected = assertGitAvailable();
+  } catch (err) {
+    if (err instanceof GitNotAvailableError || err instanceof GitTooOldError) {
+      emitPreflightFailureSpan(err);
+      log.warn(
+        {
+          event: 'git_preflight_fail',
+          platform: err.platform,
+          reason: err instanceof GitTooOldError ? 'too_old' : 'not_available',
+          detectedVersion: err instanceof GitTooOldError ? err.detected : '',
+        },
+        err instanceof GitTooOldError ? 'git binary too old' : 'git binary not found',
+      );
+    } else {
+      log.warn(
+        {
+          event: 'git_preflight_unexpected_error',
+          message: err instanceof Error ? err.message : String(err),
+        },
+        'unexpected error during git preflight',
+      );
+    }
+    throw err;
+  }
+  const gitBin = detected.resolvedPath;
+
+  if (!needsRepair && (await isInsideExistingWorkTree(gitBin, abs))) {
     return { didInit: false };
   }
 
   let stderr = '';
   try {
-    const result = await execFileAsync('git', ['init', '--initial-branch=main', abs]);
+    const result = await execFileAsync(gitBin, ['init', '--initial-branch=main', abs]);
     stderr = result.stderr ?? '';
   } catch (err) {
     const capturedStderr =

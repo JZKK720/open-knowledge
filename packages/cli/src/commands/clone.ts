@@ -7,7 +7,12 @@ import {
   isLoginFixableGitAuthError,
   shellSingleQuote,
 } from '@inkeep/open-knowledge-core';
-import type { Config } from '@inkeep/open-knowledge-server';
+import {
+  assertGitAvailable,
+  type Config,
+  GitNotAvailableError,
+  GitTooOldError,
+} from '@inkeep/open-knowledge-server';
 import { Command } from 'commander';
 import simpleGit, { type SimpleGitOptions } from 'simple-git';
 import { resolveAuth } from '../auth/resolve-auth.ts';
@@ -125,7 +130,7 @@ export function resolveCloneUrl(
   return isShorthand ? `https://${parsed.hostname}/${ownerRepo}` : rawUrl;
 }
 
-async function runClone(
+export async function runClone(
   url: string,
   opts: CloneOptions,
   _config: Config,
@@ -145,6 +150,8 @@ async function runClone(
       throw new Error(`Target directory is not empty: ${targetDir}`);
     }
   }
+
+  assertGitAvailable();
 
   const tokenStore = makeLazyTokenStore();
 
@@ -373,6 +380,15 @@ export function cloneCommand(getConfig: () => Config): Command {
             await startCmd.parseAsync([], { from: 'user' });
           }
         } catch (err) {
+          if (err instanceof GitNotAvailableError || err instanceof GitTooOldError) {
+            if (opts.json) {
+              emit(true, { type: 'error', message: err.message });
+            } else {
+              process.stderr.write(`${err.message}\n`);
+            }
+            process.exitCode = 78;
+            return;
+          }
           await handleCloneFailure({
             error: err,
             url,

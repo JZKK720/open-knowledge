@@ -1204,15 +1204,24 @@ describe('runInit', () => {
       expect(readFileSync(sentinel, 'utf-8')).toBe('do-not-clobber');
     });
 
-    it('git-missing environment → runInit throws ProjectGitInitError (no content scaffolded)', async () => {
+    it('git unusable everywhere → runInit surfaces the recoverable GitNotAvailableError (no content scaffolded)', async () => {
       const originalPath = process.env.PATH;
+      const originalPlatform = process.platform;
       process.env.PATH = '/nonexistent';
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform === 'win32' ? 'linux' : 'win32',
+        configurable: true,
+      });
       try {
-        const { ProjectGitInitError } = await import('@inkeep/open-knowledge-server');
+        const { GitNotAvailableError } = await import('@inkeep/open-knowledge-server');
         await expect(runInitForTest({ editors: ['claude'] })).rejects.toBeInstanceOf(
-          ProjectGitInitError,
+          GitNotAvailableError,
         );
       } finally {
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
         process.env.PATH = originalPath;
       }
 

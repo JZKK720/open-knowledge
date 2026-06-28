@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { delimiter as PATH_DELIMITER } from 'node:path';
 import { runSubprocess } from './subprocess.ts';
 
 const fixtureCli = (script: string): readonly string[] => [process.execPath, '-e', script];
@@ -145,5 +146,50 @@ describe('runSubprocess', () => {
     });
     await proc.done;
     expect(lines.map((l) => l.raw)).toEqual(['keep']);
+  });
+
+  const echoPathCli = fixtureCli(`console.log(JSON.stringify({ path: process.env.PATH }))`);
+  const childPathFrom = (lines: { parsed: Record<string, unknown> | null }[]): string =>
+    String(lines[0]?.parsed?.path ?? '');
+
+  test('extraPathDirs prepends to the child PATH in order, ahead of the inherited PATH', async () => {
+    const lines: { parsed: Record<string, unknown> | null }[] = [];
+    const proc = runSubprocess({
+      cliArgs: echoPathCli,
+      trailingArgs: [],
+      extraPathDirs: ['/opt/one', '/opt/two'],
+      timeoutMs: 5000,
+      onLine: (line) => lines.push(line),
+    });
+    await proc.done;
+    const childPath = childPathFrom(lines);
+    expect(childPath.startsWith(`/opt/one${PATH_DELIMITER}/opt/two${PATH_DELIMITER}`)).toBe(true);
+    expect(childPath.endsWith(process.env.PATH ?? '')).toBe(true);
+  });
+
+  test('absent extraPathDirs leaves the child PATH untouched', async () => {
+    const lines: { parsed: Record<string, unknown> | null }[] = [];
+    const proc = runSubprocess({
+      cliArgs: echoPathCli,
+      trailingArgs: [],
+      timeoutMs: 5000,
+      onLine: (line) => lines.push(line),
+    });
+    await proc.done;
+    expect(childPathFrom(lines)).toBe(process.env.PATH ?? '');
+  });
+
+  test('extraPathDirs drops empty segments when composing the child PATH', async () => {
+    const lines: { parsed: Record<string, unknown> | null }[] = [];
+    const proc = runSubprocess({
+      cliArgs: echoPathCli,
+      trailingArgs: [],
+      extraPathDirs: ['', '/opt/only'],
+      timeoutMs: 5000,
+      onLine: (line) => lines.push(line),
+    });
+    await proc.done;
+    const childPath = childPathFrom(lines);
+    expect(childPath.split(PATH_DELIMITER)[0]).toBe('/opt/only');
   });
 });

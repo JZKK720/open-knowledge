@@ -5,6 +5,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
+import {
+  __resetResolveOnPathCacheForTests,
+  __seedResolveOnPathCacheForTests,
+} from './git-preflight.ts';
 import { ensureProjectGit, ProjectGitInitError } from './project-git.ts';
 
 const execFileAsync = promisify(execFile);
@@ -101,19 +105,20 @@ describe('ensureProjectGit', () => {
     expect(head).toBe('ref: refs/heads/main\n');
   });
 
-  test('throws ProjectGitInitError when the git binary is missing', async () => {
+  test('falls back to a usable git when bare git is unavailable on PATH', async () => {
     const projectRoot = resolve(tmpDir, 'no-git-binary');
     mkdirSync(projectRoot, { recursive: true });
 
     const originalPath = process.env.PATH;
     process.env.PATH = '/nonexistent-path';
     try {
-      await expect(ensureProjectGit(projectRoot)).rejects.toBeInstanceOf(ProjectGitInitError);
+      const result = await ensureProjectGit(projectRoot);
+      expect(result.didInit).toBe(true);
     } finally {
       process.env.PATH = originalPath;
     }
 
-    expect(existsSync(resolve(projectRoot, '.git'))).toBe(false);
+    expect(existsSync(resolve(projectRoot, '.git/HEAD'))).toBe(true);
   });
 
   test('throws ProjectGitInitError when git init succeeds but .git/HEAD is absent (partial init)', async () => {
@@ -125,17 +130,20 @@ describe('ensureProjectGit', () => {
     const fakeGit = resolve(fakeBin, 'git');
     writeFileSync(
       fakeGit,
-      `#!/bin/sh\n# args: init --initial-branch=main <path>\ntarget="$3"\nmkdir -p "$target/.git"\n# intentionally do not create HEAD\nexit 0\n`,
+      `#!/bin/sh\ncase "$1" in\n  --version) echo "git version 2.45.0"; exit 0 ;;\n  init)\n    # args: init --initial-branch=main <path>\n    mkdir -p "$3/.git"\n    # intentionally do not create HEAD\n    exit 0 ;;\n  *) exit 0 ;;\nesac\n`,
       'utf-8',
     );
     await execFileAsync('chmod', ['+x', fakeGit]);
 
+    __resetResolveOnPathCacheForTests();
+    __seedResolveOnPathCacheForTests('git', fakeGit);
     const originalPath = process.env.PATH;
     process.env.PATH = `${fakeBin}:${originalPath ?? ''}`;
     try {
       await expect(ensureProjectGit(projectRoot)).rejects.toBeInstanceOf(ProjectGitInitError);
     } finally {
       process.env.PATH = originalPath;
+      __resetResolveOnPathCacheForTests();
     }
   });
 });

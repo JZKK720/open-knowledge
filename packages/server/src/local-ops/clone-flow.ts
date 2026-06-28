@@ -1,5 +1,16 @@
+import { dirname, isAbsolute } from 'node:path';
+import {
+  assertGitAvailable,
+  type GitDetected,
+  GitNotAvailableError,
+  GitTooOldError,
+} from '../git-preflight.ts';
+import { emitPreflightFailureSpan } from '../git-preflight-telemetry.ts';
 import { expandTilde, isAllowedGitUrl, isSafeLocalPath } from '../local-op-security.ts';
+import { getLogger } from '../logger.ts';
 import { runSubprocess } from './subprocess.ts';
+
+const log = getLogger('clone-flow');
 
 export type RawCloneEvent =
   | { type: 'progress'; phase: string; pct: number }
@@ -64,6 +75,39 @@ export function runCloneSubprocess(opts: RunCloneOptions): RunCloneController {
   const targetDir = expandTilde(opts.dir);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  let detected: GitDetected;
+  try {
+    detected = assertGitAvailable();
+  } catch (err) {
+    if (err instanceof GitNotAvailableError || err instanceof GitTooOldError) {
+      emitPreflightFailureSpan(err);
+      log.warn(
+        {
+          event: 'git_preflight_fail',
+          platform: err.platform,
+          reason: err instanceof GitTooOldError ? 'too_old' : 'not_available',
+          detectedVersion: err instanceof GitTooOldError ? err.detected : '',
+        },
+        err instanceof GitTooOldError ? 'git binary too old' : 'git binary not found',
+      );
+    } else {
+      log.error(
+        {
+          event: 'clone_preflight_unexpected_error',
+          err,
+        },
+        'unexpected error during clone preflight',
+      );
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    const done = Promise.resolve().then(() => {
+      opts.onEvent({ type: 'error', message });
+    });
+    return { done, cancel: () => {} };
+  }
+
+  const extraPathDirs = isAbsolute(detected.resolvedPath) ? [dirname(detected.resolvedPath)] : [];
+
   let sawTerminal = false;
 
   const branchArgs =
@@ -71,6 +115,7 @@ export function runCloneSubprocess(opts: RunCloneOptions): RunCloneController {
   const proc = runSubprocess({
     cliArgs: opts.cliArgs,
     trailingArgs: ['clone', '--json', ...branchArgs, opts.url, targetDir],
+    extraPathDirs,
     timeoutMs,
     onLine: ({ parsed }) => {
       if (!parsed) return;

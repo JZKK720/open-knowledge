@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { delimiter as PATH_DELIMITER } from 'node:path';
 
 interface ParsedLine {
   raw: string;
@@ -9,6 +10,7 @@ interface SubprocessRunOptions {
   cliArgs: readonly string[];
   trailingArgs: readonly string[];
   cwd?: string;
+  extraPathDirs?: readonly string[];
   timeoutMs: number;
   onLine: (line: ParsedLine) => void;
   onStderr?: (chunk: Buffer) => void;
@@ -46,10 +48,17 @@ export function runSubprocess(opts: SubprocessRunOptions): SubprocessController 
   let stdoutBuffer = '';
   const stderrChunks: Buffer[] = [];
 
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  if (opts.extraPathDirs && opts.extraPathDirs.length > 0) {
+    childEnv.PATH = [...opts.extraPathDirs, process.env.PATH ?? '']
+      .filter(Boolean)
+      .join(PATH_DELIMITER);
+  }
+
   const child = spawn(cmd, argv, {
     cwd: opts.cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: childEnv,
   });
 
   const killTimer = setTimeout(() => {

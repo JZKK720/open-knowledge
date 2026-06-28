@@ -163,6 +163,10 @@ export function __resetResolveOnPathCacheForTests(): void {
   resolveOnPathCache.clear();
 }
 
+export function __seedResolveOnPathCacheForTests(name: string, resolvedPath: string): void {
+  resolveOnPathCache.set(name, resolvedPath);
+}
+
 export function resolveOnPath(name: string): string | null {
   if (!SAFE_COMMAND_NAME_RE.test(name)) return null;
   const cached = resolveOnPathCache.get(name);

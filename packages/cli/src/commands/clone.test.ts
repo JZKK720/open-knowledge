@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import type { Config } from '@inkeep/open-knowledge-server';
 import type { TokenStore } from '../auth/token-store.ts';
 import { OK_DIR } from '../constants.ts';
 import {
@@ -17,6 +18,7 @@ import {
   isBranchNotFoundError,
   resolveClonePrincipal,
   resolveCloneUrl,
+  runClone,
   shouldSkipAuthForPublicRepo,
 } from './clone.ts';
 
@@ -747,5 +749,33 @@ describe('emitCloneFailure', () => {
     emitCloneFailure({ ...args, emit: c1.emit, printStderr: c1.printStderr });
     emitCloneFailure({ ...args, emit: c2.emit, printStderr: c2.printStderr });
     expect(c1.stderr.join('')).toBe(c2.stderr.join(''));
+  });
+});
+
+describe('runClone git preflight', () => {
+  it('git unusable everywhere → runClone surfaces the recoverable GitNotAvailableError', async () => {
+    const originalPath = process.env.PATH;
+    const originalPlatform = process.platform;
+    process.env.PATH = '/nonexistent';
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform === 'win32' ? 'linux' : 'win32',
+      configurable: true,
+    });
+    try {
+      const { GitNotAvailableError } = await import('@inkeep/open-knowledge-server');
+      const cwd = join(
+        tmpdir(),
+        `ok-clone-preflight-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+      await expect(
+        runClone('inkeep/playbooks', { json: true }, {} as unknown as Config, cwd),
+      ).rejects.toBeInstanceOf(GitNotAvailableError);
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+      process.env.PATH = originalPath;
+    }
   });
 });
