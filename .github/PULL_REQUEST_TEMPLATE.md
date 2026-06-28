@@ -15,12 +15,9 @@
 
 ---
 
-### How our PR flow works — please read
+### After you open this PR
 
-This repository is **mirrored from an internal monorepo**. After you open this PR:
+- A maintainer will review your PR. If you don't hear back within a few business days, a comment to nudge is welcome.
+- When your change is accepted, this PR closes automatically — that's how it merges, and your authorship is preserved.
 
-1. A bot mirrors your changes internally for review (it posts a link you won't be able to open — that's expected).
-2. Maintainer review and full CI (lint, typecheck, tests) happen internally; results are **not** posted back to this PR.
-3. Once the change lands internally and syncs back, **your PR is closed — not merged.** Your authorship is preserved.
-
-If you don't hear back within a few business days, commenting to nudge is welcome. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full flow.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
