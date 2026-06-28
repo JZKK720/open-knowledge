@@ -1,3 +1,4 @@
+
 import { execFile } from 'node:child_process';
 import { access, constants as fsConstants } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -214,6 +215,12 @@ export function resolveCursorSpawnInvocation(
   if (platform === 'darwin' && /\.app\/?$/.test(resolvedPath)) {
     const bundle = resolvedPath.replace(/\/$/, '');
     return { exec: '/usr/bin/open', args: ['-a', bundle, userPath] };
+  }
+  if (platform === 'win32' && /\.(cmd|bat)$/i.test(resolvedPath)) {
+    return {
+      exec: process.env.ComSpec || 'cmd.exe',
+      args: ['/d', '/c', resolvedPath, userPath],
+    };
   }
   return { exec: resolvedPath, args: [userPath] };
 }

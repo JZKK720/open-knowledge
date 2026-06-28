@@ -1,6 +1,8 @@
+
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HandoffTarget } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
+import { createOsProbe, type InstalledAgentScheme } from './handoff-api.ts';
 import { errorResponse } from './http/error-response.ts';
 import {
   PayloadTooLargeError,
@@ -29,6 +31,9 @@ type Recipe =
       readonly type: 'app-bundle';
       readonly appName: 'Claude' | 'Codex';
       readonly urlScheme: 'claude:' | 'codex:';
+      /** Scheme name (no colon) for the Windows/Linux availability probe —
+       *  the `InstalledAgentScheme` key `/api/installed-agents` keys off. */
+      readonly probeScheme: InstalledAgentScheme;
       readonly quitFirst: boolean;
     }
   | {
@@ -42,18 +47,21 @@ const RECIPES = {
     type: 'app-bundle',
     appName: 'Claude',
     urlScheme: 'claude:',
+    probeScheme: 'claude',
     quitFirst: false,
   },
   'claude-code': {
     type: 'app-bundle',
     appName: 'Claude',
     urlScheme: 'claude:',
+    probeScheme: 'claude',
     quitFirst: false,
   },
   codex: {
     type: 'app-bundle',
     appName: 'Codex',
     urlScheme: 'codex:',
+    probeScheme: 'codex',
     quitFirst: true,
   },
   cursor: {
@@ -85,6 +93,7 @@ export interface HandleHandoffDispatchDeps {
     timeoutMs: number,
   ) => Promise<SpawnDetachedOutcome>;
   readonly resolveCursorBinary?: (timeoutMs: number) => Promise<string | null>;
+  readonly isSchemeRegistered?: (scheme: InstalledAgentScheme) => Promise<boolean>;
 }
 
 export type { SpawnDetachedOutcome as SpawnOutcome } from './spawn-detached.ts';
@@ -103,17 +112,6 @@ export async function handleHandoffDispatch(
       handler: HANDLER,
       extraHeaders: { Allow: 'POST' },
     });
-    return;
-  }
-
-  if (deps.platform !== 'darwin') {
-    errorResponse(
-      res,
-      500,
-      'urn:ok:error:internal-server-error',
-      'Handoff is currently macOS-only.',
-      { handler: HANDLER },
-    );
     return;
   }
 
@@ -179,25 +177,41 @@ export async function handleHandoffDispatch(
 
   const sleep = deps.sleep ?? defaultSleep;
   const spawn = deps.spawnDetached ?? spawnDetachedReal;
+  const isSchemeRegistered = deps.isSchemeRegistered ?? createOsProbe(deps.platform);
 
   if (recipe.type === 'app-bundle') {
-    if (recipe.quitFirst) {
-      await spawn(
-        '/usr/bin/osascript',
-        ['-e', `tell application "${recipe.appName}" to quit`],
-        SPAWN_TIMEOUT_MS,
-      ).catch(() => undefined);
-      await sleep(QUIT_SETTLE_MS);
+    if (deps.platform === 'darwin') {
+      if (recipe.quitFirst) {
+        await spawn(
+          '/usr/bin/osascript',
+          ['-e', `tell application "${recipe.appName}" to quit`],
+          SPAWN_TIMEOUT_MS,
+        ).catch(() => undefined);
+        await sleep(QUIT_SETTLE_MS);
+      }
+
+      const activate = await spawn('/usr/bin/open', ['-a', recipe.appName], SPAWN_TIMEOUT_MS);
+      if (!activate.ok) {
+        emitSpawnFailure(res, target, activate.reason);
+        return;
+      }
+      await sleep(APP_BUNDLE_SETTLE_MS);
+    } else {
+      const registered = await isSchemeRegistered(recipe.probeScheme);
+      if (!registered) {
+        errorResponse(
+          res,
+          422,
+          'urn:ok:error:handoff-target-not-installed',
+          'Required binary or application not found.',
+          { handler: HANDLER, extensions: { target } },
+        );
+        return;
+      }
     }
 
-    const activate = await spawn('/usr/bin/open', ['-a', recipe.appName], SPAWN_TIMEOUT_MS);
-    if (!activate.ok) {
-      emitSpawnFailure(res, target, activate.reason);
-      return;
-    }
-    await sleep(APP_BUNDLE_SETTLE_MS);
-
-    const openUrl = await spawn('/usr/bin/open', [url], SPAWN_TIMEOUT_MS);
+    const open = resolveUrlOpenInvocation(url, deps.platform);
+    const openUrl = await spawn(open.exec, open.args, SPAWN_TIMEOUT_MS);
     if (!openUrl.ok) {
       emitSpawnFailure(res, target, openUrl.reason);
       return;
@@ -241,12 +255,24 @@ export async function handleHandoffDispatch(
     return;
   }
   await sleep(CURSOR_SETTLE_MS);
-  const openUrl = await spawn('/usr/bin/open', [url], SPAWN_TIMEOUT_MS);
+  const open = resolveUrlOpenInvocation(url, deps.platform);
+  const openUrl = await spawn(open.exec, open.args, SPAWN_TIMEOUT_MS);
   if (!openUrl.ok) {
     emitSpawnFailure(res, target, openUrl.reason);
     return;
   }
   successResponse(res, 200, HandoffSuccessSchema, {}, { handler: HANDLER });
+}
+
+export function resolveUrlOpenInvocation(
+  url: string,
+  platform: NodeJS.Platform,
+): { exec: string; args: ReadonlyArray<string> } {
+  if (platform === 'darwin') return { exec: '/usr/bin/open', args: [url] };
+  if (platform === 'win32') {
+    return { exec: 'rundll32.exe', args: ['url.dll,FileProtocolHandler', url] };
+  }
+  return { exec: 'xdg-open', args: [url] };
 }
 
 function emitSpawnFailure(

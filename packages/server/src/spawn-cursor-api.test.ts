@@ -1,3 +1,4 @@
+
 import { describe, expect, mock, test } from 'bun:test';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
@@ -296,9 +297,14 @@ describe('handleSpawnCursor — Cursor binary discovery (per-platform)', () => {
     expect(whichCalled).toBe(true);
   });
 
-  test('windows: bundle-path probe surface uses the .cmd shim', async () => {
-    const spawnDetached = mock(async (exec: string, _args: ReadonlyArray<string>) => {
-      expect(exec.endsWith('cursor.cmd')).toBe(true);
+  test('windows: .cmd shim is routed through cmd.exe (shell:false cannot exec .cmd — CVE-2024-27980)', async () => {
+    const cmdPath =
+      'C:\\Users\\who\\AppData\\Local\\Programs\\cursor\\resources\\app\\bin\\cursor.cmd';
+    let capturedExec = '';
+    let capturedArgs: ReadonlyArray<string> = [];
+    const spawnDetached = mock(async (exec: string, args: ReadonlyArray<string>) => {
+      capturedExec = exec;
+      capturedArgs = [...args];
       return { ok: true } as SpawnCursorOutcome;
     });
     const { res, captured } = makeRes();
@@ -308,13 +314,14 @@ describe('handleSpawnCursor — Cursor binary discovery (per-platform)', () => {
       makeDeps({
         platform: 'win32',
         contentDir: 'C:\\Users\\who\\dragons',
-        resolveCursorBinary: async () =>
-          'C:\\Users\\who\\AppData\\Local\\Programs\\cursor\\resources\\app\\bin\\cursor.cmd',
+        resolveCursorBinary: async () => cmdPath,
         spawnDetached,
       }),
     );
     expect(captured.status).toBe(200);
     expect(captured.body).toEqual({});
+    expect(capturedExec.toLowerCase().endsWith('cmd.exe')).toBe(true);
+    expect(capturedArgs).toEqual(['/d', '/c', cmdPath, 'C:\\Users\\who\\dragons']);
   });
 
   test('linux: PATH lookup is the only viable strategy (no bundle paths registered)', async () => {
