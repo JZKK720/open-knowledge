@@ -67,6 +67,7 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
 
   const keepaliveGraceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const keepaliveGraceInflight = new Set<Promise<void>>();
+  const liveUpgradeSockets = new Set<Duplex>();
   let shuttingDown = false;
 
   const onRequest = (req: IncomingMessage, res: ServerResponse): void => {
@@ -225,6 +226,8 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
         if (handleCollabSocketError(err)) return;
         log.error({ err }, 'MCP keepalive socket error');
       });
+      liveUpgradeSockets.add(socket);
+      socket.once('close', () => liveUpgradeSockets.delete(socket));
       wss.handleUpgrade(req, socket, head, (ws) => {
         const connectionId = parseKeepaliveConnectionId(req.url);
 
@@ -326,6 +329,8 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
         if (handleCollabSocketError(err)) return;
         log.error({ err }, 'Upgrade socket error');
       });
+      liveUpgradeSockets.add(socket);
+      socket.once('close', () => liveUpgradeSockets.delete(socket));
       wss.handleUpgrade(req, socket, head, (ws) => {
         const clientConnection = hocuspocus.handleConnection(
           ws as unknown as WebSocket,
@@ -380,6 +385,12 @@ export function mountMcpAndApi(opts: MountMcpAndApiOptions): MountMcpAndApiHandl
     shutdown: async (): Promise<void> => {
       if (shuttingDown) return;
       shuttingDown = true;
+      for (const socket of liveUpgradeSockets) {
+        try {
+          socket.destroy();
+        } catch {}
+      }
+      liveUpgradeSockets.clear();
       for (const timer of keepaliveGraceTimers.values()) {
         clearTimeout(timer);
       }

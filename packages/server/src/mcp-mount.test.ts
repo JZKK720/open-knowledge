@@ -11,6 +11,7 @@ import {
   INLINE_RENDERABLE_EXTENSIONS,
 } from '@inkeep/open-knowledge-core';
 import sirv from 'sirv';
+import { WebSocket } from 'ws';
 import { createAssetServeMiddleware } from './asset-serve-middleware.ts';
 import { getFreeLoopbackPort } from './loopback-rig-test-helpers.ts';
 import type { McpHttpHandler } from './mcp-http.ts';
@@ -238,6 +239,57 @@ describe('mountMcpAndApi /mcp guard', () => {
     expect(response).toBe('');
     expect(calls).toBe(0);
   });
+});
+
+describe('mountMcpAndApi shutdown drains live WS clients', () => {
+  for (const path of ['/collab', '/collab/keepalive?connectionId=teardown-probe']) {
+    test(`drains live ${path.split('?')[0]} WS so wss.close + httpServer.close resolve promptly`, async () => {
+      const httpServer = createServer();
+      const mount = mountMcpAndApi({ httpServer, hocuspocus, log });
+      const port = await getFreeLoopbackPort();
+      await new Promise<void>((resolve) => httpServer.listen(port, '127.0.0.1', () => resolve()));
+
+      const client = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+      client.on('error', () => {});
+      try {
+        await new Promise<void>((resolve, reject) => {
+          client.once('open', () => resolve());
+          client.once('error', reject);
+        });
+        expect(mount.wss.clients.size).toBe(1);
+
+        const teardown = (async (): Promise<'done'> => {
+          await mount.shutdown();
+          await new Promise<void>((resolve, reject) =>
+            mount.wss.close((err) => (err ? reject(err) : resolve())),
+          );
+          await new Promise<void>((resolve, reject) =>
+            httpServer.close((err) =>
+              err && (err as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING'
+                ? reject(err)
+                : resolve(),
+            ),
+          );
+          return 'done';
+        })();
+
+        let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([
+          teardown,
+          new Promise<'timeout'>((resolve) => {
+            budgetTimer = setTimeout(() => resolve('timeout'), 2000);
+          }),
+        ]);
+        if (budgetTimer !== undefined) clearTimeout(budgetTimer);
+
+        expect(result).toBe('done');
+        expect(mount.wss.clients.size).toBe(0);
+      } finally {
+        client.terminate();
+        httpServer.closeAllConnections?.();
+      }
+    });
+  }
 });
 
 describe('mountMcpAndApi content-asset middleware', () => {
