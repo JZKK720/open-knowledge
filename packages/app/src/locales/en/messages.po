@@ -755,6 +755,10 @@ msgstr "Asset reference"
 msgid "Asset: {title}"
 msgstr "Asset: {title}"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Attachments"
+msgstr "Attachments"
+
 #: src/editor/slash-command/component-items.tsx
 msgid "Authoritative content; mirrored verbatim everywhere it's referenced."
 msgstr "Authoritative content; mirrored verbatim everywhere it's referenced."
@@ -1404,6 +1408,10 @@ msgstr "Content directory"
 msgid "Content directory must be inside the project"
 msgstr "Content directory must be inside the project"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Content root"
+msgstr "Content root"
+
 #: src/editor/bubble-menu/FootnoteBubbleButton.tsx
 msgid "Convert selection to footnote"
 msgstr "Convert selection to footnote"
@@ -1926,6 +1934,10 @@ msgstr "Customize how the editor looks and behaves."
 msgid "Date"
 msgstr "Date"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Default location for new attachments"
+msgstr "Default location for new attachments"
+
 #: src/components/TemplateForm.tsx
 msgid "Default properties"
 msgstr "Default properties"
@@ -2223,6 +2235,10 @@ msgstr "Duplicate the focused file-tree item when focus is in the Files sidebar.
 #: src/components/skill-actions.tsx
 msgid "Duplicated to \"{0}\""
 msgstr "Duplicated to \"{0}\""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "e.g. assets/uploads"
+msgstr "e.g. assets/uploads"
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "e.g. drafts/ or *.draft.md"
@@ -2652,6 +2668,10 @@ msgstr "Failed to render PDF"
 msgid "Failed to reorder"
 msgstr "Failed to reorder"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Failed to update attachment location — {detail}"
+msgstr "Failed to update attachment location — {detail}"
+
 #: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to update property"
@@ -2779,6 +2799,10 @@ msgstr "Fit height"
 msgid "Fit width"
 msgstr "Fit width"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Fixed folder in content root"
+msgstr "Fixed folder in content root"
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Fold or unfold source"
 msgstr "Fold or unfold source"
@@ -2793,6 +2817,7 @@ msgstr "Fold, unfold, fold all, or unfold all source ranges."
 msgid "folder"
 msgstr "folder"
 
+#: src/components/settings/SettingsDialogBody.tsx
 #: src/components/share-metadata-rows.tsx
 #: src/editor/composer-mention/ComposerMentionMenu.tsx
 #: src/editor/extensions/InternalLinkPropPanel.tsx
@@ -5225,6 +5250,10 @@ msgstr "Run a real terminal docked inside OpenKnowledge, starting in this projec
 msgid "Run this in your terminal"
 msgstr "Run this in your terminal"
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Same folder as current file"
+msgstr "Same folder as current file"
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "Sandboxed HTML embed — write HTML, see the rendered preview live."
 msgstr "Sandboxed HTML embed — write HTML, see the rendered preview live."
@@ -5487,6 +5516,10 @@ msgstr "Set the auto-sync default for users opening this project for the first t
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Set up syncing"
 msgstr "Set up syncing"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Set where pasted and dropped files are stored for this project."
+msgstr "Set where pasted and dropped files are stored for this project."
 
 #: src/components/SeedDialog.tsx
 msgid "Setting up"
@@ -5841,6 +5874,10 @@ msgstr "Stored on this machine."
 #: src/lib/keyboard-shortcuts.ts
 msgid "Strikethrough"
 msgstr "Strikethrough"
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Subfolder under current folder"
+msgstr "Subfolder under current folder"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Suggestion menu navigation"
@@ -6792,6 +6829,10 @@ msgstr "What would you like to create?"
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "When enabled, the agent opens or refreshes the preview after each edit. Disable if you manage your own preview window (OK Desktop, a browser tab on another display, etc.)."
 msgstr "When enabled, the agent opens or refreshes the preview after each edit. Disable if you manage your own preview window (OK Desktop, a browser tab on another display, etc.)."
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Where newly added attachments are placed."
+msgstr "Where newly added attachments are placed."
 
 #: src/components/SeedDialog.tsx
 msgid "Where should it live?"

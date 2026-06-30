@@ -1,3 +1,4 @@
+
 import type {
   PrincipalSuccess,
   ProblemDetails,
@@ -6,6 +7,7 @@ import type {
   UploadAssetSuccess,
   UploadRequest,
 } from './api/index.ts';
+
 
 const _validProblemType: ProblemType = 'urn:ok:error:malformed-upload';
 void _validProblemType;
@@ -21,6 +23,7 @@ void _relativeUri;
 // @ts-expect-error -- ProblemType is a closed literal-union; free-form strings rejected.
 const _freeFormString: ProblemType = 'something-else';
 void _freeFormString;
+
 
 const _validProblem: ProblemDetails = {
   type: 'urn:ok:error:malformed-upload',
@@ -51,6 +54,7 @@ const _widenedType: ProblemDetails = {
 };
 void _widenedType;
 
+
 const _validSuccess: UploadAssetSuccess = { src: 'attachments/photo.png' };
 void _validSuccess;
 
@@ -61,11 +65,16 @@ void _missingSrc;
 const _validHasSrc: UploadAssetSuccess = { src: 'foo.png' };
 void _validHasSrc;
 
-const _validRequest: UploadRequest = { parentDocName: 'notes/index' };
+
+const _validRequest: UploadRequest = {
+  parentDocName: 'notes/index',
+  placement: 'configured-attachments',
+};
 void _validRequest;
 
 const _withAgentIdentity: UploadRequest = {
   parentDocName: 'notes/index',
+  placement: 'parent-dir',
   agentId: 'claude-1',
   agentName: 'Claude',
 };
@@ -74,6 +83,7 @@ void _withAgentIdentity;
 // @ts-expect-error -- parentDocName is required.
 const _missingParent: UploadRequest = { agentId: 'claude-1' };
 void _missingParent;
+
 
 const _validPrincipal: PrincipalSuccess = {
   id: 'principal-abc',

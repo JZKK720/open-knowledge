@@ -11,8 +11,11 @@ import {
   CONFIG_DOC_NAME_PROJECT_LOCAL,
   CONFIG_DOC_NAME_USER,
   CONFIG_DOC_NAMES,
+  type ConfigIssue,
   createBasenameIndex,
+  DEFAULT_ATTACHMENT_FOLDER_PATH,
   humanFormat,
+  isKnownConfigError,
   type MarkdownManager,
   type Principal,
   parseGlobalSkillBundleDoc,
@@ -241,6 +244,31 @@ export function createServer(options: ServerOptions): ServerInstance {
   } = options;
 
   const log = getLogger('server');
+
+  function readProjectAttachmentFolderPath(): string {
+    const project = readConfigSafely({
+      absPath: resolveConfigPath('project', projectDir),
+      sideline: false,
+      warn: (message) => log.warn({ message }, '[config] could not read project config'),
+    });
+    if (!project.valid) {
+      const attachmentIssues =
+        isKnownConfigError(project.error) && project.error.code === 'SCHEMA_INVALID'
+          ? (project.error.issues as ConfigIssue[]).filter(
+              (issue) => issue.path.map(String).join('.') === 'content.attachmentFolderPath',
+            )
+          : [];
+      if (attachmentIssues.length > 0) {
+        const details = attachmentIssues.map((issue) => issue.message).join('; ');
+        throw new Error(`Invalid content.attachmentFolderPath in project config: ${details}`);
+      }
+      log.warn(
+        {},
+        '[config] committed content.attachmentFolderPath unavailable (project config invalid) — using default attachment placement',
+      );
+    }
+    return project.value.content.attachmentFolderPath ?? DEFAULT_ATTACHMENT_FOLDER_PATH;
+  }
 
   function readProjectAutoSyncEnabled(): boolean {
     const local = readConfigSafely({
@@ -608,7 +636,8 @@ export function createServer(options: ServerOptions): ServerInstance {
                 loaded: loadedPrincipal.id,
               }),
             );
-          } else {
+          }
+          else {
             ctx.principalId = parsed.principalId;
           }
         }
@@ -705,6 +734,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       contentFilter,
       serverInstanceId,
       getFileIndex: () => (watcher ? watcher.getFileIndex() : new Map()),
+      getAttachmentFolderPath: readProjectAttachmentFolderPath,
       getAllFilesIndex: () => (watcher ? watcher.getAllFilesIndex() : new Map()),
       getFileIndexGeneration: () => watcher?.getFileIndexGeneration() ?? 0,
       mutateFileIndex: (event) => watcher?.mutateFileIndex(event),
@@ -1179,6 +1209,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     }
   }
 
+
   const eventBuffer: DiskEvent[] = [];
 
   async function onDiskEvent(event: DiskEvent): Promise<void> {
@@ -1195,6 +1226,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       await handleDiskEvent(event);
     }
   }
+
 
   let watcher: WatcherHandle | null = null;
   let headWatcher: HeadWatcherHandle | null = null;
@@ -1466,7 +1498,8 @@ export function createServer(options: ServerOptions): ServerInstance {
                   'utf-8',
                 );
               }
-            } catch {}
+            } catch {
+            }
 
             try {
               destroyShadowRepo(shadowRef.current);
@@ -1610,13 +1643,15 @@ export function createServer(options: ServerOptions): ServerInstance {
         let lastKnownHead: string | null = null;
         try {
           lastKnownHead = readFileSync(lastKnownHeadPath, 'utf-8').trim() || null;
-        } catch {}
+        } catch {
+        }
 
         let currentHead: string | null = null;
         try {
           const projectGit = simpleGit({ baseDir: projectDir, timeout: { block: 10_000 } });
           currentHead = (await projectGit.revparse('HEAD')).trim() || null;
-        } catch {}
+        } catch {
+        }
 
         if (currentHead !== null) {
           if (currentHead !== lastKnownHead) {
@@ -1625,7 +1660,8 @@ export function createServer(options: ServerOptions): ServerInstance {
               const projectGit = simpleGit({ baseDir: projectDir, timeout: { block: 10_000 } });
               const b = (await projectGit.raw('rev-parse', '--abbrev-ref', 'HEAD')).trim();
               if (b && b !== 'HEAD') branch = b;
-            } catch {}
+            } catch {
+            }
 
             log.info(
               { lastKnownHead, currentHead, branch },
@@ -1871,7 +1907,8 @@ export function createServer(options: ServerOptions): ServerInstance {
           const candidate = join(commonDir, 'info', 'exclude');
           if (existsSync(dirname(candidate))) gitInfoExcludePath = candidate;
         }
-      } catch {}
+      } catch {
+      }
       const ignorePaths = gitInfoExcludePath
         ? [okignorePath, gitignorePath, gitInfoExcludePath]
         : [okignorePath, gitignorePath];

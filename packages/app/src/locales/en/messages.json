@@ -43,6 +43,7 @@
     "0LBDjY": ["\"", ["0"], "\" uninstalled — back to a draft"],
     "0NA4b3": ["Keep my version"],
     "0YEbfk": ["Connect to AI tools"],
+    "0YUS3Q": ["Subfolder under current folder"],
     "0_J12R": [
       "New file from template \"",
       ["displayTitle"],
@@ -424,6 +425,7 @@
     "Aq-O0x": ["status"],
     "AqnqMJ": ["API key set"],
     "ArBWJf": ["Undo last edit"],
+    "AsqRE_": ["Default location for new attachments"],
     "AtBdnD": ["Couldn't delete skill: ", ["error"]],
     "B11p-O": ["Edit markdown link"],
     "B2DrPb": ["Auto-save"],
@@ -663,6 +665,7 @@
     "HfI1dR": ["I already have it locally →"],
     "Hl89Qd": ["Loading templates"],
     "HlmZBk": ["Documents response did not match expected shape."],
+    "Hnl9nT": ["Set where pasted and dropped files are stored for this project."],
     "HpK_8d": ["Reload"],
     "HptUxX": ["Number"],
     "HqiZvw": [
@@ -904,6 +907,7 @@
     "OX2Neh": ["Inline code"],
     "OYnx7O": ["Path cannot start with \"/\""],
     "OdmsFg": ["Failed to delete item"],
+    "OeAl1e": ["e.g. assets/uploads"],
     "OgyJSr": ["Local only"],
     "OiHJdA": [
       "Move through slash, wiki-link, tag, and path suggestions; accept or dismiss the active suggestion."
@@ -949,6 +953,7 @@
     "Pyp1NA": ["Restore to this point?"],
     "Q5fqMz": ["Connection error — try again"],
     "Q6hhn8": ["Preferences"],
+    "Q7W-mC": ["Same folder as current file"],
     "Q8A-U_": ["Connected to"],
     "QDZbvN": [["diffDays"], "d ago"],
     "QOINDn": ["empty"],
@@ -1403,6 +1408,7 @@
     "eNQGRb": ["Inline LaTeX math rendered with KaTeX."],
     "ePK91l": ["Edit"],
     "eQkgKV": ["Installed"],
+    "eQxm13": ["Failed to update attachment location — ", ["detail"]],
     "eSu2Xn": [
       "Writes a project-MCP config for each selected tool; Claude also gets <0>.claude/launch.json</0>."
     ],
@@ -1798,6 +1804,7 @@
       " · ",
       ["tabCount", "plural", { "one": ["#", " tab"], "other": ["#", " tabs"] }]
     ],
+    "qAx7xG": ["Fixed folder in content root"],
     "qEIFZu": ["Key ending in ", ["keyHint"]],
     "qEue6Q": [" or "],
     "qFWMl-": ["View as text"],
@@ -1984,6 +1991,7 @@
     "vfWA_g": ["You picked ~/Desktop. OpenKnowledge will index everything on your desktop."],
     "vhAnzJ": ["Turn on semantic search?"],
     "viwC-K": ["Failed to remove project."],
+    "vppAju": ["Where newly added attachments are placed."],
     "vv7kpg": ["Cancelled"],
     "vvWZnu": ["Diff unavailable"],
     "w3tVpc": ["No links yet. Add wiki links or markdown links to build a graph."],
@@ -2000,6 +2008,7 @@
     "wT4iQr": ["Open visual-editor find with replace controls expanded."],
     "wTcjov": ["No workspace"],
     "wXO4Tg": [["hrs"], "h ago"],
+    "w_Sphq": ["Attachments"],
     "wbv9xO": ["Create new project"],
     "wbwHYD": ["Enable sync"],
     "weP6me": ["Couldn't load docs — type @ again to retry"],
@@ -2081,6 +2090,7 @@
     "yQE2r9": ["Loading"],
     "yQyglE": ["No matching docs"],
     "yUxR-Q": ["Expand ", ["keyName"]],
+    "yWSvcf": ["Content root"],
     "yWWThY": ["Asset reference"],
     "yYR6za": ["Display text"],
     "yZmvQ4": ["This project's server (v", ["0"], ") is newer than this app (v", ["1"], ")."],

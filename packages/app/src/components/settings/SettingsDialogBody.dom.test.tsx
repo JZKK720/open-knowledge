@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
+  CONFIG_DOC_NAME_PROJECT,
   CONFIG_DOC_NAME_USER,
   type Config,
   type ConfigBinding,
@@ -9,7 +10,9 @@ import {
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, useTheme } from 'next-themes';
+import type { ReactNode } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ConfigContext, type ConfigContextValue } from '@/lib/config-context';
 import { emitConfigValidationRejected } from '@/lib/config-validation-events';
 import { expectVisualClassTokens } from '@/test-utils/visual-contract';
 import { SettingsDialogBody } from './SettingsDialogBody';
@@ -40,14 +43,31 @@ function makeBinding(config: Config = ConfigSchema.parse({})): {
   return { binding, patches };
 }
 
-describe('SettingsDialogBody preferences runtime', () => {
-  afterEach(() => {
-    cleanup();
-  });
+function makeConfigContextValue(projectBinding: ConfigBinding = makeBinding().binding) {
+  const config = ConfigSchema.parse({});
+  return {
+    userBinding: null,
+    userSynced: true,
+    projectBinding,
+    projectLocalBinding: null,
+    okignoreBinding: null,
+    okignoreSynced: true,
+    userConfig: config,
+    projectConfig: config,
+    projectSynced: true,
+    projectLocalConfig: config,
+    projectLocalSynced: true,
+    merged: config,
+  } satisfies ConfigContextValue;
+}
 
-  test('renders editor.wordWrap in the Preferences section', () => {
-    const { binding } = makeBinding();
-    const { container } = render(
+function SettingsContextProvider({ children }: { children: ReactNode }) {
+  return <ConfigContext value={makeConfigContextValue()}>{children}</ConfigContext>;
+}
+
+function renderPreferences(binding: ConfigBinding) {
+  return render(
+    <SettingsContextProvider>
       <TooltipProvider>
         <SettingsDialogBody
           activeId="preferences"
@@ -55,8 +75,19 @@ describe('SettingsDialogBody preferences runtime', () => {
           okignoreBinding={null}
           okignoreSynced={false}
         />
-      </TooltipProvider>,
-    );
+      </TooltipProvider>
+    </SettingsContextProvider>,
+  );
+}
+
+describe('SettingsDialogBody preferences runtime', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  test('renders editor.wordWrap in the Preferences section', () => {
+    const { binding } = makeBinding();
+    const { container } = renderPreferences(binding);
 
     expect(screen.getByRole('heading', { name: 'Preferences' })).toBeDefined();
     expect(screen.getByText('Word wrap')).toBeDefined();
@@ -81,16 +112,7 @@ describe('SettingsDialogBody preferences runtime', () => {
   test('commits editor.wordWrap changes through binding.patch', async () => {
     const user = userEvent.setup();
     const { binding, patches } = makeBinding();
-    render(
-      <TooltipProvider>
-        <SettingsDialogBody
-          activeId="preferences"
-          userBinding={binding}
-          okignoreBinding={null}
-          okignoreSynced={false}
-        />
-      </TooltipProvider>,
-    );
+    renderPreferences(binding);
 
     const wordWrapSwitch = screen.getByRole('switch', { name: 'Word wrap' });
     await user.click(wordWrapSwitch);
@@ -104,16 +126,7 @@ describe('SettingsDialogBody preferences runtime', () => {
   test('commits appearance.preview.autoOpen changes through binding.patch', async () => {
     const user = userEvent.setup();
     const { binding, patches } = makeBinding();
-    render(
-      <TooltipProvider>
-        <SettingsDialogBody
-          activeId="preferences"
-          userBinding={binding}
-          okignoreBinding={null}
-          okignoreSynced={false}
-        />
-      </TooltipProvider>,
-    );
+    renderPreferences(binding);
 
     const autoOpenSwitch = screen.getByRole('switch', { name: 'Open preview when agent edits' });
     expect(autoOpenSwitch.getAttribute('aria-checked')).toBe('true');
@@ -138,16 +151,7 @@ describe('SettingsDialogBody preferences runtime', () => {
 
   test('surfaces L3 config-validation rejections on the matching user field', async () => {
     const { binding } = makeBinding();
-    const { container } = render(
-      <TooltipProvider>
-        <SettingsDialogBody
-          activeId="preferences"
-          userBinding={binding}
-          okignoreBinding={null}
-          okignoreSynced={false}
-        />
-      </TooltipProvider>,
-    );
+    const { container } = renderPreferences(binding);
 
     const wordWrapField = container.querySelector('[data-field="editor.wordWrap"]');
     expect(wordWrapField).toBeTruthy();
@@ -178,6 +182,40 @@ describe('SettingsDialogBody preferences runtime', () => {
     });
     expectVisualClassTokens(wordWrapField?.className, ['animate-settings-flash']);
   });
+
+  test('surfaces L3 config-validation rejections on the project attachment field', async () => {
+    const { binding } = makeBinding();
+    const { container } = renderPreferences(binding);
+
+    const attachmentField = container.querySelector('[data-field="content.attachmentFolderPath"]');
+    expect(attachmentField).toBeTruthy();
+
+    act(() => {
+      emitConfigValidationRejected({
+        v: 1,
+        ch: 'config-validation-rejected',
+        seq: 2,
+        docName: CONFIG_DOC_NAME_PROJECT,
+        error: {
+          code: 'SCHEMA_INVALID',
+          issues: [
+            {
+              path: ['content', 'attachmentFolderPath'],
+              message: 'Invalid attachment folder path',
+              issueCode: 'invalid_path',
+            },
+          ],
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('settings-attachments')).getByRole('alert').textContent,
+      ).toBe('Invalid attachment folder path');
+    });
+    expectVisualClassTokens(attachmentField?.className, ['animate-settings-flash']);
+  });
 });
 
 let themeStorageKeySeq = 0;
@@ -196,15 +234,17 @@ function renderPreferencesWithTheme(binding: ConfigBinding) {
       enableSystem
       storageKey={`ok-theme-v1-test-${themeStorageKeySeq}`}
     >
-      <TooltipProvider>
-        <SettingsDialogBody
-          activeId="preferences"
-          userBinding={binding}
-          okignoreBinding={null}
-          okignoreSynced={false}
-        />
-        <ThemeProbe />
-      </TooltipProvider>
+      <SettingsContextProvider>
+        <TooltipProvider>
+          <SettingsDialogBody
+            activeId="preferences"
+            userBinding={binding}
+            okignoreBinding={null}
+            okignoreSynced={false}
+          />
+          <ThemeProbe />
+        </TooltipProvider>
+      </SettingsContextProvider>
     </ThemeProvider>,
   );
 }
@@ -220,7 +260,7 @@ describe('SettingsDialogBody theme toggle — optimistic apply', () => {
     cleanup();
   });
 
-  test('clicking Dark flips next-themes immediately (no ConfigProvider) and still persists via binding.patch', async () => {
+  test('clicking Dark flips next-themes immediately and still persists via binding.patch', async () => {
     const user = userEvent.setup();
     const { binding, patches } = makeBinding();
     const { container } = renderPreferencesWithTheme(binding);

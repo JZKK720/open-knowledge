@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_ATTACHMENT_FOLDER_PATH } from '../constants/upload.ts';
 import { fieldRegistry } from './field-registry.ts';
 
 export const DEFAULT_TELEMETRY_ATTRIBUTE_DENYLIST: readonly string[] = Object.freeze([
@@ -18,6 +19,23 @@ export const DEFAULT_LOGS_MAX_BYTES = 26_214_400;
 export const DEFAULT_EMBEDDINGS_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-small';
 
+export function normalizeAttachmentFolderPath(value: string): string {
+  const trimmed = value.trim();
+  return trimmed === '' ? DEFAULT_ATTACHMENT_FOLDER_PATH : trimmed;
+}
+
+export function isValidAttachmentFolderPath(value: string): boolean {
+  const normalized = normalizeAttachmentFolderPath(value);
+  if (normalized.includes('\0')) return false;
+  if (normalized.includes('\\')) return false;
+  if (normalized === '/') return true;
+  if (normalized.startsWith('/')) return false;
+  if (/^[A-Za-z]:/.test(normalized)) return false;
+  const segments = normalized.split('/');
+  if (segments.some((seg) => seg === '..')) return false;
+  return true;
+}
+
 export const ConfigSchema = z.looseObject({
   content: z
     .looseObject({
@@ -31,9 +49,24 @@ export const ConfigSchema = z.looseObject({
             'Folder OpenKnowledge reads and writes documents under, relative to the project root (the folder that contains .ok/). Defaults to the project root. Exclude paths with .okignore.',
         })
         .default('.'),
+      attachmentFolderPath: z
+        .string()
+        .register(fieldRegistry, {
+          scope: 'project',
+          agentSettable: false,
+          defaultScope: 'project',
+          description:
+            "Where pasted and dropped assets are stored, relative to the content root. './' colocates beside the current document (default); '/' targets the content root; './subdir' targets a subfolder under the current document folder; 'folder' targets a fixed folder under the content root. Whitespace-only values are treated as './'.",
+        })
+        .refine(isValidAttachmentFolderPath, {
+          message:
+            "Invalid attachment folder path: must not contain '..' segments, NUL bytes, backslashes, or OS absolute paths (use '/' for the content root).",
+        })
+        .default(DEFAULT_ATTACHMENT_FOLDER_PATH),
     })
     .default({
       dir: '.',
+      attachmentFolderPath: DEFAULT_ATTACHMENT_FOLDER_PATH,
     }),
   appearance: z
     .looseObject({

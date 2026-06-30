@@ -258,6 +258,15 @@ export function uploadParentDocNameForFolderDrop(
   return parent ? `${parent}/${fileName}` : fileName;
 }
 
+export function appendSidebarUploadFields(
+  formData: FormData,
+  parentFolderPath: string,
+  fileName: string,
+): void {
+  formData.append('parentDocName', uploadParentDocNameForFolderDrop(parentFolderPath, fileName));
+  formData.append('placement', 'parent-dir');
+}
+
 export function uploadedPathForSidebarDrop(
   parentFolderPath: string,
   success: UploadAssetSuccess,

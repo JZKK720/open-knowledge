@@ -1,3 +1,4 @@
+
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -90,6 +91,7 @@ import {
   instantiateDoc,
   isHiddenDocName,
   isManagedArtifactDocName,
+  isValidAttachmentFolderPath,
   LINKABLE_ASSET_EXTENSIONS,
   type LifecycleStatus,
   LinkGraphSuccessSchema,
@@ -110,6 +112,7 @@ import {
   MetricsParseHealthSuccessSchema,
   MetricsReconciliationSuccessSchema,
   mediaKindForSidebarAssetExtension,
+  normalizeAttachmentFolderPath,
   OK_DIR,
   OrphansSuccessSchema,
   PageHeadingsSuccessSchema,
@@ -649,7 +652,8 @@ export function resumeSyncOnAuthEvent(
   if (event.type !== 'complete') return;
   void getSyncEngine?.()
     ?.notifyCredentialsChanged()
-    .catch(() => {});
+    .catch(() => {
+    });
 }
 
 export const ROLLBACK_ORIGIN = {
@@ -825,6 +829,7 @@ interface UploadResult {
   filename: string;
   mimeType: string;
   parentDocName: string;
+  placement: string;
   tempPath: string;
   sha: string;
   byteLength: number;
@@ -847,9 +852,11 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
     let filename = 'upload';
     let mimeType = '';
     let parentDocName = '';
+    let placement = '';
     let tempPath: string | undefined;
     let pipelineError: unknown;
     let fileEventFired = false;
+
 
     const fail = (reason: UploadWriteReason, cause: unknown) => {
       if (settled) return;
@@ -857,7 +864,8 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
       if (tempPath) {
         try {
           unlinkSync(tempPath);
-        } catch {}
+        } catch {
+        }
       }
       reject(cause instanceof UploadWriteError ? cause : new UploadWriteError(reason, cause));
     };
@@ -866,6 +874,7 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
 
     bb.on('field', (name, val) => {
       if (name === 'parentDocName') parentDocName = val;
+      if (name === 'placement') placement = val;
     });
 
     bb.on('file', (_fieldname, file, info) => {
@@ -894,6 +903,7 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
             filename,
             mimeType,
             parentDocName,
+            placement,
             tempPath: path,
             sha: hasher.digest(),
             byteLength: hasher.byteLength(),
@@ -918,6 +928,7 @@ function readUploadBody(req: IncomingMessage, projectDir: string): Promise<Uploa
         filename: '',
         mimeType: '',
         parentDocName,
+        placement,
         tempPath: '',
         sha: '',
         byteLength: 0,
@@ -1751,6 +1762,7 @@ export interface ApiExtensionOptions {
   ephemeral?: boolean;
   serverInstanceId: string;
   getFileIndex: () => ReadonlyMap<string, FileIndexEntry>;
+  getAttachmentFolderPath?: () => string;
   getAllFilesIndex?: () => ReadonlyMap<string, FileIndexEntry>;
   getFileIndexGeneration?: () => number;
   mutateFileIndex?: (event: DiskEvent) => void;
@@ -1846,6 +1858,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     contentDir,
     serverInstanceId,
     getFileIndex,
+    getAttachmentFolderPath,
     getAllFilesIndex = getFileIndex,
     mutateFileIndex = (event: DiskEvent) =>
       applyDiskEventToLiveAllFilesIndex(event, getAllFilesIndex),
@@ -2032,7 +2045,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           return { cluster, category, tags };
         }
       }
-    } catch {}
+    } catch {
+    }
     try {
       const filePath = resolveDocPath(docName);
       if (!filePath || !existsSync(filePath)) return EMPTY_METADATA;
@@ -6153,6 +6167,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
         recordContentDivergenceGate('rollback', rollbackDivergence);
 
+
         let summaryResponse: SummaryResponse | undefined;
         switch (actor.kind) {
           case 'agent': {
@@ -8155,24 +8170,37 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       return;
     }
 
-    const { filename, tempPath, sha, byteLength, parentDocName: rawParentDocName } = uploadResult;
+    const {
+      filename,
+      tempPath,
+      sha,
+      byteLength,
+      parentDocName: rawParentDocName,
+      placement: rawPlacement,
+    } = uploadResult;
 
     const cleanupTempfile = () => {
       if (existsSync(tempPath)) {
         try {
           unlinkSync(tempPath);
-        } catch {}
+        } catch {
+        }
       }
     };
 
-    const validated = validateBody(UploadRequestSchema, { parentDocName: rawParentDocName }, res, {
-      handler: 'upload-asset',
-    });
+    const validated = validateBody(
+      UploadRequestSchema,
+      { parentDocName: rawParentDocName, placement: rawPlacement || undefined },
+      res,
+      {
+        handler: 'upload-asset',
+      },
+    );
     if (!validated.ok) {
       cleanupTempfile();
       return;
     }
-    const { parentDocName } = validated.value;
+    const { parentDocName, placement } = validated.value;
 
     const { agentId, agentName } = extractAgentIdentity(
       Object.fromEntries(new URL(req.url ?? '', 'http://localhost').searchParams.entries()),
@@ -8199,11 +8227,36 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     }
 
     const resolvedContentDir = resolve(contentDir);
-    const destDir = resolveUploadDestDir(
-      parentDocName,
-      DEFAULT_ATTACHMENT_FOLDER_PATH,
-      resolvedContentDir,
-    );
+    let rawAttachmentFolderPath: string;
+    try {
+      rawAttachmentFolderPath =
+        placement === 'parent-dir'
+          ? DEFAULT_ATTACHMENT_FOLDER_PATH
+          : (getAttachmentFolderPath?.() ?? DEFAULT_ATTACHMENT_FOLDER_PATH);
+    } catch (err) {
+      cleanupTempfile();
+      log.error({ err }, '[upload] project config has invalid content.attachmentFolderPath');
+      errorResponse(
+        res,
+        500,
+        'urn:ok:error:internal-server-error',
+        'Server configuration error: invalid attachment folder path.',
+        {
+          handler: 'upload-asset',
+          cause: err,
+        },
+      );
+      return;
+    }
+    if (!isValidAttachmentFolderPath(rawAttachmentFolderPath)) {
+      cleanupTempfile();
+      errorResponse(res, 400, 'urn:ok:error:invalid-request', 'Invalid attachment folder path.', {
+        handler: 'upload-asset',
+      });
+      return;
+    }
+    const attachmentFolderPath = normalizeAttachmentFolderPath(rawAttachmentFolderPath);
+    const destDir = resolveUploadDestDir(parentDocName, attachmentFolderPath, resolvedContentDir);
     if (!isWithinContentDir(destDir, resolvedContentDir)) {
       cleanupTempfile();
       errorResponse(res, 400, 'urn:ok:error:path-escape', 'Path escape detected.', {
@@ -8381,6 +8434,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     }
   }
 
+
   const LOCAL_OP_CLONE_KEY = '/api/local-op/clone';
   const LOCAL_OP_OK_INIT_KEY = '/api/local-op/ok-init';
   const LOCAL_OP_TIMEOUT_MS = 10 * 60 * 1000;
@@ -8472,7 +8526,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (!res.writableEnded && !res.destroyed) {
           try {
             res.write(`${JSON.stringify(event)}\n`);
-          } catch {}
+          } catch {
+          }
         }
       },
     });
@@ -8758,6 +8813,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     },
   );
 
+
   const LOCAL_OP_AUTH_LOGIN_KEY = '/api/local-op/auth/login';
   const LOCAL_OP_AUTH_STATUS_KEY = '/api/local-op/auth/status';
   const LOCAL_OP_AUTH_REPOS_KEY = '/api/local-op/auth/repos';
@@ -8837,7 +8893,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (!res.writableEnded && !res.destroyed) {
           try {
             res.write(`${JSON.stringify(event)}\n`);
-          } catch {}
+          } catch {
+          }
         }
       },
     });
@@ -8857,7 +8914,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       if (!res.writableEnded && !res.destroyed) {
         try {
           res.end();
-        } catch {}
+        } catch {
+        }
       }
       if (authLoginInFlight === flow) {
         authLoginInFlight = null;
@@ -8922,7 +8980,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           try {
             parsed = JSON.parse(lines[i] as string);
             break;
-          } catch {}
+          } catch {
+          }
         }
         if (parsed !== null) {
           successResponse(res, 200, LocalOpAuthStatusSuccessSchema, parsed, {
@@ -9015,7 +9074,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         let evt: { type?: unknown; message?: unknown } | null = null;
         try {
           evt = JSON.parse(line) as { type?: unknown; message?: unknown };
-        } catch {}
+        } catch {
+        }
         if (evt && evt.type === 'error') {
           const detail = typeof evt.message === 'string' ? evt.message : undefined;
           writeStreamError(
@@ -9029,7 +9089,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (!res.writableEnded && !res.destroyed) {
           try {
             res.write(`${line}\n`);
-          } catch {}
+          } catch {
+          }
         }
       }
     });
@@ -9146,6 +9207,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     },
   );
 
+
   const LOCAL_OP_AUTH_SET_IDENTITY_KEY = '/api/local-op/auth/set-identity';
 
   const HANDLE_LOCAL_OP_AUTH_SET_IDENTITY = 'local-op-auth-set-identity';
@@ -9177,7 +9239,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         writeGitIdentity(projectDir, name, email);
         void getSyncEngine?.()
           ?.refreshIdentity()
-          .catch(() => {});
+          .catch(() => {
+          });
         successResponse(
           res,
           200,
@@ -9203,6 +9266,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_AUTH_SET_IDENTITY }),
     },
   );
+
+
 
   async function handleSyncStatus(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!checkLocalOpSecurity(req, res, { handler: 'sync-status' })) return;
@@ -9514,6 +9579,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       );
     }
   }
+
 
   async function handleSeedPlan(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!checkLocalOpSecurity(req, res, { handler: 'seed-plan' })) return;
@@ -10093,7 +10159,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           frontmatter = parsed as Record<string, unknown>;
         }
-      } catch {}
+      } catch {
+      }
     }
     return { frontmatter, body };
   };
@@ -10640,7 +10707,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (typeof frontmatter.version === 'string' && frontmatter.version.trim() !== '') {
           installedVersion = frontmatter.version;
         }
-      } catch {}
+      } catch {
+      }
       skills.push({
         name: entry.name,
         ...(description !== undefined ? { description } : {}),
@@ -11044,7 +11112,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           if (typeof parsed.frontmatter.description === 'string') {
             parsedDescription = parsed.frontmatter.description;
           }
-        } catch {}
+        } catch {
+        }
         const writeBody = typeof body.body === 'string' ? body.body : parsedBody;
         const writeDescription =
           body.frontmatter !== undefined ? body.frontmatter.description : parsedDescription;
@@ -11130,6 +11199,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     },
     { handler: 'skill-move', method: 'POST' },
   );
+
 
   function classifySkillFilePath(rel: string): 'reference' | 'script' | null {
     if (rel.includes('\x00')) return null;
@@ -11942,7 +12012,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         let previousVersion: string | undefined;
         try {
           previousVersion = readSkillVersion(readFileSync(filePath, 'utf-8'));
-        } catch {}
+        } catch {
+        }
 
         let checkpointRef: string | undefined;
         const shadow = shadowRef?.current;
@@ -12243,7 +12314,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       try {
         const st = statSync(skillMd);
         out.push({ name: entry.name, absolutePath: skillMd, mtimeMs: st.mtimeMs, size: st.size });
-      } catch {}
+      } catch {
+      }
     }
     return out;
   }
@@ -12260,7 +12332,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (typeof frontmatter.name === 'string' && frontmatter.name) title = frontmatter.name;
         const desc = typeof frontmatter.description === 'string' ? frontmatter.description : '';
         content = `${desc}\n\n${body}`.trim();
-      } catch {}
+      } catch {
+      }
       docs.push(
         createWorkspaceSearchDocument({
           kind: 'page',
@@ -12382,7 +12455,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     return `${[...getAllFilesIndex()]
       .filter(([docName]) => !isSystemDoc(docName) && !isConfigDoc(docName))
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([docName, entry]) => `${docName}\0${entrySearchKey(entry)}`)
+      .map(
+        ([docName, entry]) => `${docName}\0${entrySearchKey(entry)}`,
+      )
       .join('')}|skills${skillStatFingerprint()}`;
   }
 
@@ -13072,7 +13147,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         if (responseBody.ok) {
           void getSyncEngine?.()
             ?.refreshRemote()
-            .catch(() => {});
+            .catch(() => {
+            });
         }
         successResponse(res, 200, SharePublishResponseSchema, responseBody, {
           handler: SHARE_PUBLISH_HANDLER_TAG,
@@ -13112,7 +13188,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               },
               entry.event ?? entry.message,
             );
-          } catch {}
+          } catch {
+          }
         }
         successResponse(
           res,

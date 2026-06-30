@@ -750,6 +750,10 @@ msgstr ""
 msgid "Asset: {title}"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Attachments"
+msgstr ""
+
 #: src/editor/slash-command/component-items.tsx
 msgid "Authoritative content; mirrored verbatim everywhere it's referenced."
 msgstr ""
@@ -1399,6 +1403,10 @@ msgstr ""
 msgid "Content directory must be inside the project"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Content root"
+msgstr ""
+
 #: src/editor/bubble-menu/FootnoteBubbleButton.tsx
 msgid "Convert selection to footnote"
 msgstr ""
@@ -1921,6 +1929,10 @@ msgstr ""
 msgid "Date"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Default location for new attachments"
+msgstr ""
+
 #: src/components/TemplateForm.tsx
 msgid "Default properties"
 msgstr ""
@@ -2217,6 +2229,10 @@ msgstr ""
 #. placeholder {0}: result.name
 #: src/components/skill-actions.tsx
 msgid "Duplicated to \"{0}\""
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "e.g. assets/uploads"
 msgstr ""
 
 #: src/components/settings/OkignoreSection.tsx
@@ -2647,6 +2663,10 @@ msgstr ""
 msgid "Failed to reorder"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Failed to update attachment location — {detail}"
+msgstr ""
+
 #: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Failed to update property"
@@ -2774,6 +2794,10 @@ msgstr ""
 msgid "Fit width"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Fixed folder in content root"
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Fold or unfold source"
 msgstr ""
@@ -2788,6 +2812,7 @@ msgstr ""
 msgid "folder"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
 #: src/components/share-metadata-rows.tsx
 #: src/editor/composer-mention/ComposerMentionMenu.tsx
 #: src/editor/extensions/InternalLinkPropPanel.tsx
@@ -5220,6 +5245,10 @@ msgstr ""
 msgid "Run this in your terminal"
 msgstr ""
 
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Same folder as current file"
+msgstr ""
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "Sandboxed HTML embed — write HTML, see the rendered preview live."
 msgstr ""
@@ -5481,6 +5510,10 @@ msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Set up syncing"
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Set where pasted and dropped files are stored for this project."
 msgstr ""
 
 #: src/components/SeedDialog.tsx
@@ -5835,6 +5868,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Strikethrough"
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Subfolder under current folder"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
@@ -6786,6 +6823,10 @@ msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "When enabled, the agent opens or refreshes the preview after each edit. Disable if you manage your own preview window (OK Desktop, a browser tab on another display, etc.)."
+msgstr ""
+
+#: src/components/settings/SettingsDialogBody.tsx
+msgid "Where newly added attachments are placed."
 msgstr ""
 
 #: src/components/SeedDialog.tsx

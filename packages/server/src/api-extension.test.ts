@@ -156,10 +156,14 @@ describe('handleUploadAsset', () => {
   let contentDir: string;
   let server: import('node:http').Server;
   let port: number;
+  let attachmentFolderPath: string;
+  let getAttachmentFolderPath: () => string;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'upload-test-'));
     contentDir = join(tmpDir, 'content');
+    attachmentFolderPath = './';
+    getAttachmentFolderPath = () => attachmentFolderPath;
     mkdirSync(contentDir, { recursive: true });
     mkdirSync(join(contentDir, 'docs'), { recursive: true });
     writeFileSync(join(contentDir, 'docs', 'guide.md'), '# Guide');
@@ -175,6 +179,7 @@ describe('handleUploadAsset', () => {
       sessionManager,
       contentDir,
       getFileIndex: () => new Map(),
+      getAttachmentFolderPath: () => getAttachmentFolderPath(),
       serverInstanceId: 'test-instance',
     });
 
@@ -216,9 +221,11 @@ describe('handleUploadAsset', () => {
     file: Buffer,
     filename: string,
     parentDocName: string,
+    placement?: 'configured-attachments' | 'parent-dir',
   ): Promise<Response> {
     const formData = new FormData();
     formData.append('parentDocName', parentDocName);
+    if (placement !== undefined) formData.append('placement', placement);
     formData.append('file', new Blob([file]), filename);
     return fetch(`http://127.0.0.1:${port}/api/upload`, {
       method: 'POST',
@@ -236,6 +243,70 @@ describe('handleUploadAsset', () => {
     expect(body.deduped).toBe(false);
     expect(existsSync(join(contentDir, 'docs', 'screenshot.png'))).toBe(true);
     expect((body as Record<string, unknown>).ok).toBeUndefined();
+  });
+
+  test('configured content-root folder stores upload under fixed attachments directory', async () => {
+    attachmentFolderPath = 'attachments';
+    const res = await uploadImage(createPngBuffer(), 'diagram.png', 'docs/guide.md');
+    const body = (await res.json()) as { src: string; path: string; deduped: boolean };
+    expect(res.status).toBe(200);
+    expect(body.src).toBe('diagram.png');
+    expect(body.path).toBe('attachments/diagram.png');
+    expect(body.deduped).toBe(false);
+    expect(existsSync(join(contentDir, 'attachments', 'diagram.png'))).toBe(true);
+    expect(existsSync(join(contentDir, 'docs', 'diagram.png'))).toBe(false);
+  });
+
+  test('configured current-folder subfolder stores upload beside current document folder', async () => {
+    attachmentFolderPath = './attachments';
+    const res = await uploadImage(createPngBuffer(), 'diagram.png', 'docs/guide.md');
+    const body = (await res.json()) as { src: string; path: string };
+    expect(res.status).toBe(200);
+    expect(body.path).toBe('docs/attachments/diagram.png');
+    expect(existsSync(join(contentDir, 'docs', 'attachments', 'diagram.png'))).toBe(true);
+  });
+
+  test('configured content-root sentinel stores upload at the content root', async () => {
+    attachmentFolderPath = '/';
+    const res = await uploadImage(createPngBuffer(), 'rooted.png', 'docs/guide.md');
+    const body = (await res.json()) as { src: string; path: string };
+    expect(res.status).toBe(200);
+    expect(body.path).toBe('rooted.png');
+    expect(existsSync(join(contentDir, 'rooted.png'))).toBe(true);
+  });
+
+  test('invalid configured attachment folder is rejected before final upload write', async () => {
+    attachmentFolderPath = '../escape';
+    const res = await uploadImage(createPngBuffer(), 'escape.png', 'docs/guide.md');
+    const body = (await res.json()) as { type: string; status: number };
+    expect(res.status).toBe(400);
+    expect(body.type).toBe('urn:ok:error:invalid-request');
+    expect(body.status).toBe(400);
+    expect(existsSync(join(tmpDir, 'escape', 'escape.png'))).toBe(false);
+    expect(existsSync(join(contentDir, 'docs', 'escape.png'))).toBe(false);
+  });
+
+  test('throwing attachment config reader reports a server configuration error', async () => {
+    getAttachmentFolderPath = () => {
+      throw new Error('invalid project config');
+    };
+    const res = await uploadImage(createPngBuffer(), 'config-error.png', 'docs/guide.md');
+    const body = (await res.json()) as { type: string; status: number; title: string };
+    expect(res.status).toBe(500);
+    expect(body.type).toBe('urn:ok:error:internal-server-error');
+    expect(body.status).toBe(500);
+    expect(body.title).toBe('Server configuration error: invalid attachment folder path.');
+    expect(existsSync(join(contentDir, 'docs', 'config-error.png'))).toBe(false);
+  });
+
+  test('parent-dir placement keeps explicit sidebar folder drops in the target folder', async () => {
+    attachmentFolderPath = 'attachments';
+    const res = await uploadImage(createPngBuffer(), 'clip.png', 'docs/guide.md', 'parent-dir');
+    const body = (await res.json()) as { src: string; path: string };
+    expect(res.status).toBe(200);
+    expect(body.path).toBe('docs/clip.png');
+    expect(existsSync(join(contentDir, 'docs', 'clip.png'))).toBe(true);
+    expect(existsSync(join(contentDir, 'attachments', 'clip.png'))).toBe(false);
   });
 
   test('rejects missing parentDocName', async () => {

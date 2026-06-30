@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createContext, type ReactNode, use, useState } from 'react';
 import { renderLinguiTemplate } from '@/test-utils/lingui-mock';
 
@@ -21,10 +21,18 @@ let projectLocalConfig: { autoSync?: { enabled?: boolean } } | null = {
   autoSync: { enabled: true },
 };
 let projectLocalSynced = true;
-let projectConfig: { autoSync?: { default?: boolean | null } } | null = {
+let projectConfig: {
+  autoSync?: { default?: boolean | null };
+  content: { attachmentFolderPath: string };
+} | null = {
   autoSync: { default: null },
+  content: { attachmentFolderPath: './' },
 };
 let projectSynced = true;
+let projectBinding: {
+  patch: (patch: unknown) => { ok: true } | { ok: false; error: unknown };
+} | null = null;
+let projectBindingPatchCalls: unknown[] = [];
 let syncWriterCalls: boolean[] = [];
 let syncDefaultWriterCalls: Array<boolean | null> = [];
 let okignoreProps: Array<{ binding: unknown; synced: boolean }> = [];
@@ -112,6 +120,48 @@ mock.module('@/components/ui/form', () => ({
 
 mock.module('@/components/ui/input', () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+}));
+
+const SelectHandlerCtx = createContext<((value: string) => void) | undefined>(undefined);
+mock.module('@/components/ui/select', () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children?: ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <SelectHandlerCtx.Provider value={onValueChange}>
+      <div data-testid="select-root" data-value={value}>
+        {children}
+      </div>
+    </SelectHandlerCtx.Provider>
+  ),
+  SelectContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectItem: ({
+    children,
+    value,
+    ...props
+  }: {
+    children?: ReactNode;
+    value: string;
+    [key: string]: unknown;
+  }) => {
+    const onValueChange = use(SelectHandlerCtx);
+    return (
+      <button type="button" onClick={() => onValueChange?.(value)} {...props}>
+        {children}
+      </button>
+    );
+  },
+  SelectTrigger: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+  SelectValue: () => null,
 }));
 
 const ToggleGroupHandlerCtx = createContext<((value: string) => void) | undefined>(undefined);
@@ -202,6 +252,7 @@ mock.module('@/hooks/use-git-sync-status', () => ({
 
 mock.module('@/lib/config-provider', () => ({
   useConfigContext: () => ({
+    projectBinding,
     projectConfig,
     projectLocalConfig,
     projectLocalSynced,
@@ -287,8 +338,15 @@ describe('SettingsDialogBody section runtime dispatch', () => {
     syncStatus = null;
     projectLocalConfig = { autoSync: { enabled: true } };
     projectLocalSynced = true;
-    projectConfig = { autoSync: { default: null } };
+    projectConfig = { autoSync: { default: null }, content: { attachmentFolderPath: './' } };
     projectSynced = true;
+    projectBindingPatchCalls = [];
+    projectBinding = {
+      patch: (patch: unknown) => {
+        projectBindingPatchCalls.push(patch);
+        return { ok: true };
+      },
+    };
     syncWriterCalls = [];
     syncDefaultWriterCalls = [];
     okignoreProps = [];
@@ -323,6 +381,131 @@ describe('SettingsDialogBody section runtime dispatch', () => {
     expect(screen.getByTestId('settings-hotkeys')).not.toBeNull();
     expect(screen.getByTestId('settings-hotkeys-list').textContent).toContain('Editor');
     expect(screen.getAllByText('Workspace').length).toBeGreaterThan(0);
+  });
+
+  test('preferences includes attachments controls mapped to content.attachmentFolderPath', async () => {
+    projectConfig = {
+      autoSync: { default: null },
+      content: { attachmentFolderPath: './' },
+    };
+
+    await renderBody({ activeId: 'preferences' });
+
+    expect(screen.getByTestId('settings-attachments')).not.toBeNull();
+    expect(screen.getByTestId('select-root').getAttribute('data-value')).toBe('same-folder');
+
+    fireEvent.click(screen.getByText('Fixed folder in content root'));
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: 'attachments' },
+    });
+    expect(screen.getByTestId('settings-attachments-folder')).not.toBeNull();
+
+    fireEvent.change(screen.getByTestId('settings-attachments-folder'), {
+      target: { value: 'assets/uploads' },
+    });
+    fireEvent.blur(screen.getByTestId('settings-attachments-folder'));
+
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: 'assets/uploads' },
+    });
+
+    fireEvent.click(screen.getByText('Content root'));
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: '/' },
+    });
+  });
+
+  test('preferences round trips current-folder attachment subfolders', async () => {
+    projectConfig = {
+      autoSync: { default: null },
+      content: { attachmentFolderPath: './attachments' },
+    };
+
+    await renderBody({ activeId: 'preferences' });
+
+    expect(screen.getByTestId('select-root').getAttribute('data-value')).toBe(
+      'current-folder-subfolder',
+    );
+    expect((screen.getByTestId('settings-attachments-folder') as HTMLInputElement).value).toBe(
+      'attachments',
+    );
+
+    fireEvent.change(screen.getByTestId('settings-attachments-folder'), {
+      target: { value: 'media' },
+    });
+    fireEvent.blur(screen.getByTestId('settings-attachments-folder'));
+
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: './media' },
+    });
+  });
+
+  test('fixed content-root folder strips leading dot slash to avoid remounting as current-folder mode', async () => {
+    projectConfig = {
+      autoSync: { default: null },
+      content: { attachmentFolderPath: 'attachments' },
+    };
+
+    await renderBody({ activeId: 'preferences' });
+
+    expect(screen.getByTestId('select-root').getAttribute('data-value')).toBe(
+      'content-root-folder',
+    );
+    fireEvent.change(screen.getByTestId('settings-attachments-folder'), {
+      target: { value: './media' },
+    });
+    fireEvent.blur(screen.getByTestId('settings-attachments-folder'));
+
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: 'media' },
+    });
+
+    projectConfig = {
+      autoSync: { default: null },
+      content: { attachmentFolderPath: 'media' },
+    };
+    cleanup();
+    await renderBody({ activeId: 'preferences' });
+
+    expect(screen.getByTestId('select-root').getAttribute('data-value')).toBe(
+      'content-root-folder',
+    );
+  });
+
+  test('preferences surfaces attachment patch failures inline', async () => {
+    projectConfig = {
+      autoSync: { default: null },
+      content: { attachmentFolderPath: './' },
+    };
+    projectBinding = {
+      patch: (patch: unknown) => {
+        projectBindingPatchCalls.push(patch);
+        return {
+          ok: false,
+          error: {
+            code: 'SCHEMA_INVALID',
+            issues: [
+              {
+                path: ['content', 'attachmentFolderPath'],
+                message: 'Folder must stay inside the content root',
+                issueCode: 'invalid_path',
+              },
+            ],
+          },
+        };
+      },
+    };
+
+    await renderBody({ activeId: 'preferences' });
+
+    fireEvent.click(screen.getByText('Fixed folder in content root'));
+
+    expect(projectBindingPatchCalls.at(-1)).toEqual({
+      content: { attachmentFolderPath: 'attachments' },
+    });
+    expect(within(screen.getByTestId('settings-attachments')).getByRole('alert').textContent).toBe(
+      'Folder must stay inside the content root',
+    );
   });
 
   test('sync section reads checked state from project-local config and keeps the writer/confirm path', async () => {

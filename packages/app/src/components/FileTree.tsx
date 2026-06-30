@@ -66,6 +66,7 @@ import {
   MARKDOWN_FILE_ICON_VIEWBOX,
 } from '@/components/file-entry-icon';
 import {
+  appendSidebarUploadFields,
   collectTreeFolderPathsFromDocuments,
   computeTreeAncestorPaths,
   computeTreeDropDestinationPath,
@@ -88,7 +89,6 @@ import {
   treePathSignature,
   treePathToAppPath,
   uploadedPathForSidebarDrop,
-  uploadParentDocNameForFolderDrop,
 } from '@/components/file-tree-adapter';
 import {
   createFileTreeStyle,
@@ -234,7 +234,8 @@ function focusEditorAfterRename(docName: string): void {
     if (!editor || editor.isDestroyed) return;
     try {
       editor.commands.focus();
-    } catch {}
+    } catch {
+    }
   });
 }
 
@@ -292,14 +293,16 @@ const MARKDOWN_FILE_ICON_SYMBOL = `<symbol id="${MARKDOWN_FILE_ICON_ID}" viewBox
 type IconNode = [string, Record<string, string>][];
 
 function iconNodeToSvg(iconNode: IconNode): string {
-  return iconNode
-    .map(([tag, { key: _, ...attrs }]) => {
-      const attrString = Object.entries(attrs)
-        .map(([k, v]) => `${k}="${v}"`)
-        .join(' ');
-      return `<${tag} ${attrString} />`;
-    })
-    .join('');
+  return (
+    iconNode
+      .map(([tag, { key: _, ...attrs }]) => {
+        const attrString = Object.entries(attrs)
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(' ');
+        return `<${tag} ${attrString} />`;
+      })
+      .join('')
+  );
 }
 
 function createLucideSpriteSymbol(id: string, iconNode: IconNode): string {
@@ -2387,10 +2390,7 @@ export function FileTree({
     for (const file of files) {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append(
-        'parentDocName',
-        uploadParentDocNameForFolderDrop(parentDir, file.name || 'upload'),
-      );
+      appendSidebarUploadFields(formData, parentDir, file.name || 'upload');
 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });

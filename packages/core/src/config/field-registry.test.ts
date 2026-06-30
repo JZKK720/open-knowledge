@@ -31,6 +31,13 @@ describe('getFieldMeta walker (descends innerType)', () => {
     expect(getFieldMeta(wrapped)).toEqual({ scope: 'user', agentSettable: false });
   });
 
+  test('descends through .refine()', () => {
+    const inner = z.string();
+    fieldRegistry.add(inner, { scope: 'project', agentSettable: false });
+    const wrapped = inner.refine(() => true).default('x');
+    expect(getFieldMeta(wrapped)).toEqual({ scope: 'project', agentSettable: false });
+  });
+
   test('descends through chained .optional().nullable().default()', () => {
     const inner = z.number();
     fieldRegistry.add(inner, { scope: 'project', agentSettable: true });
@@ -136,7 +143,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
     ]);
   });
 
-  test('project-strict fields cover autoSync.default + content.dir + telemetry.localSink.*', () => {
+  test('project-strict fields cover autoSync.default + content.* + telemetry.localSink.*', () => {
     const leaves: { path: string[]; schema: unknown }[] = [];
     walkLeaves(ConfigSchema, [], leaves);
     const projectStrict = leaves
@@ -145,6 +152,7 @@ describe('ConfigSchema coverage (NR3 — every leaf has fieldRegistry metadata)'
       .sort();
     expect(projectStrict).toEqual([
       'autoSync.default',
+      'content.attachmentFolderPath',
       'content.dir',
       'telemetry.localSink.attributeDenylist',
       'telemetry.localSink.enabled',
