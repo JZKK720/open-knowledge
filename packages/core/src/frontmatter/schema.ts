@@ -48,7 +48,29 @@ export function inferType(value: FrontmatterValue): FrontmatterType {
   return 'text';
 }
 
-export const FrontmatterMapSchema = z.record(z.string(), FrontmatterValueSchema);
+function coerceNullFrontmatter(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (const element of value) {
+      if (element === null) continue;
+      out.push(coerceNullFrontmatter(element));
+    }
+    return out;
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = child === null ? '' : coerceNullFrontmatter(child);
+    }
+    return out;
+  }
+  return value;
+}
+
+export const FrontmatterMapSchema = z.preprocess(
+  coerceNullFrontmatter,
+  z.record(z.string(), FrontmatterValueSchema),
+);
 export type FrontmatterMap = Record<string, FrontmatterValue>;
 
 export const FrontmatterPatchSchema = z.record(

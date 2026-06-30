@@ -698,6 +698,45 @@ describe('POST /api/agent-write-md (write_document) — malformed-FM refusal (PR
     }
   });
 
+  test("Obsidian's empty `tags:` / `aliases:` null shapes write through (200), not refused at the gate", async () => {
+    const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
+    try {
+      const session = await sessionManager.getSession('test-doc');
+
+      const obsidianShape = [
+        '---',
+        'plugin-id: dataview',
+        'tags:',
+        '- ',
+        'aliases:',
+        '- ',
+        'publish: true',
+        '---',
+        '',
+        '# Body',
+        '',
+      ].join('\n');
+
+      const response = await callApi(
+        hocuspocus,
+        sessionManager,
+        contentDir,
+        '/api/agent-write-md',
+        { docName: 'test-doc', markdown: obsidianShape, position: 'replace' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fmMap(session.dc.document)).toEqual({
+        'plugin-id': 'dataview',
+        tags: [],
+        aliases: [],
+        publish: true,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
   test('append AND prepend skip the gate even when the existing FM is already malformed', async () => {
     const { contentDir, hocuspocus, sessionManager, cleanup } = setup();
     try {

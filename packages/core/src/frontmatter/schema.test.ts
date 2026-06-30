@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   FRONTMATTER_TYPES,
+  FrontmatterMapSchema,
   frontmatterValuesEqual,
   inferType,
   isFrontmatterValueEmpty,
@@ -120,5 +121,39 @@ describe('frontmatterValuesEqual', () => {
 
   test('same key count but different key set is unequal (Object.hasOwn guard)', () => {
     expect(frontmatterValuesEqual({ a: 1, b: 2 }, { a: 1, c: 2 })).toBe(false);
+  });
+});
+
+describe('FrontmatterMapSchema — Obsidian null coercion', () => {
+  test('drops null sequence elements ([null] → [])', () => {
+    const result = FrontmatterMapSchema.safeParse({ tags: [null] });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual({ tags: [] });
+  });
+
+  test('drops null elements but keeps real items in a mixed sequence', () => {
+    const result = FrontmatterMapSchema.safeParse({ aliases: ['Real', null, 'Also'] });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual({ aliases: ['Real', 'Also'] });
+  });
+
+  test('coerces a bare-key null scalar to an empty string (key stays visible)', () => {
+    const result = FrontmatterMapSchema.safeParse({ tags: null, author: 'Alice' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual({ tags: '', author: 'Alice' });
+  });
+
+  test('coerces null nested inside a mapping subtree', () => {
+    const result = FrontmatterMapSchema.safeParse({ metadata: { version: null, name: 'x' } });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual({ metadata: { version: '', name: 'x' } });
+  });
+
+  test('leaves null-free maps untouched (no behavior change for valid input)', () => {
+    const input = { title: 'Hello', tags: ['a', 'b'], meta: { n: 1 } };
+    const result = FrontmatterMapSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success)
+      expect(result.data).toEqual({ title: 'Hello', tags: ['a', 'b'], meta: { n: 1 } });
   });
 });

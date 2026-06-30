@@ -75,6 +75,14 @@ describe('extractFrontmatterTags', () => {
     expect(extractFrontmatterTags('tags: null\n')).toEqual([]);
   });
 
+  test("returns empty for Obsidian's empty-list shape (`tags:\\n- `)", () => {
+    expect(extractFrontmatterTags('tags:\n- \n')).toEqual([]);
+  });
+
+  test('drops a null entry but keeps real tags in a mixed block sequence', () => {
+    expect(extractFrontmatterTags('tags:\n  - real\n  - \n  - also\n')).toEqual(['real', 'also']);
+  });
+
   test('drops object array elements rather than stringifying them', () => {
     const yaml = 'tags:\n  - valid\n  - {nested: "object"}\n  - alsoValid\n';
     expect(extractFrontmatterTags(yaml)).toEqual(['valid', 'alsoValid']);

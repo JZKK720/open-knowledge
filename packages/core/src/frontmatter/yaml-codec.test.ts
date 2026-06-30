@@ -60,6 +60,14 @@ describe('parseFrontmatterYaml', () => {
     expect(parseFrontmatterYaml('"just a string"').map).toBeNull();
   });
 
+  test("coerces Obsidian's empty-list / bare-key null shapes instead of rejecting the map", () => {
+    expect(parseFrontmatterYaml('tags:\n- \n').map).toEqual({ tags: [] });
+    expect(parseFrontmatterYaml('tags:\n').map).toEqual({ tags: '' });
+    const mixed = parseFrontmatterYaml('plugin-id: dataview\ntags:\n- \npublish: true\n');
+    expect(mixed.parseError).toBeUndefined();
+    expect(mixed.map).toEqual({ 'plugin-id': 'dataview', tags: [], publish: true });
+  });
+
   test('parses nested objects into a populated map with no parseError', () => {
     const yaml = 'name: skill\nmetadata:\n  version: 1.0.0\n  author: Inkeep\n';
     const { map, parseError } = parseFrontmatterYaml(yaml);
