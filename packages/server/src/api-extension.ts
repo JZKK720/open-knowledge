@@ -223,7 +223,7 @@ import {
   resolveGitDirDetailed,
 } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import busboy from 'busboy';
-import { fileTypeFromFile } from 'file-type';
+import { fileTypeFromBuffer } from 'file-type';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import { captureEffect } from './activity-log.ts';
@@ -8318,12 +8318,13 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       }
     }
 
-    const fileTypeResult = await fileTypeFromFile(tempPath);
+    const SNIFF_HEAD_BYTES = 4100;
+    const head = readTempFileHead(tempPath, SNIFF_HEAD_BYTES);
+    const fileTypeResult = await fileTypeFromBuffer(head);
     let detectedMime: string | undefined = fileTypeResult?.mime;
     let detectedExt: string | undefined = fileTypeResult?.ext;
     if (!detectedMime) {
-      const head = readTempFileHead(tempPath, 256);
-      const headText = head.toString('utf-8').replace(/^﻿/, '').trimStart();
+      const headText = head.subarray(0, 256).toString('utf-8').replace(/^﻿/, '').trimStart();
       if (
         headText.startsWith('<svg') ||
         (headText.startsWith('<?xml') && headText.includes('<svg'))

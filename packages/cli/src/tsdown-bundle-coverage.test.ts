@@ -52,3 +52,30 @@ describe('tsdown alwaysBundle covers every cli runtime dep', () => {
     });
   }
 });
+
+describe('tsdown alwaysBundle covers the file-type transitive closure', () => {
+  const fileTypeClosure = [
+    '@borewit/text-codec',
+    '@tokenizer/inflate',
+    '@tokenizer/token',
+    'file-type',
+    'ieee754',
+    'strtok3',
+    'token-types',
+    'uint8array-extras',
+  ];
+
+  for (const dep of fileTypeClosure) {
+    test(`alwaysBundle covers transitive dep '${dep}'`, () => {
+      const escaped = dep.replace(/[\\^$*+?.()|[\]{}-]/g, '\\$&').replace(/\//g, '\\\\?/');
+      const pattern = new RegExp(`\\^${escaped}\\(`);
+      expect(
+        pattern.test(alwaysBundleBlock),
+        `Add /^${dep}(\\/|$)/ to packages/cli/tsdown.config.ts \`alwaysBundle\`. ` +
+          `It is a pure-JS transitive dep of file-type (the server's upload ` +
+          `MIME-sniff); externalized, it leaves a bare \`import '${dep}'\` that ` +
+          `crashes packaged-app uploads with ERR_MODULE_NOT_FOUND.`,
+      ).toBe(true);
+    });
+  }
+});
