@@ -1,5 +1,5 @@
 {
   "title": "Get Started",
   "icon": "LuRocket",
-  "pages": ["overview", "quickstart"]
+  "pages": ["overview", "quickstart", "obsidian"]
 }
