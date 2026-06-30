@@ -7,6 +7,7 @@ import {
   setPageListCache,
 } from '@/editor/page-list-cache';
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
+import { fetchDocumentListShared } from '@/lib/documents-fetch';
 import { parseApiError } from '@/lib/parse-api-error';
 import { deriveKnownFolderPaths } from './navigation-targets';
 
@@ -101,12 +102,11 @@ async function loadDocumentListSummary(): Promise<{
   folderPaths: string[];
   filePaths: string[];
 }> {
-  const r = await fetch('/api/documents');
-  if (!r.ok) {
-    const body = (await r.json().catch(() => null)) as unknown;
-    throw new Error(parseApiError(body) ?? `/api/documents responded with ${r.status}`);
+  const { ok, status, body } = await fetchDocumentListShared();
+  if (!ok) {
+    throw new Error(parseApiError(body) ?? `/api/documents responded with ${status}`);
   }
-  const data: { documents?: DocumentListEntry[] } = await r.json();
+  const data = (body ?? {}) as { documents?: DocumentListEntry[] };
   if (!Array.isArray(data.documents)) return { assetPaths: [], folderPaths: [], filePaths: [] };
   const assetPaths = data.documents
     .filter((entry): entry is DocumentListEntry & { kind: 'asset'; path: string } => {

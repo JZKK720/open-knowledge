@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { HeadingEntry } from '@inkeep/open-knowledge-core';
+import { __resetDocumentListInflightForTests } from '@/lib/documents-fetch';
 import {
   autocompleteBoost,
   buildAnchorItems,
@@ -321,6 +322,7 @@ describe('fetchPages', () => {
 
   afterEach(() => {
     globalThis.fetch = realFetch;
+    __resetDocumentListInflightForTests();
   });
 
   test('a folder row survives and maps to a kind:"folder" PageItem', async () => {

@@ -13,6 +13,7 @@ import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { emitCreateTopLevelFile } from '@/lib/create-file-events';
 import type { OkPackId } from '@/lib/desktop-bridge-types';
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
+import { fetchDocumentListShared } from '@/lib/documents-fetch';
 
 export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?: boolean }) {
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
@@ -29,10 +30,9 @@ export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?
 
     async function refresh() {
       try {
-        const res = await fetch('/api/documents');
-        const body = (await res.json().catch(() => null)) as unknown;
+        const { ok, body } = await fetchDocumentListShared();
         if (cancelled) return;
-        const success = res.ok ? DocumentListSuccessSchema.safeParse(body) : null;
+        const success = ok ? DocumentListSuccessSchema.safeParse(body) : null;
         if (success?.success) {
           setDocumentCount(countEntries(success.data.documents));
           documentCountResolvedRef.current = true;
@@ -63,10 +63,9 @@ export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?
   function handleSeedApplied() {
     clearTimeout(celebrateTimerRef.current);
     celebrateTimerRef.current = setTimeout(() => setCelebrateSignal((prev) => prev + 1), 500);
-    fetch('/api/documents')
-      .then(async (res) => {
-        const body = (await res.json().catch(() => null)) as unknown;
-        if (!res.ok) return;
+    fetchDocumentListShared()
+      .then(({ ok, body }) => {
+        if (!ok) return;
         const success = DocumentListSuccessSchema.safeParse(body);
         if (success.success) {
           setDocumentCount(countEntries(success.data.documents));

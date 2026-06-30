@@ -16,6 +16,7 @@ import type { ResolvedPos } from '@tiptap/pm/model';
 import { PluginKey } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion';
+import { fetchDocumentListShared } from '@/lib/documents-fetch';
 import { HttpResponseParseError } from '../http-client';
 import { WikiLinkSuggestionMenu } from '../wiki-link-suggestion/WikiLinkSuggestionMenu';
 import { getEditorDocName } from './doc-context';
@@ -289,12 +290,12 @@ export async function fetchPages(): Promise<PageItem[]> {
 
   let docData: { documents?: Array<{ kind?: string; path?: string }> };
   try {
-    const docResponse = await fetch('/api/documents');
-    if (!docResponse.ok) {
-      console.warn('[wiki-link-suggestion] /api/documents responded with', docResponse.status);
+    const { ok, status, body } = await fetchDocumentListShared();
+    if (!ok) {
+      console.warn('[wiki-link-suggestion] /api/documents responded with', status);
       return pages;
     }
-    docData = await docResponse.json();
+    docData = (body ?? {}) as { documents?: Array<{ kind?: string; path?: string }> };
     if (!Array.isArray(docData.documents)) return pages;
   } catch (err) {
     console.warn('[wiki-link-suggestion] Failed to fetch referenced assets:', err);
