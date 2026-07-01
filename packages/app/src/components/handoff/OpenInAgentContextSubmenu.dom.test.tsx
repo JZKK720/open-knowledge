@@ -184,6 +184,10 @@ describe('OpenInAgentContextSubmenu runtime behavior', () => {
 
     expect(screen.getByText('Desktop')).toBeTruthy();
     expect(screen.getByText('Terminal')).toBeTruthy();
+    expect(
+      screen.getByText('Terminal').compareDocumentPosition(screen.getByText('Desktop')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(document.querySelector('[data-slot="dropdown-menu-separator"]')).toBeTruthy();
 
     const terminalRow = screen.getByTestId('file-tree-open-in-terminal-claude');

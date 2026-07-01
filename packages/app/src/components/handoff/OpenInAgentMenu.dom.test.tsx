@@ -237,6 +237,11 @@ describe('OpenInAgentMenu runtime behavior', () => {
     expect(screen.getByTestId('open-in-agent-terminal-cursor')).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Desktop' })).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Terminal' })).toBeTruthy();
+    const terminalLabel = screen.getByTestId('open-in-agent-terminal-label');
+    const desktopLabel = screen.getByTestId('open-in-agent-desktop-label');
+    expect(
+      terminalLabel.compareDocumentPosition(desktopLabel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   test('terminal row launches via the terminal launcher with the menu input', async () => {

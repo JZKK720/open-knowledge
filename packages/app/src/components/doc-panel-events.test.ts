@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
   consumePendingDocPanelTabRequest,
+  requestDocPanelCollapse,
   requestDocPanelTab,
+  subscribeToDocPanelCollapseRequests,
   subscribeToDocPanelTabRequests,
 } from './doc-panel-events';
 
@@ -22,5 +24,18 @@ describe('doc-panel-events', () => {
     requestDocPanelTab('outline', target);
     expect(onRequest).toHaveBeenCalledTimes(1);
     expect(consumePendingDocPanelTabRequest()).toBe('outline');
+  });
+
+  test('dispatches and subscribes collapse requests, and unsubscribes cleanly', () => {
+    const target = new EventTarget();
+    const onCollapse = mock(() => {});
+
+    const unsubscribe = subscribeToDocPanelCollapseRequests(onCollapse, target);
+    requestDocPanelCollapse(target);
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    requestDocPanelCollapse(target);
+    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 });

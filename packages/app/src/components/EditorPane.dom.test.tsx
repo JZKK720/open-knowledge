@@ -249,6 +249,12 @@ function makeOkDesktopStub(
       },
       terminal: {
         getDockState,
+        cliInstalledMap: async () => ({
+          claude: true,
+          codex: false,
+          opencode: false,
+          cursor: false,
+        }),
       },
     },
   };

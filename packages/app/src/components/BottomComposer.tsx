@@ -31,7 +31,9 @@ import {
   selectionSnapshotToCompose,
 } from '@/editor/selection-context';
 import type { EditorSurface } from '@/editor/selection-stats';
+import { useInstalledClis } from '@/hooks/use-installed-clis';
 import { useSelectionContext } from '@/hooks/use-selection-context';
+import { resolveDefaultCli } from '@/lib/default-cli-resolver';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
 import { recordOnboardingAskedAi } from '@/lib/onboarding-signals';
@@ -137,6 +139,7 @@ export function BottomComposer({
   const terminalLaunch = useTerminalLaunch();
   const [stickyId] = useState(() => loadStickyAgent());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const installedClis = useInstalledClis();
   const [isEmpty, setIsEmpty] = useState(true);
   const [pending, setPending] = useState(false);
   const inputRef = useRef<ComposerMentionInputHandle>(null);
@@ -276,8 +279,11 @@ export function BottomComposer({
   }, [liveFrontmatterSelection]);
 
   const effectiveId = selectedId ?? stickyId;
-  const selectedCli: TerminalCli | null =
+  const explicitCli: TerminalCli | null =
     terminalLaunch !== null ? parseStickyCliId(effectiveId) : null;
+  const defaultCli: TerminalCli | null =
+    terminalLaunch !== null && effectiveId === null ? resolveDefaultCli(null, installedClis) : null;
+  const selectedCli: TerminalCli | null = explicitCli ?? defaultCli;
   const isTerminalSelected = selectedCli !== null;
   const resolvedTarget = isTerminalSelected ? null : resolveStickyAgent(states, effectiveId);
 

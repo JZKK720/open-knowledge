@@ -746,6 +746,7 @@ export interface OkDesktopBridge {
     onExit(cb: (msg: OkPtyExit) => void): OkUnsubscribe;
     claudePreflight(): Promise<ClaudeReadiness>;
     cliPreflight(cli: TerminalCli): Promise<CliReadiness>;
+    cliInstalledMap(): Promise<Record<TerminalCli, boolean>>;
     rewireClaudeMcp(): Promise<ClaudeReadiness>;
   };
 

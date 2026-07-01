@@ -119,6 +119,7 @@ import { checkTargetExists as checkTargetExistsImpl } from './check-target-exist
 import {
   cliProbeArgs,
   resolveClaudeReadiness,
+  resolveCliInstalledMap,
   resolveCliOnPath,
   runLoginShellProbe,
 } from './claude-readiness.ts';
@@ -1443,6 +1444,25 @@ function resolveTerminalCliOnPath(cli: TerminalCli): Promise<CliReadiness> {
   });
 }
 
+const CLI_INSTALLED_MAP_TTL_MS = 60_000;
+let cliInstalledMapCache: { at: number; value: Promise<Record<TerminalCli, boolean>> } | null =
+  null;
+
+function resolveTerminalCliInstalledMap(): Promise<Record<TerminalCli, boolean>> {
+  const now = Date.now();
+  if (cliInstalledMapCache && now - cliInstalledMapCache.at < CLI_INSTALLED_MAP_TTL_MS) {
+    return cliInstalledMapCache.value;
+  }
+  const value = resolveCliInstalledMap({
+    probe: (cli) => probeLoginShellOnPath(cliProbeArgs(TERMINAL_CLIS[cli].bin)),
+  }).catch((err) => {
+    cliInstalledMapCache = null;
+    throw err;
+  });
+  cliInstalledMapCache = { at: now, value };
+  return value;
+}
+
 function pickLoadedRendererForMcpDialog(): McpWiringDispatchTarget | undefined {
   const isUsable = (win: BrowserWindow): boolean =>
     !win.isDestroyed() && !win.webContents.isLoading();
@@ -1665,6 +1685,10 @@ function registerIpcHandlers() {
       return { onPath: 'unknown' };
     }
     return resolveTerminalCliOnPath(req.cli);
+  });
+
+  handle('ok:terminal:cli-installed-map', async (): Promise<Record<TerminalCli, boolean>> => {
+    return resolveTerminalCliInstalledMap();
   });
 
   handle('ok:terminal:dock-state', async (event) => {

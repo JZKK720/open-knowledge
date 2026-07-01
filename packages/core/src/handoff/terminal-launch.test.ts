@@ -11,6 +11,12 @@ import {
 
 const CLAUDE_PREAPPROVE = `--settings '{"enabledMcpjsonServers":["${MCP_SERVER_NAME}"]}'`;
 
+describe('TERMINAL_CLI_IDS', () => {
+  it('lists the CLIs in auto-pick priority order (claude > codex > opencode > cursor)', () => {
+    expect([...TERMINAL_CLI_IDS]).toEqual(['claude', 'codex', 'opencode', 'cursor']);
+  });
+});
+
 describe('shellSingleQuote', () => {
   it('wraps a plain string in single quotes', () => {
     expect(shellSingleQuote('hello world')).toBe("'hello world'");
@@ -118,6 +124,35 @@ describe('buildCliLaunchArgString', () => {
     const arg = buildCliLaunchArgString('claude', "'; rm -rf / #");
     expect(arg).toBe("claude ''\\''; rm -rf / #'");
     expect(arg.endsWith("''\\''; rm -rf / #'")).toBe(true);
+  });
+});
+
+describe('buildCliLaunchArgString promptless (New chat)', () => {
+  it('emits a bare `<bin>` for a null/undefined/empty prompt — no positional, no prompt flag', () => {
+    for (const emptyPrompt of [null, undefined, ''] as const) {
+      expect(buildCliLaunchArgString('claude', emptyPrompt)).toBe('claude');
+      expect(buildCliLaunchArgString('codex', emptyPrompt)).toBe('codex');
+      expect(buildCliLaunchArgString('cursor', emptyPrompt)).toBe('cursor-agent');
+      expect(buildCliLaunchArgString('opencode', emptyPrompt)).toBe('opencode');
+    }
+  });
+
+  it('still applies Claude MCP pre-approval on a promptless launch when opted in', () => {
+    const arg = buildCliLaunchArgString('claude', null, { mcpPreApprove: true });
+    expect(arg).toBe(`claude ${CLAUDE_PREAPPROVE}`);
+    expect(arg.endsWith(' ')).toBe(false);
+  });
+
+  it('never adds --prompt or a positional to a promptless opencode launch, even opted in', () => {
+    expect(buildCliLaunchArgString('opencode', '', { mcpPreApprove: true })).toBe('opencode');
+  });
+
+  it('leaves the non-empty prompted shape byte-identical (promptless branch must not perturb it)', () => {
+    expect(buildCliLaunchArgString('claude', 'hi')).toBe("claude 'hi'");
+    expect(buildCliLaunchArgString('claude', 'hi', { mcpPreApprove: true })).toBe(
+      `claude ${CLAUDE_PREAPPROVE} 'hi'`,
+    );
+    expect(buildCliLaunchArgString('opencode', 'hi')).toBe("opencode --prompt 'hi'");
   });
 });
 

@@ -75,58 +75,58 @@ function OpenWithAiPanel({
       </div>
       {hasRows ? (
         <div className="flex flex-col gap-0.5">
-          {showDesktopSection ? (
+          {showTerminalSection ? (
             <fieldset className="m-0 flex min-w-0 flex-col gap-0.5 border-0 p-0">
               <legend
                 className="px-1.5 py-1 font-medium text-muted-foreground text-xs"
-                data-testid="open-in-agent-desktop-label"
+                data-testid="open-in-agent-terminal-label"
               >
-                <Trans>Desktop</Trans>
+                <Trans>Terminal</Trans>
               </legend>
-              {installedTargets.map((target) => {
-                const { displayName } = target;
+              {VISIBLE_CLIS.map((cli) => {
+                const { displayName } = TERMINAL_CLIS[cli];
                 return (
                   <Button
-                    key={target.id}
+                    key={cli}
                     type="button"
                     variant="ghost"
                     className="h-auto w-full justify-start gap-1.5 rounded-md px-1.5 py-1 font-normal text-foreground"
                     disabled={disabled}
-                    data-testid={`open-in-agent-item-${target.id}`}
-                    aria-label={t`Open with AI ${displayName}`}
-                    onClick={() => onPick(target, instruction)}
+                    data-testid={`open-in-agent-terminal-${cli}`}
+                    aria-label={t`${displayName} CLI`}
+                    onClick={() => onLaunchTerminal(cli, instruction)}
                   >
-                    <TargetIcon id={target.id} aria-hidden="true" />
+                    <TargetIcon id={cliIconTargetId(cli)} aria-hidden="true" />
                     <span>{displayName}</span>
                   </Button>
                 );
               })}
             </fieldset>
           ) : null}
-          {showTerminalSection ? (
+          {showDesktopSection ? (
             <>
-              {showDesktopSection ? <Separator className="my-1" /> : null}
+              {showTerminalSection ? <Separator className="my-1" /> : null}
               <fieldset className="m-0 flex min-w-0 flex-col gap-0.5 border-0 p-0">
                 <legend
                   className="px-1.5 py-1 font-medium text-muted-foreground text-xs"
-                  data-testid="open-in-agent-terminal-label"
+                  data-testid="open-in-agent-desktop-label"
                 >
-                  <Trans>Terminal</Trans>
+                  <Trans>Desktop</Trans>
                 </legend>
-                {VISIBLE_CLIS.map((cli) => {
-                  const { displayName } = TERMINAL_CLIS[cli];
+                {installedTargets.map((target) => {
+                  const { displayName } = target;
                   return (
                     <Button
-                      key={cli}
+                      key={target.id}
                       type="button"
                       variant="ghost"
                       className="h-auto w-full justify-start gap-1.5 rounded-md px-1.5 py-1 font-normal text-foreground"
                       disabled={disabled}
-                      data-testid={`open-in-agent-terminal-${cli}`}
-                      aria-label={t`${displayName} CLI`}
-                      onClick={() => onLaunchTerminal(cli, instruction)}
+                      data-testid={`open-in-agent-item-${target.id}`}
+                      aria-label={t`Open with AI ${displayName}`}
+                      onClick={() => onPick(target, instruction)}
                     >
-                      <TargetIcon id={cliIconTargetId(cli)} aria-hidden="true" />
+                      <TargetIcon id={target.id} aria-hidden="true" />
                       <span>{displayName}</span>
                     </Button>
                   );

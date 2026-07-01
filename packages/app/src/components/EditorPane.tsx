@@ -6,8 +6,10 @@ import { RAW_MDX_NAV_EVENT, type RawMdxNavDetail } from '@/editor/extensions/raw
 import { rememberPendingSourceNavigation } from '@/editor/source-editor-navigation';
 import { type EditorModeValue, useEditorMode } from '@/editor/use-editor-mode';
 import { useGitSyncStatus } from '@/hooks/use-git-sync-status';
+import { useInstalledClis } from '@/hooks/use-installed-clis';
 import { useNoPushPermissionToast } from '@/hooks/use-no-push-permission-toast';
 import { useConfigContext } from '@/lib/config-provider';
+import { resolveDefaultCli } from '@/lib/default-cli-resolver';
 import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
 import {
   getInitialTerminalDock,
@@ -15,17 +17,19 @@ import {
   writeTerminalDock,
 } from '@/lib/terminal-dock-store';
 import { recordTerminalOpened } from '@/lib/terminal-telemetry';
+import { loadStickyAgent } from '@/lib/unified-agent-store';
 import { AuthModal } from './AuthModal';
 import { AutoSyncOnboardingDialog } from './AutoSyncOnboardingDialog';
 import { shouldShowAutoSyncOnboarding } from './auto-sync-onboarding-gate';
 import { type PanelTab, TABS } from './DocPanel';
+import { requestDocPanelCollapse } from './doc-panel-events';
 import { EditorArea, type TerminalPlacement } from './EditorArea';
 import { EditorHeader } from './EditorHeader';
 import { subscribeToTerminalLaunchRequests } from './handoff/terminal-launch-events';
 import { TerminalSessionsHost } from './TerminalSessionsHost';
 
 export interface TerminalLaunchIntent {
-  readonly prompt: string;
+  readonly prompt: string | null;
   readonly cli: TerminalCli;
   readonly nonce: number;
 }
@@ -44,7 +48,10 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
   const [activeTab, setActiveTab] = useState<PanelTab>(TABS[0].id);
   const [autoSyncOnboardingDismissed, setAutoSyncOnboardingDismissed] = useState(false);
   const desktopBridge = typeof window !== 'undefined' ? (window.okDesktop ?? null) : null;
+  const terminalAvailable = desktopBridge != null && desktopBridge.terminal != null;
   const [terminalVisible, setTerminalVisible] = useState(false);
+  const installedClis = useInstalledClis();
+  const [hasSessions, setHasSessions] = useState(false);
   const [dockRestoreSettled, setDockRestoreSettled] = useState(false);
   const restoreRevealRef = useRef(false);
   const [terminalLaunch, setTerminalLaunch] = useState<TerminalLaunchIntent | null>(null);
@@ -65,6 +72,23 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     editorRegion: null,
   });
   const launchNonceRef = useRef(0);
+
+  function launchNewChat(cli?: TerminalCli) {
+    const resolvedCli = cli ?? resolveDefaultCli(loadStickyAgent(), installedClis);
+    setTerminalVisible(true);
+    launchNonceRef.current += 1;
+    setTerminalLaunch({ prompt: null, cli: resolvedCli, nonce: launchNonceRef.current });
+  }
+
+  function handleToggleChat() {
+    if (terminalVisible) {
+      setTerminalVisible(false);
+      return;
+    }
+    setTerminalVisible(true);
+    requestDocPanelCollapse();
+    if (!hasSessions) launchNewChat();
+  }
 
   const syncStatus = useGitSyncStatus();
   const { projectConfig, projectLocalConfig, projectLocalSynced, projectSynced } =
@@ -121,6 +145,7 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
   useEffect(() => {
     return subscribeToTerminalLaunchRequests((prompt, cli) => {
       setTerminalVisible(true);
+      requestDocPanelCollapse();
       launchNonceRef.current += 1;
       setTerminalLaunch({ prompt, cli, nonce: launchNonceRef.current });
     });
@@ -190,6 +215,9 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
           setAuthModalOpen(true);
         }}
         onOpenSearch={onOpenSearch}
+        terminalAvailable={terminalAvailable}
+        terminalVisible={terminalVisible}
+        onToggleChat={handleToggleChat}
       />
       {/* The terminal docks to the right of the doc panel (its own column) or
           under the editor/file column. EditorArea owns the layout; the dock
@@ -207,17 +235,21 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
         terminalDock={terminalDock}
         onTerminalPlacement={setTerminalPlacement}
       />
-      {desktopBridge != null ? (
+      {/* The `desktopBridge != null` clause re-narrows the bridge to non-null for
+          the prop — the derived `terminalAvailable` boolean can't narrow it. */}
+      {terminalAvailable && desktopBridge != null ? (
         <TerminalSessionsHost
           bridge={desktopBridge}
           visible={terminalVisible}
           onVisibleChange={setTerminalVisible}
           launch={terminalLaunch}
+          installedClis={installedClis}
           container={terminalPlacement.container}
           isShowing={terminalPlacement.isShowing}
           onRequestEditorFocus={() => terminalPlacement.editorRegion?.focus()}
           dockPosition={terminalDock}
           onToggleDock={toggleTerminalDock}
+          onHasSessionsChange={setHasSessions}
         />
       ) : null}
       <AuthModal

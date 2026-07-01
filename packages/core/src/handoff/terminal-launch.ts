@@ -69,8 +69,8 @@ export const TERMINAL_CLIS = {
 export const TERMINAL_CLI_IDS = [
   'claude',
   'codex',
-  'cursor',
   'opencode',
+  'cursor',
 ] as const satisfies readonly TerminalCli[];
 
 export interface BuildCliLaunchOptions {
@@ -79,12 +79,15 @@ export interface BuildCliLaunchOptions {
 
 export function buildCliLaunchArgString(
   cli: TerminalCli,
-  prompt: string,
+  prompt: string | null | undefined,
   opts: BuildCliLaunchOptions = {},
 ): string {
   const info: TerminalCliInfo = TERMINAL_CLIS[cli];
   const preApprove =
     opts.mcpPreApprove === true && info.mcpPreApproveArg ? `${info.mcpPreApproveArg} ` : '';
+  if (prompt == null || prompt.length === 0) {
+    return `${info.bin} ${preApprove}`.trimEnd();
+  }
   const promptFlag = info.promptFlag ? `${info.promptFlag} ` : '';
   return `${info.bin} ${preApprove}${promptFlag}${shellSingleQuote(prompt)}`;
 }

@@ -5,6 +5,7 @@ import {
   PanelBottomIcon,
   PanelRightIcon,
   PlusIcon,
+  SquareTerminalIcon,
   XIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -24,7 +25,12 @@ interface TerminalTabStripProps {
   readonly activeSessionId: string;
   readonly onSelect: (id: string) => void;
   readonly onTabActivate?: (id: string) => void;
-  readonly onNew: () => void;
+  /** Fires when the user clicks "New chat" (hugs the last tab) — launch the
+   *  default CLI promptless in a fresh session. */
+  readonly onNewChat: () => void;
+  /** Fires when the user clicks "New terminal tab" (trailing group) — open a
+   *  bare shell (the previous `+` behavior). */
+  readonly onNewTerminalTab: () => void;
   readonly onClose: (id: string) => void;
   /** Where the terminal is currently docked — drives the dock-toggle + collapse
    *  button icons/labels. */
@@ -40,7 +46,8 @@ export function TerminalTabStrip({
   activeSessionId,
   onSelect,
   onTabActivate,
-  onNew,
+  onNewChat,
+  onNewTerminalTab,
   onClose,
   dockPosition,
   onToggleDock,
@@ -60,7 +67,7 @@ export function TerminalTabStrip({
         <TabsList
           variant="line"
           aria-label={t`Terminal sessions`}
-          className="flex h-auto min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] scroll-fade-mask-x"
+          className="flex h-auto min-w-0 items-center justify-start gap-0.5 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] scroll-fade-mask-x"
         >
           {sessions.map((session) => {
             const isActive = session.id === activeSessionId;
@@ -100,21 +107,43 @@ export function TerminalTabStrip({
             );
           })}
         </TabsList>
+        {/* New chat hugs the last tab (outside the tablist's scroll+fade so it is
+            never clipped): launch the default CLI promptless. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
-              aria-label={t`New terminal`}
+              aria-label={t`New chat`}
               className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
-              onClick={onNew}
+              onClick={onNewChat}
             >
               <PlusIcon aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={8}>
-            <Trans>New terminal</Trans>
+            <Trans>New chat</Trans>
+          </TooltipContent>
+        </Tooltip>
+        {/* Spacer pushes the trailing controls to the far right. */}
+        <div className="flex-1" />
+        {/* New terminal tab opens a bare shell (the previous `+` behavior). */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t`New terminal tab`}
+              className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
+              onClick={onNewTerminalTab}
+            >
+              <SquareTerminalIcon aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={8}>
+            <Trans>New terminal tab</Trans>
           </TooltipContent>
         </Tooltip>
         <Tooltip>

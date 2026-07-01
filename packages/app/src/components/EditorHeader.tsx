@@ -1,6 +1,6 @@
 import { parseManagedArtifactName } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Search } from 'lucide-react';
+import { MessageSquare, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -28,10 +28,27 @@ interface EditorHeaderProps {
   onSignIn?: () => void;
   onSetIdentity?: () => void;
   onOpenSearch?: () => void;
+  /** Desktop terminal is available (bridge + `terminal` surface). Gates the
+   *  chat toggle header button; absent/false on web. */
+  terminalAvailable?: boolean;
+  /** Current dock visibility — flips the button between "Open chat" and "Close
+   *  chat" so the label always names the action it performs. */
+  terminalVisible?: boolean;
+  /** Toggle the docked chat: when hidden, reveal it (collapsing the doc-panel)
+   *  and spawn a default-CLI chat if none exists; when shown, hide it. */
+  onToggleChat?: () => void;
 }
 
-export function EditorHeader({ onSignIn, onSetIdentity, onOpenSearch }: EditorHeaderProps) {
+export function EditorHeader({
+  onSignIn,
+  onSetIdentity,
+  onOpenSearch,
+  terminalAvailable,
+  terminalVisible,
+  onToggleChat,
+}: EditorHeaderProps) {
   const { t } = useLingui();
+  const chatToggleLabel = terminalVisible ? t`Close chat` : t`Open chat`;
   const { activeDocName, activeTarget } = useDocumentContext();
   const managedArtifact = activeDocName ? parseManagedArtifactName(activeDocName) : null;
   const { state: sidebarState, isDraggingRail } = useSidebar();
@@ -149,6 +166,29 @@ export function EditorHeader({ onSignIn, onSetIdentity, onOpenSearch }: EditorHe
         )}
         <SyncStatusBadge onSignIn={onSignIn} onSetIdentity={onSetIdentity} />
         <PresenceBar />
+        {/* Desktop-only chat toggle (gated on the derived terminalAvailable),
+            placed after the badges, before the vertical separator. One control:
+            Open chat (reveal-and-start) ⇄ Close chat (hide). */}
+        {terminalAvailable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onToggleChat?.()}
+                aria-label={chatToggleLabel}
+                data-telemetry-event="ok.editor_header.toggle_chat.click"
+                className={cn(
+                  'shrink-0 text-muted-foreground',
+                  isElectronHost && '[-webkit-app-region:no-drag]',
+                )}
+              >
+                <MessageSquare aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{chatToggleLabel}</TooltipContent>
+          </Tooltip>
+        )}
         <Separator orientation="vertical" className="h-4 shrink-0 data-vertical:self-center" />
         <BetaBadge />
         {/* Settings is unavailable in single-file mode (config editing is inert). */}

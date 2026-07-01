@@ -223,6 +223,13 @@ async function renderComposerWithThrowingTerminal(docName = 'notes') {
   );
 }
 
+async function renderComposerWithInstalledClis(installed: Record<string, boolean>) {
+  (window as { okDesktop?: unknown }).okDesktop = {
+    terminal: { cliInstalledMap: async () => installed },
+  };
+  return renderComposerWithTerminal();
+}
+
 async function renderFolderComposer(folderPath = 'specs/foo') {
   const { BottomComposer } = await import('./BottomComposer');
   return render(<BottomComposer folderPath={folderPath} />);
@@ -291,6 +298,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   consoleErrorSpy.mockRestore();
+  delete (window as { okDesktop?: unknown }).okDesktop;
 });
 
 describe('BottomComposer (shell behavior)', () => {
@@ -560,6 +568,42 @@ describe('BottomComposer (dispatch + picker + sticky default)', () => {
 
     expect(loadStickyDefaultAgent()).toBe('terminal-cli:codex');
     expect(terminalLaunchCalls).toHaveLength(0);
+  });
+
+  test('desktop with no sticky pick leads with the first-installed CLI (Codex when Claude is absent)', async () => {
+    await renderComposerWithInstalledClis({
+      claude: false,
+      codex: true,
+      opencode: false,
+      cursor: true,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('ask-ai-send').textContent).toContain('Codex CLI'),
+    );
+  });
+
+  test('desktop with no sticky pick and no CLI installed defaults to the Claude CLI', async () => {
+    await renderComposerWithInstalledClis({
+      claude: false,
+      codex: false,
+      opencode: false,
+      cursor: false,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('ask-ai-send').textContent).toContain('Claude CLI'),
+    );
+  });
+
+  test('the Ask X picker lists the Terminal section before the Desktop section (Terminal-first)', async () => {
+    const user = userEvent.setup();
+    await renderComposerWithTerminal();
+
+    await user.click(screen.getByTestId('ask-ai-agent-trigger'));
+    const terminalLabel = await screen.findByText('Terminal');
+    const desktopLabel = screen.getByText('Desktop');
+    expect(
+      terminalLabel.compareDocumentPosition(desktopLabel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   test('without a docked terminal (web host) all Terminal CLI options are absent', async () => {

@@ -1167,6 +1167,10 @@ msgstr ""
 msgid "Close all unpinned"
 msgstr ""
 
+#: src/components/EditorHeader.tsx
+msgid "Close chat"
+msgstr ""
+
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Close find"
 msgstr ""
@@ -3873,6 +3877,10 @@ msgstr ""
 msgid "New"
 msgstr ""
 
+#: src/components/TerminalTabStrip.tsx
+msgid "New chat"
+msgstr ""
+
 #: src/components/CommandPalette.tsx
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
@@ -3932,7 +3940,7 @@ msgid "New template"
 msgstr ""
 
 #: src/components/TerminalTabStrip.tsx
-msgid "New terminal"
+msgid "New terminal tab"
 msgstr ""
 
 #: src/editor/find-replace/FindReplaceBar.tsx
@@ -4320,6 +4328,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open and focus the bottom Ask AI prompt composer."
+msgstr ""
+
+#: src/components/EditorHeader.tsx
+msgid "Open chat"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts

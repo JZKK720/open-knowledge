@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { TERMINAL_CLI_IDS, type TerminalCli } from '@inkeep/open-knowledge-core';
 import {
   CLAUDE_PROBE_ARGS,
   cliProbeArgs,
@@ -7,6 +8,7 @@ import {
   type ProbeChild,
   type ProbeTimers,
   resolveClaudeReadiness,
+  resolveCliInstalledMap,
   resolveCliOnPath,
   runLoginShellProbe,
 } from '../../src/main/claude-readiness.ts';
@@ -270,5 +272,34 @@ describe('resolveCliOnPath', () => {
     expect(await resolveCliOnPath({ probe: () => Promise.reject(new Error('boom')) })).toEqual({
       onPath: 'unknown',
     });
+  });
+});
+
+describe('resolveCliInstalledMap', () => {
+  test('maps each CLI probe exit code to installed=true iff the probe exited 0', async () => {
+    const codes: Record<TerminalCli, number | null> = {
+      claude: 0,
+      codex: 127,
+      opencode: null,
+      cursor: 0,
+    };
+    expect(await resolveCliInstalledMap({ probe: (cli) => Promise.resolve(codes[cli]) })).toEqual({
+      claude: true,
+      codex: false,
+      opencode: false,
+      cursor: true,
+    });
+  });
+
+  test('a rejected probe for one CLI degrades that entry to not-installed, never crashes', async () => {
+    const map = await resolveCliInstalledMap({
+      probe: (cli) => (cli === 'codex' ? Promise.reject(new Error('boom')) : Promise.resolve(0)),
+    });
+    expect(map).toEqual({ claude: true, codex: false, opencode: true, cursor: true });
+  });
+
+  test('returns exactly one entry per CLI in TERMINAL_CLI_IDS', async () => {
+    const map = await resolveCliInstalledMap({ probe: () => Promise.resolve(127) });
+    expect(Object.keys(map).sort()).toEqual([...TERMINAL_CLI_IDS].sort());
   });
 });

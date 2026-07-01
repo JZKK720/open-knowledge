@@ -156,6 +156,10 @@ describe('CreatePromptComposer Desktop / Terminal sections', () => {
 
     expect(screen.getByText('Desktop')).toBeTruthy();
     expect(screen.getByText('Terminal')).toBeTruthy();
+    expect(
+      screen.getByText('Terminal').compareDocumentPosition(screen.getByText('Desktop')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByTestId('create-with-cli-claude')).toBeTruthy();
     expect(screen.queryByTestId('menu-separator')).not.toBeNull();
   });

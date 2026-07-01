@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
@@ -82,11 +82,17 @@ function setElectronHost(enabled: boolean) {
   });
 }
 
-async function renderHeader() {
+interface TerminalHeaderProps {
+  terminalAvailable?: boolean;
+  terminalVisible?: boolean;
+  onToggleChat?: () => void;
+}
+
+async function renderHeader(props: TerminalHeaderProps = {}) {
   const { EditorHeader } = await import('./EditorHeader');
   render(
     <TooltipProvider>
-      <EditorHeader />
+      <EditorHeader {...props} />
     </TooltipProvider>,
   );
   return document.querySelector('header') as HTMLElement;
@@ -214,5 +220,34 @@ describe('EditorHeader runtime behavior', () => {
     await renderHeader();
 
     expect(lastShareInput).toBeNull();
+  });
+
+  test('terminalAvailable renders a single Open chat button when the dock is hidden', async () => {
+    await renderHeader({ terminalAvailable: true, terminalVisible: false });
+
+    expect(screen.getByRole('button', { name: 'Open chat' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Close chat' })).toBeNull();
+  });
+
+  test('the button label flips to Close chat when the dock is visible', async () => {
+    await renderHeader({ terminalAvailable: true, terminalVisible: true });
+
+    expect(screen.getByRole('button', { name: 'Close chat' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull();
+  });
+
+  test('clicking the chat toggle fires its handler', async () => {
+    const onToggleChat = mock(() => {});
+    await renderHeader({ terminalAvailable: true, terminalVisible: false, onToggleChat });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
+    expect(onToggleChat).toHaveBeenCalledTimes(1);
+  });
+
+  test('the chat toggle does not render when terminalAvailable is false (web / no terminal surface)', async () => {
+    await renderHeader({ terminalAvailable: false });
+
+    expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close chat' })).toBeNull();
   });
 });

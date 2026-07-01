@@ -263,6 +263,7 @@
     "67f-3g": ["Duplicate succeeded but the sidebar may be out of date — refresh to resync"],
     "6Aih4U": ["Offline"],
     "6EKG_c": ["What agents match on to decide when to use the skill."],
+    "6I7cJR": ["Open chat"],
     "6LbUG7": ["The repository is private and your GitHub account doesn't have access to it."],
     "6MnZEC": ["Terminal failed to load"],
     "6O626z": ["No headings match \"", ["trimmedAnchorQuery"], "\""],
@@ -407,7 +408,6 @@
     "AAlr5Y": [
       "No collab server for this worktree — run <0>ok start</0> here, or reopen the project."
     ],
-    "AB4qw9": ["New terminal"],
     "AE7BY3": ["The terminal session ended."],
     "AIn2Yv": [["displayName"], " CLI, ", ["hint"]],
     "ALhMYW": ["Terminal"],
@@ -1524,6 +1524,7 @@
     "hDoLrm": ["Remove ", ["projectName"], " from recent projects"],
     "hGmuTc": ["Docs tagged #", ["tagDocsName"]],
     "hHMv6l": ["Delete block"],
+    "hIQkLb": ["New chat"],
     "hSBIG-": ["A title, description, tags — anything that describes this folder."],
     "hSySVc": ["Install handoff failed: ", ["msg"]],
     "hXUWyd": ["Value is required"],
@@ -1610,6 +1611,7 @@
       ["trimmedSlug"],
       "</0> already exists here. Saving creates a local copy that overrides it for this folder."
     ],
+    "k0vc0N": ["New terminal tab"],
     "kCNU4q": [
       "Indexing your pages — ",
       ["semanticIndexedCount"],
@@ -1817,6 +1819,7 @@
     "pmKdif": ["Failed: ", ["loadError"]],
     "pmUArF": ["Workspace"],
     "ppDgFi": ["Restart with this app's version"],
+    "pqZJT2": ["Close chat"],
     "pzutoc": ["Italic"],
     "q2kXMG": ["Inline Math"],
     "q4YJl_": ["The terminal session ended (exit code ", ["0"], ")."],

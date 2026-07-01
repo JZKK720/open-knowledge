@@ -365,6 +365,12 @@ export async function installHandoffMocks(page: Page, cfg: HandoffMockConfig): P
           onExit: () => () => {},
           claudePreflight: async () => ({ claude: 'present' as const, mcp: 'wired' as const }),
           cliPreflight: async () => ({ onPath: 'present' as const }),
+          cliInstalledMap: async () => ({
+            claude: true,
+            codex: true,
+            opencode: true,
+            cursor: true,
+          }),
           rewireClaudeMcp: async () => ({ claude: 'present' as const, mcp: 'wired' as const }),
         },
         platform: 'darwin' as const,

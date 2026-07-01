@@ -75,30 +75,32 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
         <Trans>Open with AI</Trans>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        {showDesktopSection ? (
-          <DropdownMenuGroup aria-label={t`Desktop`}>
+        {showTerminalSection ? (
+          <DropdownMenuGroup aria-label={t`Terminal`}>
             <DropdownMenuLabel>
-              <Trans>Desktop</Trans>
+              <Trans>Terminal</Trans>
             </DropdownMenuLabel>
-            {installedTargets.map((target) => {
-              const enabled = !inputMissing;
-              const { displayName } = target;
-              const accessibleLabel = hint
-                ? t`Open with AI ${displayName}, ${hint}`
-                : t`Open with AI ${displayName}`;
+            {/* Launches `claude` / `codex` / `cursor-agent` in the docked
+                terminal with the right-clicked node's scope prompt. Visible
+                text is the brand name; the accessible name is "<Brand> CLI"
+                (plus the "No workspace" hint when input is missing), so it
+                contains the visible label and AT users can tell it apart from a
+                Desktop row (WCAG 2.5.3 — name contains visible label). */}
+            {VISIBLE_CLIS.map((cli) => {
+              const { displayName } = TERMINAL_CLIS[cli];
               return (
                 <DropdownMenuItem
-                  key={target.id}
-                  disabled={!enabled}
+                  key={cli}
                   onSelect={() => {
-                    if (!input) return;
-                    void dispatch(target.id, input);
+                    if (input === null) return;
+                    terminalLaunch.launchInTerminal(input, cli);
                   }}
-                  data-testid={`file-tree-open-in-${target.id}`}
-                  aria-label={accessibleLabel}
+                  disabled={inputMissing}
+                  data-testid={`file-tree-open-in-terminal-${cli}`}
+                  aria-label={hint ? t`${displayName} CLI, ${hint}` : t`${displayName} CLI`}
                 >
-                  <TargetIcon id={target.id} aria-hidden="true" />
-                  <span className="flex-1">{target.displayName}</span>
+                  <TargetIcon id={cliIconTargetId(cli)} aria-hidden="true" />
+                  <span className="flex-1">{displayName}</span>
                   {hint ? (
                     <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
                       {hint}
@@ -109,44 +111,33 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
             })}
           </DropdownMenuGroup>
         ) : null}
-        {showEmptyHint ? (
-          <DropdownMenuItem disabled data-testid="file-tree-open-in-empty">
-            {probePending ? (
-              <Trans>Checking for installed agents</Trans>
-            ) : (
-              <Trans>No installed agents found</Trans>
-            )}
-          </DropdownMenuItem>
-        ) : null}
-        {showTerminalSection ? (
+        {showDesktopSection ? (
           <>
-            {/* Separator only when a Desktop section sits above this one. */}
-            {showDesktopSection ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuGroup aria-label={t`Terminal`}>
+            {/* Separator only when a Terminal section sits above this one. */}
+            {showTerminalSection ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuGroup aria-label={t`Desktop`}>
               <DropdownMenuLabel>
-                <Trans>Terminal</Trans>
+                <Trans>Desktop</Trans>
               </DropdownMenuLabel>
-              {/* Launches `claude` / `codex` / `cursor-agent` in the docked
-                  terminal with the right-clicked node's scope prompt. Visible
-                  text is the brand name; the accessible name is "<Brand> CLI"
-                  (plus the "No workspace" hint when input is missing), so it
-                  contains the visible label and AT users can tell it apart from a
-                  Desktop row (WCAG 2.5.3 — name contains visible label). */}
-              {VISIBLE_CLIS.map((cli) => {
-                const { displayName } = TERMINAL_CLIS[cli];
+              {installedTargets.map((target) => {
+                const enabled = !inputMissing;
+                const { displayName } = target;
+                const accessibleLabel = hint
+                  ? t`Open with AI ${displayName}, ${hint}`
+                  : t`Open with AI ${displayName}`;
                 return (
                   <DropdownMenuItem
-                    key={cli}
+                    key={target.id}
+                    disabled={!enabled}
                     onSelect={() => {
-                      if (input === null) return;
-                      terminalLaunch.launchInTerminal(input, cli);
+                      if (!input) return;
+                      void dispatch(target.id, input);
                     }}
-                    disabled={inputMissing}
-                    data-testid={`file-tree-open-in-terminal-${cli}`}
-                    aria-label={hint ? t`${displayName} CLI, ${hint}` : t`${displayName} CLI`}
+                    data-testid={`file-tree-open-in-${target.id}`}
+                    aria-label={accessibleLabel}
                   >
-                    <TargetIcon id={cliIconTargetId(cli)} aria-hidden="true" />
-                    <span className="flex-1">{displayName}</span>
+                    <TargetIcon id={target.id} aria-hidden="true" />
+                    <span className="flex-1">{target.displayName}</span>
                     {hint ? (
                       <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
                         {hint}
@@ -157,6 +148,15 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
               })}
             </DropdownMenuGroup>
           </>
+        ) : null}
+        {showEmptyHint ? (
+          <DropdownMenuItem disabled data-testid="file-tree-open-in-empty">
+            {probePending ? (
+              <Trans>Checking for installed agents</Trans>
+            ) : (
+              <Trans>No installed agents found</Trans>
+            )}
+          </DropdownMenuItem>
         ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>

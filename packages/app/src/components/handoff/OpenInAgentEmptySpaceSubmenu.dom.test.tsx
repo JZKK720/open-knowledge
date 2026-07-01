@@ -168,6 +168,10 @@ describe('OpenInAgentEmptySpaceSubmenu runtime behavior', () => {
 
     expect(screen.getByText('Desktop')).toBeTruthy();
     expect(screen.getByText('Terminal')).toBeTruthy();
+    expect(
+      screen.getByText('Terminal').compareDocumentPosition(screen.getByText('Desktop')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(document.querySelector('[data-slot="context-menu-separator"]')).toBeTruthy();
 
     const terminalRow = screen.getByTestId('empty-space-open-in-terminal-claude');

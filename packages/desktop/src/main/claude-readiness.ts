@@ -1,4 +1,5 @@
 import type { McpEntryClassification } from '@inkeep/open-knowledge';
+import { TERMINAL_CLI_IDS, type TerminalCli } from '@inkeep/open-knowledge-core';
 import type { ClaudeReadiness, CliReadiness } from '../shared/bridge-contract.ts';
 import { getLogger } from './desktop-logger.ts';
 
@@ -138,4 +139,22 @@ export async function resolveCliOnPath(deps: ResolveCliOnPathDeps): Promise<CliR
     return null;
   });
   return { onPath: interpretClaudeProbe(code) };
+}
+
+export interface ResolveCliInstalledMapDeps {
+  /** Login-shell PATH probe for a CLI's registry binary; resolves the exit code
+   *  or `null` (probe failed → UNKNOWN, treated here as not-installed). */
+  probe(cli: TerminalCli): Promise<number | null>;
+}
+
+export async function resolveCliInstalledMap(
+  deps: ResolveCliInstalledMapDeps,
+): Promise<Record<TerminalCli, boolean>> {
+  const entries = await Promise.all(
+    TERMINAL_CLI_IDS.map(async (cli) => {
+      const { onPath } = await resolveCliOnPath({ probe: () => deps.probe(cli) });
+      return [cli, onPath === 'present'] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Record<TerminalCli, boolean>;
 }

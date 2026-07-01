@@ -511,6 +511,10 @@ export interface RequestChannels {
     args: [req: { cli: TerminalCli }];
     result: CliReadiness;
   };
+  'ok:terminal:cli-installed-map': {
+    args: [];
+    result: Record<TerminalCli, boolean>;
+  };
   'ok:terminal:dock-state': {
     args: [];
     result: { visible: boolean };

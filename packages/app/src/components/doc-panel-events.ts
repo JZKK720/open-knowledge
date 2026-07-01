@@ -46,3 +46,25 @@ export function subscribeToDocPanelTabRequests(
   target.addEventListener(DOC_PANEL_TAB_EVENT, listener as EventListener);
   return () => target.removeEventListener(DOC_PANEL_TAB_EVENT, listener as EventListener);
 }
+
+const DOC_PANEL_COLLAPSE_EVENT = 'open-knowledge:doc-panel-collapse';
+
+export function requestDocPanelCollapse(
+  target: Pick<Window, 'dispatchEvent'> | EventTarget = typeof window === 'undefined'
+    ? new EventTarget()
+    : window,
+): void {
+  target.dispatchEvent(new CustomEvent(DOC_PANEL_COLLAPSE_EVENT));
+}
+
+export function subscribeToDocPanelCollapseRequests(
+  onRequest: () => void,
+  target: Pick<Window, 'addEventListener' | 'removeEventListener'> | EventTarget = typeof window ===
+  'undefined'
+    ? new EventTarget()
+    : window,
+): () => void {
+  const listener = () => onRequest();
+  target.addEventListener(DOC_PANEL_COLLAPSE_EVENT, listener as EventListener);
+  return () => target.removeEventListener(DOC_PANEL_COLLAPSE_EVENT, listener as EventListener);
+}

@@ -1172,6 +1172,10 @@ msgstr "Close all"
 msgid "Close all unpinned"
 msgstr "Close all unpinned"
 
+#: src/components/EditorHeader.tsx
+msgid "Close chat"
+msgstr "Close chat"
+
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Close find"
 msgstr "Close find"
@@ -3878,6 +3882,10 @@ msgstr "never"
 msgid "New"
 msgstr "New"
 
+#: src/components/TerminalTabStrip.tsx
+msgid "New chat"
+msgstr "New chat"
+
 #: src/components/CommandPalette.tsx
 #: src/components/FileSidebar.tsx
 #: src/components/FileTree.tsx
@@ -3937,8 +3945,8 @@ msgid "New template"
 msgstr "New template"
 
 #: src/components/TerminalTabStrip.tsx
-msgid "New terminal"
-msgstr "New terminal"
+msgid "New terminal tab"
+msgstr "New terminal tab"
 
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Next match"
@@ -4326,6 +4334,10 @@ msgstr "Open and focus the Ask AI composer for the current editor selection."
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open and focus the bottom Ask AI prompt composer."
 msgstr "Open and focus the bottom Ask AI prompt composer."
+
+#: src/components/EditorHeader.tsx
+msgid "Open chat"
+msgstr "Open chat"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open CodeMirror search in source editor mode."

@@ -96,81 +96,81 @@ export function AgentSplitButton({
         <DropdownMenuContent align={menuAlign} className="min-w-[200px]" data-testid={testIds.menu}>
           {hasOptions ? (
             <>
-              {showDesktop ? (
-                <DropdownMenuGroup aria-label={t`Desktop`}>
-                  <DropdownMenuLabel>
-                    <Trans>Desktop</Trans>
-                  </DropdownMenuLabel>
-                  {installedTargets.map((target) => (
-                    <DropdownMenuItem
-                      key={target.id}
-                      onSelect={() => onSelectTarget(target)}
-                      data-testid={testIds.option(target.id)}
-                    >
-                      <TargetIcon id={target.id} aria-hidden="true" className="size-4" />
-                      <span className="flex-1">{target.displayName}</span>
-                      {selectedTargetId === target.id ? (
-                        <Check aria-hidden="true" className="size-4 text-muted-foreground" />
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-              ) : null}
               {showTerminal ? (
-                <>
-                  {showDesktop ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuGroup aria-label={t`Terminal`}>
-                    <DropdownMenuLabel>
-                      <Trans>Terminal</Trans>
-                    </DropdownMenuLabel>
-                    {/* The visible text is the bare CLI name while the accessible
-                        name carries "<name> CLI" so AT users can tell it apart
-                        from a same-named Desktop row (WCAG 2.5.3 — the accessible
-                        name contains the visible label). */}
-                    {cliRows ? (
-                      cliRows.map((row) => (
-                        <DropdownMenuItem
-                          key={row.cli}
-                          onSelect={row.onSelect}
-                          data-testid={terminalTestId(row.cli)}
-                          aria-label={row.ariaLabel}
-                        >
-                          {/* Per-CLI brand icon (same source of truth the "Open
-                              with AI" surfaces use via `cliIconTargetId`), so each
-                              row is identifiable at a glance — OpenCode is
-                              terminal-only and would otherwise show no brand mark.
-                              The "Terminal" section header + the "(CLI)" label
-                              already convey that these launch a terminal. */}
-                          <TargetIcon
-                            id={cliIconTargetId(row.cli)}
-                            className="size-4"
-                            aria-hidden="true"
-                          />
-                          <span className="flex-1">{row.label}</span>
-                          {row.selected ? (
-                            <Check aria-hidden="true" className="size-4 text-muted-foreground" />
-                          ) : null}
-                        </DropdownMenuItem>
-                      ))
-                    ) : terminal ? (
+                <DropdownMenuGroup aria-label={t`Terminal`}>
+                  <DropdownMenuLabel>
+                    <Trans>Terminal</Trans>
+                  </DropdownMenuLabel>
+                  {/* The visible text is the bare CLI name while the accessible
+                      name carries "<name> CLI" so AT users can tell it apart
+                      from a same-named Desktop row (WCAG 2.5.3 — the accessible
+                      name contains the visible label). */}
+                  {cliRows ? (
+                    cliRows.map((row) => (
                       <DropdownMenuItem
-                        onSelect={terminal.onSelect}
-                        data-testid={terminalTestId('claude')}
-                        aria-label={t`Claude CLI`}
+                        key={row.cli}
+                        onSelect={row.onSelect}
+                        data-testid={terminalTestId(row.cli)}
+                        aria-label={row.ariaLabel}
                       >
+                        {/* Per-CLI brand icon (same source of truth the "Open
+                            with AI" surfaces use via `cliIconTargetId`), so each
+                            row is identifiable at a glance — OpenCode is
+                            terminal-only and would otherwise show no brand mark.
+                            The "Terminal" section header + the "(CLI)" label
+                            already convey that these launch a terminal. */}
                         <TargetIcon
-                          id={cliIconTargetId('claude')}
+                          id={cliIconTargetId(row.cli)}
                           className="size-4"
                           aria-hidden="true"
                         />
-                        <span className="flex-1">
-                          <Trans>Claude</Trans>
-                        </span>
-                        {terminal.selected ? (
+                        <span className="flex-1">{row.label}</span>
+                        {row.selected ? (
                           <Check aria-hidden="true" className="size-4 text-muted-foreground" />
                         ) : null}
                       </DropdownMenuItem>
-                    ) : null}
+                    ))
+                  ) : terminal ? (
+                    <DropdownMenuItem
+                      onSelect={terminal.onSelect}
+                      data-testid={terminalTestId('claude')}
+                      aria-label={t`Claude CLI`}
+                    >
+                      <TargetIcon
+                        id={cliIconTargetId('claude')}
+                        className="size-4"
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1">
+                        <Trans>Claude</Trans>
+                      </span>
+                      {terminal.selected ? (
+                        <Check aria-hidden="true" className="size-4 text-muted-foreground" />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuGroup>
+              ) : null}
+              {showDesktop ? (
+                <>
+                  {showTerminal ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuGroup aria-label={t`Desktop`}>
+                    <DropdownMenuLabel>
+                      <Trans>Desktop</Trans>
+                    </DropdownMenuLabel>
+                    {installedTargets.map((target) => (
+                      <DropdownMenuItem
+                        key={target.id}
+                        onSelect={() => onSelectTarget(target)}
+                        data-testid={testIds.option(target.id)}
+                      >
+                        <TargetIcon id={target.id} aria-hidden="true" className="size-4" />
+                        <span className="flex-1">{target.displayName}</span>
+                        {selectedTargetId === target.id ? (
+                          <Check aria-hidden="true" className="size-4 text-muted-foreground" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    ))}
                   </DropdownMenuGroup>
                 </>
               ) : null}

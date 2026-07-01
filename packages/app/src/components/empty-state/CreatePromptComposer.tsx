@@ -286,62 +286,59 @@ export function CreatePromptComposer({ scenario, className }: CreatePromptCompos
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-[200px]">
-                  {showDesktopSection ? (
-                    <DropdownMenuGroup aria-label={t`Desktop`}>
+                  {showTerminalSection ? (
+                    <DropdownMenuGroup aria-label={t`Terminal`}>
                       <DropdownMenuLabel>
-                        <Trans>Desktop</Trans>
+                        <Trans>Terminal</Trans>
                       </DropdownMenuLabel>
-                      {selectableTargets.map((target) => (
-                        <DropdownMenuItem
-                          key={target.id}
-                          onSelect={() => chooseAgent(target.id)}
-                          data-testid={`create-agent-option-${target.id}`}
-                        >
-                          <TargetIcon id={target.id} aria-hidden="true" className="size-4" />
-                          <span className="flex-1">{target.displayName}</span>
-                          {!cliSelected && target.id === selectedAgentId ? (
-                            <Check aria-hidden="true" className="size-4 text-muted-foreground" />
-                          ) : null}
-                        </DropdownMenuItem>
-                      ))}
+                      {/* Selects a docked-terminal CLI as the create target (the
+                        Create button performs the launch). Visible text is the
+                        brand name while the accessible name is "<Brand> CLI" so AT
+                        users can tell it apart from the matching Desktop row (WCAG
+                        2.5.3 — the name contains the visible label). */}
+                      {VISIBLE_CLIS.map((cli) => {
+                        const { displayName } = TERMINAL_CLIS[cli];
+                        return (
+                          <DropdownMenuItem
+                            key={cli}
+                            onSelect={() => chooseCli(cli)}
+                            data-testid={`create-with-cli-${cli}`}
+                            aria-label={t`${displayName} CLI`}
+                          >
+                            <TargetIcon
+                              id={cliIconTargetId(cli)}
+                              aria-hidden="true"
+                              className="size-4"
+                            />
+                            <span className="flex-1">{displayName}</span>
+                            {selectedCli === cli ? (
+                              <Check aria-hidden="true" className="size-4 text-muted-foreground" />
+                            ) : null}
+                          </DropdownMenuItem>
+                        );
+                      })}
                     </DropdownMenuGroup>
                   ) : null}
-                  {showTerminalSection ? (
+                  {showDesktopSection ? (
                     <>
-                      {showDesktopSection ? <DropdownMenuSeparator /> : null}
-                      <DropdownMenuGroup aria-label={t`Terminal`}>
+                      {showTerminalSection ? <DropdownMenuSeparator /> : null}
+                      <DropdownMenuGroup aria-label={t`Desktop`}>
                         <DropdownMenuLabel>
-                          <Trans>Terminal</Trans>
+                          <Trans>Desktop</Trans>
                         </DropdownMenuLabel>
-                        {/* Selects a docked-terminal CLI as the create target (the
-                          Create button performs the launch). Visible text is the
-                          brand name while the accessible name is "<Brand> CLI" so AT
-                          users can tell it apart from the matching Desktop row (WCAG
-                          2.5.3 — the name contains the visible label). */}
-                        {VISIBLE_CLIS.map((cli) => {
-                          const { displayName } = TERMINAL_CLIS[cli];
-                          return (
-                            <DropdownMenuItem
-                              key={cli}
-                              onSelect={() => chooseCli(cli)}
-                              data-testid={`create-with-cli-${cli}`}
-                              aria-label={t`${displayName} CLI`}
-                            >
-                              <TargetIcon
-                                id={cliIconTargetId(cli)}
-                                aria-hidden="true"
-                                className="size-4"
-                              />
-                              <span className="flex-1">{displayName}</span>
-                              {selectedCli === cli ? (
-                                <Check
-                                  aria-hidden="true"
-                                  className="size-4 text-muted-foreground"
-                                />
-                              ) : null}
-                            </DropdownMenuItem>
-                          );
-                        })}
+                        {selectableTargets.map((target) => (
+                          <DropdownMenuItem
+                            key={target.id}
+                            onSelect={() => chooseAgent(target.id)}
+                            data-testid={`create-agent-option-${target.id}`}
+                          >
+                            <TargetIcon id={target.id} aria-hidden="true" className="size-4" />
+                            <span className="flex-1">{target.displayName}</span>
+                            {!cliSelected && target.id === selectedAgentId ? (
+                              <Check aria-hidden="true" className="size-4 text-muted-foreground" />
+                            ) : null}
+                          </DropdownMenuItem>
+                        ))}
                       </DropdownMenuGroup>
                     </>
                   ) : null}

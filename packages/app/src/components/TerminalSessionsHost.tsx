@@ -1,9 +1,12 @@
+import type { TerminalCli } from '@inkeep/open-knowledge-core';
 import { useLingui } from '@lingui/react/macro';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TabsContent } from '@/components/ui/tabs';
+import { resolveDefaultCli } from '@/lib/default-cli-resolver';
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import type { TerminalDockPosition } from '@/lib/terminal-dock-store';
+import { loadStickyAgent } from '@/lib/unified-agent-store';
 import { emitOpenAskAiComposer } from './ask-ai-composer-events';
 import type { TerminalLaunchIntent } from './EditorPane';
 import { subscribeToActiveTerminalInput } from './handoff/terminal-input-events';
@@ -45,6 +48,9 @@ interface TerminalSessionsHostProps {
   readonly visible: boolean;
   readonly onVisibleChange: (visible: boolean) => void;
   readonly launch?: TerminalLaunchIntent | null;
+  /** Which CLIs are on PATH (desktop probe). The tab strip's "New chat" resolves
+   *  its default CLI from this + the sticky pick. */
+  readonly installedClis?: Partial<Record<TerminalCli, boolean>>;
   readonly container: HTMLElement | null;
   readonly isShowing: boolean;
   readonly onRequestEditorFocus: () => void;
@@ -52,6 +58,10 @@ interface TerminalSessionsHostProps {
    *  controls so their icons/labels reflect where the terminal lives. */
   readonly dockPosition: TerminalDockPosition;
   readonly onToggleDock: () => void;
+  /** Reports whether any PTY session is currently open. The header's New chat
+   *  button reads this to decide between spawning a first chat and merely
+   *  revealing the existing dock. */
+  readonly onHasSessionsChange?: (hasSessions: boolean) => void;
 }
 
 export function TerminalSessionsHost({
@@ -59,11 +69,13 @@ export function TerminalSessionsHost({
   visible,
   onVisibleChange,
   launch = null,
+  installedClis,
   container,
   isShowing,
   onRequestEditorFocus,
   dockPosition,
   onToggleDock,
+  onHasSessionsChange,
 }: TerminalSessionsHostProps) {
   const { t } = useLingui();
 
@@ -101,6 +113,7 @@ export function TerminalSessionsHost({
     if (ptyId === null) ptyIdBySessionRef.current.delete(id);
     else ptyIdBySessionRef.current.set(id, ptyId);
   }
+  const stripLaunchNonceRef = useRef(0);
 
   function openSession(launchForSession: TerminalLaunchIntent | null) {
     sessionCounterRef.current += 1;
@@ -110,6 +123,15 @@ export function TerminalSessionsHost({
       { id, launch: launchForSession, title: null, adoptPtyId: null },
     ]);
     setActiveSessionId(id);
+  }
+
+  function openNewChatSession() {
+    stripLaunchNonceRef.current += 1;
+    openSession({
+      prompt: null,
+      cli: resolveDefaultCli(loadStickyAgent(), installedClis ?? {}),
+      nonce: stripLaunchNonceRef.current,
+    });
   }
 
   function setSessionTitle(id: string, title: string) {
@@ -238,6 +260,10 @@ export function TerminalSessionsHost({
     bridge.editor.notifyViewMenuStateChanged({ terminalLive: sessions.length > 0 });
   }, [bridge, sessions.length]);
 
+  useEffect(() => {
+    onHasSessionsChange?.(sessions.length > 0);
+  }, [onHasSessionsChange, sessions.length]);
+
   useLayoutEffect(() => {
     if (isShowing || visible) return;
     if (hostEl == null || !hostEl.contains(document.activeElement)) return;
@@ -261,7 +287,8 @@ export function TerminalSessionsHost({
         activeSessionId={activeSessionId}
         onSelect={setActiveSessionId}
         onTabActivate={(id) => queueMicrotask(() => focusTerminalSession(id))}
-        onNew={() => openSession(null)}
+        onNewChat={openNewChatSession}
+        onNewTerminalTab={() => openSession(null)}
         onClose={closeSession}
         dockPosition={dockPosition}
         onToggleDock={onToggleDock}

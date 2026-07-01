@@ -17,7 +17,8 @@ function renderStrip(props?: {
 }) {
   const onSelect = mock((_id: string) => {});
   const onTabActivate = mock((_id: string) => {});
-  const onNew = mock(() => {});
+  const onNewChat = mock(() => {});
+  const onNewTerminalTab = mock(() => {});
   const onClose = mock((_id: string) => {});
   const onToggleDock = mock(() => {});
   const onCollapse = mock(() => {});
@@ -28,7 +29,8 @@ function renderStrip(props?: {
         activeSessionId={props?.activeSessionId ?? 's1'}
         onSelect={onSelect}
         onTabActivate={onTabActivate}
-        onNew={onNew}
+        onNewChat={onNewChat}
+        onNewTerminalTab={onNewTerminalTab}
         onClose={onClose}
         dockPosition={props?.dockPosition ?? 'bottom'}
         onToggleDock={onToggleDock}
@@ -36,7 +38,15 @@ function renderStrip(props?: {
       />
     </TooltipProvider>,
   );
-  return { onSelect, onTabActivate, onNew, onClose, onToggleDock, onCollapse };
+  return {
+    onSelect,
+    onTabActivate,
+    onNewChat,
+    onNewTerminalTab,
+    onClose,
+    onToggleDock,
+    onCollapse,
+  };
 }
 
 describe('TerminalTabStrip', () => {
@@ -104,26 +114,50 @@ describe('TerminalTabStrip', () => {
     expect(onSelect).toHaveBeenCalledWith('s2');
   });
 
-  test('the new-terminal control reports onNew and never onSelect', async () => {
+  test('the New chat control reports onNewChat and never onSelect / onNewTerminalTab', async () => {
     const user = userEvent.setup();
-    const { onNew, onSelect } = renderStrip();
+    const { onNewChat, onNewTerminalTab, onSelect } = renderStrip();
 
-    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New chat' }));
 
-    expect(onNew).toHaveBeenCalledTimes(1);
+    expect(onNewChat).toHaveBeenCalledTimes(1);
+    expect(onNewTerminalTab).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  test('the New terminal tab control reports onNewTerminalTab (bare shell) and never onNewChat', async () => {
+    const user = userEvent.setup();
+    const { onNewChat, onNewTerminalTab } = renderStrip();
+
+    await user.click(screen.getByRole('button', { name: 'New terminal tab' }));
+
+    expect(onNewTerminalTab).toHaveBeenCalledTimes(1);
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
+
+  test('New chat hugs the last tab, preceding the trailing New terminal tab / collapse controls', () => {
+    renderStrip();
+    const newChat = screen.getByRole('button', { name: 'New chat' });
+    const newTerminalTab = screen.getByRole('button', { name: 'New terminal tab' });
+    const collapse = screen.getByRole('button', { name: 'Collapse terminal' });
+    expect(
+      newChat.compareDocumentPosition(newTerminalTab) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      newTerminalTab.compareDocumentPosition(collapse) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   test('a tab close control reports onClose with that session id only', async () => {
     const user = userEvent.setup();
-    const { onClose, onSelect, onNew } = renderStrip({ activeSessionId: 's1' });
+    const { onClose, onSelect, onNewChat } = renderStrip({ activeSessionId: 's1' });
 
     await user.click(screen.getByRole('button', { name: 'Close Terminal 2' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledWith('s2');
     expect(onSelect).not.toHaveBeenCalled();
-    expect(onNew).not.toHaveBeenCalled();
+    expect(onNewChat).not.toHaveBeenCalled();
   });
 
   test('the dock-toggle reports onToggleDock and labels the resulting position', async () => {
@@ -142,15 +176,16 @@ describe('TerminalTabStrip', () => {
     expect(screen.queryByRole('button', { name: 'Dock terminal to the right' })).toBeNull();
   });
 
-  test('the collapse control reports onCollapse and never onClose/onNew', async () => {
+  test('the collapse control reports onCollapse and never onClose / onNewChat / onNewTerminalTab', async () => {
     const user = userEvent.setup();
-    const { onCollapse, onClose, onNew } = renderStrip();
+    const { onCollapse, onClose, onNewChat, onNewTerminalTab } = renderStrip();
 
     await user.click(screen.getByRole('button', { name: 'Collapse terminal' }));
 
     expect(onCollapse).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
-    expect(onNew).not.toHaveBeenCalled();
+    expect(onNewChat).not.toHaveBeenCalled();
+    expect(onNewTerminalTab).not.toHaveBeenCalled();
   });
 
   test('no drag-to-dock grip is rendered (dragging was removed)', () => {
@@ -160,7 +195,8 @@ describe('TerminalTabStrip', () => {
 
   test('every icon-only control exposes an accessible name', () => {
     renderStrip();
-    expect(screen.getByRole('button', { name: 'New terminal' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'New terminal tab' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Dock terminal to the right' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Collapse terminal' })).toBeDefined();
     for (const label of ['Terminal 1', 'Terminal 2', 'Terminal 3']) {

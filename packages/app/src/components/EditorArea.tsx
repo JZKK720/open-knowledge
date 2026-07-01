@@ -16,6 +16,7 @@ import { AssetPreview } from '@/components/AssetPreview';
 import { DocPanel, type PanelTab } from '@/components/DocPanel';
 import {
   consumePendingDocPanelTabRequest,
+  subscribeToDocPanelCollapseRequests,
   subscribeToDocPanelTabRequests,
 } from '@/components/doc-panel-events';
 import { EditorSkeleton } from '@/components/EditorSkeleton';
@@ -320,6 +321,21 @@ function EditorAreaInner({
     if (docPanelExpandSignal === 0) return;
     panelRef.current?.expand();
   }, [docPanelExpandSignal, panelRef]);
+
+  useEffect(() => {
+    let rafId = 0;
+    const unsubscribe = subscribeToDocPanelCollapseRequests(() => {
+      if (terminalDock !== 'right') return;
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        panelRef.current?.collapse();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      unsubscribe();
+    };
+  }, [panelRef, terminalDock]);
 
   useLayoutEffect(() => {
     if (!isCollapsed) return;
