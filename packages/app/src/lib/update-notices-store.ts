@@ -3,6 +3,7 @@ import {
   attachUpdateSubscribers,
   type UpdateNotice,
 } from '@/components/UpdateNotices.shared';
+import { isSubscribeCombinedEligible, subscribeCardStore } from '@/lib/subscribe-card-store';
 
 let notices: UpdateNotice[] = [];
 const listeners = new Set<() => void>();
@@ -48,7 +49,10 @@ export function installUpdateNoticesBridge(): void {
   const bridge = window.okDesktop;
   if (!bridge) return;
   attached = true;
-  attachUpdateSubscribers(bridge, addNotice, dismissNotice);
+  attachUpdateSubscribers(bridge, addNotice, dismissNotice, undefined, {
+    isEligible: (version) => isSubscribeCombinedEligible(subscribeCardStore.getSnapshot(), version),
+    onShown: (version) => subscribeCardStore.recordShown(version),
+  });
   bridge.state.query().then(
     (snapshot) => {
       if (snapshot.schemaIncompatibility) {

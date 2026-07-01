@@ -2945,6 +2945,18 @@ msgstr "Folder properties"
 msgid "Folder target: {linkTitle}. Click to open the overview."
 msgstr "Folder target: {linkTitle}. Click to open the overview."
 
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on"
+msgstr "Follow us on"
+
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on social media"
+msgstr "Follow us on social media"
+
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on X"
+msgstr "Follow us on X"
+
 #: src/editor/slash-command/items.tsx
 msgid "Footnote"
 msgstr "Footnote"
@@ -3447,6 +3459,10 @@ msgstr "Item {0}"
 #: src/components/CreatedItemsList.tsx
 msgid "Items to be created"
 msgstr "Items to be created"
+
+#: src/components/SubscribeCard.tsx
+msgid "Join us on Discord"
+msgstr "Join us on Discord"
 
 #: src/editor/components/Pdf.tsx
 msgid "Jump to page {pageNumber}"
@@ -4869,6 +4885,10 @@ msgstr "probe failed"
 msgid "Product updates"
 msgstr "Product updates"
 
+#: src/components/SubscribeCard.tsx
+msgid "Product updates in your inbox."
+msgstr "Product updates in your inbox."
+
 #: src/components/settings/ProjectTemplatesSection.tsx
 msgid "project"
 msgstr "project"
@@ -5077,6 +5097,7 @@ msgid "Relaunching to install the update…"
 msgstr "Relaunching to install the update…"
 
 #: src/components/settings/SettingsDialogShell.tsx
+#: src/components/SubscribeCard.tsx
 msgid "Release notes"
 msgstr "Release notes"
 
@@ -5965,6 +5986,10 @@ msgstr "Split diff"
 msgid "Split list item"
 msgstr "Split list item"
 
+#: src/components/SubscribeCard.tsx
+msgid "Star us on GitHub"
+msgstr "Star us on GitHub"
+
 #: src/components/NavigatorApp.tsx
 msgid "Start a new OpenKnowledge project."
 msgstr "Start a new OpenKnowledge project."
@@ -6005,6 +6030,7 @@ msgstr "Starting sign-in flow"
 msgid "status"
 msgstr "status"
 
+#: src/components/SubscribeCard.tsx
 #: src/components/SubscribeForm.tsx
 msgid "Stay in the loop"
 msgstr "Stay in the loop"
@@ -6825,6 +6851,10 @@ msgstr "Updated \"{display}\" to {0}."
 #: src/components/FolderTimelineCard.tsx
 msgid "updated folder properties"
 msgstr "updated folder properties"
+
+#: src/components/SubscribeCard.tsx
+msgid "Updated to Version {version}"
+msgstr "Updated to Version {version}"
 
 #: src/components/SkillUpdateDialog.tsx
 msgid "Updating"

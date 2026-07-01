@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Check, Loader2, Mail, X } from 'lucide-react';
+import { ArrowRight, Check, Loader2, Mail, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -20,6 +20,7 @@ export interface SubscribeFormProps {
   onSuccess?: () => void;
   onDismiss?: () => void;
   autoFocus?: boolean;
+  compactSubmit?: boolean;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export function SubscribeForm({
   onSuccess,
   onDismiss,
   autoFocus,
+  compactSubmit,
   className,
 }: SubscribeFormProps) {
   const { t } = useLingui();
@@ -79,7 +81,7 @@ export function SubscribeForm({
           <p
             ref={successHeadingRef}
             tabIndex={subscribed ? -1 : undefined}
-            className="text-base font-medium leading-tight text-foreground focus:outline-none"
+            className="text-sm font-medium leading-tight text-foreground focus:outline-none"
           >
             {subscribed ? (
               <span className="mb-1.5 inline-flex flex-row items-center gap-2">
@@ -94,7 +96,7 @@ export function SubscribeForm({
               before the success text replaces the description — adding the role
               and the new content in the same render makes screen readers miss
               the announcement (WCAG 4.1.3). */}
-          <p className="text-sm text-muted-foreground" role="status">
+          <p className="text-1sm text-muted-foreground" role="status">
             {subscribed ? (
               <Trans>Thanks for subscribing. Watch your inbox for product updates.</Trans>
             ) : (
@@ -143,7 +145,11 @@ export function SubscribeForm({
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="mr-1 ml-auto text-1sm"
+                  size={compactSubmit ? 'icon' : 'default'}
+                  className={cn(
+                    'mr-1 ml-auto text-1sm',
+                    compactSubmit && 'size-8 shrink-0 rounded-lg',
+                  )}
                   data-testid="subscribe-submit"
                 >
                   {isSubmitting ? (
@@ -151,6 +157,13 @@ export function SubscribeForm({
                       <Loader2 className="size-3.5 animate-spin" aria-hidden />
                       <span className="sr-only">
                         <Trans>Subscribing...</Trans>
+                      </span>
+                    </>
+                  ) : compactSubmit ? (
+                    <>
+                      <ArrowRight className="size-4" aria-hidden />
+                      <span className="sr-only">
+                        <Trans>Subscribe</Trans>
                       </span>
                     </>
                   ) : (

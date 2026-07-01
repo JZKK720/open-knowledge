@@ -2940,6 +2940,18 @@ msgstr ""
 msgid "Folder target: {linkTitle}. Click to open the overview."
 msgstr ""
 
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on"
+msgstr ""
+
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on social media"
+msgstr ""
+
+#: src/components/SubscribeCard.tsx
+msgid "Follow us on X"
+msgstr ""
+
 #: src/editor/slash-command/items.tsx
 msgid "Footnote"
 msgstr ""
@@ -3441,6 +3453,10 @@ msgstr ""
 
 #: src/components/CreatedItemsList.tsx
 msgid "Items to be created"
+msgstr ""
+
+#: src/components/SubscribeCard.tsx
+msgid "Join us on Discord"
 msgstr ""
 
 #: src/editor/components/Pdf.tsx
@@ -4864,6 +4880,10 @@ msgstr ""
 msgid "Product updates"
 msgstr ""
 
+#: src/components/SubscribeCard.tsx
+msgid "Product updates in your inbox."
+msgstr ""
+
 #: src/components/settings/ProjectTemplatesSection.tsx
 msgid "project"
 msgstr ""
@@ -5072,6 +5092,7 @@ msgid "Relaunching to install the update…"
 msgstr ""
 
 #: src/components/settings/SettingsDialogShell.tsx
+#: src/components/SubscribeCard.tsx
 msgid "Release notes"
 msgstr ""
 
@@ -5960,6 +5981,10 @@ msgstr ""
 msgid "Split list item"
 msgstr ""
 
+#: src/components/SubscribeCard.tsx
+msgid "Star us on GitHub"
+msgstr ""
+
 #: src/components/NavigatorApp.tsx
 msgid "Start a new OpenKnowledge project."
 msgstr ""
@@ -6000,6 +6025,7 @@ msgstr ""
 msgid "status"
 msgstr ""
 
+#: src/components/SubscribeCard.tsx
 #: src/components/SubscribeForm.tsx
 msgid "Stay in the loop"
 msgstr ""
@@ -6819,6 +6845,10 @@ msgstr ""
 
 #: src/components/FolderTimelineCard.tsx
 msgid "updated folder properties"
+msgstr ""
+
+#: src/components/SubscribeCard.tsx
+msgid "Updated to Version {version}"
 msgstr ""
 
 #: src/components/SkillUpdateDialog.tsx

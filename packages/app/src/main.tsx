@@ -30,6 +30,7 @@ import {
 import { installRelaunchStateBridge } from '@/lib/relaunch-store';
 import { installShareReceivedListener } from '@/lib/share/receive-store';
 import { seedInitialDocHashFromWindow } from '@/lib/single-file-initial-doc';
+import { installSubscribeCardStore } from '@/lib/subscribe-card-store';
 import { installUpdateNoticesBridge } from '@/lib/update-notices-store';
 import { App } from './App';
 import '@fontsource-variable/inter';
@@ -54,6 +55,8 @@ if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
 installUpdateNoticesBridge();
 
 installOnboardingCardStore();
+
+installSubscribeCardStore();
 
 installRelaunchStateBridge();
 

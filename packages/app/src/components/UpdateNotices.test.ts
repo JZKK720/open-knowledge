@@ -552,6 +552,62 @@ describe('Notice B — ok:update:whats-new', () => {
   });
 });
 
+describe('Notice B — combined subscribe path', () => {
+  test('eligible → combined notice: distinct id, whatsNew data, onShown + dismissWhatsNew at creation, no auto-dismiss', async () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    const dismissNotice = mock<(id: string) => void>(() => {});
+    const onShown = mock<(version: string) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice, dismissNotice, 15, {
+      isEligible: () => true,
+      onShown,
+    });
+    bridge._whatsNew?.({ version: '1.4.0', releaseUrl: 'https://example.com/r' });
+
+    const notice = addNotice.mock.calls[0]?.[0] as UpdateNotice;
+    expect(notice.id).toBe('whats-new-combined-1.4.0');
+    expect(notice.combinedSubscribe).toBe(true);
+    expect(notice.whatsNew).toEqual({ version: '1.4.0', releaseUrl: 'https://example.com/r' });
+    expect(onShown).toHaveBeenCalledWith('1.4.0');
+    expect(bridge.update.dismissWhatsNew).toHaveBeenCalledWith('1.4.0');
+    await new Promise((resolve) => setTimeout(resolve, 45));
+    expect(dismissNotice).not.toHaveBeenCalled();
+  });
+
+  test('ineligible → plain notice with auto-dismiss (combined branch skipped, onShown not called)', async () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    const dismissNotice = mock<(id: string) => void>(() => {});
+    const onShown = mock<(version: string) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice, dismissNotice, 15, {
+      isEligible: () => false,
+      onShown,
+    });
+    bridge._whatsNew?.({ version: '1.4.0', releaseUrl: 'https://example.com/r' });
+
+    const notice = addNotice.mock.calls[0]?.[0] as UpdateNotice;
+    expect(notice.id).toBe('whats-new-1.4.0');
+    expect(notice.combinedSubscribe).toBeUndefined();
+    expect(onShown).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 45));
+    expect(dismissNotice).toHaveBeenCalledWith('whats-new-1.4.0');
+  });
+
+  test('onWhatsNewDismissed echo does not remove the combined card (distinct id is load-bearing)', () => {
+    const bridge = makeFakeBridge();
+    const addNotice = mock<(notice: UpdateNotice) => void>(() => {});
+    const dismissNotice = mock<(id: string) => void>(() => {});
+    attachUpdateSubscribers(castBridge(bridge), addNotice, dismissNotice, 60_000, {
+      isEligible: () => true,
+      onShown: () => {},
+    });
+    bridge._whatsNew?.({ version: '1.4.0', releaseUrl: 'https://example.com/r' });
+    bridge._whatsNewDismissed?.({ version: '1.4.0' });
+    expect(dismissNotice).toHaveBeenCalledWith('whats-new-1.4.0');
+    expect(dismissNotice).not.toHaveBeenCalledWith('whats-new-combined-1.4.0');
+  });
+});
+
 describe('Notice C — ok:update:stuck-hint', () => {
   test('emits notice with D12 copy + download URL action', () => {
     const bridge = makeFakeBridge();
