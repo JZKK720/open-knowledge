@@ -10,12 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { dispatchExternalLinkClick } from '@/lib/external-link';
+import { DISCORD_INVITE_URL, GITHUB_REPO_URL, X_PROFILE_URL } from '@/lib/social-links';
+import { subscribeCardStore } from '@/lib/subscribe-card-store';
 import { cn } from '@/lib/utils';
 import { DiscordIcon } from './icons/discord';
 import { GithubIcon } from './icons/github';
 import { XTwitterIcon } from './icons/x-twitter';
-
-const GITHUB_REPO_URL = 'https://github.com/inkeep/open-knowledge';
 
 interface ResourceLink {
   label: string | MessageDescriptor;
@@ -43,8 +43,8 @@ const sections: ResourceSection[] = [
     key: 'community',
     heading: msg`Community`,
     links: [
-      { label: 'Discord', href: 'https://discord.com/invite/YujKpFN49', icon: DiscordIcon },
-      { label: 'X (Twitter)', href: 'https://x.com/OpenKnowledgeAI', icon: XTwitterIcon },
+      { label: 'Discord', href: DISCORD_INVITE_URL, icon: DiscordIcon },
+      { label: 'X (Twitter)', href: X_PROFILE_URL, icon: XTwitterIcon },
       { label: 'GitHub', href: GITHUB_REPO_URL, icon: GithubIcon },
     ],
   },
@@ -189,7 +189,11 @@ export const HelpPopover: FC = () => {
                       by the dropdown's p-3, so sideOffset clears that padding
                       plus a gap rather than overlapping the menu. */}
                   <PopoverContent side="left" align="center" sideOffset={20} className="w-80">
-                    <SubscribeForm autoFocus onDismiss={() => setSubscribeOpen(false)} />
+                    <SubscribeForm
+                      autoFocus
+                      onDismiss={() => setSubscribeOpen(false)}
+                      onSuccess={() => subscribeCardStore.markSubscribed()}
+                    />
                   </PopoverContent>
                 </Popover>
               </li>

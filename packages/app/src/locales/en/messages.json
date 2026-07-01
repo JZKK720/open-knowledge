@@ -123,6 +123,7 @@
     "322lyb": ["Highlight tips, warnings, and notes."],
     "34qyH5": ["Could not reach server"],
     "36WXSC": ["Couldn't delete template: ", ["error"]],
+    "36aWJD": ["Join us on Discord"],
     "379t2h": ["Unified diff"],
     "38foVZ": ["Loading diff"],
     "3DTatP": ["Copy a prompt for your agent, start a blank file, or scaffold from a template."],
@@ -400,6 +401,7 @@
     "9npOH9": ["Open file"],
     "9o1bIV": [["behind"], " behind"],
     "9oE4C3": ["Browse your repos:"],
+    "9sBe85": ["Follow us on"],
     "9tJX8r": ["By meaning"],
     "9zb2WA": ["Connecting"],
     "A1taO8": ["Search"],
@@ -687,6 +689,7 @@
     "HyvSqq": ["Project Skill"],
     "I1gRhX": ["Failed to rename"],
     "I5AfhE": ["Sync status unavailable — server unreachable."],
+    "I7Exsw": ["Follow us on X"],
     "IA1wNb": ["The Claude Desktop App didn't open the file. Is it installed? (", ["msg"], ")"],
     "IA6JW2": ["Detecting"],
     "ICoNYz": ["You can also manage this in Settings."],
@@ -1419,6 +1422,7 @@
       "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
     ],
     "dURmlQ": ["\"frontmatter\" is a reserved property name"],
+    "dbapvC": ["Follow us on social media"],
     "dbhUX1": ["Hide this file"],
     "dbtjJh": ["(opens in new tab)"],
     "djc1l9": ["More than ", ["0"], " requests were blocked by the preview's security policy"],
@@ -1545,6 +1549,7 @@
     "hGmuTc": ["Docs tagged #", ["tagDocsName"]],
     "hHMv6l": ["Delete block"],
     "hIQkLb": ["New chat"],
+    "hLy8b1": ["Updated to Version ", ["version"]],
     "hSBIG-": ["A title, description, tags — anything that describes this folder."],
     "hSySVc": ["Install handoff failed: ", ["msg"]],
     "hXUWyd": ["Value is required"],
@@ -2144,6 +2149,7 @@
     "yHikCO": ["Open CodeMirror's go-to-line prompt."],
     "yIPXut": ["Preparing search"],
     "yKu_3Y": ["Restore"],
+    "yLEyuq": ["Product updates in your inbox."],
     "yLq4w4": ["Separator"],
     "yMgL_E": ["Find field navigation"],
     "yQE2r9": ["Loading"],
@@ -2205,6 +2211,7 @@
       "}</1> fills in on create."
     ],
     "ztKII6": ["Failed to add item"],
-    "zwBp5t": ["Private"]
+    "zwBp5t": ["Private"],
+    "zyKa-I": ["Star us on GitHub"]
   }
 }

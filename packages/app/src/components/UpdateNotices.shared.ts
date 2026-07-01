@@ -43,6 +43,8 @@ export interface UpdateNotice {
   onDismiss?: () => void;
   variant?: 'info' | 'error' | 'success';
   priority: number;
+  whatsNew?: { version: string; releaseUrl: string };
+  combinedSubscribe?: boolean;
   dismissible?: boolean;
 }
 
@@ -63,6 +65,10 @@ export function attachUpdateSubscribers(
   addNotice: AddNoticeFn,
   dismissNotice: DismissNoticeFn = () => {},
   autoDismissMs: number = WHATS_NEW_AUTO_DISMISS_MS,
+  subscribeCombined: {
+    isEligible: (version: string) => boolean;
+    onShown: (version: string) => void;
+  } = { isEligible: () => false, onShown: () => {} },
 ): () => void {
   const unsubscribers: Array<() => void> = [];
   const autoDismissTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -167,6 +173,26 @@ export function attachUpdateSubscribers(
 
   unsubscribers.push(
     bridge.onWhatsNew(({ version, releaseUrl }) => {
+      if (subscribeCombined.isEligible(version)) {
+        subscribeCombined.onShown(version);
+        addNotice({
+          id: `whats-new-combined-${version}`,
+          body: toastBBody(version),
+          variant: 'success',
+          priority: PRIORITY_WHATS_NEW,
+          combinedSubscribe: true,
+          whatsNew: { version, releaseUrl },
+          action: {
+            label: TOAST_B_ACTION,
+            onClick: () => {
+              void bridge.shell.openExternal(releaseUrl);
+            },
+          },
+        });
+        void bridge.update.dismissWhatsNew(version);
+        return;
+      }
+
       const noticeId = `whats-new-${version}`;
       addNotice({
         id: noticeId,
