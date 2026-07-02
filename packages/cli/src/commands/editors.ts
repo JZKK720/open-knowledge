@@ -35,10 +35,39 @@ done
 echo "OpenKnowledge: install OK Desktop or Node.js 24+, then restart your editor" >&2
 exit 127`;
 
+export const CHAIN_WIN_VERSION_SENTINEL = '# ok-mcp-win-v1';
+
+export const CHAIN_WIN_V1 = `# ok-mcp-win-v1
+if ($env:PATHEXT -notmatch 'CMD') { $env:PATHEXT = '.COM;.EXE;.BAT;.CMD;' + $env:PATHEXT }
+if ($env:APPDATA) {
+  $shim = Join-Path $env:APPDATA 'npm\\ok.cmd'
+  if (Test-Path -LiteralPath $shim -PathType Leaf) { & $shim mcp; exit $LASTEXITCODE }
+}
+$ok = Get-Command ok.cmd -CommandType Application -ErrorAction SilentlyContinue
+if ($ok) { & $ok.Source mcp; exit $LASTEXITCODE }
+$npx = Get-Command npx.cmd -CommandType Application -ErrorAction SilentlyContinue
+if ($npx) { & $npx.Source -y '@inkeep/open-knowledge@latest' mcp; exit $LASTEXITCODE }
+$dirs = @()
+if ($env:ProgramFiles) { $dirs += Join-Path $env:ProgramFiles 'nodejs' }
+if ($env:NVM_SYMLINK) { $dirs += $env:NVM_SYMLINK }
+if ($env:LOCALAPPDATA) {
+  $dirs += Join-Path $env:LOCALAPPDATA 'fnm\\aliases\\default'
+  $dirs += Join-Path $env:LOCALAPPDATA 'Volta\\bin'
+  $dirs += Join-Path $env:LOCALAPPDATA 'pnpm'
+}
+if ($env:USERPROFILE) { $dirs += Join-Path $env:USERPROFILE 'scoop\\shims' }
+foreach ($d in $dirs) {
+  $probe = Join-Path $d 'npx.cmd'
+  if (Test-Path -LiteralPath $probe -PathType Leaf) { & $probe -y '@inkeep/open-knowledge@latest' mcp; exit $LASTEXITCODE }
+}
+[Console]::Error.WriteLine('OpenKnowledge: install Node.js 24+ (npm i -g @inkeep/open-knowledge), then restart your editor')
+exit 127`;
+
 type McpInstallMode = 'published' | 'dev';
 
 export interface McpInstallOptions {
   mode?: McpInstallMode;
+  platformName?: NodeJS.Platform;
   skipAvailabilityCheck?: boolean;
 }
 
@@ -53,10 +82,33 @@ export function isEntryUpToDate(entry: unknown): boolean {
     return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
   }
 
+  if (e.command === 'powershell') {
+    if (!Array.isArray(e.args)) return false;
+    if (e.args[0] !== '-NoProfile' || e.args[1] !== '-NonInteractive' || e.args[2] !== '-Command') {
+      return false;
+    }
+    const body = e.args[3];
+    return typeof body === 'string' && body.includes(CHAIN_WIN_VERSION_SENTINEL);
+  }
+
   if (e.type === 'local' && Array.isArray(e.command)) {
-    if (e.command[0] !== '/bin/sh' || e.command[1] !== '-l' || e.command[2] !== '-c') return false;
-    const body = e.command[3];
-    return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
+    if (e.command[0] === '/bin/sh') {
+      if (e.command[1] !== '-l' || e.command[2] !== '-c') return false;
+      const body = e.command[3];
+      return typeof body === 'string' && body.includes(CHAIN_VERSION_SENTINEL);
+    }
+    if (e.command[0] === 'powershell') {
+      if (
+        e.command[1] !== '-NoProfile' ||
+        e.command[2] !== '-NonInteractive' ||
+        e.command[3] !== '-Command'
+      ) {
+        return false;
+      }
+      const body = e.command[4];
+      return typeof body === 'string' && body.includes(CHAIN_WIN_VERSION_SENTINEL);
+    }
+    return false;
   }
 
   return false;
@@ -96,6 +148,13 @@ export function buildManagedServerEntry(options: McpInstallOptions = {}): Record
     };
   }
 
+  const platformName = options.platformName ?? process.platform;
+  if (platformName === 'win32') {
+    return {
+      command: 'powershell',
+      args: ['-NoProfile', '-NonInteractive', '-Command', CHAIN_WIN_V1],
+    };
+  }
   return {
     command: '/bin/sh',
     args: ['-l', '-c', CHAIN_V1],
@@ -112,6 +171,14 @@ function buildOpenCodeEntry(options: McpInstallOptions = {}): Record<string, unk
     };
   }
 
+  const platformName = options.platformName ?? process.platform;
+  if (platformName === 'win32') {
+    return {
+      type: 'local',
+      enabled: true,
+      command: ['powershell', '-NoProfile', '-NonInteractive', '-Command', CHAIN_WIN_V1],
+    };
+  }
   return {
     type: 'local',
     enabled: true,
@@ -122,10 +189,25 @@ function buildOpenCodeEntry(options: McpInstallOptions = {}): Record<string, unk
 export function isOwnManagedEntry(entry: unknown): boolean {
   if (typeof entry !== 'object' || entry === null) return false;
   const e = entry as Record<string, unknown>;
-  if (Object.keys(e).length !== 2) return false;
-  const canonical = buildManagedServerEntry({ mode: 'published' });
-  const canonicalArgs = canonical.args;
+  return (
+    matchesCanonicalExactly(
+      e,
+      buildManagedServerEntry({ mode: 'published', platformName: 'darwin' }),
+    ) ||
+    matchesCanonicalExactly(
+      e,
+      buildManagedServerEntry({ mode: 'published', platformName: 'win32' }),
+    )
+  );
+}
+
+function matchesCanonicalExactly(
+  e: Record<string, unknown>,
+  canonical: Record<string, unknown>,
+): boolean {
+  if (Object.keys(e).length !== Object.keys(canonical).length) return false;
   if (e.command !== canonical.command) return false;
+  const canonicalArgs = canonical.args;
   if (!Array.isArray(canonicalArgs) || !Array.isArray(e.args)) return false;
   if (e.args.length !== canonicalArgs.length) return false;
   return e.args.every((v, i) => v === canonicalArgs[i]);

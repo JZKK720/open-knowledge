@@ -24,6 +24,7 @@ import { Command } from 'commander';
 import { assertProjectPathSafe } from '../integrations/write-project-skill.ts';
 import {
   CHAIN_VERSION_SENTINEL,
+  CHAIN_WIN_VERSION_SENTINEL,
   EDITOR_TARGETS,
   type EditorId,
   HOSTS_WITH_USER_SKILL_DIR,
@@ -280,7 +281,8 @@ function editorWiredForOk(configPath: string | undefined, fs: RepairSkillsFsOps)
   if (!configPath) return false;
   try {
     if (!fs.existsSync(configPath)) return false;
-    return fs.readFileSync(configPath).toString('utf8').includes(CHAIN_VERSION_SENTINEL);
+    const bytes = fs.readFileSync(configPath).toString('utf8');
+    return bytes.includes(CHAIN_VERSION_SENTINEL) || bytes.includes(CHAIN_WIN_VERSION_SENTINEL);
   } catch {
     return false;
   }

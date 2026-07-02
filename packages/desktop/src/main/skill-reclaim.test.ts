@@ -22,6 +22,16 @@ const OK_WIRED_MCP_JSON = JSON.stringify({
   },
 });
 const UNWIRED_MCP_JSON = JSON.stringify({ mcpServers: { other: { command: 'node' } } });
+/** A `.mcp.json` carrying the WINDOWS chain sentinel — written by a Windows
+ *  teammate into a shared repo; must still count as wired here. */
+const OK_WIRED_MCP_JSON_WIN = JSON.stringify({
+  mcpServers: {
+    'open-knowledge': {
+      command: 'powershell',
+      args: ['-NoProfile', '-NonInteractive', '-Command', '# ok-mcp-win-v1\nexit 127'],
+    },
+  },
+});
 
 const cleanupPaths: string[] = [];
 
@@ -562,6 +572,27 @@ describe('reclaimProjectSkillsOnProjectOpen — createIfWired (managed heal path
     expect(
       events.some((e) => e.event === 'project-skill-reclaim-created' && e.editorId === 'claude'),
     ).toBe(true);
+  });
+
+  test('creates SKILL.md for a host wired with the Windows chain sentinel', async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ok-proj-'));
+    cleanupPaths.push(projectDir);
+    writeFileSync(join(projectDir, '.mcp.json'), OK_WIRED_MCP_JSON_WIN);
+    const r = await reclaimProjectSkillsOnProjectOpen({
+      projectDir,
+      executablePath: EXE,
+      isPackaged: true,
+      platform: 'darwin',
+      createIfWired: true,
+      deps: { resolveBundledSkillDir: () => setupBundle() },
+    });
+    expect(r.status).toBe('done');
+    if (r.status === 'done') {
+      expect(r.entries.find((e) => e.editorId === 'claude')?.status).toBe('created');
+    }
+    expect(existsSync(join(projectDir, '.claude', 'skills', 'open-knowledge', 'SKILL.md'))).toBe(
+      true,
+    );
   });
 
   test('creates SKILL.md for cursor host wired via .cursor/mcp.json', async () => {

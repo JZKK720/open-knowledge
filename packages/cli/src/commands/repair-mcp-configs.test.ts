@@ -6,6 +6,11 @@ import { buildManagedServerEntry, resolveClaudeCodeConfigPath } from './editors.
 import { type RepairLogEvent, repairMcpConfigs } from './repair-mcp-configs.ts';
 
 const CHAIN_ENTRY = buildManagedServerEntry({ mode: 'published' });
+const WIN_CHAIN_ENTRY = buildManagedServerEntry({ mode: 'published', platformName: 'win32' });
+const CMD_WORKAROUND = {
+  command: 'cmd',
+  args: ['/c', 'C:\\Users\\me\\AppData\\Roaming\\npm\\ok.cmd', 'mcp'],
+};
 const LEGACY_BARE = { command: 'npx', args: ['@inkeep/open-knowledge', 'mcp'] };
 const LEGACY_NPX_AT_LATEST = {
   command: 'npx',
@@ -88,6 +93,27 @@ describe('repairMcpConfigs', () => {
     expect(second.repairedCount).toBe(0);
     expect(second.outcomes.find((o) => o.editorId === 'claude')?.outcome).toBe('canonical');
     expect(after2).toBe(after1);
+  });
+
+  it('leaves the Windows canonical untouched on a non-Windows host (cross-platform no-clobber)', () => {
+    const configPath = writeClaude(WIN_CHAIN_ENTRY);
+    const before = readFileSync(configPath, 'utf-8');
+
+    const result = repairMcpConfigs({ projectDir, home: fakeHome });
+
+    expect(result.repairedCount).toBe(0);
+    expect(result.outcomes.find((o) => o.editorId === 'claude')?.outcome).toBe('canonical');
+    expect(readFileSync(configPath, 'utf-8')).toBe(before);
+  });
+
+  it('rewrites the hand-fixed cmd workaround shape forward to the local canonical', () => {
+    const configPath = writeClaude(CMD_WORKAROUND);
+
+    const result = repairMcpConfigs({ projectDir, home: fakeHome });
+
+    expect(result.repairedCount).toBe(1);
+    const written = JSON.parse(readFileSync(configPath, 'utf-8'));
+    expect(written.mcpServers['open-knowledge']).toEqual(CHAIN_ENTRY);
   });
 
   it('leaves configs without an open-knowledge entry untouched', () => {

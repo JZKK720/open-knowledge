@@ -26,6 +26,8 @@ const DEFAULT_LOGGER: SkillReclaimLogger = {
 
 const OK_MCP_MARKER = '# ok-mcp-v1';
 
+const OK_MCP_WIN_MARKER = '# ok-mcp-win-v1';
+
 const PROJECT_SKILL_DIR_NAME = 'open-knowledge';
 const LEGACY_SKILL_DIR_NAME = 'open-knowledge';
 
@@ -381,7 +383,8 @@ function editorWiredForOk(configPath: string | undefined, fs: SkillFsOps): boole
   if (!configPath) return false;
   try {
     if (!fs.existsSync(configPath)) return false;
-    return fs.readFileSync(configPath).toString('utf8').includes(OK_MCP_MARKER);
+    const bytes = fs.readFileSync(configPath).toString('utf8');
+    return bytes.includes(OK_MCP_MARKER) || bytes.includes(OK_MCP_WIN_MARKER);
   } catch {
     return false;
   }
