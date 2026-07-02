@@ -3,6 +3,7 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useConflictFooterHeightVar } from '@/hooks/use-conflict-footer-height';
 import { useConflicts } from '@/hooks/use-conflicts';
 import { filePathToDocName } from '@/lib/doc-hash';
 import { DiffView } from './DiffView';
@@ -92,6 +93,9 @@ export function DiffViewBoundary({ docName }: DiffViewBoundaryProps) {
   const [sides, setSides] = useState<ConflictSides | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const duUdFooterRef = useConflictFooterHeightVar(
+    sides?.kind === 'delete-modify' || sides?.kind === 'modify-delete',
+  );
 
   useEffect(() => {
     console.warn(JSON.stringify({ event: 'editor-area-swap-to-diffview', 'doc.name': docName }));
@@ -163,7 +167,10 @@ export function DiffViewBoundary({ docName }: DiffViewBoundaryProps) {
         <div className="min-h-0 flex-1">
           <DiffView oldContent="" newContent={sides.theirs} layout="unified" previewMode />
         </div>
-        <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t px-6 py-4">
+        <div
+          ref={duUdFooterRef}
+          className="flex flex-shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t px-6 py-4"
+        >
           <p className="text-sm text-muted-foreground">
             <Trans>
               You deleted <span className="font-medium text-foreground">{filePath}</span> locally,
@@ -204,7 +211,10 @@ export function DiffViewBoundary({ docName }: DiffViewBoundaryProps) {
         <div className="min-h-0 flex-1">
           <DiffView oldContent="" newContent={sides.ours} layout="unified" previewMode />
         </div>
-        <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t px-6 py-4">
+        <div
+          ref={duUdFooterRef}
+          className="flex flex-shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t px-6 py-4"
+        >
           <p className="text-sm text-muted-foreground">
             <Trans>
               You modified <span className="font-medium text-foreground">{filePath}</span> locally,

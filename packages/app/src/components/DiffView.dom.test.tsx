@@ -71,3 +71,32 @@ describe('DiffView oursOverride (FR3)', () => {
     await screen.findByText('All hunks resolved');
   });
 });
+
+describe('DiffView conflict footer height contract', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  test('conflictMode publishes --conflict-footer-height on the document root while mounted', () => {
+    const { unmount } = render(
+      <DiffView
+        oldContent="# Base\ntheirs\n"
+        newContent="# Base\nours\n"
+        layout="unified"
+        conflictMode
+      />,
+    );
+
+    const value = document.documentElement.style.getPropertyValue('--conflict-footer-height');
+    expect(value).toBe('0px');
+
+    unmount();
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('');
+  });
+
+  test('non-conflict renders never publish --conflict-footer-height', () => {
+    render(<DiffView oldContent="# Base\ntheirs\n" newContent="# Base\nours\n" layout="unified" />);
+
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('');
+  });
+});

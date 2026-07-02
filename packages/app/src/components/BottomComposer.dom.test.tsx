@@ -997,6 +997,16 @@ describe('BottomComposer (dismiss / reopen)', () => {
   });
 });
 
+describe('BottomComposer (conflict footer stacking)', () => {
+  test('the wrapper anchors its bottom to --conflict-footer-height, not a hard bottom-0', async () => {
+    await renderComposer('notes');
+
+    const wrapper = screen.getByTestId('bottom-composer');
+    expect(wrapper.className).toContain('bottom-[var(--conflict-footer-height,0px)]');
+    expect(wrapper.className).not.toMatch(/(?:^|\s)bottom-0(?:\s|$)/);
+  });
+});
+
 describe('BottomComposer (failure + defensive guards)', () => {
   test('an unsuccessful ({ok:false}) dispatch still clears the field and adds no bespoke toast', async () => {
     dispatchImpl = () => Promise.resolve({ ok: false });

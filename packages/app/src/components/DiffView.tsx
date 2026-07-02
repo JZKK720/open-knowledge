@@ -10,6 +10,7 @@ import { basicSetup } from 'codemirror';
 import { useTheme } from 'next-themes';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useConflictFooterHeightVar } from '@/hooks/use-conflict-footer-height';
 import { Button } from './ui/button';
 
 const darkTheme = basicDarkInit({
@@ -105,6 +106,7 @@ export function DiffView({
   const onAbortRef = useRef(onAbort);
   const [chunksRemaining, setChunksRemaining] = useState<number | null>(null);
   const [mergeControls, setMergeControls] = useState<MergeControlPortal[]>([]);
+  const conflictFooterRef = useConflictFooterHeightVar(conflictMode === true);
   useEffect(() => {
     onResolveRef.current = onResolve;
     onAbortRef.current = onAbort;
@@ -269,7 +271,10 @@ export function DiffView({
         ),
       )}
       {conflictMode && (
-        <div className="flex items-center justify-between gap-2 px-3 py-2 border-t shrink-0">
+        <div
+          ref={conflictFooterRef}
+          className="flex items-center justify-between gap-2 px-3 py-2 border-t shrink-0"
+        >
           <span
             className={`text-xs ${allResolved ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}
           >

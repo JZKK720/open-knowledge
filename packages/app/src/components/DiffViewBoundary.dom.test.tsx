@@ -403,6 +403,28 @@ describe('DiffViewBoundary (Tier-3 mount)', () => {
     expect(screen.queryByRole('button', { name: /accept their deletion/i })).toBeNull();
   });
 
+  test('delete-modify publishes --conflict-footer-height while mounted, removes on unmount', async () => {
+    globalThis.fetch = strategyFetch('delete-modify') as typeof fetch;
+    const { unmount } = render(<DiffViewBoundary docName="foo" provider={makeProvider('x\n')} />);
+
+    await screen.findByRole('button', { name: /keep file deleted/i });
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('0px');
+
+    unmount();
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('');
+  });
+
+  test('modify-delete publishes --conflict-footer-height while mounted, removes on unmount', async () => {
+    globalThis.fetch = strategyFetch('modify-delete') as typeof fetch;
+    const { unmount } = render(<DiffViewBoundary docName="foo" provider={makeProvider('x\n')} />);
+
+    await screen.findByRole('button', { name: /accept their deletion/i });
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('0px');
+
+    unmount();
+    expect(document.documentElement.style.getPropertyValue('--conflict-footer-height')).toBe('');
+  });
+
   test('delete-modify: "Keep deletion" dispatches strategy: delete', async () => {
     globalThis.fetch = strategyFetch('delete-modify') as typeof fetch;
     render(<DiffViewBoundary docName="foo" provider={makeProvider('x\n')} />);

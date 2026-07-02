@@ -818,18 +818,33 @@
   padding-bottom: var(--ask-composer-height, 0px);
 }
 
+/* Conflict-mode DiffView scroller: same composer inset so the last hunks (and
+   their inline Accept/Reject controls) can scroll clear of the floating
+   composer. The content-side padding rule lives next to the
+   `.source-editor .cm-content` restore rule AFTER the `.cm-editor .cm-content`
+   padding reset (equal specificity — source order decides; see the comment
+   there). The conflict footer itself needs no inset — the composer anchors
+   above it via `--conflict-footer-height` (see use-conflict-footer-height.ts). */
+.diff-view {
+  scroll-padding-bottom: var(--ask-composer-height, 0px);
+}
+
 /* Ease the inset + composer entrance so collapsing/expanding glides instead of a
    hard jump cut. The per-frame scroll re-clamp in BottomComposer keeps the bottom
-   pinned while the padding transition plays. Reduced-motion users get the instant
-   change. */
+   pinned while the padding transition plays. `bottom` is included because the
+   composer's anchor tracks `--conflict-footer-height`, which flips between 0 and
+   the conflict footer's height when conflict mode mounts/unmounts. Reduced-motion
+   users get the instant change. */
 @media (prefers-reduced-motion: no-preference) {
-  .editor-doc-scroll :is(.ProseMirror, .cm-content) {
+  .editor-doc-scroll :is(.ProseMirror, .cm-content),
+  .diff-view .cm-content {
     transition: padding-bottom 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   [data-testid="bottom-composer"] {
     transition:
       opacity 200ms ease,
-      transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      bottom 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   @starting-style {
     [data-testid="bottom-composer"] {
@@ -2081,14 +2096,15 @@
   padding: 0;
 }
 
-/* Restore the floating Ask AI composer's bottom inset for full-page source mode.
-   The `padding: 0` reset above ties on specificity with the shared
-   `.editor-doc-scroll :is(.ProseMirror, .cm-content)` inset rule and, being later,
-   zeroes it — so source mode's last lines sit under the composer while WYSIWYG
-   clears. Scoped to `.source-editor` (not `.cm-editor`) so nested code-block CM
-   inside the WYSIWYG body is never padded; declared after the reset so it wins the
-   tie. */
-.source-editor .cm-content {
+/* Restore the floating Ask AI composer's bottom inset for full-page source mode
+   and the conflict-mode diff view. The `padding: 0` reset above ties on
+   specificity with the shared `.editor-doc-scroll :is(.ProseMirror, .cm-content)`
+   inset rule and, being later, zeroes it — so those surfaces' last lines would
+   sit under the composer while WYSIWYG clears. Scoped to `.source-editor` /
+   `.diff-view` (not `.cm-editor`) so nested code-block CM inside the WYSIWYG
+   body is never padded; declared after the reset so it wins the tie. */
+.source-editor .cm-content,
+.diff-view .cm-content {
   padding-bottom: var(--ask-composer-height, 0px);
 }
 
