@@ -35,7 +35,7 @@ export default defineConfig({
     port: vitePort ?? 5173,
     strictPort: vitePort !== undefined,
     watch: {
-      ignored: ['**/content/**'],
+      ignored: ['**/content/**', '**/playwright-report/**', '**/test-results/**'],
     },
   },
   build: {

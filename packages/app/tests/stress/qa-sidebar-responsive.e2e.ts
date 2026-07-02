@@ -190,6 +190,44 @@ test.describe('non-embedded UA', () => {
     await expect(toggle).toHaveAttribute('aria-controls', 'doc-panel');
   });
 
+  test('collapsed doc panel exposes a disabled resize handle; expanded stays interactive', async ({
+    page,
+    api,
+  }) => {
+    await seedDoc(api, 'qa-doc-handle-collapse');
+    await page.setViewportSize(WIDE);
+    await page.goto('/#/qa-doc-handle-collapse');
+    await waitForActiveProviderSynced(page);
+
+    const docPanelHandle = page.locator('[data-slot="resizable-handle"]');
+    await expect(docPanelHandle).toHaveCount(1);
+
+    expect(await docPanelOpen(page)).toBe(true);
+    await expect(docPanelHandle).toHaveAttribute('tabindex', '0');
+    await expect(docPanelHandle).not.toHaveAttribute('aria-disabled', 'true');
+
+    await page.locator('[data-doc-panel-toggle]').click();
+    await expect(page.locator('[data-doc-panel-toggle]')).toHaveAttribute('aria-expanded', 'false');
+
+    await expect(docPanelHandle).toHaveAttribute('aria-disabled', 'true');
+    await expect(docPanelHandle).not.toHaveAttribute('tabindex', '0');
+
+    const box = await docPanelHandle.boundingBox();
+    if (box) {
+      const startX = box.x + box.width / 2;
+      const startY = box.y + box.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX - 320, startY, { steps: 10 });
+      await page.mouse.up();
+    }
+    await expect(page.locator('[data-doc-panel-toggle]')).toHaveAttribute('aria-expanded', 'false');
+
+    await page.locator('[data-doc-panel-toggle]').click();
+    await expect(page.locator('[data-doc-panel-toggle]')).toHaveAttribute('aria-expanded', 'true');
+    await expect(docPanelHandle).toHaveAttribute('tabindex', '0');
+  });
+
   test('QA-013: focus inside left sidebar → narrow → focus on trigger (FR-9)', async ({
     page,
     api,

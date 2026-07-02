@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { usePanelRef } from 'react-resizable-panels';
+import { useGroupRef, usePanelRef } from 'react-resizable-panels';
 import { AssetPreview } from '@/components/AssetPreview';
 import { DocPanel, type PanelTab } from '@/components/DocPanel';
 import {
@@ -58,6 +58,7 @@ import { EditorFooter } from './EditorFooter';
 import type { EditorMode } from './EditorPane';
 import { EditorToolbar } from './EditorToolbar';
 import { shouldPaintOverlay } from './editor-area-overlay';
+import { computeStickyRepinLayout } from './editor-area-sticky-repin';
 import { TerminalDock } from './TerminalDock';
 import { TerminalRevealTab } from './TerminalRevealTab';
 import { xtermThemeForMode } from './terminal-theme';
@@ -69,6 +70,8 @@ const LazyActivityModeContent = lazy(async () => {
 
 const DOC_PANEL_MIN_SIZE = '300px';
 const DOC_PANEL_MAX_SIZE = '600px';
+
+const RIGHT_PANEL_IDS = new Set(['doc-panel', 'terminal-column', 'agent-panel']);
 
 export interface TerminalPlacement {
   readonly container: HTMLElement | null;
@@ -197,6 +200,7 @@ function EditorAreaInner({
 
   const rightDocked = terminalDock === 'right';
   const terminalDockPosition: TerminalDockPosition = rightDocked ? 'right' : 'bottom';
+  const terminalColumnPresent = terminalBridge != null && rightDocked && terminalVisible;
   const revealTabHidden = terminalBridge != null && !terminalVisible && onRevealTerminal != null;
   const bottomRevealTabPresent = revealTabHidden && !rightDocked;
   const rightRevealTabPresent = revealTabHidden && rightDocked;
@@ -260,16 +264,85 @@ function EditorAreaInner({
   );
 
   const [groupContainerEl, setGroupContainerEl] = useState<HTMLDivElement | null>(null);
+  const groupContainerElRef = useRef<HTMLDivElement | null>(null);
+
+  const groupRef = useGroupRef();
+  const terminalColumnPresentRef = useRef(terminalColumnPresent);
+  useEffect(() => {
+    terminalColumnPresentRef.current = terminalColumnPresent;
+  }, [terminalColumnPresent]);
+
+  function resolveGroupPxWidth(): number | null {
+    for (const ref of [panelRef, terminalColumnPanelRef]) {
+      const size = ref.current?.getSize();
+      if (size != null && size.asPercentage > 1 && size.inPixels > 0) {
+        return (size.inPixels / size.asPercentage) * 100;
+      }
+    }
+    const el = groupContainerElRef.current;
+    return el != null && el.offsetWidth > 0 ? el.offsetWidth : null;
+  }
+
+  function assertRightRailLayout(docCollapsed: boolean) {
+    if (isDraggingDocHandleRef.current || isDraggingTerminalHandleRef.current) return;
+    const group = groupRef.current;
+    if (group == null) return;
+    try {
+      const containerPx = resolveGroupPxWidth();
+      if (containerPx == null) return;
+      const layout = group.getLayout();
+      const ids = Object.keys(layout);
+      if (ids.length === 0) return;
+      const residualId = ids.find((id) => !RIGHT_PANEL_IDS.has(id));
+      if (residualId == null) return;
+      const pinnedPx: Record<string, number> = {};
+      if ('doc-panel' in layout) {
+        pinnedPx['doc-panel'] = docCollapsed ? 0 : docPanelWidthPxRef.current;
+      }
+      if ('terminal-column' in layout) {
+        pinnedPx['terminal-column'] = terminalWidthPxRef.current;
+      }
+      if (Object.keys(pinnedPx).length === 0) return;
+      const next = computeStickyRepinLayout({
+        currentLayout: layout,
+        containerPx,
+        pinnedPx,
+        residualId,
+      });
+      if (next !== layout) group.setLayout(next);
+    } catch {}
+  }
+
+  const assertRightRailLayoutRef = useRef(assertRightRailLayout);
+  useEffect(() => {
+    assertRightRailLayoutRef.current = assertRightRailLayout;
+  });
+
+  function expandDocPanel() {
+    if (terminalColumnPresentRef.current) {
+      assertRightRailLayout(false);
+    } else {
+      panelRef.current?.expand();
+    }
+  }
 
   function togglePanel() {
     if (panelRef.current == null) return;
     const partition = rightPartitionRef.current;
     if (isCollapsed) {
       applyToggle('right', partition, 'open');
-      panelRef.current?.expand();
+      if (terminalColumnPresentRef.current) {
+        assertRightRailLayout(false);
+      } else {
+        panelRef.current?.expand();
+      }
     } else {
       applyToggle('right', partition, 'collapsed');
-      panelRef.current?.collapse();
+      if (terminalColumnPresentRef.current) {
+        assertRightRailLayout(true);
+      } else {
+        panelRef.current?.collapse();
+      }
     }
   }
 
@@ -282,7 +355,9 @@ function EditorAreaInner({
       const effective = resolveEffectiveState('right', newPartition, pins);
       const nextCollapsed = effective === 'collapsed';
       setIsCollapsed(nextCollapsed);
-      if (nextCollapsed) {
+      if (terminalColumnPresentRef.current) {
+        assertRightRailLayout(nextCollapsed);
+      } else if (nextCollapsed) {
         panelRef.current?.collapse();
       } else {
         panelRef.current?.expand();
@@ -290,27 +365,27 @@ function EditorAreaInner({
     };
     mql.addEventListener('change', onChange);
     return () => mql.removeEventListener('change', onChange);
-  }, [embeddedHost, panelRef]);
+  }, [
+    embeddedHost,
+    panelRef,
+    // biome-ignore lint/correctness/useExhaustiveDependencies: assertRightRailLayout is render-bound; re-subscribing keeps the handler fresh (mirrors the ⌥⌘B menu effect below)
+    assertRightRailLayout,
+  ]);
 
   useEffect(() => {
     if (groupContainerEl == null) return;
     if (isEmbedded) return;
     const ro = new ResizeObserver(() => {
-      if (!isDraggingDocHandleRef.current && !isCollapsedRef.current) {
-        panelRef.current?.resize(`${docPanelWidthPxRef.current}px`);
-      }
-      if (!isDraggingTerminalHandleRef.current) {
-        terminalColumnPanelRef.current?.resize(`${terminalWidthPxRef.current}px`);
-      }
+      assertRightRailLayoutRef.current(isCollapsedRef.current);
     });
     ro.observe(groupContainerEl);
     return () => ro.disconnect();
-  }, [groupContainerEl, isEmbedded, panelRef, terminalColumnPanelRef]);
+  }, [groupContainerEl, isEmbedded]);
 
   useEffect(() => {
     const openRequestedTab = (tab: PanelTab) => {
       onActiveTabChange(tab);
-      panelRef.current?.expand();
+      expandDocPanel();
     };
 
     const pendingTab = consumePendingDocPanelTabRequest();
@@ -322,12 +397,30 @@ function EditorAreaInner({
       consumePendingDocPanelTabRequest();
       openRequestedTab(tab);
     });
-  }, [onActiveTabChange, panelRef]);
+  }, [
+    onActiveTabChange,
+    // biome-ignore lint/correctness/useExhaustiveDependencies: expandDocPanel is render-bound; re-subscribing keeps the handler fresh
+    expandDocPanel,
+  ]);
 
   useEffect(() => {
     if (docPanelExpandSignal === 0) return;
-    panelRef.current?.expand();
-  }, [docPanelExpandSignal, panelRef]);
+    expandDocPanel();
+  }, [
+    docPanelExpandSignal,
+    // biome-ignore lint/correctness/useExhaustiveDependencies: expandDocPanel is render-bound; re-running keeps the closure fresh
+    expandDocPanel,
+  ]);
+
+  const prevTerminalColumnPresentRef = useRef(terminalColumnPresent);
+  useLayoutEffect(() => {
+    if (prevTerminalColumnPresentRef.current === terminalColumnPresent) return;
+    prevTerminalColumnPresentRef.current = terminalColumnPresent;
+    const docCollapsed = isCollapsed;
+    queueMicrotask(() => {
+      assertRightRailLayoutRef.current(docCollapsed);
+    });
+  }, [terminalColumnPresent, isCollapsed]);
 
   useLayoutEffect(() => {
     if (!isCollapsed) return;
@@ -635,11 +728,12 @@ function EditorAreaInner({
     );
 
     viewContent = editorContent;
+    const docPanelNeutralized = terminalColumnPresent && isCollapsed;
     rightPanel = (
       <>
         <ResizableHandle
-          withHandle
-          disabled={isEmbedded && isCollapsed}
+          withHandle={!isCollapsed}
+          disabled={isCollapsed}
           onPointerDown={() => {
             setIsDraggingDocHandle(true);
             isDraggingDocHandleRef.current = true;
@@ -654,8 +748,9 @@ function EditorAreaInner({
         <ResizablePanel
           id="doc-panel"
           panelRef={panelRef}
+          disabled={docPanelNeutralized}
           defaultSize={initialRightCollapsed ? 0 : `${initialDocPanelWidthPx}px`}
-          minSize={DOC_PANEL_MIN_SIZE}
+          minSize={docPanelNeutralized ? '0px' : DOC_PANEL_MIN_SIZE}
           maxSize={DOC_PANEL_MAX_SIZE}
           collapsible
           collapsedSize={0}
@@ -701,7 +796,6 @@ function EditorAreaInner({
       viewContent
     );
 
-  const terminalColumnPresent = terminalBridge != null && rightDocked && terminalVisible;
   const terminalColumn = terminalColumnPresent ? (
     <>
       <ResizableHandle
@@ -713,6 +807,9 @@ function EditorAreaInner({
             setIsDraggingTerminalHandle(false);
             isDraggingTerminalHandleRef.current = false;
             window.removeEventListener('pointerup', handleUp);
+            if (terminalColumnPanelRef.current?.isCollapsed()) {
+              onTerminalVisibleChange?.(false);
+            }
           };
           window.addEventListener('pointerup', handleUp);
         }}
@@ -724,6 +821,8 @@ function EditorAreaInner({
         defaultSize={`${initialTerminalWidthPx}px`}
         minSize={`${MIN_TERMINAL_WIDTH}px`}
         maxSize={`${MAX_TERMINAL_WIDTH}px`}
+        collapsible
+        collapsedSize={0}
         onResize={(size) => {
           if (size.inPixels > 0 && isDraggingTerminalHandleRef.current) {
             terminalWidthPxRef.current = size.inPixels;
@@ -749,9 +848,16 @@ function EditorAreaInner({
     (rightPanel != null && !initialRightCollapsed) || terminalColumnPresent;
 
   return (
-    <div className="relative flex min-h-0 flex-1" ref={setGroupContainerEl}>
+    <div
+      className="relative flex min-h-0 flex-1"
+      ref={(el) => {
+        setGroupContainerEl(el);
+        groupContainerElRef.current = el;
+      }}
+    >
       <ResizablePanelGroup
         orientation="horizontal"
+        groupRef={groupRef}
         data-dragging={isDraggingDocHandle || isDraggingTerminalHandle || undefined}
       >
         <ResizablePanel

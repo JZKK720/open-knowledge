@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { type ReactNode, useEffect } from 'react';
 
 type SettingsDialogShellProps = {
@@ -103,11 +103,24 @@ mock.module('./TerminalDock', () => ({
   },
 }));
 
+let groupLayout: Record<string, number> = {};
+let groupSetLayoutCalls: Array<Record<string, number>> = [];
+let panelIsCollapsed = false;
 mock.module('react-resizable-panels', () => ({
   usePanelRef: () => ({
     current: {
       collapse: () => {},
       expand: () => {},
+      getSize: () => ({ asPercentage: 25, inPixels: 340 }),
+      isCollapsed: () => panelIsCollapsed,
+    },
+  }),
+  useGroupRef: () => ({
+    current: {
+      getLayout: () => groupLayout,
+      setLayout: (layout: Record<string, number>) => {
+        groupSetLayoutCalls.push(layout);
+      },
     },
   }),
 }));
@@ -117,7 +130,9 @@ mock.module('@/components/ui/resizable', () => ({
     <div data-testid="resizable-group">{children}</div>
   ),
   ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ResizableHandle: () => <div data-testid="resizable-handle" />,
+  ResizableHandle: ({ onPointerDown }: { onPointerDown?: (e: unknown) => void }) => (
+    <div data-testid="resizable-handle" onPointerDown={onPointerDown} />
+  ),
 }));
 
 mock.module('@/hooks/use-doc-panel-layout', () => ({
@@ -275,6 +290,108 @@ describe('EditorArea empty-state terminal host', () => {
 
     expect(screen.queryByTestId('terminal-dock')).toBeNull();
     expect(screen.getByTestId('empty-editor-state')).toBeTruthy();
+  });
+});
+
+describe('EditorArea right-rail layout assert on terminal-column mount/unmount', () => {
+  const setViewportWidth = (px: number) => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: px,
+      configurable: true,
+      writable: true,
+    });
+  };
+
+  const baseProps = {
+    editorMode: 'wysiwyg',
+    onModeChange: () => {},
+    activeTab: 'timeline',
+    onActiveTabChange: () => {},
+    terminalBridge: {} as never,
+    terminalDock: 'right',
+    onTerminalVisibleChange: () => {},
+  } as const;
+
+  const MOCK_GROUP_PX = 1360;
+  const pctOf = (px: number) => (px / MOCK_GROUP_PX) * 100;
+
+  beforeEach(() => {
+    cleanup();
+    docCtx = EMPTY_DOC_CTX;
+    groupLayout = {};
+    groupSetLayoutCalls = [];
+    panelIsCollapsed = false;
+  });
+
+  test('hiding the terminal re-asserts the collapsed doc panel over the stale panel-set restore', async () => {
+    setViewportWidth(1024);
+    const view = render(<EditorArea {...baseProps} terminalVisible />);
+    expect(groupSetLayoutCalls).toHaveLength(0);
+    groupLayout = { 'editor-main': 70, 'doc-panel': 30 };
+    view.rerender(<EditorArea {...baseProps} terminalVisible={false} />);
+    await act(async () => {});
+    const corrected = groupSetLayoutCalls.at(-1);
+    expect(corrected).toBeDefined();
+    expect(corrected?.['doc-panel']).toBe(0);
+    expect(corrected?.['editor-main']).toBe(100);
+  });
+
+  test('revealing the terminal keeps the open doc panel open despite a stale cached layout', async () => {
+    setViewportWidth(1400);
+    const view = render(<EditorArea {...baseProps} terminalVisible={false} />);
+    groupLayout = { 'editor-main': 45, 'doc-panel': 25, 'terminal-column': 30 };
+    view.rerender(<EditorArea {...baseProps} terminalVisible />);
+    await act(async () => {});
+    const corrected = groupSetLayoutCalls.at(-1);
+    expect(corrected).toBeDefined();
+    expect(corrected?.['doc-panel']).toBeCloseTo(pctOf(320), 3);
+    expect(corrected?.['terminal-column']).toBeCloseTo(pctOf(480), 3);
+    expect(corrected?.['editor-main']).toBeCloseTo(100 - pctOf(320) - pctOf(480), 3);
+  });
+
+  test('releasing a terminal-handle drag with the column snapped shut hides the terminal', async () => {
+    setViewportWidth(1400);
+    const visibleChanges: boolean[] = [];
+    render(
+      <EditorArea
+        {...baseProps}
+        terminalVisible
+        onTerminalVisibleChange={(visible: boolean) => {
+          visibleChanges.push(visible);
+        }}
+      />,
+    );
+    const handle = screen.getByTestId('resizable-handle');
+    act(() => {
+      fireEvent.pointerDown(handle);
+    });
+    panelIsCollapsed = true;
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+    expect(visibleChanges.at(-1)).toBe(false);
+  });
+
+  test('releasing a terminal-handle drag with the column still open does NOT hide the terminal', async () => {
+    setViewportWidth(1400);
+    const visibleChanges: boolean[] = [];
+    render(
+      <EditorArea
+        {...baseProps}
+        terminalVisible
+        onTerminalVisibleChange={(visible: boolean) => {
+          visibleChanges.push(visible);
+        }}
+      />,
+    );
+    const handle = screen.getByTestId('resizable-handle');
+    act(() => {
+      fireEvent.pointerDown(handle);
+    });
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+    expect(visibleChanges).toHaveLength(0);
   });
 });
 

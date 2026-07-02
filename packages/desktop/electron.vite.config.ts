@@ -64,7 +64,7 @@ export default defineConfig({
     },
     server: {
       watch: {
-        ignored: ['**/content/**'],
+        ignored: ['**/content/**', '**/playwright-report/**', '**/test-results/**'],
       },
     },
   },
