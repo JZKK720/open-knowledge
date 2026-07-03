@@ -10,7 +10,11 @@ import type {
   OkServerVersionDriftInfo,
   OkShareReceivedPayload,
 } from './bridge-contract.ts';
-import type { McpWiringEditorDetection, OnboardingShowPayload } from './ipc-channels.ts';
+import type {
+  McpWiringEditorDetection,
+  McpWiringPathInstallDescriptor,
+  OnboardingShowPayload,
+} from './ipc-channels.ts';
 
 export interface EventChannels {
   'ok:project:switching': { payload: { projectPath: string } };
@@ -35,7 +39,10 @@ export interface EventChannels {
   };
   'ok:share:received': { payload: OkShareReceivedPayload };
   'ok:mcp-wiring:show': {
-    payload: { detectedEditors: readonly McpWiringEditorDetection[] };
+    payload: {
+      detectedEditors: readonly McpWiringEditorDetection[];
+      pathInstall: McpWiringPathInstallDescriptor;
+    };
   };
   'ok:onboarding:show': {
     payload: OnboardingShowPayload;

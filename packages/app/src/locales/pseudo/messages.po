@@ -443,6 +443,11 @@ msgstr ""
 msgid "<0>Mirror source removed.</0> The doc <1>{src}</1> is no longer available."
 msgstr ""
 
+#. Warning shown when the user unchecks the PATH toggle — only external terminals degrade
+#: src/components/McpConsentDialogBody.tsx
+msgid "<0>ok</0> won't run in external terminals until you add it later from the File menu. OpenKnowledge's built-in terminal and AI tools keep working."
+msgstr ""
+
 #: src/components/PageHeaderWidgets.tsx
 msgid "📝 or assets/icon.png"
 msgstr ""
@@ -636,8 +641,18 @@ msgstr ""
 msgid "Add tag"
 msgstr ""
 
+#. Toggle in the first-launch dialog that adds the ok CLI to the user's shell PATH
+#: src/components/McpConsentDialogBody.tsx
+msgid "Add the <0>ok</0> command to your terminal"
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Add the next matching source selection."
+msgstr ""
+
+#. placeholder {0}: pathInstall.rcFilesToTouch.join(', ')
+#: src/components/McpConsentDialogBody.tsx
+msgid "Adds a managed block to {0}"
 msgstr ""
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
@@ -665,6 +680,11 @@ msgstr ""
 msgid "Agent configuration file"
 msgstr ""
 
+#. Section label above the editor checkbox list in the first-launch dialog
+#: src/components/McpConsentDialogBody.tsx
+msgid "AI tools"
+msgstr ""
+
 #: src/components/FolderOverview.tsx
 msgid "All files"
 msgstr ""
@@ -687,6 +707,10 @@ msgstr ""
 
 #: src/components/GraphPanel.tsx
 msgid "Already open"
+msgstr ""
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "Already set up — ok is available in your terminal"
 msgstr ""
 
 #: src/components/DocumentErrorBoundary.tsx
@@ -6411,11 +6435,13 @@ msgstr ""
 msgid "Templates available"
 msgstr ""
 
+#. Section label above the shell-PATH toggle in the first-launch dialog
 #: src/components/empty-state/CreatePromptComposer.tsx
 #: src/components/handoff/AgentSplitButton.tsx
 #: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
+#: src/components/McpConsentDialogBody.tsx
 #: src/components/settings/SettingsDialogShell.tsx
 #: src/components/settings/TerminalSection.tsx
 #: src/components/TerminalNewChatButton.tsx

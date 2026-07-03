@@ -185,7 +185,12 @@ import {
   recordFirstRunShareHandoff,
   recordOnboardingFlow,
 } from './onboarding-telemetry.ts';
-import { computePathLeg, type EnsureCliOnPathResult, ensureCliOnPath } from './path-install.ts';
+import {
+  computePathInstallDescriptor,
+  computePathLeg,
+  type EnsureCliOnPathResult,
+  ensureCliOnPath,
+} from './path-install.ts';
 import { installStdioBrokenPipeGuard } from './process-safety-net.ts';
 import {
   checkAndRepairProjectMcpOnProjectOpen,
@@ -1342,7 +1347,7 @@ async function runApplicationMenuRefresh(): Promise<void> {
               const message = err instanceof Error ? err.message : String(err);
               console.error('[main] reconfigureMcpWiring failed', { err: message });
               dialog.showErrorBox(
-                'Configure AI Tool Integrations failed',
+                'Set up OpenKnowledge integrations failed',
                 `OpenKnowledge couldn't re-arm the MCP consent dialog:\n\n${message}`,
               );
             }
@@ -1457,6 +1462,24 @@ interface ArmMcpWiringOpts {
   immediateDispatchTarget?: McpWiringDispatchTarget;
 }
 
+const pathInstallLogger = {
+  event: (payload: { event: string; [key: string]: unknown }) =>
+    getLogger('path-install').info(payload, payload.event),
+};
+
+function buildEnsureCliOnPathOpts() {
+  return {
+    executablePath: app.getPath('exe'),
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    forceEnv: process.env.OK_M6B_FORCE ?? null,
+    reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
+    home: osHomedir(),
+    bundleVersion: app.getVersion(),
+    logger: pathInstallLogger,
+  };
+}
+
 function createMcpWiringOpts(opts: ArmMcpWiringOpts = {}) {
   return {
     isPackaged: app.isPackaged,
@@ -1465,6 +1488,24 @@ function createMcpWiringOpts(opts: ArmMcpWiringOpts = {}) {
     platform: process.platform,
     ipcMain,
     cli: createMcpWiringCliSurface(),
+    pathInstall: {
+      computeDescriptor: () =>
+        computePathInstallDescriptor({
+          home: osHomedir(),
+          env: process.env,
+          logger: pathInstallLogger,
+        }),
+      applyConsent: async (status: 'granted' | 'declined') => {
+        const result = await ensureCliOnPath({
+          ...buildEnsureCliOnPathOpts(),
+          consentDecision: { status, at: new Date().toISOString() },
+        });
+        if (result.status === 'failed-all') {
+          return { ok: false as const, error: result.error };
+        }
+        return { ok: true as const };
+      },
+    },
     forceEnv: process.env.OK_M6B_FORCE ?? null,
     reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
     forceShow: opts.forceShow ?? false,
@@ -2861,18 +2902,7 @@ function bootPrimaryInstance(): void {
       mcpWiringHandle = armMcpWiring();
       void Promise.allSettled([
         checkAndRepairMcpWiringOnStartup(createMcpWiringOpts()),
-        ensureCliOnPath({
-          executablePath: app.getPath('exe'),
-          isPackaged: app.isPackaged,
-          platform: process.platform,
-          forceEnv: process.env.OK_M6B_FORCE ?? null,
-          reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
-          home: osHomedir(),
-          bundleVersion: app.getVersion(),
-          logger: {
-            event: (payload) => getLogger('path-install').info(payload, payload.event),
-          },
-        }),
+        ensureCliOnPath(buildEnsureCliOnPathOpts()),
       ])
         .then(([mcpSettled, pathSettled]) => {
           if (mcpSettled.status === 'rejected') {

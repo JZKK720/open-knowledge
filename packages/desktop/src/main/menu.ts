@@ -232,7 +232,7 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
         ...(deps.reconfigureMcpWiring
           ? ([
               {
-                label: 'Configure AI tool integrations…',
+                label: 'Set up OpenKnowledge integrations…',
                 click: () => {
                   void deps.reconfigureMcpWiring?.();
                 },

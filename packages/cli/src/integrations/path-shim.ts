@@ -18,6 +18,11 @@ export interface PathDiscovery {
   okBinAlreadyOnPath: boolean;
 }
 
+export interface PathInstallConsent {
+  status: 'granted' | 'declined';
+  at: string;
+}
+
 export interface PathInstallMarker {
   version: 1;
   installedAt: string;
@@ -36,6 +41,7 @@ export interface PathInstallMarker {
     createdAt: string;
     kind: 'created' | 'refreshed-our-own';
   }>;
+  consent?: PathInstallConsent;
 }
 
 /** Absolute path to the PATH-install manifest (macOS layout — the shim is

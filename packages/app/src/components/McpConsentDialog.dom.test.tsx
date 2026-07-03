@@ -18,6 +18,16 @@ const payload: OkMcpWiringShowPayload = {
     { id: 'cursor', label: 'Cursor', detected: true, willReplace: false },
     { id: 'codex', label: 'Codex', detected: false, willReplace: false },
   ],
+  pathInstall: {
+    shellDetected: true,
+    rcFilesToTouch: ['~/.zshrc', '~/.config/fish/conf.d/open-knowledge.fish'],
+    alreadyInstalled: false,
+  },
+};
+
+const noneDetectedPayload: OkMcpWiringShowPayload = {
+  detectedEditors: [{ id: 'codex', label: 'Codex', detected: false, willReplace: false }],
+  pathInstall: payload.pathInstall,
 };
 
 function deferredResult() {
@@ -28,23 +38,30 @@ function deferredResult() {
   return { promise, resolve };
 }
 
+interface RecordedConfirm {
+  editorIds: readonly string[];
+  pathInstall: boolean | undefined;
+}
+
 function makeHarness({
   confirmResult = async () => ({ ok: true as const }),
   skipResult = async () => ({ ok: true as const }),
+  snapshot = payload,
 }: {
   confirmResult?: (editorIds: readonly string[]) => Promise<OkMcpWiringResult>;
   skipResult?: () => Promise<OkMcpWiringResult>;
+  snapshot?: OkMcpWiringShowPayload;
 } = {}) {
-  const confirmCalls: readonly string[][] = [];
+  const confirmCalls: RecordedConfirm[] = [];
   const skipCalls: string[] = [];
   const toastErrors: string[] = [];
   const store: McpConsentStore = {
-    confirm: async (editorIds) => {
-      (confirmCalls as string[][]).push([...editorIds]);
-      return confirmResult(editorIds);
+    confirm: async (request) => {
+      confirmCalls.push({ editorIds: [...request.editorIds], pathInstall: request.pathInstall });
+      return confirmResult(request.editorIds);
     },
     dismiss: () => {},
-    getSnapshot: () => payload,
+    getSnapshot: () => snapshot,
     install: () => undefined,
     skip: async () => {
       skipCalls.push('skip');
@@ -55,12 +72,14 @@ function makeHarness({
   const toast: ToastImpl = {
     error: (message) => toastErrors.push(message),
   };
-  return { confirmCalls, skipCalls, store, toast, toastErrors };
+  return { confirmCalls, skipCalls, store, toast, toastErrors, snapshot };
 }
 
 async function renderDialog(harness = makeHarness()) {
   const { McpConsentDialogBody } = await import('./McpConsentDialogBody');
-  render(<McpConsentDialogBody payload={payload} store={harness.store} toast={harness.toast} />);
+  render(
+    <McpConsentDialogBody payload={harness.snapshot} store={harness.store} toast={harness.toast} />,
+  );
   return harness;
 }
 
@@ -113,15 +132,15 @@ describe('McpConsentDialog runtime behavior', () => {
 
     expect(skip.disabled).toBe(false);
     expect(add.textContent).toBe('Add');
-    expect(harness.confirmCalls).toEqual([['claude', 'cursor']]);
+    expect(harness.confirmCalls).toEqual([{ editorIds: ['claude', 'cursor'], pathInstall: true }]);
     expect(harness.toastErrors).toEqual(['Could not write Claude config']);
 
     await userEvent.click(add);
     second.resolve({ ok: false, error: 'Still unwritable' });
     await waitFor(() => {
       expect(harness.confirmCalls).toEqual([
-        ['claude', 'cursor'],
-        ['claude', 'cursor'],
+        { editorIds: ['claude', 'cursor'], pathInstall: true },
+        { editorIds: ['claude', 'cursor'], pathInstall: true },
       ]);
     });
   });
@@ -155,6 +174,115 @@ describe('McpConsentDialog runtime behavior', () => {
     second.resolve({ ok: false, error: 'Still cannot write marker' });
     await waitFor(() => {
       expect(harness.skipCalls).toEqual(['skip', 'skip']);
+    });
+  });
+});
+
+describe('McpConsentDialog PATH consent row', () => {
+  afterEach(() => cleanup());
+
+  test('PATH section is pinned outside the scrollable editor list', async () => {
+    await renderDialog();
+
+    const pathCheckbox = screen.getByTestId('mcp-consent-path-checkbox');
+    expect(pathCheckbox.closest('[class*="overflow-y-auto"]')).toBeNull();
+    const editorCheckbox = screen.getByTestId('mcp-consent-checkbox-claude');
+    expect(editorCheckbox.closest('[class*="overflow-y-auto"]')).not.toBeNull();
+  });
+
+  test('renders pre-checked with the rc-file disclosure; warning appears only when unchecked', async () => {
+    await renderDialog();
+
+    const checkbox = screen.getByTestId('mcp-consent-path-checkbox');
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
+    expect(checkbox.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByTestId('mcp-consent-path-status').textContent).toBe(
+      'Adds a managed block to ~/.zshrc, ~/.config/fish/conf.d/open-knowledge.fish',
+    );
+    expect(screen.queryByTestId('mcp-consent-path-warning')).toBeNull();
+
+    await userEvent.click(checkbox);
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByTestId('mcp-consent-path-warning').textContent).toContain(
+      'external terminals',
+    );
+  });
+
+  test('unchecking the toggle sends pathInstall:false on Add', async () => {
+    const harness = await renderDialog();
+
+    await userEvent.click(screen.getByTestId('mcp-consent-path-checkbox'));
+    await userEvent.click(screen.getByTestId('mcp-consent-add'));
+
+    await waitFor(() => {
+      expect(harness.confirmCalls).toEqual([
+        { editorIds: ['claude', 'cursor'], pathInstall: false },
+      ]);
+    });
+  });
+
+  test('FR8: zero editors selected + PATH checked keeps Add enabled and confirms PATH-only', async () => {
+    const harness = await renderDialog(makeHarness({ snapshot: noneDetectedPayload }));
+
+    const add = screen.getByTestId('mcp-consent-add') as HTMLButtonElement;
+    expect(add.disabled).toBe(false);
+
+    await userEvent.click(add);
+    await waitFor(() => {
+      expect(harness.confirmCalls).toEqual([{ editorIds: [], pathInstall: true }]);
+    });
+  });
+
+  test('FR8: zero editors + PATH unchecked disables Add', async () => {
+    await renderDialog(makeHarness({ snapshot: noneDetectedPayload }));
+
+    await userEvent.click(screen.getByTestId('mcp-consent-path-checkbox'));
+    const add = screen.getByTestId('mcp-consent-add') as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+  });
+
+  test('alreadyInstalled renders an informational row and solicits no decision', async () => {
+    const harness = await renderDialog(
+      makeHarness({
+        snapshot: {
+          ...payload,
+          pathInstall: { ...payload.pathInstall, alreadyInstalled: true },
+        },
+      }),
+    );
+
+    const checkbox = screen.getByTestId('mcp-consent-path-checkbox');
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
+    expect(checkbox.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByTestId('mcp-consent-path-status').textContent).toBe(
+      'Already set up — ok is available in your terminal',
+    );
+
+    await userEvent.click(screen.getByTestId('mcp-consent-add'));
+    await waitFor(() => {
+      expect(harness.confirmCalls).toEqual([
+        { editorIds: ['claude', 'cursor'], pathInstall: undefined },
+      ]);
+    });
+  });
+
+  test('shellDetected:false hides the row entirely and sends no PATH decision', async () => {
+    const harness = await renderDialog(
+      makeHarness({
+        snapshot: {
+          ...payload,
+          pathInstall: { shellDetected: false, rcFilesToTouch: [], alreadyInstalled: false },
+        },
+      }),
+    );
+
+    expect(screen.queryByTestId('mcp-consent-path-checkbox')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('mcp-consent-add'));
+    await waitFor(() => {
+      expect(harness.confirmCalls).toEqual([
+        { editorIds: ['claude', 'cursor'], pathInstall: undefined },
+      ]);
     });
   });
 });

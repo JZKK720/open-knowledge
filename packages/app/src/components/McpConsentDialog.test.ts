@@ -3,6 +3,7 @@ import type { OkMcpWiringEditorId, OkMcpWiringShowPayload } from '@/lib/desktop-
 import { McpConsentDialog } from './McpConsentDialog';
 import {
   computeInitialSelection,
+  isPathRowActionable,
   selectedIdsOrdered,
   type ToastImpl,
   toggleSelectedId,
@@ -98,6 +99,34 @@ describe('selectedIdsOrdered', () => {
     const sel = new Set<OkMcpWiringEditorId>(allIds);
     const out = selectedIdsOrdered(sel, sampleDetection);
     expect(out).toEqual(allIds);
+  });
+});
+
+describe('isPathRowActionable', () => {
+  test('actionable only when an rc file is touchable AND nothing is installed yet', () => {
+    expect(
+      isPathRowActionable({
+        shellDetected: true,
+        rcFilesToTouch: ['~/.zshrc'],
+        alreadyInstalled: false,
+      }),
+    ).toBe(true);
+  });
+
+  test('hidden row (no touchable rc files) solicits no decision', () => {
+    expect(
+      isPathRowActionable({ shellDetected: false, rcFilesToTouch: [], alreadyInstalled: false }),
+    ).toBe(false);
+  });
+
+  test('informational row (already installed / consent granted) solicits no decision', () => {
+    expect(
+      isPathRowActionable({
+        shellDetected: true,
+        rcFilesToTouch: ['~/.zshrc'],
+        alreadyInstalled: true,
+      }),
+    ).toBe(false);
   });
 });
 

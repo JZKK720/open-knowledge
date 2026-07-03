@@ -17,6 +17,11 @@ import type { OkMcpWiringEditorId, OkMcpWiringShowPayload } from '@/lib/desktop-
 import { type McpConsentStore, mcpConsentStore } from '@/lib/mcp-consent-store';
 
 type EditorDetection = OkMcpWiringShowPayload['detectedEditors'][number];
+type PathInstallDescriptor = OkMcpWiringShowPayload['pathInstall'];
+
+export function isPathRowActionable(pathInstall: PathInstallDescriptor): boolean {
+  return pathInstall.shellDetected && !pathInstall.alreadyInstalled;
+}
 
 export function computeInitialSelection(
   detectedEditors: readonly EditorDetection[],
@@ -81,9 +86,12 @@ interface McpConsentDialogFormProps {
 function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormProps) {
   const { t } = useLingui();
   const detectedEditors = payload.detectedEditors;
+  const pathInstall = payload.pathInstall;
+  const pathActionable = isPathRowActionable(pathInstall);
   const [selection, setSelection] = useState<ReadonlySet<OkMcpWiringEditorId>>(() =>
     computeInitialSelection(detectedEditors),
   );
+  const [pathChecked, setPathChecked] = useState(true);
   const [busy, setBusy] = useState(false);
   const idPrefix = useId();
 
@@ -93,7 +101,10 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
 
   async function onAdd() {
     setBusy(true);
-    const result = await store.confirm(selectedIdsOrdered(selection, detectedEditors));
+    const result = await store.confirm({
+      editorIds: selectedIdsOrdered(selection, detectedEditors),
+      pathInstall: pathActionable ? pathChecked : undefined,
+    });
     if (!result.ok) {
       toast.error(result.error);
       setBusy(false);
@@ -140,7 +151,81 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
           </DialogDescription>
         </DialogHeader>
 
+        {/*
+         * Shell-PATH consent section — its own pinned block ABOVE the
+         * scrollable editor list (DialogBody is the overflow container; a
+         * row inside it sits below the fold on machines with many editors).
+         * Distinct from the per-editor MCP checkboxes because the two
+         * decisions are independent (MCP runs over npx / the bundle
+         * wrapper, never bare `ok`). Hidden when no rc file is touchable;
+         * informational when a managed block is already on disk or consent
+         * was already granted.
+         */}
+        {pathInstall.shellDetected && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              <Trans comment="Section label above the shell-PATH toggle in the first-launch dialog">
+                Terminal
+              </Trans>
+            </span>
+            <div className="overflow-hidden rounded-md border border-border bg-card/50">
+              <Label
+                htmlFor={`${idPrefix}-path`}
+                className={
+                  pathActionable
+                    ? 'flex cursor-pointer items-start gap-2.5 px-3 py-2.5 font-normal hover:bg-accent'
+                    : 'flex items-start gap-2.5 px-3 py-2.5 font-normal'
+                }
+              >
+                <Checkbox
+                  id={`${idPrefix}-path`}
+                  checked={pathActionable ? pathChecked : true}
+                  disabled={busy || !pathActionable}
+                  onCheckedChange={() => setPathChecked((prev) => !prev)}
+                  className="mt-0.5"
+                  data-testid="mcp-consent-path-checkbox"
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground">
+                    <Trans comment="Toggle in the first-launch dialog that adds the ok CLI to the user's shell PATH">
+                      Add the <code>ok</code> command to your terminal
+                    </Trans>
+                  </span>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    data-testid="mcp-consent-path-status"
+                  >
+                    {pathActionable
+                      ? t`Adds a managed block to ${pathInstall.rcFilesToTouch.join(', ')}`
+                      : t`Already set up — ok is available in your terminal`}
+                  </span>
+                  {pathActionable && !pathChecked && (
+                    <span
+                      className="text-xs text-amber-600 dark:text-amber-400"
+                      data-testid="mcp-consent-path-warning"
+                    >
+                      <Trans comment="Warning shown when the user unchecks the PATH toggle — only external terminals degrade">
+                        <code>ok</code> won't run in external terminals until you add it later from
+                        the File menu. OpenKnowledge's built-in terminal and AI tools keep working.
+                      </Trans>
+                    </span>
+                  )}
+                </span>
+              </Label>
+            </div>
+          </div>
+        )}
+
         <DialogBody>
+          {/* Group label only when the Terminal section renders above —
+              with a single group there is nothing to distinguish. */}
+          {pathInstall.shellDetected && (
+            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+              <Trans comment="Section label above the editor checkbox list in the first-launch dialog">
+                AI tools
+              </Trans>
+            </div>
+          )}
           <ul className="rounded-md border border-border bg-card/50 divide-y divide-border overflow-hidden">
             {detectedEditors.map((editor) => {
               const checked = selection.has(editor.id);
@@ -194,7 +279,7 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
           </Button>
           <Button
             onClick={() => void onAdd()}
-            disabled={busy || selection.size === 0}
+            disabled={busy || (selection.size === 0 && !(pathActionable && pathChecked))}
             data-testid="mcp-consent-add"
           >
             {busy ? (

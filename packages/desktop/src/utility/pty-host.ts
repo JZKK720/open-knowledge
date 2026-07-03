@@ -1,3 +1,5 @@
+import { delimiter, join } from 'node:path';
+
 const DARWIN_FALLBACK_SHELL = '/bin/zsh';
 
 const STRIPPED_ENV_MARKERS = ['OK_ELECTRON_PROTOCOL_HOST', 'OK_LOCK_KIND'] as const;
@@ -151,6 +153,14 @@ export function buildShellEnv(
     if (value === undefined) continue;
     if (stripped.has(key)) continue;
     out[key] = value;
+  }
+  const home = out.HOME;
+  if (home) {
+    const okBin = join(home, '.ok', 'bin');
+    const entries = (out.PATH ?? '').split(delimiter).filter(Boolean);
+    if (!entries.includes(okBin)) {
+      out.PATH = [okBin, ...entries].join(delimiter);
+    }
   }
   out.OK_DESKTOP_TERMINAL = '1';
   return out;

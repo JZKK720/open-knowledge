@@ -276,7 +276,10 @@ export type OkMcpWiringEditorId = EditorId;
 /** Payload passed to `mcpWiring.onShow` subscribers. `willReplace: true`
  *  signals the editor has an existing OK-managed MCP entry (canonical npx,
  *  `-y` variant, or prior cliPath shape) that Add would overwrite (Pass 1
- *  Major #8). */
+ *  Major #8). `pathInstall` drives the dialog's shell-PATH toggle row:
+ *  `shellDetected: false` hides the row; `alreadyInstalled: true` renders
+ *  it informational (block already on disk or consent already granted);
+ *  `rcFilesToTouch` names the tildified shell files a grant would edit. */
 export interface OkMcpWiringShowPayload {
   readonly detectedEditors: readonly {
     readonly id: OkMcpWiringEditorId;
@@ -284,6 +287,20 @@ export interface OkMcpWiringShowPayload {
     readonly detected: boolean;
     readonly willReplace: boolean;
   }[];
+  readonly pathInstall: {
+    readonly shellDetected: boolean;
+    readonly rcFilesToTouch: readonly string[];
+    readonly alreadyInstalled: boolean;
+  };
+}
+
+/** Confirm payload for `mcpWiring.confirm`. `pathInstall` is the PATH
+ *  toggle, tri-state: `true` → append the managed rc block; `false` →
+ *  record declined, touch nothing; absent → no PATH decision was solicited
+ *  (row hidden or informational). */
+export interface OkMcpWiringConfirmRequest {
+  readonly editorIds: readonly OkMcpWiringEditorId[];
+  readonly pathInstall?: boolean;
 }
 
 export type OkMcpWiringResult = { ok: true } | { ok: false; error: string };
@@ -674,7 +691,7 @@ export interface OkDesktopBridge {
   mcpWiring: {
     onShow(cb: (payload: OkMcpWiringShowPayload) => void): OkUnsubscribe;
     signalReady(): void;
-    confirm(editorIds: readonly OkMcpWiringEditorId[]): Promise<OkMcpWiringResult>;
+    confirm(request: OkMcpWiringConfirmRequest): Promise<OkMcpWiringResult>;
     skip(): Promise<OkMcpWiringResult>;
   };
   onboarding: {

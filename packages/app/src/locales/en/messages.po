@@ -448,6 +448,11 @@ msgstr "<0>Mirror anchor not found.</0> No <1>{mirrorSourceTag}</1> exists in <2
 msgid "<0>Mirror source removed.</0> The doc <1>{src}</1> is no longer available."
 msgstr "<0>Mirror source removed.</0> The doc <1>{src}</1> is no longer available."
 
+#. Warning shown when the user unchecks the PATH toggle — only external terminals degrade
+#: src/components/McpConsentDialogBody.tsx
+msgid "<0>ok</0> won't run in external terminals until you add it later from the File menu. OpenKnowledge's built-in terminal and AI tools keep working."
+msgstr "<0>ok</0> won't run in external terminals until you add it later from the File menu. OpenKnowledge's built-in terminal and AI tools keep working."
+
 #: src/components/PageHeaderWidgets.tsx
 msgid "📝 or assets/icon.png"
 msgstr "📝 or assets/icon.png"
@@ -641,9 +646,19 @@ msgstr "Add tab"
 msgid "Add tag"
 msgstr "Add tag"
 
+#. Toggle in the first-launch dialog that adds the ok CLI to the user's shell PATH
+#: src/components/McpConsentDialogBody.tsx
+msgid "Add the <0>ok</0> command to your terminal"
+msgstr "Add the <0>ok</0> command to your terminal"
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Add the next matching source selection."
 msgstr "Add the next matching source selection."
+
+#. placeholder {0}: pathInstall.rcFilesToTouch.join(', ')
+#: src/components/McpConsentDialogBody.tsx
+msgid "Adds a managed block to {0}"
+msgstr "Adds a managed block to {0}"
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Adds the OpenKnowledge skill to the <0>Claude Desktop App</0> so it's available in Chat and Cowork sessions."
@@ -670,6 +685,11 @@ msgstr "Agent activity"
 msgid "Agent configuration file"
 msgstr "Agent configuration file"
 
+#. Section label above the editor checkbox list in the first-launch dialog
+#: src/components/McpConsentDialogBody.tsx
+msgid "AI tools"
+msgstr "AI tools"
+
 #: src/components/FolderOverview.tsx
 msgid "All files"
 msgstr "All files"
@@ -693,6 +713,10 @@ msgstr "Already have a git repository? Add it with <0>git remote add origin <url
 #: src/components/GraphPanel.tsx
 msgid "Already open"
 msgstr "Already open"
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "Already set up — ok is available in your terminal"
+msgstr "Already set up — ok is available in your terminal"
 
 #: src/components/DocumentErrorBoundary.tsx
 msgid "An unexpected error occurred."
@@ -6416,11 +6440,13 @@ msgstr "Templates"
 msgid "Templates available"
 msgstr "Templates available"
 
+#. Section label above the shell-PATH toggle in the first-launch dialog
 #: src/components/empty-state/CreatePromptComposer.tsx
 #: src/components/handoff/AgentSplitButton.tsx
 #: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
+#: src/components/McpConsentDialogBody.tsx
 #: src/components/settings/SettingsDialogShell.tsx
 #: src/components/settings/TerminalSection.tsx
 #: src/components/TerminalNewChatButton.tsx

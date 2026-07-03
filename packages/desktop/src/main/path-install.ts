@@ -16,9 +16,11 @@ import {
   PATH_SHIM_BLOCK_RE as BLOCK_RE,
   PATH_SHIM_END as END,
   type PathDiscovery,
+  type PathInstallConsent,
   type PathInstallMarker,
   pathInstallMarkerPath,
 } from '@inkeep/open-knowledge';
+import type { McpWiringPathInstallDescriptor } from '../shared/ipc-channels.ts';
 import { wrapperPathInBundle } from './bundle-paths.ts';
 
 export { pathInstallMarkerPath };
@@ -107,6 +109,7 @@ interface EnsureCliOnPathOpts {
   ) => Promise<{ code: number | null; stdout: string; stderr: string; timedOut?: boolean }>;
   logger?: PathInstallLogger;
   now?: () => Date;
+  consentDecision?: PathInstallConsent;
 }
 
 function readMarker(
@@ -121,6 +124,14 @@ function readMarker(
     if (parsed?.version !== 1) {
       logger.event({ event: 'path-install-marker-version-unknown', foundVersion: parsed?.version });
       return null;
+    }
+    if (
+      parsed.consent !== undefined &&
+      parsed.consent?.status !== 'granted' &&
+      parsed.consent?.status !== 'declined'
+    ) {
+      logger.event({ event: 'path-install-marker-consent-invalid' });
+      return { ...parsed, consent: undefined };
     }
     return parsed;
   } catch (err) {
@@ -192,6 +203,10 @@ function rcBlockHealthy(path: string, fs: PathInstallFsOps): boolean {
   if (!fs.existsSync(path)) return false;
   const text = fs.readFileSync(path, 'utf8');
   return text.includes(BEGIN) && text.includes(END);
+}
+
+function tildify(path: string, home: string): string {
+  return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 }
 
 function linkPointsTo(
@@ -393,7 +408,30 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
 
   const wrapper = wrapperPathInBundle(executablePath);
   const prior = readMarker(home, fs, logger);
-  if (prior && markerHealthy(prior, home, wrapper, fs, logger)) {
+  const consentUnchanged =
+    opts.consentDecision === undefined || prior?.consent?.status === opts.consentDecision.status;
+  if (prior && consentUnchanged && markerHealthy(prior, home, wrapper, fs, logger)) {
+    if (!prior.consent && prior.rcFiles.length > 0) {
+      const marker: PathInstallMarker = {
+        ...prior,
+        consent: { status: 'granted', at: (opts.now?.() ?? new Date()).toISOString() },
+      };
+      try {
+        writeMarker(home, marker, fs);
+      } catch (err) {
+        logger.event({
+          event: 'path-install-consent-stamp-failed',
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return { status: 'healthy-current', marker: prior };
+      }
+      logger.event({
+        event: 'path-install-consent-granted',
+        source: 'grandfather',
+        rcFileCount: prior.rcFiles.length,
+      });
+      return { status: 'healthy-current', marker };
+    }
     logger.event({ event: 'path-install-healthy-current', binDir: prior.binDir });
     return { status: 'healthy-current', marker: prior };
   }
@@ -440,23 +478,34 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
       prior != null &&
       discovery?.okBinAlreadyOnPath === true &&
       activePriorRcFiles.every((file) => rcBlockHealthy(file, fs));
+    const nowIso = (opts.now?.() ?? new Date()).toISOString();
+    const grandfatherEvidence =
+      activePriorRcFiles.some((file) => rcBlockHealthy(file, fs)) ||
+      targets.some((target) => rcBlockHealthy(target.path, fs));
+    const consent: PathInstallConsent | undefined =
+      opts.consentDecision ??
+      prior?.consent ??
+      (grandfatherEvidence ? { status: 'granted', at: nowIso } : undefined);
+    const rcConsented = consent?.status === 'granted';
     phase = 'upsertRcBlocks';
     const rcFiles: string[] = [];
     const changedRcFiles: string[] = [];
     if (canSkipRc && prior) {
       rcFiles.push(...activePriorRcFiles);
-    } else {
+    } else if (rcConsented) {
       for (const target of targets) {
         if (upsertBlock(target.path, target.content, fs)) changedRcFiles.push(target.path);
         rcFiles.push(target.path);
       }
+    } else {
+      rcFiles.push(...activePriorRcFiles.filter((file) => rcBlockHealthy(file, fs)));
     }
     phase = 'cleanupExtraSymlinks';
     const cleanup = removeRecordedExtraSymlinks(prior?.extraSymlinks ?? [], fs, logger);
     phase = 'writeMarker';
     const marker: PathInstallMarker = {
       version: 1,
-      installedAt: (opts.now?.() ?? new Date()).toISOString(),
+      installedAt: nowIso,
       bundleVersion,
       bundleWrapperPath: wrapper,
       binDir: okBin(home),
@@ -465,20 +514,30 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
       rcOptOuts,
       pathDiscovery: discovery,
       extraSymlinks: cleanup.remaining,
+      ...(consent ? { consent } : {}),
     };
     writeMarker(home, marker, fs);
+    if (consent && consent.status !== prior?.consent?.status) {
+      logger.event({
+        event:
+          consent.status === 'granted'
+            ? 'path-install-consent-granted'
+            : 'path-install-consent-declined',
+        source: opts.consentDecision ? 'dialog' : 'grandfather',
+        rcTargetCount: targets.length,
+      });
+    }
     logger.event({ event: 'path-install-symlink-success', binDir: marker.binDir });
     if (changedRcFiles.length > 0)
       logger.event({ event: 'path-install-rc-append-success', rcFiles: changedRcFiles });
-    const tildify = (p: string) => (p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
     const parts: string[] = [];
     if (changedRcFiles.length > 0)
       parts.push(
-        `Added ok to your PATH — managed block in ${changedRcFiles.map(tildify).join(', ')}.`,
+        `Added ok to your PATH — managed block in ${changedRcFiles.map((p) => tildify(p, home)).join(', ')}.`,
       );
     if (newOptOuts.length > 0)
       parts.push(
-        `You removed the OpenKnowledge block from ${newOptOuts.map(tildify).join(', ')} — it won't be re-added.`,
+        `You removed the OpenKnowledge block from ${newOptOuts.map((p) => tildify(p, home)).join(', ')} — it won't be re-added.`,
       );
     if (cleanup.removedCount > 0)
       parts.push(
@@ -492,4 +551,28 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
     logger.event({ event: 'path-install-failed-all', phase, error, stack });
     return { status: 'failed-all', error };
   }
+}
+
+export function computePathInstallDescriptor(opts: {
+  home: string;
+  env?: Record<string, string | undefined>;
+  fs?: PathInstallFsOps;
+  logger?: PathInstallLogger;
+}): McpWiringPathInstallDescriptor {
+  const { home, fs = defaultFsOps, logger = DEFAULT_LOGGER } = opts;
+  const marker = readMarker(home, fs, logger);
+  const rcOptOuts = marker?.rcOptOuts ?? [];
+  const targets = rcTargets(home, (opts.env ?? process.env).SHELL, fs).filter(
+    (target) => !rcOptOuts.includes(target.path),
+  );
+  const candidates = new Set<string>([
+    ...targets.map((target) => target.path),
+    ...(marker?.rcFiles ?? []),
+  ]);
+  const blockPresent = [...candidates].some((path) => rcBlockHealthy(path, fs));
+  return {
+    shellDetected: targets.length > 0,
+    rcFilesToTouch: targets.map((target) => tildify(target.path, home)),
+    alreadyInstalled: blockPresent || marker?.consent?.status === 'granted',
+  };
 }

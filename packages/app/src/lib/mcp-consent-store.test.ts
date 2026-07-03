@@ -64,6 +64,7 @@ const sampleShowPayload: OkMcpWiringShowPayload = {
     { id: 'claude', label: 'Claude', detected: true, willReplace: false },
     { id: 'cursor', label: 'Cursor', detected: false, willReplace: false },
   ],
+  pathInstall: { shellDetected: true, rcFilesToTouch: ['~/.zshrc'], alreadyInstalled: false },
 };
 
 describe('createMcpConsentStore — install', () => {
@@ -132,21 +133,21 @@ describe('createMcpConsentStore — onShow propagation', () => {
 describe('createMcpConsentStore — confirm', () => {
   test('no-op + error result when bridge is not attached', async () => {
     const store = createMcpConsentStore();
-    const result = await store.confirm([]);
+    const result = await store.confirm({ editorIds: [] });
     expect(result).toEqual({ ok: false, error: 'Not attached to desktop bridge' });
   });
 
-  test('invokes bridge.confirm with the editorIds payload', async () => {
+  test('passes the confirm request (editors + PATH toggle) through to the bridge', async () => {
     const store = createMcpConsentStore();
     const bridge = makeBridge();
     store.install({ bridge });
     bridge.fireShow(sampleShowPayload);
 
     const editorIds: OkMcpWiringEditorId[] = ['claude', 'cursor'];
-    const result = await store.confirm(editorIds);
+    const result = await store.confirm({ editorIds, pathInstall: false });
 
     expect(result).toEqual({ ok: true });
-    expect(bridge.mcpWiring.confirm.mock.calls[0]).toEqual([editorIds]);
+    expect(bridge.mcpWiring.confirm.mock.calls[0]).toEqual([{ editorIds, pathInstall: false }]);
   });
 
   test('clears snapshot on success', async () => {
@@ -156,7 +157,7 @@ describe('createMcpConsentStore — confirm', () => {
     bridge.fireShow(sampleShowPayload);
     expect(store.getSnapshot()).not.toBeNull();
 
-    await store.confirm(['claude']);
+    await store.confirm({ editorIds: ['claude'], pathInstall: true });
     expect(store.getSnapshot()).toBeNull();
   });
 
@@ -166,7 +167,7 @@ describe('createMcpConsentStore — confirm', () => {
     store.install({ bridge });
     bridge.fireShow(sampleShowPayload);
 
-    const result = await store.confirm(['claude']);
+    const result = await store.confirm({ editorIds: ['claude'] });
     expect(result).toEqual({ ok: false, error: 'confirm-boom' });
     expect(store.getSnapshot()).toEqual(sampleShowPayload);
   });
@@ -177,7 +178,7 @@ describe('createMcpConsentStore — confirm', () => {
     store.install({ bridge });
     bridge.fireShow(sampleShowPayload);
 
-    const result = await store.confirm([]);
+    const result = await store.confirm({ editorIds: [] });
     expect(result).toEqual({ ok: false, error: 'no editors selected' });
     expect(store.getSnapshot()).toEqual(sampleShowPayload);
   });

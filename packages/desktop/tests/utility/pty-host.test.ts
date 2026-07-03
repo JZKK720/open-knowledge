@@ -181,6 +181,35 @@ describe('setupPtyHost — create', () => {
     const env = h.spawnCalls[0]?.options.env ?? {};
     expect(env.OK_DESKTOP_TERMINAL).toBe('1');
   });
+
+  test('prepends ~/.ok/bin to the child PATH so `ok` resolves regardless of rc consent', () => {
+    const h = makeHarness({
+      env: { SHELL: '/bin/zsh', PATH: '/usr/bin:/bin', HOME: '/Users/alice' },
+    });
+    h.fire(CREATE());
+    const env = h.spawnCalls[0]?.options.env ?? {};
+    expect(env.PATH).toBe('/Users/alice/.ok/bin:/usr/bin:/bin');
+  });
+
+  test('does not duplicate ~/.ok/bin when the parent PATH already carries it', () => {
+    const h = makeHarness({
+      env: {
+        SHELL: '/bin/zsh',
+        PATH: '/opt/x:/Users/alice/.ok/bin:/usr/bin',
+        HOME: '/Users/alice',
+      },
+    });
+    h.fire(CREATE());
+    const env = h.spawnCalls[0]?.options.env ?? {};
+    expect(env.PATH).toBe('/opt/x:/Users/alice/.ok/bin:/usr/bin');
+  });
+
+  test('leaves PATH untouched when HOME is absent (nothing to resolve against)', () => {
+    const h = makeHarness({ env: { SHELL: '/bin/zsh', PATH: '/usr/bin' } });
+    h.fire(CREATE());
+    const env = h.spawnCalls[0]?.options.env ?? {};
+    expect(env.PATH).toBe('/usr/bin');
+  });
 });
 
 describe('setupPtyHost — streaming', () => {
@@ -573,7 +602,11 @@ describe('buildShellEnv', () => {
       OK_LOCK_KIND: 'interactive',
       MAYBE: undefined,
     });
-    expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/x', OK_DESKTOP_TERMINAL: '1' });
+    expect(env).toEqual({
+      PATH: '/Users/x/.ok/bin:/usr/bin',
+      HOME: '/Users/x',
+      OK_DESKTOP_TERMINAL: '1',
+    });
   });
 });
 

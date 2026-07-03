@@ -33,6 +33,7 @@
     "0-31GV": ["Removing"],
     "02P3hL": ["Upload failed: ", ["message"]],
     "04RA0-": ["Failed to enable sync — ", ["detail"]],
+    "04XyCH": ["Adds a managed block to ", ["0"]],
     "05n5wS": ["Doc mention suggestions"],
     "06SZfb": ["Template \"", ["trimmedTitle"], "\" created"],
     "07eGJB": ["Couldn't move skill: ", ["0"]],
@@ -321,6 +322,9 @@
     "7Ongq0": ["Condense my AGENTS.md file to less than 40k characters"],
     "7OwvEL": ["Show HTML preview"],
     "7PNNNs": ["This sends content off your machine"],
+    "7PXYaF": [
+      "<0>ok</0> won't run in external terminals until you add it later from the File menu. OpenKnowledge's built-in terminal and AI tools keep working."
+    ],
     "7PzzBU": ["User"],
     "7YRrJ9": [
       "Available in the OpenKnowledge desktop app. From a terminal, use<0> ok config-sharing status</0> / <1>share</1> / <2>unshare</2>."
@@ -640,6 +644,7 @@
     "FnMkli": ["Sync disabled — you don't have permission to push"],
     "FqTpiN": ["Bird wiki"],
     "Fqr8BP": ["Multi-page PDF viewer with toolbar controls (thumbnails, page nav, zoom)."],
+    "Fsx78O": ["Add the <0>ok</0> command to your terminal"],
     "FvMSms": ["Renaming changes the file on disk and the id agents use to pick this template."],
     "FvpFSZ": ["Reveal in Finder, ", ["hint"]],
     "Fxf4jq": ["Description (optional)"],
@@ -1058,6 +1063,7 @@
     "RlCInP": ["Slash commands"],
     "RlLl3G": ["Actions for ", ["0"]],
     "RmBY0A": ["No git remote"],
+    "RnrnTe": ["Already set up — ok is available in your terminal"],
     "RobAKV": ["Update the destination and optional section anchor."],
     "Rq1vFD": ["Tree view options"],
     "RrAIZx": ["What config sharing covers"],
@@ -1439,6 +1445,7 @@
     "cn1sLi": ["Couldn't connect OpenKnowledge tools to Claude Code. Please try again."],
     "cnGeoo": ["Delete"],
     "cqQyPB": ["Folder name"],
+    "crqzW5": ["AI tools"],
     "cs4mps": ["Config sharing"],
     "csDS2L": ["Available"],
     "ct2kv5": ["No headings in ", ["pageTarget"]],

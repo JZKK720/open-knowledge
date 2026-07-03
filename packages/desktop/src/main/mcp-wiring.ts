@@ -21,6 +21,7 @@ import type {
   McpWiringConfirmResult,
   McpWiringEditorDetection,
   McpWiringEditorId,
+  McpWiringPathInstallDescriptor,
   McpWiringSkipResult,
 } from '../shared/ipc-channels.ts';
 import { createHandler } from '../shared/ipc-handler.ts';
@@ -190,6 +191,15 @@ export interface McpWiringCliSurface {
   editorTargets: Record<McpWiringEditorId, EditorMcpTarget>;
 }
 
+export interface McpWiringPathInstallSurface {
+  /** Arming-time descriptor for the dialog's PATH row. Read-only — must not
+   *  write. Failures are tolerated (row degrades to hidden). */
+  computeDescriptor(): McpWiringPathInstallDescriptor;
+  applyConsent(
+    status: 'granted' | 'declined',
+  ): Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
 interface McpWiringLogger {
   info(msg: string, ctx?: object): void;
   warn(msg: string, ctx?: object): void;
@@ -218,6 +228,10 @@ interface RunMcpWiringOpts {
   fs?: McpWiringFsOps;
   now?: () => Date;
   logger?: McpWiringLogger;
+}
+
+export interface RunMcpWiringFirstLaunchOpts extends RunMcpWiringOpts {
+  pathInstall: McpWiringPathInstallSurface;
 }
 
 export interface RunMcpWiringHandle {
@@ -368,7 +382,7 @@ export function checkAndRepairMcpWiringOnStartup(
     });
 }
 
-export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringHandle {
+export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringFirstLaunchOpts): RunMcpWiringHandle {
   const {
     isPackaged,
     executablePath,
@@ -376,6 +390,7 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
     platform,
     ipcMain,
     cli,
+    pathInstall,
     forceEnv,
     reclaimDisableEnv,
     forceShow = false,
@@ -445,6 +460,16 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
     logger.error('detection failed — wiring inert for this boot', { message });
     logger.event({ event: 'mcp-wiring-detect-failed', error: message });
     return inertHandle;
+  }
+
+  let pathDescriptor: McpWiringPathInstallDescriptor;
+  try {
+    pathDescriptor = pathInstall.computeDescriptor();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('path-install descriptor failed — PATH row hidden for this boot', { message });
+    logger.event({ event: 'mcp-wiring-path-descriptor-failed', error: message });
+    pathDescriptor = { shellDetected: false, rcFilesToTouch: [], alreadyInstalled: false };
   }
 
   let handled = false;
@@ -546,6 +571,44 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
       };
     }
 
+    const pathDecision =
+      request?.pathInstall === true
+        ? ('granted' as const)
+        : request?.pathInstall === false
+          ? ('declined' as const)
+          : null;
+    if (pathDecision !== null) {
+      let pathResult: { ok: true } | { ok: false; error: string };
+      try {
+        pathResult = await pathInstall.applyConsent(pathDecision);
+      } catch (err) {
+        pathResult = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+      if (!pathResult.ok) {
+        logger.event({
+          event: 'mcp-wiring-path-consent-failed',
+          decision: pathDecision,
+          error: pathResult.error,
+        });
+        logIpcError({
+          event: 'ipc.error',
+          channel: 'ok:mcp-wiring:confirm',
+          reason: 'path-consent-failed',
+          handler: 'mcpWiringConfirm',
+          cause: { decision: pathDecision, error: pathResult.error },
+        });
+        handled = false;
+        return {
+          ok: false,
+          error:
+            pathDecision === 'granted'
+              ? `Couldn't add ok to your PATH (${pathResult.error}). The dialog will reappear on next launch so you can retry.`
+              : `Couldn't record your PATH preference (${pathResult.error}). The dialog will reappear on next launch so you can retry.`,
+        };
+      }
+      logger.info('path consent applied', { decision: pathDecision });
+    }
+
     const configuredEditors = results
       .filter((r) => r.action === 'written' || r.action === 'overwritten')
       .map((r) => r.editorId);
@@ -630,6 +693,7 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
     try {
       sendToRenderer(target, 'ok:mcp-wiring:show', {
         detectedEditors: detections,
+        pathInstall: pathDescriptor,
       });
       logger.info('dispatched show to renderer', {
         detectedCount: detections.length,

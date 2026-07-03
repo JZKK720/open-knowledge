@@ -408,7 +408,11 @@ const bridge: OkDesktopBridge = {
     signalReady: () => {
       invoke('ok:mcp-wiring:renderer-ready').catch(() => {});
     },
-    confirm: (editorIds) => invoke('ok:mcp-wiring:confirm', { editorIds }),
+    confirm: (request) =>
+      invoke('ok:mcp-wiring:confirm', {
+        editorIds: request.editorIds,
+        pathInstall: request.pathInstall,
+      }),
     skip: () => invoke('ok:mcp-wiring:skip'),
   },
 

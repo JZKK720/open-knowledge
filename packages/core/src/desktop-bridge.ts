@@ -183,6 +183,16 @@ interface OkMcpWiringShowPayload {
     readonly detected: boolean;
     readonly willReplace: boolean;
   }[];
+  readonly pathInstall: {
+    readonly shellDetected: boolean;
+    readonly rcFilesToTouch: readonly string[];
+    readonly alreadyInstalled: boolean;
+  };
+}
+
+interface OkMcpWiringConfirmRequest {
+  readonly editorIds: readonly OkMcpWiringEditorId[];
+  readonly pathInstall?: boolean;
 }
 
 type OkMcpWiringResult = { ok: true } | { ok: false; error: string };
@@ -670,7 +680,10 @@ export interface OkDesktopBridge {
   mcpWiring: {
     onShow(cb: (payload: OkMcpWiringShowPayload) => void): OkUnsubscribe;
     signalReady(): void;
-    confirm(editorIds: readonly OkMcpWiringEditorId[]): Promise<OkMcpWiringResult>;
+    /** User clicked Add. `editorIds` is the subset the user checked;
+     *  `pathInstall` is the PATH toggle (tri-state — see
+     *  `OkMcpWiringConfirmRequest`). */
+    confirm(request: OkMcpWiringConfirmRequest): Promise<OkMcpWiringResult>;
     skip(): Promise<OkMcpWiringResult>;
   };
 

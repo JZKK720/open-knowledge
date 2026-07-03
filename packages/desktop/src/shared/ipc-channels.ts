@@ -228,10 +228,29 @@ export interface McpWiringEditorDetection {
   readonly willReplace: boolean;
 }
 
+/** PATH-install leg of the first-launch consent dialog. Computed read-only
+ *  at arming time from the path-install marker + rc targets.
+ *  `rcFilesToTouch` names the shell files a grant would edit (tildified for
+ *  display; recorded opt-outs excluded). `shellDetected: false` — no
+ *  touchable rc files — hides the PATH row. `alreadyInstalled` renders the
+ *  row as informational: a managed block is already on disk or consent was
+ *  already granted, so there is no new decision to solicit. */
+export interface McpWiringPathInstallDescriptor {
+  readonly shellDetected: boolean;
+  readonly rcFilesToTouch: readonly string[];
+  readonly alreadyInstalled: boolean;
+}
+
 /** Confirm payload from renderer → main. Editors the user checked when they
- *  clicked "Add". Subset of `McpWiringEditorId`. */
+ *  clicked "Add". Subset of `McpWiringEditorId`.
+ *
+ *  `pathInstall` is the PATH toggle, tri-state: `true` → append the managed
+ *  rc block (consent granted); `false` → record declined, touch no rc file;
+ *  absent → the dialog solicited no PATH decision (row hidden or
+ *  informational) — the path-install marker is left untouched. */
 export interface McpWiringConfirmRequest {
   readonly editorIds: readonly McpWiringEditorId[];
+  readonly pathInstall?: boolean;
 }
 
 /** Confirm / skip response shape. `ok:false` surfaces when (a)

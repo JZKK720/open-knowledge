@@ -30,6 +30,7 @@ import {
   type McpWiringCliSurface,
   type McpWiringDispatchTarget,
   type McpWiringFsOps,
+  type McpWiringPathInstallSurface,
   readMcpStatusMarker,
   runMcpWiringOnFirstLaunch,
   writeMcpStatusMarker,
@@ -591,6 +592,29 @@ function buildFirstLaunchCli(): { cli: McpWiringCliSurface; writes: McpWiringEdi
 
 const SILENT_LOGGER = { info() {}, warn() {}, error() {}, event() {} };
 
+const STUB_PATH_DESCRIPTOR = {
+  shellDetected: true,
+  rcFilesToTouch: ['~/.zshrc'],
+  alreadyInstalled: false,
+} as const;
+
+/** PATH-install stub that records `applyConsent` calls and lets tests
+ *  script the per-call outcome. */
+function stubPathInstall(
+  overrides: Partial<McpWiringPathInstallSurface> = {},
+): McpWiringPathInstallSurface & { consentCalls: Array<'granted' | 'declined'> } {
+  const consentCalls: Array<'granted' | 'declined'> = [];
+  return {
+    consentCalls,
+    computeDescriptor: () => ({ ...STUB_PATH_DESCRIPTOR, rcFilesToTouch: ['~/.zshrc'] }),
+    applyConsent: async (status) => {
+      consentCalls.push(status);
+      return { ok: true as const };
+    },
+    ...overrides,
+  };
+}
+
 function buildWiringOpts(overrides: Partial<WiringOpts> = {}): WiringOpts {
   const { cli } = buildFirstLaunchCli();
   return {
@@ -600,6 +624,7 @@ function buildWiringOpts(overrides: Partial<WiringOpts> = {}): WiringOpts {
     platform: 'darwin',
     ipcMain: stubIpcMain(),
     cli,
+    pathInstall: stubPathInstall(),
     fs: memoryFs(),
     logger: SILENT_LOGGER,
     ...overrides,
@@ -622,6 +647,11 @@ describe('runMcpWiringOnFirstLaunch — mid-session immediate dispatch', () => {
         channel: 'ok:mcp-wiring:show',
         payload: {
           detectedEditors: [{ id: 'claude', label: 'claude', detected: true, willReplace: false }],
+          pathInstall: {
+            shellDetected: true,
+            rcFilesToTouch: ['~/.zshrc'],
+            alreadyInstalled: false,
+          },
         },
       },
     ]);
@@ -805,5 +835,154 @@ describe('runMcpWiringOnFirstLaunch — mid-session immediate dispatch', () => {
     const wc = fakeWebContents(5);
     ipcMain.handlers.get('ok:mcp-wiring:renderer-ready')?.({ sender: wc });
     expect(wc.sent.map((s) => s.channel)).toEqual(['ok:mcp-wiring:show']);
+  });
+});
+
+describe('runMcpWiringOnFirstLaunch — PATH consent leg', () => {
+  test('confirm with pathInstall:true applies granted consent and writes the marker', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const pathInstall = stubPathInstall();
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({ ipcMain, fs, pathInstall, immediateDispatchTarget: wc }),
+    );
+
+    const confirm = ipcMain.handlers.get('ok:mcp-wiring:confirm');
+    const result = await confirm?.(
+      { sender: { id: 11 } },
+      { editorIds: ['claude'], pathInstall: true },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(pathInstall.consentCalls).toEqual(['granted']);
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({ configured: true });
+  });
+
+  test('confirm with pathInstall:false records the decline (and still wires editors)', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const pathInstall = stubPathInstall();
+    const { cli, writes } = buildFirstLaunchCli();
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({ ipcMain, cli, fs, pathInstall, immediateDispatchTarget: wc }),
+    );
+
+    const confirm = ipcMain.handlers.get('ok:mcp-wiring:confirm');
+    const result = await confirm?.(
+      { sender: { id: 11 } },
+      { editorIds: ['claude'], pathInstall: false },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(pathInstall.consentCalls).toEqual(['declined']);
+    expect(writes).toEqual([['claude' as McpWiringEditorId]]);
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({ configured: true });
+  });
+
+  test('confirm without pathInstall leaves the PATH surface untouched (no decision solicited)', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const pathInstall = stubPathInstall();
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({ ipcMain, fs, pathInstall, immediateDispatchTarget: wc }),
+    );
+
+    const confirm = ipcMain.handlers.get('ok:mcp-wiring:confirm');
+    const result = await confirm?.({ sender: { id: 11 } }, { editorIds: ['claude'] });
+    expect(result).toEqual({ ok: true });
+    expect(pathInstall.consentCalls).toEqual([]);
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({ configured: true });
+  });
+
+  test('a failed PATH leg defers the marker and allows a same-boot retry (deferred-marker mirror)', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const events: Array<Record<string, unknown>> = [];
+    const outcomes = [
+      { ok: false as const, error: 'EACCES: /home/u/.zshrc' },
+      { ok: true as const },
+    ];
+    const consentCalls: Array<'granted' | 'declined'> = [];
+    const pathInstall: McpWiringPathInstallSurface = {
+      computeDescriptor: () => ({ ...STUB_PATH_DESCRIPTOR, rcFilesToTouch: ['~/.zshrc'] }),
+      applyConsent: async (status) => {
+        consentCalls.push(status);
+        return outcomes.shift() ?? { ok: true as const };
+      },
+    };
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({
+        ipcMain,
+        fs,
+        pathInstall,
+        immediateDispatchTarget: wc,
+        logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+      }),
+    );
+
+    const confirm = ipcMain.handlers.get('ok:mcp-wiring:confirm');
+    const first = (await confirm?.(
+      { sender: { id: 11 } },
+      { editorIds: ['claude'], pathInstall: true },
+    )) as { ok: boolean; error?: string };
+    expect(first.ok).toBe(false);
+    expect(first.error).toContain('PATH');
+    expect(readMcpStatusMarker('/home/u', fs)).toBeNull();
+    expect(events.find((e) => e.event === 'mcp-wiring-path-consent-failed')).toMatchObject({
+      decision: 'granted',
+    });
+
+    const second = await confirm?.(
+      { sender: { id: 11 } },
+      { editorIds: ['claude'], pathInstall: true },
+    );
+    expect(second).toEqual({ ok: true });
+    expect(consentCalls).toEqual(['granted', 'granted']);
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({ configured: true });
+  });
+
+  test('a throwing descriptor degrades to a hidden PATH row instead of killing the dialog', () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const events: Array<Record<string, unknown>> = [];
+    const pathInstall = stubPathInstall({
+      computeDescriptor: () => {
+        throw new Error('marker unreadable');
+      },
+    });
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({
+        ipcMain,
+        pathInstall,
+        immediateDispatchTarget: wc,
+        logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+      }),
+    );
+
+    expect(wc.sent).toHaveLength(1);
+    expect((wc.sent[0]?.payload as { pathInstall: unknown }).pathInstall).toEqual({
+      shellDetected: false,
+      rcFilesToTouch: [],
+      alreadyInstalled: false,
+    });
+    expect(events.some((e) => e.event === 'mcp-wiring-path-descriptor-failed')).toBe(true);
+  });
+
+  test('skip never touches the PATH surface', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const pathInstall = stubPathInstall();
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({ ipcMain, fs, pathInstall, immediateDispatchTarget: wc }),
+    );
+
+    const skip = ipcMain.handlers.get('ok:mcp-wiring:skip');
+    const result = await skip?.({ sender: { id: 11 } });
+    expect(result).toEqual({ ok: true });
+    expect(pathInstall.consentCalls).toEqual([]);
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({ configured: false });
   });
 });

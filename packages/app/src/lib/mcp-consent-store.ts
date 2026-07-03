@@ -1,6 +1,6 @@
 import type {
   OkDesktopBridge,
-  OkMcpWiringEditorId,
+  OkMcpWiringConfirmRequest,
   OkMcpWiringResult,
   OkMcpWiringShowPayload,
 } from '@/lib/desktop-bridge-types';
@@ -9,7 +9,7 @@ export interface McpConsentStore {
   install(opts: { bridge: OkDesktopBridge | undefined }): (() => void) | undefined;
   getSnapshot(): OkMcpWiringShowPayload | null;
   subscribe(listener: () => void): () => void;
-  confirm(editorIds: readonly OkMcpWiringEditorId[]): Promise<OkMcpWiringResult>;
+  confirm(request: OkMcpWiringConfirmRequest): Promise<OkMcpWiringResult>;
   skip(): Promise<OkMcpWiringResult>;
   dismiss(): void;
 }
@@ -62,11 +62,11 @@ export function createMcpConsentStore(): McpConsentStore {
       };
     },
 
-    async confirm(editorIds): Promise<OkMcpWiringResult> {
+    async confirm(request): Promise<OkMcpWiringResult> {
       const b = bridge;
       if (!b) return { ok: false, error: 'Not attached to desktop bridge' };
       try {
-        const result = await b.mcpWiring.confirm(editorIds);
+        const result = await b.mcpWiring.confirm(request);
         if (result.ok) clearCurrent();
         return result;
       } catch (err) {
