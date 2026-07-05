@@ -17,6 +17,9 @@ export const HardBreakFidelity = HardBreak.extend({
     return {
       ...this.parent?.(),
       hardBreakStyle: { default: 'backslash' },
+      // Void-HTML-authored breaks (`<br>` / `<br/>` / `<br />`) carry their
+      // exact source spelling so serialization re-emits it byte-identically.
+      sourceRaw: { default: null },
     };
   },
 });

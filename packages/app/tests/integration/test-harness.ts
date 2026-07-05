@@ -32,6 +32,7 @@ import {
   type BridgeInvariantViolation,
   BridgeInvariantViolationError,
   type InvariantViolation,
+  isParseEquivalentBridge,
   MarkdownManager,
   normalizeBridge,
   prependFrontmatter,
@@ -669,6 +670,13 @@ export function serializeFragment(fragment: Y.XmlFragment): string {
   return mdManager.serialize(yXmlFragmentToProseMirrorRootNode(fragment, schema).toJSON());
 }
 
+/** Body canonicalizer for the parse-equivalence fallback — the harness's
+ *  own parse pipeline (no embed resolution: harness docs resolve none; an
+ *  embed-bearing doc degrades toward alerting, never masking). */
+function canonicalizeBodyForHarness(body: string): string {
+  return mdManager.serialize(mdManager.parseWithFallback(body));
+}
+
 /** Strip trailing whitespace per line + trailing newlines */
 export function stripTrailingWhitespace(s: string): string {
   return s
@@ -678,13 +686,21 @@ export function stripTrailingWhitespace(s: string): string {
     .replace(/\n+$/, '');
 }
 
-/** Assert bridge invariant: normalized Y.Text === serialized XmlFragment.
+/** Assert bridge invariant: normalized Y.Text === serialized XmlFragment,
+ * with the parse-equivalence fallback for byte forms beyond every
+ * normalizeBridge class whose parse matches the fragment (CommonMark lazy
+ * continuations et al. — fragment ≡ parse(ytext) holds, precedent #38).
  * Normalization includes: blank-line count between blocks may normalize
  * (ProseMirror schema limitation). Collapse 3+ consecutive newlines to 2. */
 export function assertBridgeInvariant(ytext: Y.Text, fragment: Y.XmlFragment): void {
-  const textNorm = normalizeBridge(ytext.toString());
-  const fragNorm = normalizeBridge(serializeFragment(fragment));
-  if (textNorm !== fragNorm) {
+  const ytextStr = ytext.toString();
+  const fragMd = serializeFragment(fragment);
+  const textNorm = normalizeBridge(ytextStr);
+  const fragNorm = normalizeBridge(fragMd);
+  if (
+    textNorm !== fragNorm &&
+    !isParseEquivalentBridge(ytextStr, fragMd, canonicalizeBodyForHarness)
+  ) {
     throw new Error(
       `Bridge invariant violated.\n` +
         `  Y.Text (${textNorm.length} chars): ${textNorm.slice(0, 200)}...\n` +
@@ -1149,6 +1165,8 @@ const BRIDGE_ENFORCING_NON_PAIRED_ORIGINS: Set<LocalTransactionOrigin> = new Set
  * After every drain that contains AT LEAST ONE transaction with an enforcing
  * origin, asserts:
  *   normalizeBridge(ytext) === normalizeBridge(prependFrontmatter(fm, serialize(fragment)))
+ * with the parse-equivalence fallback for beyond-tolerance byte forms whose
+ * parse matches the fragment (mirrors the server watchdog's canonicalizeBody).
  *
  * where `normalizeBridge` carries the extended tolerance set (CRLF/BOM/
  * doc-start/leading-newline/trailing-newline/per-line trailing whitespace/
@@ -1201,6 +1219,10 @@ export function attachBridgeInvariantWatcher(
     const fragNorm = normalizeBridge(fragMd);
 
     if (ytextNorm === fragNorm) return;
+    // Parse-equivalence fallback — mirrors the server watchdog: a byte form
+    // beyond every normalizeBridge class whose parse matches the fragment is
+    // a resting serializer canonicalization, not a violation.
+    if (isParseEquivalentBridge(ytextStr, fragMd, canonicalizeBodyForHarness)) return;
 
     const info: InvariantViolation = {
       site: 'test-harness',

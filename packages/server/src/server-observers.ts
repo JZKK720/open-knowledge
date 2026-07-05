@@ -29,6 +29,7 @@ import {
   applyIncrementalDiff,
   BridgeInvariantViolationError,
   BridgeMergeContentLossError,
+  isParseEquivalentBridge,
   mergeThreeWay,
   normalizeBridge,
   prependFrontmatter,
@@ -44,6 +45,7 @@ import { attachQuiescenceTracker } from './bridge-quiescence.ts';
 import {
   assertBridgeInvariant,
   type BridgeSplitBrainSite,
+  createDocCanonicalizer,
   emitBridgeSplitBrainRederive,
   emitObserverAPathBFired,
 } from './bridge-watchdog.ts';
@@ -104,7 +106,7 @@ export const OBSERVER_SYNC_ORIGIN = {
  * still match; `satisfies PairedWriteOrigin` is the authoring-site gate,
  * not a runtime `instanceof` narrowing.
  *
- * Today's paired origin count: 4. When adding a 5th, the ONLY required
+ * Today's paired origin count: 5. When adding a 6th, the ONLY required
  * change is `satisfies PairedWriteOrigin` at the literal. No registry
  * update. No Observer A/B wiring. No `BRIDGE_ENFORCING_ORIGINS` change
  * (that set is unrelated — it enforces the bridge-invariant watcher's
@@ -458,10 +460,13 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
   };
 
   /**
-   * Telemetry for the split-brain settlement check. No organic input
-   * produces this divergence at HEAD (producers were narrowed to
-   * dependency/plugin drift), so this firing in production is itself the
-   * drift alert — and the operator's only handle on a doc stuck re-deriving
+   * Telemetry for the split-brain settlement check. The settlement predicate
+   * tolerates resting serializer canonicalizations of organic input via the
+   * parse-equivalence fallback (`settlesSplitBrainChecked` — fragment ≡
+   * parse(ytext) verified through the doc's own parse pipeline), so a fire
+   * means the fragment genuinely does not derive from Y.Text: dependency/
+   * plugin drift or a degraded fragment. That makes this event the drift
+   * alert — and the operator's only handle on a doc stuck re-deriving
    * its fragment on every drain. Rate-limited per (site, doc) through
    * `emitBridgeSplitBrainRederive` (mirroring `emitObserverAPathBFired`);
    * the counter increments only on emit, the suppressed counter inside the
@@ -603,6 +608,70 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
    */
   const readCurrentFm = (): string => stripFrontmatter(ytext.toString()).frontmatter;
 
+  /** Parse options for THIS doc's text→tree derivations. One shape shared by
+   *  Observer B's full fire, the attach-time settlement check, and the
+   *  parse-equivalence canonicalizer, so every parse of this doc resolves
+   *  embeds identically — a mismatched pipeline would read the same bytes
+   *  into different trees. */
+  const observerParseOpts =
+    opts.resolveEmbed && opts.docName
+      ? {
+          resolveEmbed: opts.resolveEmbed,
+          resolveSize: opts.resolveSize,
+          sourcePath: opts.docName,
+        }
+      : undefined;
+
+  /** Canonicalize a body through this doc's own parse pipeline — the
+   *  parse-equivalence fallback's callback (`isParseEquivalentBridge`). */
+  const canonicalizeBody = createDocCanonicalizer(mdManager, {
+    resolveEmbed: opts.resolveEmbed,
+    resolveSize: opts.resolveSize,
+    docName: opts.docName,
+  });
+
+  // Positive-result memo for the parse-equivalence fallback. A doc resting
+  // on a serializer canonicalization (lazy continuations et al.) hits the
+  // settlement checks on every drain with the SAME byte pair; the memo
+  // caps that at one parse per distinct pair (string compares are 10-100×
+  // cheaper than a parse on the per-drain hot path). Negative results are
+  // deliberately NOT cached — genuine divergence must keep re-evaluating
+  // (and alerting) as the doc changes.
+  let memoParseEquivalentLeft = '';
+  let memoParseEquivalentRight = '';
+  let hasParseEquivalentMemo = false;
+  const isRestingParseEquivalent = (left: string, right: string): boolean => {
+    if (
+      hasParseEquivalentMemo &&
+      left === memoParseEquivalentLeft &&
+      right === memoParseEquivalentRight
+    ) {
+      return true;
+    }
+    const equivalent = isParseEquivalentBridge(left, right, canonicalizeBody);
+    if (equivalent) {
+      memoParseEquivalentLeft = left;
+      memoParseEquivalentRight = right;
+      hasParseEquivalentMemo = true;
+    }
+    return equivalent;
+  };
+
+  /**
+   * Health-check refinement of `settlesSplitBrain`: a drain settles
+   * split-brain only when the byte comparison fails AND the pair is not
+   * parse-equivalent. Beyond-tolerance bytes whose parse matches the
+   * fragment (organic resting canonicalizations — CommonMark lazy
+   * continuations and kin) are a healthy steady state: the router still
+   * classifies them as residual-bearing (normalizeBridge untouched, so
+   * fragment edits keep the byte-preserving residual merge), but no
+   * re-derive is enqueued and no split-brain telemetry fires. The parse
+   * runs only after byte + normalize inequality — the drains that would
+   * otherwise settle split-brain and pay a full Observer B re-derive.
+   */
+  const settlesSplitBrainChecked = (settledText: string, md: string, normMdPre?: string): boolean =>
+    settlesSplitBrain(settledText, md, normMdPre) && !isRestingParseEquivalent(settledText, md);
+
   /** Initialize Observer A baseline from current XmlFragment state. */
   try {
     const initialJson = yXmlFragmentToProseMirrorRootNode(xmlFragment, schema).toJSON();
@@ -614,30 +683,13 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
     // witness then captures the seed bytes so the first fragment change on a
     // residual-bearing doc routes Path A instead of a spurious Path B merge.
     // But that is an assumption, not a given: a partially-failed paired write
-    // can leave the fragment behind Y.Text at attach. Verify by comparing the
-    // fragment's canonical body against the canonical body of parse(ytext) —
-    // canonical-vs-canonical, so the check is tolerance-independent and
-    // residual bytes never flip it.
-    const initParseOpts =
-      opts.resolveEmbed && opts.docName
-        ? {
-            resolveEmbed: opts.resolveEmbed,
-            resolveSize: opts.resolveSize,
-            sourcePath: opts.docName,
-          }
-        : undefined;
-    const ytextCanonicalBody = mdManager.serialize(
-      mdManager.parseWithFallback(stripFrontmatter(ytext.toString()).body, initParseOpts),
-    );
-    // Doc-boundary-normalized compare: parse(ytext) re-captures the
-    // sourceDocBoundary leading/trailing newline forms from the raw bytes
-    // (e.g. the blank line after a stripped FM region becomes a leading
-    // capture), while the live fragment structurally drops doc-node attrs
-    // (pinned by doc-boundary-fragment-drop.test.ts) — so the two canonical
-    // serializations legitimately differ by exactly the boundary newlines
-    // on a perfectly settled doc. Everything else stays strict-byte.
-    const stripDocBoundary = (b: string): string => b.replace(/^\n+/, '').replace(/\n+$/, '');
-    if (stripDocBoundary(ytextCanonicalBody) === stripDocBoundary(initialBody)) {
+    // can leave the fragment behind Y.Text at attach. Verify parse-
+    // equivalence: canonical-vs-canonical through the doc's own parse
+    // pipeline (tolerance-independent, residual bytes never flip it), with
+    // the boundary-newline handling documented on `isParseEquivalentBridge`
+    // (parse(ytext) re-captures sourceDocBoundary forms the live fragment
+    // structurally drops — pinned by doc-boundary-fragment-drop.test.ts).
+    if (isRestingParseEquivalent(ytext.toString(), canonicalInit)) {
       recordSettledBaselines(canonicalInit);
     } else {
       recordDivergedAttachBaselines(canonicalInit);
@@ -711,7 +763,7 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
         //
         // (2) Perf short-circuit. Absent split-brain, the fragment is at the
         //     witnessed settlement and Y.Text agrees — nothing to do.
-        if (settlesSplitBrain(ytext.toString(), md)) {
+        if (settlesSplitBrainChecked(ytext.toString(), md)) {
           // Force Observer B to re-derive in this same drain: move BOTH
           // witnesses to the canonical form so B's early-exit comparand
           // (`normalizeBridge(lastSyncedYTextBytes)`) no longer matches the
@@ -977,23 +1029,24 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
 
       // Split-brain settlement guard (Y.Text-is-truth, precedent #38). After
       // the write, the raw witness is at the post-write ytext and the canonical
-      // witness is at md. The `settlesSplitBrain` predicate fires on ANY
-      // beyond-tolerance residual — which covers BOTH a legitimate NG-class doc
-      // (un-padded tables, multi-blank lines: storage never sanitizes) and a
-      // degraded-fallback divergence. The two-witness router already
-      // DISCRIMINATES and protects them identically: the next fragment-change
-      // drain sees the beyond-tolerance residual and routes the byte-preserving
-      // residual-merge (row 2), never a wholesale Path A rewrite. We still
-      // enqueue a same-drain Observer B to ATTEMPT convergence (Y.Text-is-truth
-      // re-derive). Deliberately WITHOUT moving the witnesses to the canonical
-      // form: for an NG-class doc the fragment and Y.Text agree within
-      // serialization (B early-exits — its raw-witness comparand equals the
-      // current ytext — leaving the row-2 steady state intact), and only a
-      // genuinely irreducible fallback divergence keeps B re-deriving. Forcing
-      // the diverged-attach witness shape here would wrongly re-derive every
-      // NG-class doc on every WYSIWYG edit (regressing the residual-merge
+      // witness is at md. The checked predicate fires on a beyond-tolerance
+      // residual whose parse does NOT match the fragment — a genuinely
+      // degraded divergence. A parse-equivalent resting canonicalization
+      // (lazy continuations and other organic constructs the serializer
+      // re-shapes: storage never sanitizes) is a healthy steady state and is
+      // excluded here, while the two-witness router still classifies it as
+      // residual-bearing: the next fragment-change drain sees the
+      // beyond-tolerance residual and routes the byte-preserving
+      // residual-merge (row 2), never a wholesale Path A rewrite. On a
+      // genuine fire we enqueue a same-drain Observer B to ATTEMPT
+      // convergence (Y.Text-is-truth re-derive), deliberately WITHOUT moving
+      // the witnesses to the canonical form: only a genuinely irreducible
+      // fallback divergence keeps B re-deriving (B early-exits when its
+      // raw-witness comparand equals the current ytext). Forcing the
+      // diverged-attach witness shape here would wrongly re-derive every
+      // residual doc on every WYSIWYG edit (regressing the residual-merge
       // steady state); the bytes are already safe either way.
-      if (settlesSplitBrain(ytext.toString(), md, normMd)) {
+      if (settlesSplitBrainChecked(ytext.toString(), md, normMd)) {
         textDirty = true;
         recordSplitBrainRederive('post-merge');
       }
@@ -1031,7 +1084,7 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
         const recoveryJson = yXmlFragmentToProseMirrorRootNode(xmlFragment, schema).toJSON();
         const recoveryBody = mdManager.serialize(recoveryJson);
         const recoveryMd = prependFrontmatter(readCurrentFm(), recoveryBody);
-        if (settlesSplitBrain(ytext.toString(), recoveryMd)) {
+        if (settlesSplitBrainChecked(ytext.toString(), recoveryMd)) {
           recordSplitBrainRecoveryBaselines(recoveryMd);
           textDirty = true;
           recordSplitBrainRederive('error-recovery');
@@ -1210,21 +1263,13 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
 
       // Bridge always-live: parseWithFallback never throws — it always
       // produces a valid JSONContent tree, falling back to rawMdxFallback
-      // for unparseable spans. Threads `resolveEmbed` + `sourcePath` so
-      // `![[photo.png]]` mdast nodes resolve to disk paths before PM
-      // dispatch. Under server-authoritative architecture (precedent #14),
-      // this observer is the sole writer for XmlFragment — the "always-
-      // live" contract here means no client sees frozen WYSIWYG when
-      // another peer is mid-typing a broken MDX tag.
-      const parseOpts =
-        opts.resolveEmbed && opts.docName
-          ? {
-              resolveEmbed: opts.resolveEmbed,
-              resolveSize: opts.resolveSize,
-              sourcePath: opts.docName,
-            }
-          : undefined;
-      const parsedJson = mdManager.parseWithFallback(body, parseOpts);
+      // for unparseable spans. `observerParseOpts` threads `resolveEmbed` +
+      // `sourcePath` so `![[photo.png]]` mdast nodes resolve to disk paths
+      // before PM dispatch. Under server-authoritative architecture
+      // (precedent #14), this observer is the sole writer for XmlFragment —
+      // the "always-live" contract here means no client sees frozen WYSIWYG
+      // when another peer is mid-typing a broken MDX tag.
+      const parsedJson = mdManager.parseWithFallback(body, observerParseOpts);
 
       const pmNode = opts.schema.nodeFromJSON(parsedJson);
 
@@ -1261,6 +1306,11 @@ export function setupServerObservers(opts: SetupServerObserversOpts): () => void
         assertBridgeInvariant(ytext.toString(), canonicalYText, {
           site: 'observer-b',
           docName: opts.docName,
+          // One-shot reuse of the canonicalization this fire just computed:
+          // the watchdog's fallback canonicalizes the SAME body B parsed
+          // above, and re-running parse+serialize per fire is exactly the
+          // extra O(N) pass the parsedJson reuse note above exists to avoid.
+          canonicalizeBody: (b) => (b === body ? canonicalBody : canonicalizeBody(b)),
         });
         // Maintain Observer A's witnesses — B just absorbed Y.Text into the
         // fragment, a true settlement point. The canonical witness records

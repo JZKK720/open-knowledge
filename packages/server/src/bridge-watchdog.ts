@@ -28,8 +28,9 @@
  *
  * Telemetry payload is bounded-cardinality and content-redacted by default:
  * site, docName-or-null, the tolerance-class label (`'untracked'` for
- * unknown classes — the comparator tolerates known classes, so a violation
- * outside tolerance is by definition untracked), and FNV-1a digests of the
+ * unknown classes — the comparator stack tolerates known byte classes plus
+ * the parse-equivalence fallback, so a violation past ALL of them is by
+ * definition untracked), and FNV-1a digests of the
  * ytext + fragment snapshots for cross-event correlation. The truncated
  * unifiedDiff is included as `diff` ONLY when `OK_TELEMETRY_VERBOSE=1`
  * (mirrors the sibling `bridge-merge-content-loss` opt-in pattern). Full
@@ -39,14 +40,17 @@
  * @see packages/core/src/bridge/bridge-invariant.ts (error type)
  */
 
+import type { MarkdownManager } from '@inkeep/open-knowledge-core';
 import {
   type BridgeInvariantSite,
   type BridgeInvariantViolation,
   BridgeInvariantViolationError,
-  type BridgeToleranceClass,
+  type BridgeToleranceSignal,
   detectAppliedToleranceClasses,
   emitToleranceFire,
+  isParseEquivalentBridge,
   normalizeBridge,
+  PARSE_EQUIVALENCE_TOLERANCE,
   toBridgeInvariantLog,
 } from '@inkeep/open-knowledge-core';
 import {
@@ -111,12 +115,13 @@ const lastEmitMs = new Map<string, number>();
 const MAX_VIOLATION_RATE_TUPLES = 1024;
 
 /** Map<rateKey, last-emit-Unix-ms> for the bridge-tolerance-applied event.
- *  rateKey = `${site}::${class}`. Bounded cardinality: 16 classes × 3 sites =
- *  48 entries max globally. Per-(site, class) windows let operators see how
+ *  rateKey = `${site}::${class}`. Bounded cardinality: 17 signals (16
+ *  normalizeBridge classes + the parse-equivalence fallback) × 3 sites =
+ *  51 entries max globally. Per-(site, class) windows let operators see how
  *  often each site relies on each tolerance class — observer-b CRLF rates
  *  vs persistence CRLF rates surface separately.
  *
- *  WARN: same module-level state caveat as `lastEmitMs` above. The 48-entry
+ *  WARN: same module-level state caveat as `lastEmitMs` above. The 51-entry
  *  bound is global; under multi-server-per-process, a single server's
  *  tolerance event would suppress another server's same-class event in
  *  the same window. Less concerning than the violation rate-limiter
@@ -146,14 +151,14 @@ export type BridgeSplitBrainSite = 'identity-gate' | 'post-merge' | 'error-recov
 
 /** Map<rateKey, last-emit-Unix-ms> for the bridge-split-brain-rederive
  *  event. rateKey = `${site}::${docName ?? '__nodoc__'}` — per-(site, doc)
- *  so a chatty doc can't suppress signal from quieter docs and the two
- *  detection sites surface independently. Bounded: 2 sites × docs, with
+ *  so a chatty doc can't suppress signal from quieter docs and the three
+ *  detection sites surface independently. Bounded: 3 sites × docs, with
  *  the same lazy prune as `lastEmitMs`.
  *
  *  WARN: same module-level state caveat as `lastEmitMs` above. */
 const lastSplitBrainEmitMs = new Map<string, number>();
 
-function toleranceRateKey(site: BridgeInvariantSite, cls: BridgeToleranceClass): string {
+function toleranceRateKey(site: BridgeInvariantSite, cls: BridgeToleranceSignal): string {
   return `${site}::${cls}`;
 }
 
@@ -225,13 +230,13 @@ export function shouldEmitBridgeInvariantViolation(
  *
  * Keying by (site, class) — not just class — so observer-b's CRLF reliance
  * doesn't suppress persistence-site CRLF reliance within the same window.
- * Bounded: 16 classes × 3 sites = 48 entries.
+ * Bounded: 17 signals × 3 sites = 51 entries.
  *
  * Test seam: pass `nowMs` to deterministically advance the clock.
  */
 export function shouldEmitBridgeToleranceApplied(
   site: BridgeInvariantSite,
-  toleranceClass: BridgeToleranceClass,
+  toleranceClass: BridgeToleranceSignal,
   nowMs: number = Date.now(),
 ): boolean {
   const key = toleranceRateKey(site, toleranceClass);
@@ -410,6 +415,43 @@ export function shouldThrowOnBridgeInvariantViolation(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Doc canonicalizer
+// ─────────────────────────────────────────────────────────────
+
+/** The per-doc parse surface a canonicalizer must replicate — the embed
+ *  option pair every fragment derivation threads into `parseWithFallback`,
+ *  keyed to the doc that owns the comparison. */
+type DocParseSurface = Pick<
+  NonNullable<Parameters<MarkdownManager['parseWithFallback']>[1]>,
+  'resolveEmbed' | 'resolveSize'
+> & { docName?: string };
+
+/**
+ * Bind a body canonicalizer to a doc's own parse surface. Every
+ * parse-equivalence decision is only as good as the promise that the
+ * canonicalizer parses EXACTLY like the fragment derivation it is compared
+ * against — hand-replicating the option triple at each call site lets the
+ * copies drift apart silently, and a drifted canonicalizer can mask (or
+ * spuriously alert on) embed-bearing docs. Constructing the closure here
+ * makes the same-surface invariant hold by construction for every consumer.
+ */
+export function createDocCanonicalizer(
+  mdManager: MarkdownManager,
+  opts: DocParseSurface,
+): (body: string) => string {
+  const parseOpts =
+    opts.resolveEmbed && opts.docName
+      ? {
+          resolveEmbed: opts.resolveEmbed,
+          resolveSize: opts.resolveSize,
+          sourcePath: opts.docName,
+        }
+      : undefined;
+  return (body: string): string =>
+    mdManager.serialize(mdManager.parseWithFallback(body, parseOpts));
+}
+
+// ─────────────────────────────────────────────────────────────
 // Watchdog assertion
 // ─────────────────────────────────────────────────────────────
 
@@ -442,6 +484,23 @@ interface AssertBridgeInvariantOpts {
    * thrown errors. Observer B still throws by default.
    */
   suppressDevThrow?: boolean;
+  /**
+   * Parse-equivalence fallback (`isParseEquivalentBridge`). When the inputs
+   * diverge beyond every `normalizeBridge` byte class, canonicalize the
+   * ytext body through the caller's own parse→serialize pipeline and accept
+   * the pair when the canonical forms match — the fragment then IS
+   * `parse(ytext)` (precedent #38), so a resting serializer canonicalization
+   * (CommonMark lazy continuations: an unindented wrapped list line, a
+   * paragraph glued under a list, a `> `-less blockquote continuation) is a
+   * tolerated equivalence, not a violation. Reported through the
+   * `bridge-tolerance-applied` channel as `parse-equivalence`.
+   *
+   * Callers MUST bind the same parse options the doc's fragment derivation
+   * uses (embed resolution, source path) — a mismatched pipeline degrades
+   * safely toward alerting, never masking. Omitting the callback preserves
+   * the strict normalize-only behavior.
+   */
+  canonicalizeBody?: (body: string) => string;
 }
 
 /**
@@ -475,39 +534,61 @@ export function assertBridgeInvariant(
   fragmentMdSnapshot: string,
   opts: AssertBridgeInvariantOpts,
 ): boolean {
+  // Tolerance-applied reporting, shared by both tolerated paths (normalize-
+  // equal and parse-equivalent). Two consumers, two policies. The metric
+  // counter + console.warn loop are noise/cardinality controls, so they
+  // share ONE rate-limit decision per (site, class). The JSONL file hook is
+  // evidence collection for the aggregator CLI: it needs every fire to
+  // measure frequency, and the RotatingAppender already bounds disk (~16MB
+  // across two generations), so it intentionally gets the full
+  // un-rate-limited class list. Bounded cardinality: 17 signals × 3 sites
+  // = 51 series globally; rate-limited per (site, class).
+  const reportTolerated = (classes: readonly BridgeToleranceSignal[]): void => {
+    const emittedClasses = classes.filter((cls) =>
+      shouldEmitBridgeToleranceApplied(opts.site, cls, opts.nowMs),
+    );
+    if (classes.length > 0) {
+      emitToleranceFire(classes, ytextSnapshot, fragmentMdSnapshot, opts.docName);
+    }
+    for (const cls of emittedClasses) {
+      incrementBridgeToleranceApplied(cls);
+      console.warn(
+        JSON.stringify({
+          event: 'bridge-tolerance-applied',
+          site: opts.site,
+          class: cls,
+        }),
+      );
+    }
+  };
+
   const ytextNorm = normalizeBridge(ytextSnapshot);
   const fragNorm = normalizeBridge(fragmentMdSnapshot);
   if (ytextNorm === fragNorm) {
-    // Tolerance-applied path: bytes are normalize-equal but may differ
-    // pre-normalization. Emit one bridge-tolerance-applied event per
-    // detected (site, class) tuple so operators can prioritize closing
-    // tolerance gaps per-site. Bounded cardinality: 16 classes × 3 sites
-    // = 48 series globally; rate-limited per (site, class).
+    // Bytes are normalize-equal but may differ pre-normalization — emit one
+    // bridge-tolerance-applied event per detected (site, class) tuple so
+    // operators can prioritize closing tolerance gaps per-site.
     if (ytextSnapshot !== fragmentMdSnapshot) {
-      const classes = detectAppliedToleranceClasses(ytextSnapshot, fragmentMdSnapshot);
-      // Two consumers, two policies. The metric counter + console.warn loop
-      // are noise/cardinality controls, so they share ONE rate-limit decision
-      // per (site, class). The JSONL file hook is evidence collection for the
-      // aggregator CLI: it needs every fire to measure frequency, and the
-      // RotatingAppender already bounds disk (~16MB across two generations),
-      // so it intentionally gets the full un-rate-limited class list.
-      const emittedClasses = classes.filter((cls) =>
-        shouldEmitBridgeToleranceApplied(opts.site, cls, opts.nowMs),
-      );
-      if (classes.length > 0) {
-        emitToleranceFire(classes, ytextSnapshot, fragmentMdSnapshot, opts.docName);
-      }
-      for (const cls of emittedClasses) {
-        incrementBridgeToleranceApplied(cls);
-        console.warn(
-          JSON.stringify({
-            event: 'bridge-tolerance-applied',
-            site: opts.site,
-            class: cls,
-          }),
-        );
-      }
+      reportTolerated(detectAppliedToleranceClasses(ytextSnapshot, fragmentMdSnapshot));
     }
+    return true;
+  }
+
+  // Parse-equivalence fallback — runs only after every byte class failed,
+  // i.e. exactly the inputs that would otherwise alert. When the caller's
+  // canonicalize pipeline maps the ytext body onto the fragment side, the
+  // divergence is a resting serializer canonicalization of organic input
+  // (fragment ≡ parse(ytext) holds), not a broken bridge. The heuristic
+  // byte-class labels ride along for diagnostic color (e.g. an unindented
+  // wrapped list line also registers paragraph-continuation-indent).
+  if (
+    opts.canonicalizeBody &&
+    isParseEquivalentBridge(ytextSnapshot, fragmentMdSnapshot, opts.canonicalizeBody)
+  ) {
+    reportTolerated([
+      ...detectAppliedToleranceClasses(ytextSnapshot, fragmentMdSnapshot),
+      PARSE_EQUIVALENCE_TOLERANCE,
+    ]);
     return true;
   }
 

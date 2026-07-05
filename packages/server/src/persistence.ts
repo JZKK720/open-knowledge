@@ -44,7 +44,7 @@ import * as Y from 'yjs';
 import { LINEAGE_EPOCH_KEY } from './auth-token-schema.ts';
 import type { BacklinkIndex } from './backlink-index.ts';
 import { getMsSinceLastUserTx, isDocQuiescent } from './bridge-quiescence.ts';
-import { assertBridgeInvariant } from './bridge-watchdog.ts';
+import { assertBridgeInvariant, createDocCanonicalizer } from './bridge-watchdog.ts';
 import { isConfigDoc, isManagedArtifactDoc, isSystemDoc } from './cc1-broadcast.ts';
 import { type ConfigPersistenceCtx, loadConfigDoc, storeConfigDoc } from './config-persistence.ts';
 import type { ContributorEntry } from './contributor-tracker.ts';
@@ -1372,6 +1372,17 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
             site: 'persistence',
             docName: documentName,
             suppressDevThrow: true,
+            // Parse-equivalence fallback: a doc resting on a serializer
+            // canonicalization (CommonMark lazy continuations et al.) is
+            // NOT a divergence — without this, every persist of such a doc
+            // would warn AND run the synchronous reconcileFragmentNow below
+            // for a fragment that already equals parse(ytext). Same `mgr` +
+            // parse surface as the fragment derivation, by construction.
+            canonicalizeBody: createDocCanonicalizer(mgr, {
+              resolveEmbed: options?.resolveEmbed,
+              resolveSize: options?.resolveSize,
+              docName: documentName,
+            }),
           });
         } catch (err) {
           // Counter + structured event give the serialize-throw failure

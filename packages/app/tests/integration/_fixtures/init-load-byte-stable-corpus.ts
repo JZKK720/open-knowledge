@@ -397,6 +397,7 @@ export const CORPUS: CorpusEntry[] = [
       'entity-ref-preservation',
       'pua-sentinel-ranges-reserved',
       'doc-start-thematic-break-to-asterisks',
+      'lazy-continuation-canonicalization',
     ],
     description:
       'Mega-combo: 8 byte-unsafe constructs in one .md doc — doc-start thematic, multi-blank, GFM table, math+footnote, alert, PUA, backslash, HTML entity. e2e tier target.',
@@ -450,6 +451,21 @@ export const CORPUS: CorpusEntry[] = [
       NL +
       // pua-sentinel-ranges-reserved — PUA sentinels U+E000..U+E004 (R23 guard reserved range).
       'PUA: ' +
+      NL +
+      NL +
+      // lazy-continuation-canonicalization — a list item whose wrapped line
+      // continues without indent, and a blockquote continuation without the
+      // `> ` prefix (CommonMark 5.2). Both rest byte-divergent from canonical
+      // and must survive load verbatim (health checks tolerate via
+      // parse-equivalence; the byte comparator keeps them residual-bearing).
+      '- lazy list item whose wrapped line' +
+      NL +
+      'continues without indent.' +
+      NL +
+      NL +
+      '> lazy quote line' +
+      NL +
+      'continues without the prefix.' +
       NL +
       NL +
       'Tail.' +

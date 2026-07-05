@@ -19,7 +19,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   BridgeInvariantViolationError,
+  MarkdownManager,
+  normalizeBridge,
   setToleranceTelemetryHook,
+  sharedExtensions,
   type ToleranceFireRecord,
 } from '@inkeep/open-knowledge-core';
 import {
@@ -1061,5 +1064,97 @@ describe('assertBridgeInvariant — return value reflects normalize-equality', (
       if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = originalNodeEnv;
     }
+  });
+});
+
+describe('assertBridgeInvariant — parse-equivalence fallback (canonicalizeBody opt)', () => {
+  // CommonMark lazy continuations serialize non-identically beyond the
+  // normalizeBridge tolerance set (step 7f keeps them divergent for the
+  // router's byte-preserving residual merge), yet parse identically — the
+  // fragment IS parse(ytext), so the health check must not fire. The
+  // `canonicalizeBody` opt lets a call site holding a MarkdownManager
+  // supply the authoritative equivalence: canonicalize(left body) equals
+  // the (already-canonical) right body ⇒ tolerated, not a violation.
+  const mgr = new MarkdownManager({ extensions: sharedExtensions });
+  const canonicalizeBody = (body: string): string => mgr.serialize(mgr.parseWithFallback(body));
+
+  const LAZY_RAW = '- item one continues here,\nlazily on the next line.\n';
+
+  test('normalize-divergent but parse-equivalent inputs are tolerated (returns true, no throw)', () => {
+    const canonical = canonicalizeBody(LAZY_RAW);
+    // Class trigger: byte-divergent AND beyond normalizeBridge tolerance.
+    expect(canonical).not.toBe(LAZY_RAW);
+    expect(normalizeBridge(canonical)).not.toBe(normalizeBridge(LAZY_RAW));
+
+    const result = assertBridgeInvariant(LAZY_RAW, canonical, {
+      site: 'persistence',
+      docName: 'lazy-doc',
+      canonicalizeBody,
+    });
+    expect(result).toBe(true);
+    expect(getMetrics().bridgeInvariantViolations).toBe(0);
+    expect(getMetrics().bridgeInvariantViolationsSuppressed).toBe(0);
+  });
+
+  test('tolerated parse-equivalent pair emits bridge-tolerance-applied with the parse-equivalence class', () => {
+    const canonical = canonicalizeBody(LAZY_RAW);
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      assertBridgeInvariant(LAZY_RAW, canonical, {
+        site: 'persistence',
+        docName: 'lazy-doc',
+        canonicalizeBody,
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+    const toleranceEvents = warnings
+      .map((w) => {
+        try {
+          return JSON.parse(w) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is Record<string, unknown> => e?.event === 'bridge-tolerance-applied');
+    expect(toleranceEvents.map((e) => e.class)).toContain('parse-equivalence');
+  });
+
+  test('genuinely divergent inputs still throw with canonicalizeBody provided', () => {
+    // Right side lacks content the left carries — canonicalizing the left
+    // cannot bridge that gap, so the loud-fail contract must hold.
+    expect(() => {
+      assertBridgeInvariant(LAZY_RAW, '# Completely different fragment\n', {
+        site: 'observer-b',
+        docName: 'diverged-doc',
+        canonicalizeBody,
+      });
+    }).toThrow(BridgeInvariantViolationError);
+  });
+
+  test('frontmatter divergence is not bridged by body parse-equivalence', () => {
+    const left = `---\ntitle: A\n---\n\n${LAZY_RAW}`;
+    const right = `---\ntitle: B\n---\n\n${canonicalizeBody(LAZY_RAW)}`;
+    expect(() => {
+      assertBridgeInvariant(left, right, {
+        site: 'observer-b',
+        docName: 'fm-diverged-doc',
+        canonicalizeBody,
+      });
+    }).toThrow(BridgeInvariantViolationError);
+  });
+
+  test('without canonicalizeBody the strict normalize-only behavior is preserved', () => {
+    const canonical = canonicalizeBody(LAZY_RAW);
+    expect(() => {
+      assertBridgeInvariant(LAZY_RAW, canonical, {
+        site: 'observer-b',
+        docName: 'lazy-doc-strict',
+      });
+    }).toThrow(BridgeInvariantViolationError);
   });
 });

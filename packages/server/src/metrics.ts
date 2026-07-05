@@ -4,12 +4,12 @@
  * Exposed via GET /api/metrics/reconciliation.
  */
 
-import type { BridgeToleranceClass, CC1Channel } from '@inkeep/open-knowledge-core';
+import type { BridgeToleranceSignal, CC1Channel } from '@inkeep/open-knowledge-core';
 
 /**
  * Why an Observer A drain could not be served by the map-driven splice.
  * Closed union — keys a bounded-cardinality counter map, so call sites are
- * compile-time checked the same way `BridgeToleranceClass` keys are.
+ * compile-time checked the same way `BridgeToleranceSignal` keys are.
  */
 export type MapDrivenSpliceFallbackReason =
   | 'text-mismatch'
@@ -152,12 +152,13 @@ export interface ReconciliationMetrics {
    *  (architectural-floor cases like CRLF/leading-newline are normal); growth
    *  highlights which classes are most worth closing via fidelity attrs.
    *
-   *  Keys are bounded to `BridgeToleranceClass` (the enumerated labels in
-   *  `BRIDGE_TOLERANCE_CLASSES`). Lazy keys: a class only appears once the
+   *  Keys are bounded to `BridgeToleranceSignal` (the enumerated labels in
+   *  `BRIDGE_TOLERANCE_CLASSES` plus the check-layer parse-equivalence
+   *  fallback). Lazy keys: a class only appears once the
    *  first event for it has fired. Tightening from `string` enforces typo-
    *  resistance at compile time so no caller can silently pollute the map
    *  with arbitrary labels and drop those counters from operator visibility. */
-  bridgeToleranceApplied: Partial<Record<BridgeToleranceClass, number>>;
+  bridgeToleranceApplied: Partial<Record<BridgeToleranceSignal, number>>;
   /** Y.Text-is-truth contract — count of Observer A Path B
    *  fires (mergeThreeWay slow path triggered by ytext divergence from the
    *  baseline) that escaped the per-doc rate-limiter and emitted a
@@ -521,12 +522,13 @@ export function incrementAgentPatchFindMismatches(): void {
 /**
  * Increment the bridge-tolerance-applied counter for a specific tolerance
  * class. Bounded cardinality: the enumerated labels in
- * `BRIDGE_TOLERANCE_CLASSES` from `@inkeep/open-knowledge-core`. Tightening
- * from `string` to `BridgeToleranceClass` is a compile-time guard against
+ * `BRIDGE_TOLERANCE_CLASSES` plus the check-layer parse-equivalence
+ * fallback (`BridgeToleranceSignal` in `@inkeep/open-knowledge-core`).
+ * Tightening from `string` is a compile-time guard against
  * typos at call sites that would otherwise silently pollute the metrics map
  * with arbitrary keys and drop those counters from operator dashboards.
  */
-export function incrementBridgeToleranceApplied(toleranceClass: BridgeToleranceClass): void {
+export function incrementBridgeToleranceApplied(toleranceClass: BridgeToleranceSignal): void {
   counters.bridgeToleranceApplied[toleranceClass] =
     (counters.bridgeToleranceApplied[toleranceClass] ?? 0) + 1;
 }

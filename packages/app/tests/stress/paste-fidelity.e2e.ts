@@ -335,6 +335,24 @@ test.describe('Paste from vendor HTML → structured content through Branch D', 
       expect(content).toContain('bold');
     }).toPass({ timeout: 5_000 });
   });
+
+  test('table with block-content cell pastes as an intact single-line row', async ({ page }) => {
+    // A pasted <td> carrying a list must degrade to one physical GFM row
+    // (breaks as <br />), never emit a raw newline inside the row — a raw
+    // newline fractures the table on every fresh parse of the stored bytes.
+    await pasteWithMimes(page, {
+      'text/plain': 'fallback text',
+      'text/html':
+        '<table><tr><th>h</th></tr><tr><td><ul><li>one</li><li>two</li></ul></td></tr></table>',
+    });
+    await expect(async () => {
+      const content = await getYText(page);
+      // Both list items live on the same physical row line.
+      expect(content).toMatch(/\|[^\n]*one[^\n]*two[^\n]*\|/);
+      // No fracture: nothing escaped the table as a top-level block.
+      expect(content).not.toMatch(/^[*-] two/m);
+    }).toPass({ timeout: 5_000 });
+  });
 });
 
 // ─── FR-specific WYSIWYG scenarios ───
