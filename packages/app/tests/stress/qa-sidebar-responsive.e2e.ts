@@ -396,7 +396,9 @@ test.describe('non-embedded UA', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect
       .poll(() => page.locator('text=With AI').count(), {
-        timeout: 10_000,
+        // No inline timeout: inherit the config-owned expect budget — this is
+        // the first UI wait after goto, exactly the site class a hand-rolled
+        // sub-config budget exposes on cold/contended workers.
         intervals: [200, 500, 1000],
         message: 'With AI section visible in non-embedded empty state',
       })

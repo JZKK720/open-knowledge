@@ -162,7 +162,9 @@ async function checkApiConfig(baseURL: string, timeoutMs = 2_000): Promise<void>
  * Three-phase readiness probe for the per-worker dev server. Fail-fast
  * under sustained host load instead of letting each in-test browser
  * also wait 30s for `Sync timed out`. Worst-case total budget:
- * 60 + 2 + 10 = 72s, within the worker fixture's 120s timeout below.
+ * 60 + 2 + 10 = 72s; phase 4 (`warmupAppFirstLoad` below) adds up to
+ * 60 (goto) + 60 (treeitem) = 120s, for a 192s worst case within the worker
+ * fixture's 240s timeout.
  * (`checkCollabSync` lives in `./server-process.ts`, shared with the
  * per-test fixtures.)
  */
@@ -175,6 +177,50 @@ async function waitForServerReady(baseURL: string, port: number): Promise<void> 
   await waitForHttpReady(baseURL, 60_000);
   await checkApiConfig(baseURL);
   await checkCollabSync(port);
+}
+
+/**
+ * Phase 4 of the readiness probe: one awaited, throwaway real-browser first
+ * load, gated on the same app-interactive signal tests wait on (the
+ * fixture-seeded treeitem). The server-facing phases above leave Vite's
+ * per-process source-transform graph COLD — the per-run warm seed covers only
+ * the dependency-optimizer cache — so without this phase the app's first-load
+ * compile cost lands on whichever test runs first. On a retry that test is
+ * the retried test itself (Playwright discards the failed worker and boots a
+ * fresh replacement per retry), making retries structurally WEAKER than
+ * first attempts and inverting the retry-as-recovery design
+ * (`retries: 2` + `failOnFlakyTests: false` in playwright.config.ts).
+ * Contract pinned by `tests/stress/harness-app-warmth.e2e.ts`.
+ *
+ * Fail-closed on purpose: an app that cannot render inside this budget
+ * (2× the suite's 30s cold content budgets) would fail every test on the
+ * worker anyway — failing here routes through the fixture's
+ * readiness-failure path, which attaches the dev-server log tail instead
+ * of surfacing as a per-test generic timeout.
+ *
+ * The gate waits on the first entry of `REQUIRED_FIXTURE_ENTRY_NAMES`
+ * rendering in the sidebar tree. Any future `test.use({ workerServerEnv })`
+ * whose env hides or empties the default sidebar at first paint would stall
+ * every worker of that group here for the full budget — keep such envs
+ * compatible with the seeded fixture entries rendering.
+ */
+const APP_WARMUP_GOTO_TIMEOUT_MS = 60_000;
+const APP_WARMUP_TIMEOUT_MS = 60_000;
+
+async function warmupAppFirstLoad(
+  browser: import('@playwright/test').Browser,
+  baseURL: string,
+): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/`, { timeout: APP_WARMUP_GOTO_TIMEOUT_MS });
+    await page
+      .getByRole('treeitem', { name: REQUIRED_FIXTURE_ENTRY_NAMES[0], exact: true })
+      .waitFor({ state: 'visible', timeout: APP_WARMUP_TIMEOUT_MS });
+  } finally {
+    await context.close();
+  }
 }
 
 /**
@@ -223,7 +269,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
    */
   workerServerEnv: [{}, { scope: 'worker', option: true }],
   workerServer: [
-    async ({ workerServerEnv }, use, workerInfo) => {
+    async ({ workerServerEnv, browser }, use, workerInfo) => {
       const port = await getFreePort();
       const contentDir = mkdtempSync(join(tmpdir(), `ok-w${workerInfo.workerIndex}-`));
       // Per-worker Vite optimized-dependency cacheDir — the third per-process
@@ -306,6 +352,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
       try {
         await waitForServerReady(baseURL, port);
+        await warmupAppFirstLoad(browser, baseURL);
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         // Same guard shape as the teardown below: cleanup must run even if
@@ -337,7 +384,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         rmSync(viteCacheDir, { recursive: true, force: true });
       }
     },
-    { scope: 'worker', timeout: 120_000 },
+    // 240s: server boot probe (≤72s) + app first-load warmup (≤60s goto +
+    // ≤60s treeitem = 120s) = 192s worst case, with 48s headroom under
+    // 4-worker CI contention.
+    { scope: 'worker', timeout: 240_000 },
   ],
 
   // Override Playwright's built-in `baseURL` so `page.goto('/foo')` resolves

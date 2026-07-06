@@ -54,7 +54,12 @@ import type { Page } from '@playwright/test';
 import { expect, test, waitForActiveProviderSynced } from './_helpers';
 
 async function openFromSidebar(page: Page, filename: string) {
-  await page.getByRole('treeitem', { name: filename, exact: true }).click({ timeout: 10_000 });
+  const row = page.getByRole('treeitem', { name: filename, exact: true });
+  // Render-gate before acting (mirrors docs-open.e2e.ts): a bare bounded
+  // click conflates "app/tree not rendered yet" with "row missing", and a
+  // hand-rolled budget sits below the config-owned expect budget.
+  await expect(row).toBeVisible();
+  await row.click();
 }
 
 // Same shape as docs-open.e2e.ts's DOC_A / DOC_B so this test exercises

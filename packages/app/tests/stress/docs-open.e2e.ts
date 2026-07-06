@@ -3,8 +3,9 @@
  *
  * Covers the core navigation UX properties of the hybrid render tree.
  *
- * Requires: Playwright browsers installed. Dev server started by
- * playwright.config.ts webServer on VITE_PORT (or default 5173).
+ * Requires: Playwright browsers installed. Server provided per-worker by
+ * the `workerServer` fixture in `_helpers/fixtures.ts`; the `baseURL`
+ * fixture resolves `page.goto('/…')` against it.
  */
 
 import { DOCUMENT_OPEN_BYTE_LIMIT } from '@inkeep/open-knowledge-core';
@@ -12,7 +13,13 @@ import type { Page } from '@playwright/test';
 import { expect, test, waitForActiveProviderSynced } from './_helpers';
 
 async function openFromSidebar(page: Page, filename: string) {
-  await page.getByRole('treeitem', { name: filename, exact: true }).click({ timeout: 10_000 });
+  const row = page.getByRole('treeitem', { name: filename, exact: true });
+  // Render-gate before acting: a bare bounded click conflates "app/tree not
+  // rendered yet" with "row missing", and its hand-rolled budget sat below
+  // the config-owned expect budget the suite calibrates for CI contention.
+  // Gate visibility web-first (inherits the config budget), then click.
+  await expect(row).toBeVisible();
+  await row.click();
 }
 
 function sidebarItem(page: Page, filename: string) {
