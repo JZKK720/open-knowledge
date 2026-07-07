@@ -9,11 +9,20 @@
  * detection) belong in a future integration test that spins up a bare git repo.
  */
 
-import { describe as _bunDescribe, afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-// Skip-on-CI gate (oven-sh/bun#11892): subprocess or git child spawns; Bun fails to reap children on ubuntu-latest GHA runners (oven-sh/bun#11892).
-// Tests run normally locally; follow-up will narrow the leak surface.
-const describe = process.env.CI ? _bunDescribe.skip : _bunDescribe;
+// CI-skip gate REMOVED (2026-07): this file was blanket-skipped on CI as a
+// workaround for oven-sh/bun#11892 (Bun fails to kill/reap spawned child
+// processes on GitHub Actions runners; still open upstream — a Bun runtime
+// defect, so the move to Blacksmith runners dates the lift but is not what
+// makes it safe). The lift is carried by two facts: the suite only spawns
+// short-lived git children via simple-git — not the long-lived spawn+kill
+// pattern from the bun issue — and the bare-remote fixtures now pin their
+// branch explicitly, so the suite passes under CI's `master`-default git
+// (inkeep/open-knowledge#361). If this file ever flakes or hangs in CI,
+// narrow to a targeted skip of the specific live-git describe blocks —
+// do not restore a blanket process.env.CI gate. 17 sibling files still carry
+// the blanket gate; per-file lift is tracked in inkeep/agents-private#2447.
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
