@@ -73,7 +73,7 @@ import {
 } from '@inkeep/open-knowledge-core';
 import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
-import { Trans, useLingui } from '@lingui/react/macro';
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -98,6 +98,8 @@ import type {
   OkFindEnclosingProjectRootResult,
   OkFolderState,
   OkMcpWiringEditorId,
+  OkPackId,
+  OkSeedPackInfo,
 } from '@/lib/desktop-bridge-types';
 
 /**
@@ -178,6 +180,22 @@ interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bridge: OkDesktopBridge;
+  /**
+   * Starter pack pre-selected on the packs-forward first-run launcher. When
+   * set (alongside a matching entry in `packs`), the dialog names the pack in
+   * its description as read-only confirmation and threads this id into
+   * `createNew` so the fresh project opens seeded. The pack was already chosen
+   * on the launcher — the dialog confirms it, it isn't a control here. Unset →
+   * the blank-project create flow (today's generic description). No subfolder
+   * UI — first-run applies the pack's defaults (see `runCreateNew`).
+   */
+  initialPackId?: OkPackId;
+  /**
+   * The available starter packs, used only to look up `initialPackId`'s
+   * display metadata (name + folder count) for the read-only description.
+   * Empty/omitted → the generic blank-create description.
+   */
+  packs?: OkSeedPackInfo[];
 }
 
 /**
@@ -281,7 +299,13 @@ function errorCopy(err: CreateNewError): MessageDescriptor {
   }
 }
 
-export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjectDialogProps) {
+export function CreateProjectDialog({
+  open,
+  onOpenChange,
+  bridge,
+  initialPackId,
+  packs,
+}: CreateProjectDialogProps) {
   const { t } = useLingui();
   const formId = useId();
   const nameInputId = useId();
@@ -588,6 +612,12 @@ export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjec
     });
   }, [open, cascade, bridge]);
 
+  // The launcher-chosen pack, resolved for the read-only description. Present
+  // only when the dialog was opened from a pack (`initialPackId` set) and its
+  // metadata is available in `packs`; otherwise the description stays generic
+  // (blank / `File → New` create path).
+  const selectedPack = packs?.find((pack) => pack.id === initialPackId);
+
   // Derived name + target presentation.
   const rawName = name;
   const sanitized = rawName === '' ? '' : sanitizeFolderName(rawName);
@@ -682,6 +712,10 @@ export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjec
         name: sanitized,
         editors: Array.from(editorIds),
         sharing,
+        // Seed the launcher-chosen starter pack (packs-forward first-run).
+        // Undefined on the blank-create path — main opens an empty project
+        // as before.
+        packId: initialPackId,
       });
       onOpenChange(false);
     } catch (err) {
@@ -771,7 +805,16 @@ export function CreateProjectDialog({ open, onOpenChange, bridge }: CreateProjec
             <Trans>Create new project</Trans>
           </DialogTitle>
           <DialogDescription>
-            <Trans>Create a new OpenKnowledge project in the folder of your choice.</Trans>
+            {selectedPack ? (
+              <Trans>
+                Create a new OpenKnowledge project from the <strong>{selectedPack.name}</strong>{' '}
+                starter pack (
+                <Plural value={selectedPack.entryCounts.folders} one="# folder" other="# folders" />{' '}
+                and starter templates) in the folder of your choice.
+              </Trans>
+            ) : (
+              <Trans>Create a new OpenKnowledge project in the folder of your choice.</Trans>
+            )}
           </DialogDescription>
         </DialogHeader>
 

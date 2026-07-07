@@ -22,13 +22,16 @@ import { useThemeBridge } from '@/hooks/use-theme-bridge';
 import type {
   OkDesktopBridge,
   OkLocalOpAuthStatusResponse,
+  OkPackId,
   OkProjectEntryPoint,
+  OkSeedPackInfo,
   RecentProjectEntry,
 } from '@/lib/desktop-bridge-types';
 import {
   resolveErrorMessage,
   runWithErrorStatePure as runWithErrorStatePureBase,
 } from '@/lib/error-state';
+import { seedClient } from '@/lib/seed-client';
 import { createCloneController } from '@/lib/share/clone-controller';
 import { ipcAuthQueryTransport } from '@/lib/transports/auth-query-transport';
 import { ipcAuthTransport } from '@/lib/transports/auth-transport';
@@ -42,6 +45,7 @@ import { CreateProjectDialog } from './CreateProjectDialog';
 import { GithubIcon } from './icons/github';
 import { OkIcon } from './icons/ok';
 import { McpConsentDialog } from './McpConsentDialog';
+import { PackCardGrid } from './PackCardGrid';
 import { basenameOf } from './project-switcher-recents';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -76,6 +80,11 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [recentBranches, setRecentBranches] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
+  // Whether the `listRecent()` fetch rejected. A fetch failure must fall back
+  // to the returning-user three-card launcher, NOT the first-run packs view —
+  // otherwise a transient error would show a returning user the first-run
+  // onboarding (`recents` stays `[]` on failure).
+  const [recentsLoadFailed, setRecentsLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Non-null while a project open is in flight. `bridge.project.open` stays
   // pending for the entire main-side flow — server spawn, the up-to-15s lock
@@ -85,6 +94,13 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
   const [openingLabel, setOpeningLabel] = useState<string | null>(null);
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  // Starter pack chosen on the packs-forward first-run grid, plus the pack
+  // list. Threaded into CreateProjectDialog so it can name the pack as
+  // read-only context in its description and seed the fresh project with it;
+  // both clear on dialog close so the blank-create path (secondary row /
+  // File → New project) never inherits a stale selection.
+  const [createPackId, setCreatePackId] = useState<OkPackId | undefined>(undefined);
+  const [createPacks, setCreatePacks] = useState<OkSeedPackInfo[] | undefined>(undefined);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [returnToCloneAfterAuth, setReturnToCloneAfterAuth] = useState(false);
   // Pending share-receive sign-in resolver — the share dialog's controller
@@ -165,6 +181,10 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
         console.error('[NavigatorApp] listRecent failed:', err);
         if (!cancelled) {
           setError(err instanceof Error ? err.message : t`Failed to load recent projects.`);
+          // Mark the fetch as failed so the launcher falls back to the
+          // three-card view rather than the first-run packs onboarding (an
+          // empty `recents` on failure would otherwise read as "brand-new user").
+          setRecentsLoadFailed(true);
         }
       })
       .finally(() => {
@@ -224,6 +244,25 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
 
   const onCreate = () => setCreateDialogOpen(true);
 
+  // First-run pack pick → open the create dialog with the pack pre-selected
+  // and the full pack list so the dialog's Select can switch in-place.
+  const onPackSelect = (packId: OkPackId, packs: OkSeedPackInfo[]) => {
+    setCreatePackId(packId);
+    setCreatePacks(packs);
+    setCreateDialogOpen(true);
+  };
+
+  // Clear the pending pack + pack list whenever the create dialog closes so the
+  // next open (blank secondary-row create, File → New project) starts unseeded
+  // and renders no Select.
+  const onCreateDialogOpenChange = (next: boolean) => {
+    setCreateDialogOpen(next);
+    if (!next) {
+      setCreatePackId(undefined);
+      setCreatePacks(undefined);
+    }
+  };
+
   const onOpenRecent = (path: string) =>
     openWithIndicator(path, 'recents', displayNameForPath(path));
 
@@ -258,7 +297,7 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
     //
     // `overflow-hidden` on the content column + `shrink-0` on every
     // fixed-height item keeps the primary affordances on-screen at the
-    // default 840×600 Navigator window size.
+    // default 920×680 Navigator window size.
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-primary-foreground dark:bg-background text-foreground">
       {/* Chrome row is absolutely positioned so it doesn't push content
           out of geometric center. The full window height participates in
@@ -298,29 +337,43 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
             </div>
           </header>
 
-          <section className="grid shrink-0 sm:grid-cols-3 gap-3">
-            <NavigatorCard
-              title={t`Create new project`}
-              description={t`Start a new OpenKnowledge project.`}
-              onClick={onCreate}
-              dataTestId="nav-create-new"
-              Icon={PlusIcon}
+          {/* First run (no recents, load settled) leads with the starter
+              packs; everyone else sees today's three-card launcher unchanged.
+              During loading we render neither so neither the packs grid nor the
+              three-card launcher flashes in before a returning user's recents
+              resolve. */}
+          {loading ? null : !recentsLoadFailed && recents.length === 0 ? (
+            <FirstRunPacksView
+              onPackSelect={onPackSelect}
+              onOpenFolder={onOpenFolder}
+              onClone={onClone}
+              onCreate={onCreate}
             />
-            <NavigatorCard
-              title={t`Open folder on disk`}
-              description={t`Use a folder you already have.`}
-              onClick={onOpenFolder}
-              dataTestId="nav-open"
-              Icon={FolderOpenIcon}
-            />
-            <NavigatorCard
-              title={t`Clone from GitHub`}
-              description={t`Bring a remote repository onto this machine.`}
-              onClick={onClone}
-              dataTestId="nav-clone"
-              Icon={GithubIcon}
-            />
-          </section>
+          ) : (
+            <section className="grid shrink-0 sm:grid-cols-3 gap-3">
+              <NavigatorCard
+                title={t`Create new project`}
+                description={t`Start a new OpenKnowledge project.`}
+                onClick={onCreate}
+                dataTestId="nav-create-new"
+                Icon={PlusIcon}
+              />
+              <NavigatorCard
+                title={t`Open folder on disk`}
+                description={t`Use a folder you already have.`}
+                onClick={onOpenFolder}
+                dataTestId="nav-open"
+                Icon={FolderOpenIcon}
+              />
+              <NavigatorCard
+                title={t`Clone from GitHub`}
+                description={t`Bring a remote repository onto this machine.`}
+                onClick={onClone}
+                dataTestId="nav-clone"
+                Icon={GithubIcon}
+              />
+            </section>
+          )}
 
           {error !== null ? (
             <div
@@ -383,8 +436,10 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
 
       <CreateProjectDialog
         open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        onOpenChange={onCreateDialogOpenChange}
         bridge={bridge}
+        initialPackId={createPackId}
+        packs={createPacks}
       />
 
       <AuthModal
@@ -498,6 +553,126 @@ function NavigatorCard({ title, description, onClick, dataTestId, Icon }: Naviga
       </div>
       <span className="line-clamp-2 text-muted-foreground text-xs leading-snug">{description}</span>
     </Button>
+  );
+}
+
+/**
+ * Packs-forward first-run launcher. Leads with the same starter-pack grid the
+ * empty editor shows (6 visible + "Show more" for `okf`/`entity-vault`) so a
+ * brand-new user's first action produces a project that already has content in
+ * it. Below it, a demoted secondary row keeps the three original doors for
+ * people who arrive with their own content. Only mounted when there are no
+ * recent projects — returning users never see it.
+ *
+ * Fetches the pack list here (not in `PackCardGrid`, which can self-fetch) so
+ * `onPackSelect` can hand the full list to the create dialog's Select without a
+ * second round-trip.
+ */
+function FirstRunPacksView({
+  onPackSelect,
+  onOpenFolder,
+  onClone,
+  onCreate,
+}: {
+  onPackSelect: (packId: OkPackId, packs: OkSeedPackInfo[]) => void;
+  onOpenFolder: () => void;
+  onClone: () => void;
+  onCreate: () => void;
+}) {
+  const [packs, setPacks] = useState<OkSeedPackInfo[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await seedClient().listPacks();
+        if (cancelled) return;
+        // `[]` short-circuits PackCardGrid's spinner into its labelled
+        // empty-state; the secondary row below still gives the user a path.
+        if (result.ok) {
+          setPacks(result.packs);
+        } else {
+          console.error('[NavigatorApp] listPacks returned error:', result);
+          setPacks([]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[NavigatorApp] listPacks failed:', err);
+        setPacks([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="flex min-h-0 shrink flex-col gap-6" data-testid="nav-first-run">
+      <div className="flex shrink-0 flex-col gap-1">
+        <h2 className="text-xl font-light tracking-tighter text-balance">
+          <Trans>What do you want to build?</Trans>
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          <Trans>
+            Pick a starter pack to scaffold your project with ready-made folders and templates.
+          </Trans>
+        </p>
+      </div>
+      {/* Grid scrolls inside its own container so the header + secondary row
+          stay anchored on the default 920×680 Navigator window. The 6 visible
+          packs fit without scrolling; expanding "Show more" can overflow, so
+          this stays a scroll container. The `-m-1 p-1` widens the overflow clip
+          box by the card focus-ring width, then pulls it back, so a focused
+          card's ring on the edge rows isn't shaved off. No `scroll-fade-mask`
+          here: its 1rem edge fade clipped that same ring. */}
+      <div className="-m-1 min-h-0 flex-1 overflow-y-auto subtle-scrollbar p-1">
+        <PackCardGrid
+          packs={packs}
+          onPackSelect={(packId) => onPackSelect(packId, packs ?? [])}
+          collapsedPackIds={['okf', 'entity-vault']}
+        />
+      </div>
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1"
+        data-testid="nav-first-run-secondary"
+      >
+        <span className="text-muted-foreground text-sm">
+          <Trans>Have something else in mind?</Trans>
+        </span>
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+          <Button
+            type="button"
+            variant="link-muted"
+            size="sm"
+            onClick={onOpenFolder}
+            data-testid="nav-first-run-open"
+          >
+            <FolderOpenIcon aria-hidden="true" className="size-3.5" />
+            <Trans>Open folder</Trans>
+          </Button>
+          <Button
+            type="button"
+            variant="link-muted"
+            size="sm"
+            onClick={onClone}
+            data-testid="nav-first-run-clone"
+          >
+            <GithubIcon aria-hidden="true" className="size-3.5" />
+            <Trans>Clone from GitHub</Trans>
+          </Button>
+          <Button
+            type="button"
+            variant="link-muted"
+            size="sm"
+            onClick={onCreate}
+            data-testid="nav-first-run-blank"
+          >
+            <PlusIcon aria-hidden="true" className="size-3.5" />
+            <Trans>Blank project</Trans>
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 

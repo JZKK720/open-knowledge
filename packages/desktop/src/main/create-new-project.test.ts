@@ -585,3 +585,37 @@ describe('runCreateNew — installs the project-local skill (PRD-6733)', () => {
     ]);
   });
 });
+
+describe('runCreateNew — starter-pack seeding', () => {
+  // The seed step is the primary new user-facing behavior of the packs-forward
+  // launcher: a known `packId` scaffolds the pack's folders before the editor
+  // opens, an unknown id is silently coerced away (blank project), and a seed
+  // failure is best-effort (a valid project still lands). Type-checking alone
+  // doesn't cover the runtime `coercePackId` narrowing or the best-effort catch.
+  test('scaffolds the pack folders when a known packId is supplied', async () => {
+    const result = await runCreateNew({
+      parent: tmpRoot,
+      name: 'Seeded Project',
+      editors: [...ALL_EDITOR_IDS],
+      packId: 'plain-notes',
+    });
+    // `plain-notes` declares `notes/` + `daily/`; the seed step creates them on
+    // disk. A blank create leaves neither.
+    expect(existsSync(join(result.projectDir, 'notes'))).toBe(true);
+    expect(existsSync(join(result.projectDir, 'daily'))).toBe(true);
+  });
+
+  test('creates a blank project when packId is unrecognised', async () => {
+    const result = await runCreateNew({
+      parent: tmpRoot,
+      name: 'Blank From Unknown Pack',
+      editors: [...ALL_EDITOR_IDS],
+      packId: 'not-a-real-pack-id',
+    });
+    // `coercePackId` narrows the unknown id to `undefined`, so seeding is
+    // skipped — the project is valid but carries no pack scaffold.
+    expect(existsSync(join(result.projectDir, '.ok/config.yml'))).toBe(true);
+    expect(existsSync(join(result.projectDir, 'notes'))).toBe(false);
+    expect(existsSync(join(result.projectDir, 'daily'))).toBe(false);
+  });
+});

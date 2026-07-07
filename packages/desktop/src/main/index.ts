@@ -1265,16 +1265,17 @@ function openNavigator(pendingPayload?: ShareNavigatorPayload) {
     return;
   }
   getLogger('navigator').info({}, 'opening window');
-  // Fixed-size launcher window at the 840×600 (1.4 ratio) target.
-  // NavigatorApp.tsx vertically centers the visible content (icon, title,
-  // 3 action cards, recents) within this frame and leaves the top ~36 px
-  // chrome strip as the drag region for the macOS title-bar zone.
+  // Fixed-size launcher window at the 920×680 target. Sized so the first-run
+  // packs-forward view (header + full starter-pack grid + secondary row) fits
+  // without the grid scrolling. NavigatorApp.tsx vertically centers the visible
+  // content within this frame and leaves the top ~36 px chrome strip as the
+  // drag region for the macOS title-bar zone.
   navigatorWindow = createNavigatorWindow({
     createWindow: (opts) => {
       const win = new BrowserWindow({
         ...DEFAULT_WIN_OPTS,
-        width: 840,
-        height: 600,
+        width: 920,
+        height: 680,
         webPreferences: {
           ...DEFAULT_WIN_OPTS.webPreferences,
           additionalArguments: withDebugFlagIfAllowed(opts.additionalArguments),
@@ -3644,6 +3645,7 @@ function registerIpcHandlers() {
         name: args.name,
         editors: args.editors,
         sharing: args.sharing,
+        packId: args.packId,
       });
     } catch (err) {
       if (err instanceof CreateNewProjectError) {

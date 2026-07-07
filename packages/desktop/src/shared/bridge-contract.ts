@@ -1206,6 +1206,11 @@ export interface OkDesktopBridge {
       editors: OkMcpWiringEditorId[];
       /** OK config sharing mode — defaults to 'shared' when omitted. */
       sharing?: 'shared' | 'local-only';
+      /**
+       * Starter pack to seed into the newly-created project (first-run
+       * packs-forward launcher). Omitted → blank project (today's behavior).
+       */
+      packId?: PackId;
     }): Promise<void>;
     /**
      * Fire-and-forget renderer→main telemetry signal for the Create-new-project

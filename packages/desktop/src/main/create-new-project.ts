@@ -27,10 +27,14 @@ import {
   sanitizeFolderName,
 } from '@inkeep/open-knowledge-core';
 import {
+  applySeed,
+  coercePackId,
   type EnsureProjectGitResult,
   ensureProjectGit,
   findEnclosingProjectRoot,
   initContent,
+  planSeed,
+  resolvePack,
   tracedMkdirSync,
   writeRootGitignoreForNewRepo,
 } from '@inkeep/open-knowledge-server';
@@ -177,6 +181,14 @@ interface CreateNewProjectArgs {
    * Pick-Existing consent dialog share one sharing-transition site.
    */
   readonly sharing?: 'shared' | 'local-only';
+  /**
+   * Starter pack to seed into the fresh project (first-run packs-forward
+   * launcher). When set, `runCreateNew` plans + applies the pack's scaffold
+   * BEFORE returning so the editor opens populated with no empty-editor
+   * flash. Omitted → blank project (today's behavior). Coerced through
+   * `coercePackId` at the trust boundary; an unknown id skips seeding.
+   */
+  readonly packId?: string;
 }
 
 /**
@@ -437,6 +449,48 @@ export async function runCreateNew(
     args.sharing === 'local-only' ? 'local-only' : 'shared';
   const sharingOutcome: CreateNewSharingOutcome =
     desiredSharing === 'local-only' ? applyCreateNewLocalOnly(projectDir) : { kind: 'shared' };
+
+  // 10. Seed the selected starter pack. Only fires when the packs-forward
+  //     first-run launcher threaded a `packId`; the blank create path leaves
+  //     it undefined and the project opens empty as before. Runs BEFORE the
+  //     caller opens the editor window so it lands populated with no
+  //     empty-editor flash. Seeds at the pack's `defaultSubfolder` (project
+  //     root when the pack declares none) — parity with `SeedDialog`'s
+  //     project-root default + pre-filled subfolder. `initContent` (step 7)
+  //     already wrote `.ok/config.yml`, so `planSeed`'s project-root
+  //     prerequisite holds. Best-effort: a seed failure leaves a valid (if
+  //     empty) project rather than failing the whole create — the folder is
+  //     already on disk and the user just picked a name/location.
+  const seedPackId = coercePackId(args.packId);
+  if (seedPackId !== undefined) {
+    try {
+      const pack = resolvePack(seedPackId);
+      const plan = await planSeed({
+        projectDir,
+        rootDir: pack.defaultSubfolder,
+        packId: seedPackId,
+      });
+      const seedResult = await applySeed(plan, { projectDir, packId: seedPackId });
+      // `applySeed` is best-effort: per-file write failures land in
+      // `errors[]` rather than throwing, so a partial seed would otherwise
+      // leave the user in a partially-populated project with no breadcrumb.
+      if (seedResult.errors.length > 0) {
+        console.warn(
+          `[create-new-project] starter-pack seed partial failure at ${projectDir} (pack ${seedPackId}):`,
+          seedResult.errors,
+        );
+      }
+    } catch (err) {
+      // Pass `err` as a structured second arg (not the interpolated message) so
+      // the stack survives — parity with the partial-failure branch above; a
+      // "first project was empty" report needs the call depth to tell whether
+      // the throw came from resolvePack, planSeed, or applySeed.
+      console.warn(
+        `[create-new-project] starter-pack seed failed at ${projectDir} (pack ${seedPackId}):`,
+        err,
+      );
+    }
+  }
 
   const variant: CreateNewProjectSuccess['variant'] =
     editors.length === ALL_EDITOR_IDS.length ? 'create-new-default' : 'create-new-customized';

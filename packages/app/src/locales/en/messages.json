@@ -531,6 +531,13 @@
     "CmeH9S": ["Add property to ", ["keyName"]],
     "CvsD6Y": ["via ", ["viaTags"]],
     "D12vtS": ["(detached)"],
+    "D2CwBE": [
+      "Create a new OpenKnowledge project from the <0>",
+      ["0"],
+      "</0> starter pack (",
+      ["1", "plural", { "one": ["#", " folder"], "other": ["#", " folders"] }],
+      " and starter templates) in the folder of your choice."
+    ],
     "D4H2N6": ["Remove ", ["tag"]],
     "D8OV7J": ["Only collaborators"],
     "DDTdLl": ["Code block settings"],
@@ -1064,6 +1071,7 @@
     "QfFBdJ": ["The template's filename (without `.md`)."],
     "Qj4RL5": ["Completed:"],
     "QlxHAH": ["Showing results for \"", ["semanticResultsLabel"], "\""],
+    "QnjpOq": ["What do you want to build?"],
     "QqBQu1": ["Label <0>(visible link text)</0>"],
     "Qvls7J": ["Eng specs"],
     "Qw-7Ie": [
@@ -1119,6 +1127,7 @@
       " has been moved, renamed, or deleted in your local copy, and that change hasn't synced yet."
     ],
     "S33tz3": ["Not connected"],
+    "S34Vju": ["Have something else in mind?"],
     "S6l5dv": ["Could not start creating a new item"],
     "S9Vnum": ["Remove ", ["patternText"]],
     "SCoBBH": ["Tag suggestions"],
@@ -1651,6 +1660,9 @@
       " could not be opened — try navigating to it manually."
     ],
     "gUlRQj": ["Orphans"],
+    "gYuDfu": [
+      "Pick a starter pack to scaffold your project with ready-made folders and templates."
+    ],
     "gYz2ep": ["Expires in ", ["timeLabel"]],
     "gbHcbI": ["Failed to delete property"],
     "gfohmY": ["Connect tools"],
@@ -1763,6 +1775,7 @@
     "iqIDv4": ["Sync status unavailable"],
     "iqugog": ["Initialize failed: ", ["errorDetail"]],
     "irFGwu": ["Template list"],
+    "ircigK": ["Blank project"],
     "irrm_E": ["Remove selection"],
     "isRobC": ["New"],
     "iuTKci": ["No edits yet."],

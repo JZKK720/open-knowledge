@@ -982,6 +982,10 @@ msgstr "Bird wiki"
 msgid "Blank note"
 msgstr "Blank note"
 
+#: src/components/NavigatorApp.tsx
+msgid "Blank project"
+msgstr "Blank project"
+
 #: src/editor/slash-command/component-items.tsx
 msgid "Block math equation rendered with KaTeX from a LaTeX source string."
 msgstr "Block math equation rendered with KaTeX from a LaTeX source string."
@@ -2029,6 +2033,12 @@ msgstr "Create a new branch, or check out an existing one, in its own window."
 #: src/lib/keyboard-shortcuts.ts
 msgid "Create a new list item from the current list item."
 msgstr "Create a new list item from the current list item."
+
+#. placeholder {0}: selectedPack.name
+#. placeholder {1}: selectedPack.entryCounts.folders
+#: src/components/CreateProjectDialog.tsx
+msgid "Create a new OpenKnowledge project from the <0>{0}</0> starter pack ({1, plural, one {# folder} other {# folders}} and starter templates) in the folder of your choice."
+msgstr "Create a new OpenKnowledge project from the <0>{0}</0> starter pack ({1, plural, one {# folder} other {# folders}} and starter templates) in the folder of your choice."
 
 #: src/components/CreateProjectDialog.tsx
 msgid "Create a new OpenKnowledge project in the folder of your choice."
@@ -3248,6 +3258,10 @@ msgstr "guides/install or https://example.com"
 #: src/lib/keyboard-shortcuts.ts
 msgid "Hard break"
 msgstr "Hard break"
+
+#: src/components/NavigatorApp.tsx
+msgid "Have something else in mind?"
+msgstr "Have something else in mind?"
 
 #: src/editor/slash-command/items.tsx
 msgid "Heading 1"
@@ -4708,6 +4722,7 @@ msgstr "Open emoji picker for {keyName}"
 msgid "Open file"
 msgstr "Open file"
 
+#: src/components/NavigatorApp.tsx
 #: src/components/ProjectSwitcher.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open folder"
@@ -5096,6 +5111,10 @@ msgstr "Pick <0>openknowledge.skill</0> from your <1>Downloads</1> folder. It en
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Pick a name"
 msgstr "Pick a name"
+
+#: src/components/NavigatorApp.tsx
+msgid "Pick a starter pack to scaffold your project with ready-made folders and templates."
+msgstr "Pick a starter pack to scaffold your project with ready-made folders and templates."
 
 #: src/components/ShareReceiveDialog.tsx
 msgid "Pick the folder where you've cloned it."
@@ -7479,6 +7498,10 @@ msgstr "What agents match on to decide when to use the skill."
 #: src/components/ConfigSharingInfoTooltip.tsx
 msgid "What config sharing covers"
 msgstr "What config sharing covers"
+
+#: src/components/NavigatorApp.tsx
+msgid "What do you want to build?"
+msgstr "What do you want to build?"
 
 #: src/components/CreatedItemsList.tsx
 msgid "What gets created"

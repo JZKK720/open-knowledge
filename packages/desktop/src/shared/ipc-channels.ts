@@ -56,6 +56,7 @@ import type {
 import type {
   FindEnclosingGitRootResult,
   FindEnclosingProjectRootResult,
+  PackId,
   ScaffoldPlan,
 } from '@inkeep/open-knowledge-server';
 import type { BuildAndOpenResult } from '../main/ipc/install-skill.ts';
@@ -808,6 +809,11 @@ export interface RequestChannels {
         editors: readonly McpWiringEditorId[];
         /** Defaults to 'shared' when omitted. */
         sharing?: 'shared' | 'local-only';
+        /**
+         * Starter pack to seed into the newly-created project (first-run
+         * packs-forward launcher). Omitted → blank project (today's behavior).
+         */
+        packId?: PackId;
       },
     ];
     result: undefined;

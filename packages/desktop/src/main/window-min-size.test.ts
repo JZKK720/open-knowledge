@@ -44,9 +44,9 @@ describe('WINDOW_MIN_SIZE constants', () => {
     expect(WINDOW_MIN_SIZE.EDITOR.height).toBeLessThan(800);
   });
 
-  test('min sizes leave headroom under initial Navigator size (840 x 600)', () => {
-    expect(WINDOW_MIN_SIZE.NAVIGATOR.width).toBeLessThan(840);
-    expect(WINDOW_MIN_SIZE.NAVIGATOR.height).toBeLessThan(600);
+  test('min sizes leave headroom under initial Navigator size (920 x 680)', () => {
+    expect(WINDOW_MIN_SIZE.NAVIGATOR.width).toBeLessThan(920);
+    expect(WINDOW_MIN_SIZE.NAVIGATOR.height).toBeLessThan(680);
   });
 });
 

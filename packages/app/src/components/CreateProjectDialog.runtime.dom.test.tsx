@@ -16,8 +16,28 @@ import type {
   OkDesktopBridge,
   OkFolderState,
   OkMcpWiringEditorId,
+  OkSeedPackInfo,
 } from '@/lib/desktop-bridge-types';
 import { CreateProjectDialog } from './CreateProjectDialog';
+
+// Two packs to look up `initialPackId`'s display metadata. Folder counts differ
+// so the read-only description's "N folders" phrasing is distinguishable per pack.
+const PACKS: OkSeedPackInfo[] = [
+  {
+    id: 'plain-notes',
+    name: 'Plain notes',
+    description: 'A single flat folder for quick notes.',
+    folders: [],
+    entryCounts: { files: 2, folders: 1 },
+  },
+  {
+    id: 'knowledge-base',
+    name: 'Knowledge base',
+    description: 'Structured folders for a team wiki.',
+    folders: [],
+    entryCounts: { files: 8, folders: 4 },
+  },
+];
 
 type WindowGlobals = {
   NodeFilter?: typeof NodeFilter;
@@ -60,6 +80,7 @@ function makeBridge() {
     name: string;
     editors: OkMcpWiringEditorId[];
     sharing: 'shared' | 'local-only';
+    packId?: string;
   }> = [];
 
   const bridge = {
@@ -90,6 +111,7 @@ function makeBridge() {
           name: string;
           editors: OkMcpWiringEditorId[];
           sharing: 'shared' | 'local-only';
+          packId?: string;
         }) => {
           createNewCalls.push(payload);
           return createNewImpl();
@@ -336,6 +358,42 @@ describe('CreateProjectDialog runtime wiring', () => {
       expect(stub.createNewCalls).toHaveLength(1);
     });
     expect(stub.createNewCalls[0]?.sharing).toBe('local-only');
+  });
+
+  test('a pre-selected pack threads packId through to the createNew payload', async () => {
+    // Pins the seam that makes the packs-forward launcher actually seed:
+    // `initialPackId` → `createNew({ ..., packId })`. Without this, dropping
+    // `packId` threading in the dialog would silently make every first-run
+    // pack pick produce a blank project (DOM tests mock the dialog; the
+    // desktop integration tests call `runCreateNew` directly — neither
+    // exercises the real dialog → bridge payload with a pack).
+    const stub = makeBridge();
+    const onOpenChange = mock(() => {});
+    render(
+      <CreateProjectDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        bridge={stub.bridge}
+        initialPackId="plain-notes"
+        packs={PACKS}
+      />,
+    );
+    await screen.findByTestId('create-project-dialog');
+    await waitForLocationHydrate();
+
+    // The launcher-chosen pack is named as read-only context in the dialog
+    // description — no Select control.
+    expect(screen.getByTestId('create-project-dialog').textContent).toContain('Plain notes');
+
+    await typeProjectName(PROJECT_NAME);
+    await waitForSubmitEnabled();
+
+    fireEvent.click(screen.getByTestId('create-submit'));
+
+    await waitFor(() => {
+      expect(stub.createNewCalls).toHaveLength(1);
+    });
+    expect(stub.createNewCalls[0]?.packId).toBe('plain-notes');
   });
 
   test('name resolving to a non-empty folder shows inline name-taken error and disables Create', async () => {

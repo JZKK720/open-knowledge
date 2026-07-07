@@ -977,6 +977,10 @@ msgstr ""
 msgid "Blank note"
 msgstr ""
 
+#: src/components/NavigatorApp.tsx
+msgid "Blank project"
+msgstr ""
+
 #: src/editor/slash-command/component-items.tsx
 msgid "Block math equation rendered with KaTeX from a LaTeX source string."
 msgstr ""
@@ -2023,6 +2027,12 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Create a new list item from the current list item."
+msgstr ""
+
+#. placeholder {0}: selectedPack.name
+#. placeholder {1}: selectedPack.entryCounts.folders
+#: src/components/CreateProjectDialog.tsx
+msgid "Create a new OpenKnowledge project from the <0>{0}</0> starter pack ({1, plural, one {# folder} other {# folders}} and starter templates) in the folder of your choice."
 msgstr ""
 
 #: src/components/CreateProjectDialog.tsx
@@ -3242,6 +3252,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Hard break"
+msgstr ""
+
+#: src/components/NavigatorApp.tsx
+msgid "Have something else in mind?"
 msgstr ""
 
 #: src/editor/slash-command/items.tsx
@@ -4703,6 +4717,7 @@ msgstr ""
 msgid "Open file"
 msgstr ""
 
+#: src/components/NavigatorApp.tsx
 #: src/components/ProjectSwitcher.tsx
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open folder"
@@ -5090,6 +5105,10 @@ msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Pick a name"
+msgstr ""
+
+#: src/components/NavigatorApp.tsx
+msgid "Pick a starter pack to scaffold your project with ready-made folders and templates."
 msgstr ""
 
 #: src/components/ShareReceiveDialog.tsx
@@ -7473,6 +7492,10 @@ msgstr ""
 
 #: src/components/ConfigSharingInfoTooltip.tsx
 msgid "What config sharing covers"
+msgstr ""
+
+#: src/components/NavigatorApp.tsx
+msgid "What do you want to build?"
 msgstr ""
 
 #: src/components/CreatedItemsList.tsx
