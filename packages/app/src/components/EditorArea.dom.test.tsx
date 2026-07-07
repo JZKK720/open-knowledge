@@ -88,10 +88,11 @@ mock.module('@/editor/DocumentContext', () => ({
 }));
 
 mock.module('@/components/EmptyEditorState', () => ({
-  // Forward terminalVisible so the EditorArea -> EmptyEditorState prop wiring is
-  // observable (the empty state collapses to the mascot when the terminal is up).
-  EmptyEditorState: ({ terminalVisible }: { terminalVisible?: boolean }) => (
-    <div data-testid="empty-editor-state" data-terminal-visible={String(terminalVisible)} />
+  // Forward terminalDock so the EditorArea -> EmptyEditorState prop wiring is
+  // observable (the empty state collapses to the header-only view whenever a
+  // terminal is up, in either dock).
+  EmptyEditorState: ({ terminalDock }: { terminalDock?: string | null }) => (
+    <div data-testid="empty-editor-state" data-terminal-dock={String(terminalDock)} />
   ),
 }));
 
@@ -278,10 +279,6 @@ describe('EditorArea empty-state terminal host', () => {
         terminalBridge={{} as never}
         terminalVisible
         onTerminalVisibleChange={() => {}}
-        // Pin the bottom dock so the mascot-collapse forwarding is exercised:
-        // only a BOTTOM terminal collapses the mascot (it eats vertical space). A
-        // right-docked terminal eats horizontal space, so the mascot stays full —
-        // covered by the next test.
         terminalDock="bottom"
       />,
     );
@@ -290,11 +287,12 @@ describe('EditorArea empty-state terminal host', () => {
     expect(dock.getAttribute('data-visible')).toBe('true');
     const emptyState = dock.querySelector('[data-testid="empty-editor-state"]');
     expect(emptyState).not.toBeNull();
-    // EditorArea forwards terminalVisible so the empty state can collapse to the mascot.
-    expect(emptyState?.getAttribute('data-terminal-visible')).toBe('true');
+    // EditorArea forwards the dock position so the empty state collapses to the
+    // header-only view (composer bubble dropped) while the terminal is up.
+    expect(emptyState?.getAttribute('data-terminal-dock')).toBe('bottom');
   });
 
-  test('keeps the empty-state mascot full-size when the terminal is right-docked', () => {
+  test('collapses the empty state to the header-only view when the terminal is right-docked', () => {
     render(
       <EditorArea
         editorMode="wysiwyg"
@@ -304,8 +302,9 @@ describe('EditorArea empty-state terminal host', () => {
         terminalBridge={{} as never}
         terminalVisible
         onTerminalVisibleChange={() => {}}
-        // Right is the default dock; the terminal eats horizontal (not vertical)
-        // space, so the empty-state mascot must NOT collapse.
+        // Right is the default dock. Either dock position collapses the empty
+        // state — the open terminal is its own AI entry point, so the composer
+        // bubble must not compete with it.
         terminalDock="right"
       />,
     );
@@ -314,7 +313,7 @@ describe('EditorArea empty-state terminal host', () => {
     expect(dock.getAttribute('data-visible')).toBe('true');
     const emptyState = dock.querySelector('[data-testid="empty-editor-state"]');
     expect(emptyState).not.toBeNull();
-    expect(emptyState?.getAttribute('data-terminal-visible')).toBe('false');
+    expect(emptyState?.getAttribute('data-terminal-dock')).toBe('right');
   });
 
   test('renders the empty state with no terminal dock on the web host (no bridge)', () => {
@@ -328,7 +327,12 @@ describe('EditorArea empty-state terminal host', () => {
     );
 
     expect(screen.queryByTestId('terminal-dock')).toBeNull();
-    expect(screen.getByTestId('empty-editor-state')).toBeTruthy();
+    // Pins the `terminalVisible ? position : null` forwarding: without an open
+    // terminal the empty state must receive null, or it would collapse to
+    // header-only on every new tab.
+    expect(screen.getByTestId('empty-editor-state').getAttribute('data-terminal-dock')).toBe(
+      'null',
+    );
   });
 });
 

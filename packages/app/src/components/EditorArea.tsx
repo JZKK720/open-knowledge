@@ -50,7 +50,6 @@ import { applyToggle, readPins, resolveEffectiveState } from '@/lib/sidebar-pin-
 import type { TerminalDockPosition } from '@/lib/terminal-dock-store';
 import {
   getInitialTerminalWidth,
-  MAX_TERMINAL_WIDTH,
   MIN_TERMINAL_WIDTH,
   writeTerminalWidth,
 } from '@/lib/terminal-width-store';
@@ -884,12 +883,13 @@ function EditorAreaInner({
         return <EditorSkeleton />;
       }
     } else {
-      // The empty state forwards `terminalVisible` so it can collapse to the
-      // mascot while the BOTTOM-docked terminal is open. A right-docked terminal
-      // eats horizontal (not vertical) space, so the mascot must stay full-size —
-      // gate on the resolved bottom position.
+      // The empty state collapses to the header-only view while a terminal is
+      // open in EITHER dock — the open terminal is its own AI entry point, so
+      // the composer bubble + starter packs would compete with it. The dock
+      // position picks the header pose (bottom-anchored above the bottom dock;
+      // centered beside the right column).
       viewContent = (
-        <EmptyEditorState terminalVisible={terminalVisible && terminalDockPosition === 'bottom'} />
+        <EmptyEditorState terminalDock={terminalVisible ? terminalDockPosition : null} />
       );
     }
   } else {
@@ -1172,7 +1172,11 @@ function EditorAreaInner({
         style={{ backgroundColor: xtermBackground }}
         defaultSize={`${initialTerminalWidthPx}px`}
         minSize={`${MIN_TERMINAL_WIDTH}px`}
-        maxSize={`${MAX_TERMINAL_WIDTH}px`}
+        // The terminal can be dragged wide — up to 95% of the group — leaving the
+        // editor a 5% sliver (its panel `minSize` while this column is mounted).
+        // Pair the two: the terminal's max plus the editor's min must sum to 100%
+        // or the drag can't reach it. Mirrors the bottom dock's 95%/5% split.
+        maxSize="95%"
         // Collapsible so a drag past half the min width snaps the column shut —
         // the pointerup handler above turns that into a real hide.
         collapsible
@@ -1230,7 +1234,14 @@ function EditorAreaInner({
           // pixel-width sticky restore. The
           // left panel is always the first child, so React keeps it mounted
           // across right-side toggles without one (the terminal still persists).
-          minSize="30%"
+          //
+          // With the terminal column mounted the editor yields to a 5% sliver so
+          // the terminal can be dragged near-full width without ever fully
+          // eclipsing the editor — the horizontal mirror of the bottom dock's
+          // 95%/5% split (see the terminal column's maxSize below; the pair must
+          // sum to 100% or the drag can't reach the max). Without the terminal
+          // the 30% floor keeps the editor usable against the doc panel.
+          minSize={terminalColumnPresent ? '5%' : '30%'}
           // Editor takes full width only when nothing on the right claims space;
           // otherwise it absorbs the residual while the pixel-sized doc panel and
           // terminal column hold their widths.

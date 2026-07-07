@@ -14,8 +14,15 @@ import { emitCreateTopLevelFile } from '@/lib/create-file-events';
 import type { OkPackId } from '@/lib/desktop-bridge-types';
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
 import { fetchDocumentListShared } from '@/lib/documents-fetch';
+import type { TerminalDockPosition } from '@/lib/terminal-dock-store';
+import { cn } from '@/lib/utils';
 
-export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?: boolean }) {
+export function EmptyEditorState({
+  terminalDock = null,
+}: {
+  /** Where the visible terminal is docked, or null when no terminal is open. */
+  terminalDock?: TerminalDockPosition | null;
+}) {
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
   const [seedDialogInitialPackId, setSeedDialogInitialPackId] = useState<OkPackId | undefined>(
     undefined,
@@ -100,15 +107,22 @@ export function EmptyEditorState({ terminalVisible = false }: { terminalVisible?
     if (!next) setSeedDialogInitialPackId(undefined);
   }
 
-  // When the docked terminal is open (an empty-state CLI launch), keep the
-  // header — blob + headline + subtitle, left-aligned in the same column as the
-  // full view — but drop the composer bubble + starter-pack list, since the
-  // terminal owns the lower half and the full surface would crowd it.
-  // `justify-end` bottom-anchors the header just above the dock so it rides
-  // up/down as the terminal is resized (matching the prior blob-only pose).
-  if (terminalVisible) {
+  // When the terminal is open (an empty-state CLI launch), keep the header —
+  // blob + headline + subtitle, left-aligned in the same column as the full
+  // view — but drop the composer bubble + starter-pack list: the terminal is
+  // its own AI entry point, so the composer would be a competing dispatch
+  // affordance in either dock position. Bottom dock: `justify-end`
+  // bottom-anchors the header just above the dock so it rides up/down as the
+  // terminal is resized (matching the prior blob-only pose). Right dock keeps
+  // its vertical space, so the header centers instead.
+  if (terminalDock !== null) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-end px-6 sm:px-12 md:px-16 pb-8 pt-10">
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col items-center px-6 sm:px-12 md:px-16 pb-8 pt-10',
+          terminalDock === 'bottom' ? 'justify-end' : 'justify-center',
+        )}
+      >
         {messageReady ? (
           <TerminalEmptyHeader isOnboarding={isOnboarding} celebrateSignal={celebrateSignal} />
         ) : null}
@@ -173,7 +187,7 @@ export function countEntries(
 }
 
 /**
- * Header-only empty state shown while the docked terminal is open. Shares the
+ * Header-only empty state shown while a terminal is open (either dock). Shares the
  * onboarding/create copy with the full-height views via `getEmptyStateCopy`,
  * but omits the composer + starter packs that would crowd the terminal below.
  * Left-aligned within the shared `max-w-5xl` column; the parent bottom-anchors it.
