@@ -1,5 +1,13 @@
 # @inkeep/open-knowledge-docs
 
+## 0.0.10
+
+### Patch Changes
+
+- 19c9928: Fix relative links
+- Updated dependencies [d9dc40c]
+  - @inkeep/open-knowledge-core@0.25.0
+
 ## 0.0.9
 
 ### Patch Changes
