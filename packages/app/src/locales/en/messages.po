@@ -83,6 +83,11 @@ msgstr "(opens in new tab)"
 msgid "(project + user)"
 msgstr "(project + user)"
 
+#. Scope tag next to an AI tool — config is written at project level only
+#: src/components/ConsentDialogBody.tsx
+msgid "(project-level only)"
+msgstr "(project-level only)"
+
 #: src/components/PropertyWidgets.tsx
 msgid "(read-only — edit in source mode for now)"
 msgstr "(read-only — edit in source mode for now)"

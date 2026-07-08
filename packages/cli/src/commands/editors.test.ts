@@ -17,6 +17,7 @@ import {
   resolveEditorTargets,
   resolveOpenClawConfigPath,
   resolveOpenCodeConfigPath,
+  resolvePiAgentDirPath,
 } from './editors.ts';
 
 describe('resolveAppSupportPath', () => {
@@ -195,6 +196,43 @@ describe('resolveOpenClawConfigPath', () => {
     expect(resolveOpenClawConfigPath({ home: '/home/alice', platformName: 'linux' })).toBe(
       '/home/alice/.openclaw/openclaw.json',
     );
+  });
+});
+
+describe('resolvePiAgentDirPath', () => {
+  it('builds the default Pi agent dir under home', () => {
+    expect(resolvePiAgentDirPath({ home: '/Users/alice', platformName: 'darwin', env: {} })).toBe(
+      '/Users/alice/.pi/agent',
+    );
+  });
+
+  it('honors PI_CODING_AGENT_DIR when present', () => {
+    expect(
+      resolvePiAgentDirPath({
+        home: '/Users/alice',
+        platformName: 'darwin',
+        env: { PI_CODING_AGENT_DIR: '/tmp/custom-pi-home' },
+      }),
+    ).toBe('/tmp/custom-pi-home');
+  });
+});
+
+describe('EDITOR_TARGETS.pi', () => {
+  const t = EDITOR_TARGETS.pi;
+
+  it('is a project-scope-only file-drop target', () => {
+    expect(t.format).toBe('file');
+    expect(t.scope).toBe('project');
+    // No user-global MCP config surface — mirrors Claude Desktop on Linux.
+    expect(() => t.configPath('', '/Users/alice')).toThrow(/no user-global MCP config/);
+    // No entry shape either: the managed file is built by buildPiExtensionSource.
+    expect(() => t.buildEntry('', { mode: 'published' })).toThrow(/buildPiExtensionSource/);
+  });
+
+  it('project paths target OK-owned artifacts under .pi/', () => {
+    expect(t.projectConfigPath?.('/proj')).toBe('/proj/.pi/extensions/open-knowledge.ts');
+    expect(t.projectSkillPath?.('/proj')).toBe('/proj/.pi/skills/open-knowledge/SKILL.md');
+    expect(t.detectPath?.('', '/Users/alice')).toBe('/Users/alice/.pi/agent');
   });
 });
 

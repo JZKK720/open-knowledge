@@ -1,13 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MCP_SERVER_NAME } from '@inkeep/open-knowledge-server';
+import { buildPiExtensionSource } from '../integrations/pi-extension.ts';
 import {
   createTomlConfigEngine,
   setTomlConfigEngineForTesting,
 } from '../native/toml-config-engine.ts';
-import { buildManagedServerEntry, EDITOR_TARGETS } from './editors.ts';
+import {
+  buildManagedServerEntry,
+  EDITOR_TARGETS,
+  PI_EXTENSION_OWNERSHIP_MARKER,
+} from './editors.ts';
 import { removeOwnMcpEntry } from './mcp-config-removal.ts';
 
 function tmp(): string {
@@ -274,6 +279,78 @@ describe('removeOwnMcpEntry — TOML (Codex)', () => {
       } finally {
         setTomlConfigEngineForTesting(null); // restore the lazy default
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('removeOwnMcpEntry — Pi managed extension file', () => {
+  const piConfigPath = (dir: string) => {
+    const p = EDITOR_TARGETS.pi.projectConfigPath?.(dir);
+    if (!p) throw new Error('pi projectConfigPath missing');
+    return p;
+  };
+
+  test('removes OK’s own bridge file (current version)', () => {
+    const dir = tmp();
+    try {
+      const configPath = piConfigPath(dir);
+      mkdirSync(join(dir, '.pi', 'extensions'), { recursive: true });
+      writeFileSync(configPath, buildPiExtensionSource());
+      const outcome = removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath);
+      expect(outcome.kind).toBe('removed');
+      expect(existsSync(configPath)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('removes a STALE-version drop (ownership marker is version-agnostic)', () => {
+    // Unlike chain entries (dev/stale → left-foreign), the managed file's
+    // first-line marker is an unambiguous OK signature, so stale drops are
+    // removable — a deinit must not strand `-v0` files forever.
+    const dir = tmp();
+    try {
+      const configPath = piConfigPath(dir);
+      mkdirSync(join(dir, '.pi', 'extensions'), { recursive: true });
+      writeFileSync(configPath, `${PI_EXTENSION_OWNERSHIP_MARKER}-v0\n// legacy body\n`);
+      const outcome = removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath);
+      expect(outcome.kind).toBe('removed');
+      expect(existsSync(configPath)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('leaves a FOREIGN file at the managed path untouched', () => {
+    const dir = tmp();
+    try {
+      const configPath = piConfigPath(dir);
+      mkdirSync(join(dir, '.pi', 'extensions'), { recursive: true });
+      const raw = "// the user's own extension, not OK's\nexport default function () {}\n";
+      writeFileSync(configPath, raw);
+      const outcome = removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath);
+      expect(outcome.kind).toBe('left-foreign');
+      expect(readFileSync(configPath, 'utf-8')).toBe(raw);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('not-present when the bridge file is absent, idempotent on re-run', () => {
+    const dir = tmp();
+    try {
+      const configPath = piConfigPath(dir);
+      expect(removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath).kind).toBe(
+        'not-present',
+      );
+      mkdirSync(join(dir, '.pi', 'extensions'), { recursive: true });
+      writeFileSync(configPath, buildPiExtensionSource());
+      expect(removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath).kind).toBe('removed');
+      expect(removeOwnMcpEntry(EDITOR_TARGETS.pi, dir, undefined, configPath).kind).toBe(
+        'not-present',
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

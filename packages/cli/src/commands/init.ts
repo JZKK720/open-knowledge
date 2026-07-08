@@ -56,6 +56,7 @@ import {
 import { stringify as stringifyToml } from 'smol-toml';
 import { CONFIG_FILENAME, OK_DIR } from '../constants.ts';
 import { formatPreviewBlock, type PreviewResult } from '../content/preview.ts';
+import { buildPiExtensionSource, makePiManagedFileEntry } from '../integrations/pi-extension.ts';
 import { resolveProjectRoot } from '../integrations/resolve-project-root.ts';
 import { removeUserGlobalSkillBundle } from '../integrations/skill-teardown.ts';
 import {
@@ -1090,6 +1091,17 @@ export function writeEditorMcpConfig(
     }
   }
 
+  // `format: 'file'` targets (Pi): OK owns the WHOLE managed file, so the
+  // write is a verbatim drop of the generated source rather than an entry
+  // upsert into a shared config. Only reachable at project scope — a
+  // file-format target's user-global `configPath` throws, returning `failed`
+  // above before this point.
+  if (target.format === 'file') {
+    return writeManagedEditorFile(target, configPath, serverName, installOptions, {
+      isProjectScope: configPathOverride !== undefined,
+    });
+  }
+
   let targetEntry: Record<string, unknown>;
   try {
     targetEntry = target.buildEntry(cwd, installOptions);
@@ -1229,6 +1241,113 @@ export function writeEditorMcpConfig(
   };
 }
 
+/**
+ * Whole-file content builders for `format: 'file'` targets, keyed by editor
+ * id. Deliberately a lookup table here rather than a `buildFileContent`
+ * function field on `EditorMcpTarget`: `integrations/pi-extension.ts` imports
+ * the registry module for the launcher chains, so a registry entry referencing
+ * the builder back would create an `editors.ts` ⇄ `pi-extension.ts` module
+ * cycle (TDZ-fragile at evaluation time). A future `format: 'file'` editor
+ * adds one entry; `writeManagedEditorFile` fails loud when it is missing, and
+ * the lockstep test in `init.test.ts` pins the two in sync.
+ *
+ * @internal exported for that lockstep test only.
+ */
+export const MANAGED_FILE_BUILDERS: Partial<
+  Record<EditorId, (options?: McpInstallOptions) => string>
+> = {
+  pi: buildPiExtensionSource,
+};
+
+/**
+ * Write path for `format: 'file'` targets — the whole-file sibling of the
+ * JSON/TOML entry upserts. Drops the generated managed source verbatim,
+ * skipping the write on byte equality so idempotent `ok init` re-runs never
+ * churn the file. A foreign file squatting OK's managed path is overwritten —
+ * the same namespace-ownership rule the entry upserts apply to a foreign
+ * server under OK's `open-knowledge` key. Serialized under the same advisory
+ * lock the entry writers use so concurrent OK writers can't interleave.
+ */
+function writeManagedEditorFile(
+  target: EditorMcpTarget,
+  configPath: string,
+  serverName: string,
+  installOptions: McpInstallOptions,
+  opts: { isProjectScope: boolean },
+): EditorMcpResult {
+  const scopeField = opts.isProjectScope ? { configScope: 'project' as const } : {};
+  const fail = (err: unknown): EditorMcpResult => ({
+    editorId: target.id,
+    label: target.label,
+    action: 'failed',
+    configPath,
+    serverName,
+    error: err instanceof Error ? err.message : String(err),
+    ...scopeField,
+  });
+
+  const buildFileContent = MANAGED_FILE_BUILDERS[target.id];
+  if (!buildFileContent) {
+    return fail(
+      new Error(
+        `No managed-file builder registered for editor "${target.id}" (format: 'file' targets need a MANAGED_FILE_BUILDERS entry).`,
+      ),
+    );
+  }
+  let desired: string;
+  try {
+    desired = buildFileContent(installOptions);
+  } catch (err) {
+    return fail(err);
+  }
+
+  try {
+    mkdirSync(dirname(configPath), { recursive: true });
+  } catch (err) {
+    return fail(err);
+  }
+
+  const captured: { action: 'written' | 'overwritten' } = { action: 'written' };
+  try {
+    withFileLockSync(
+      `${configPath}.lock`,
+      () => {
+        let existing: string | null = null;
+        try {
+          existing = readFileSync(configPath, 'utf-8');
+        } catch {
+          existing = null;
+        }
+        if (existing === desired) {
+          captured.action = 'overwritten';
+          return;
+        }
+        atomicWriteFileSync(
+          configPath,
+          desired,
+          existing !== null ? { mode: existingFileMode(configPath) } : undefined,
+        );
+        captured.action = existing === null ? 'written' : 'overwritten';
+      },
+      {
+        onWarn: (message, context) =>
+          process.stderr.write(`[ok] ${message} ${JSON.stringify(context)}\n`),
+      },
+    );
+  } catch (err) {
+    return fail(err);
+  }
+
+  return {
+    editorId: target.id,
+    label: target.label,
+    action: captured.action,
+    configPath,
+    serverName,
+    ...scopeField,
+  };
+}
+
 function collectProjectConfig(
   target: EditorMcpTarget,
   cwd: string,
@@ -1280,7 +1399,12 @@ export interface UserMcpConfigsOptions {
  * so skip-on-missing would silently drop their selection.
  */
 export async function writeUserMcpConfigs(opts: UserMcpConfigsOptions): Promise<EditorMcpResult[]> {
-  const targets = resolveEditorTargets(opts.editors);
+  // Filter out `scope: 'project'` targets (Pi) defensively: they have no
+  // user-global config to write (`configPath` throws), so a caller that
+  // enumerated every editor id would otherwise get a guaranteed-failed result
+  // — which the desktop consent flow treats as retry-forever. The consent UI
+  // filters its checkbox list the same way; this is the write-side backstop.
+  const targets = resolveEditorTargets(opts.editors).filter((t) => t.scope === 'global');
   const installOptions: McpInstallOptions = {
     mode: 'published',
     skipAvailabilityCheck: true,
@@ -1435,6 +1559,16 @@ export function classifyExistingMcpEntry(
   }
   if (raw.trim() === '') {
     return { kind: 'absent' };
+  }
+
+  // `format: 'file'` targets (Pi): the raw text IS the classify unit — no
+  // server map to parse. Any non-blank file at the managed path classifies
+  // `present` (namespace ownership: the path is OK's, like the
+  // `open-knowledge` key in a shared config); `isEntryUpToDate` /
+  // `isOwnPiManagedFileEntry` then decide rewrite vs remove vs leave-foreign
+  // from the synthesized entry.
+  if (target.format === 'file') {
+    return { kind: 'present', entry: makePiManagedFileEntry(raw) };
   }
 
   const serverName = target.serverName(cwd);
@@ -1626,7 +1760,10 @@ export async function runInit(options: InitCommandOptions = {}): Promise<InitCom
       continue;
     }
 
-    if (writesUser(scope) && userTargets.includes(target)) {
+    // `scope: 'project'` targets (Pi) have no user-global config surface —
+    // their `configPath` throws — so the user-scope write is skipped rather
+    // than surfaced as a spurious per-editor failure.
+    if (writesUser(scope) && userTargets.includes(target) && target.scope === 'global') {
       editorResults.push(writeEditorMcpConfig(target, projectRoot, installOptions, options.home));
     }
     if (writesProject(scope) && projectTargets.includes(target) && target.projectConfigPath) {

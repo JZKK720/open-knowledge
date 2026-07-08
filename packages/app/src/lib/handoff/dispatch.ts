@@ -126,6 +126,13 @@ export async function dispatchHandoff(
         reason: 'invalid-payload',
         detail: 'opencode is terminal-only; launch via requestTerminalLaunch',
       };
+    case 'pi':
+      // Terminal-only target, same carve-out as opencode above.
+      return {
+        ok: false,
+        reason: 'invalid-payload',
+        detail: 'pi is terminal-only; launch via requestTerminalLaunch',
+      };
     default: {
       const _exhaustive: never = payload.target;
       return {

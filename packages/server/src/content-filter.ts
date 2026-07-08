@@ -103,6 +103,7 @@ const BUILTIN_SKIP_DIRS = new Set([
   '.codex',
   '.agents',
   '.opencode',
+  '.pi',
   // OS-managed (macOS)
   'Library',
   'Applications',
@@ -134,6 +135,7 @@ const ALWAYS_SKIP_DIRS = new Set<string>([
   '.codex',
   '.agents',
   '.opencode',
+  '.pi',
 ]);
 
 /**

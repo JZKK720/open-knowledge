@@ -107,11 +107,12 @@ describe('projectSkill / reverseProjectSkill', () => {
       'claude',
       'cursor',
       'codex',
+      'pi',
       'claude-desktop',
     ]);
     // claude-desktop has no skill surface → skipped.
-    expect(written.sort()).toEqual(['claude', 'codex', 'cursor']);
-    for (const host of ['.claude', '.cursor', '.codex']) {
+    expect(written.sort()).toEqual(['claude', 'codex', 'cursor', 'pi']);
+    for (const host of ['.claude', '.cursor', '.codex', '.pi']) {
       const link = join(root, host, 'skills', 'trip-log');
       // It's a symlink, not a copied dir, and it resolves to the source.
       expect(lstatSync(link).isSymbolicLink()).toBe(true);
@@ -120,9 +121,10 @@ describe('projectSkill / reverseProjectSkill', () => {
       expect(readlinkSync(link).startsWith('..')).toBe(true);
     }
 
-    const removed = reverseProjectSkill('trip-log', root, ['claude', 'cursor', 'codex']);
-    expect(removed.sort()).toEqual(['claude', 'codex', 'cursor']);
+    const removed = reverseProjectSkill('trip-log', root, ['claude', 'cursor', 'codex', 'pi']);
+    expect(removed.sort()).toEqual(['claude', 'codex', 'cursor', 'pi']);
     expect(existsSync(join(root, '.claude', 'skills', 'trip-log'))).toBe(false);
+    expect(existsSync(join(root, '.pi', 'skills', 'trip-log'))).toBe(false);
     // Uninstall removes only the link — the source is untouched.
     expect(existsSync(join(dir, 'SKILL.md'))).toBe(true);
   });
@@ -165,6 +167,7 @@ describe('projectSkill / reverseProjectSkill', () => {
   test('skillHostDir returns null for claude-desktop', () => {
     expect(skillHostDir(root, 'claude-desktop', 'x')).toBeNull();
     expect(skillHostDir(root, 'claude', 'x')).toContain('/.claude/skills/x');
+    expect(skillHostDir(root, 'pi', 'x')).toContain('/.pi/skills/x');
   });
 });
 

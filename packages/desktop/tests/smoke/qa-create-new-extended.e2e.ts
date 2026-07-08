@@ -35,6 +35,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { _electron as electron } from '@playwright/test';
 import { typeProjectName } from './_helpers/create-new-dialog';
 import { captureAppProcess, closeAppBounded } from './_helpers/electron-cleanup';
+import { clickNavCreateNew } from './_helpers/navigator-actions';
 import { expect, test } from './_helpers/smoke-test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -168,7 +169,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -229,7 +230,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     const dialog = navigator.locator('[data-testid="create-project-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 15_000 });
 
@@ -297,7 +298,7 @@ test.describe('QA extended create-new-project', () => {
     // close.
     const app1Proc = captureAppProcess(app1);
     const navigator = await findWindowByMode(app1, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -349,7 +350,7 @@ test.describe('QA extended create-new-project', () => {
     const app2 = await launchApp(tmpHome);
     captureStderrFor(app2);
     const navigator2 = await findWindowByMode(app2, 'navigator', 30_000);
-    await navigator2.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator2);
     await expect(navigator2.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -386,7 +387,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -430,7 +431,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -483,7 +484,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: subFolder });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -518,7 +519,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -551,7 +552,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -593,7 +594,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: subFolder });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -645,7 +646,7 @@ test.describe('QA extended create-new-project', () => {
     const app = await launchApp(tmpHome, { pickedParent: parent });
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });

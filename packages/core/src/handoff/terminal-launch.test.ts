@@ -15,10 +15,10 @@ import {
 const CLAUDE_PREAPPROVE = `--settings '{"enabledMcpjsonServers":["${MCP_SERVER_NAME}"]}'`;
 
 describe('TERMINAL_CLI_IDS', () => {
-  it('lists the CLIs in auto-pick priority order (claude > codex > opencode > cursor)', () => {
+  it('lists the CLIs in auto-pick priority order (claude > codex > opencode > cursor > pi)', () => {
     // The single constant drives both the visible launch-row order and the
     // default-CLI auto-pick, so display and defaulting can never disagree.
-    expect([...TERMINAL_CLI_IDS]).toEqual(['claude', 'codex', 'opencode', 'cursor']);
+    expect([...TERMINAL_CLI_IDS]).toEqual(['claude', 'codex', 'opencode', 'cursor', 'pi']);
   });
 });
 
@@ -114,6 +114,8 @@ describe('buildCliLaunchCommand', () => {
     expect(buildCliLaunchCommand('cursor', 'hi')).toBe("cursor-agent 'hi'\r");
     // OpenCode's positional is the project dir, so the prompt rides on --prompt.
     expect(buildCliLaunchCommand('opencode', 'hi')).toBe("opencode --prompt 'hi'\r");
+    // Pi's positional IS the prompt — same shape as claude/codex/cursor.
+    expect(buildCliLaunchCommand('pi', 'hi')).toBe("pi 'hi'\r");
   });
 
   it('escapes the prompt identically for every CLI regardless of fixed args', () => {

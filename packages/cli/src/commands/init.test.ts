@@ -17,6 +17,7 @@ import { readBundleDecision } from '@inkeep/open-knowledge-server';
 import { loadConfig } from '../config/loader.ts';
 import { OK_DIR } from '../constants.ts';
 import { previewContent } from '../content/preview.ts';
+import { buildPiExtensionSource } from '../integrations/pi-extension.ts';
 import {
   ALL_EDITOR_IDS,
   CHAIN_V1,
@@ -50,6 +51,7 @@ import {
   initCommand,
   LAUNCH_UI_CHAIN_SENTINEL,
   LAUNCH_UI_CHAIN_V1,
+  MANAGED_FILE_BUILDERS,
   readExistingMcpEntry,
   resolveInitSkillEnablement,
   resolveMcpScope,
@@ -616,6 +618,70 @@ describe('runInit', () => {
     });
   });
 
+  describe('Pi (project-scope file drop)', () => {
+    const piBridgePath = () => join(testDir, '.pi', 'extensions', 'open-knowledge.ts');
+
+    it('drops the managed bridge extension at .pi/extensions/open-knowledge.ts', async () => {
+      const result = await runInitForTest({ editors: ['pi'], scope: 'project' });
+
+      const projResult = result.editors.find(
+        (e) => e.editorId === 'pi' && e.configScope === 'project',
+      );
+      expect(projResult?.action).toBe('written');
+      expect(projResult?.configPath).toBe(piBridgePath());
+
+      const bytes = readFileSync(piBridgePath(), 'utf-8');
+      expect(bytes).toBe(buildPiExtensionSource({ mode: 'published' }));
+    });
+
+    it('re-run is idempotent — byte-identical bridge, action overwritten', async () => {
+      await runInitForTest({ editors: ['pi'], scope: 'project' });
+      const first = readFileSync(piBridgePath(), 'utf-8');
+
+      const again = await runInitForTest({ editors: ['pi'], scope: 'project' });
+      const projResult = again.editors.find(
+        (e) => e.editorId === 'pi' && e.configScope === 'project',
+      );
+      expect(projResult?.action).toBe('overwritten');
+      expect(readFileSync(piBridgePath(), 'utf-8')).toBe(first);
+    });
+
+    it('writes the Pi project skill into .pi/skills/', async () => {
+      const result = await runInitForTest({ editors: ['pi'], scope: 'project' });
+      const piSkill = join(testDir, '.pi', 'skills', 'open-knowledge', 'SKILL.md');
+      expect(result.projectSkills.some((s) => s.path === piSkill)).toBe(true);
+      expect(existsSync(piSkill)).toBe(true);
+    });
+
+    it('user scope produces NO pi result and never touches ~/.pi (project-scope-only editor)', async () => {
+      mkdirSync(join(fakeHome, '.pi', 'agent'), { recursive: true });
+      const result = await runInitForTest({ editors: ['pi'], scope: 'user' });
+      expect(result.editors.filter((e) => e.editorId === 'pi')).toHaveLength(0);
+      expect(existsSync(join(fakeHome, '.pi', 'extensions'))).toBe(false);
+    });
+
+    it('every format:file target has a registered managed-file builder', () => {
+      // Lockstep pin for MANAGED_FILE_BUILDERS (see its doc comment for why it
+      // is a lookup table rather than a function field on EditorMcpTarget): a
+      // future format:'file' editor must register its builder or the write
+      // path fails loud on every init.
+      for (const target of Object.values(EDITOR_TARGETS)) {
+        if (target.format === 'file') {
+          expect(MANAGED_FILE_BUILDERS[target.id]).toBeDefined();
+        }
+      }
+      expect(MANAGED_FILE_BUILDERS.pi).toBe(buildPiExtensionSource);
+    });
+
+    it('dev mode drops the dev-launcher bridge', async () => {
+      enableDevMcp();
+      await runInitForTest({ editors: ['pi'], scope: 'project', devMcp: true });
+      const bytes = readFileSync(piBridgePath(), 'utf-8');
+      expect(bytes).toBe(buildPiExtensionSource({ mode: 'dev' }));
+      expect(bytes).toContain(join(devRepoRoot(), 'packages', 'cli', 'dist', 'cli.mjs'));
+    });
+  });
+
   describe('Claude Desktop', () => {
     it('writes the same simple global open-knowledge entry as the local editors', async () => {
       const fakeHome = join(testDir, 'fakehome');
@@ -733,10 +799,15 @@ describe('runInit', () => {
       mkdirSync(dirname(codexConfigPath()), { recursive: true });
       mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
       mkdirSync(join(fakeHome, '.openclaw'), { recursive: true });
+      mkdirSync(join(fakeHome, '.pi', 'agent'), { recursive: true });
 
       const result = await runInitForTest({ editors: [...ALL_EDITOR_IDS] });
 
-      expect(result.editors).toHaveLength(ALL_EDITOR_IDS.length);
+      // Every editor with a user-global config surface gets a user-scope
+      // write; Pi is project-scope only (its bridge file is written by the
+      // project-scope flow), so it is skipped here rather than failed.
+      expect(result.editors).toHaveLength(ALL_EDITOR_IDS.length - 1);
+      expect(result.editors.map((e) => e.editorId)).not.toContain('pi');
       for (const editor of result.editors) {
         expect(editor.action).toBe('written');
       }
@@ -2297,9 +2368,19 @@ describe('detectInstalledEditors', () => {
     mkdirSync(dirname(codexConfigPath()), { recursive: true });
     mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
     mkdirSync(join(fakeHome, '.openclaw'), { recursive: true });
+    mkdirSync(join(fakeHome, '.pi', 'agent'), { recursive: true });
     const detected = detectInstalledEditors(testDir, fakeHome);
     expect(detected).toEqual(expect.arrayContaining([...ALL_EDITOR_IDS]));
     expect(detected).toHaveLength(ALL_EDITOR_IDS.length);
+  });
+
+  it('detects Pi via ~/.pi/agent (not the bare ~/.pi dotdir)', async () => {
+    // `~/.pi` alone could belong to another tool; the coding agent's home is
+    // the nested `agent/` dir.
+    mkdirSync(join(fakeHome, '.pi'), { recursive: true });
+    expect(detectInstalledEditors(testDir, fakeHome)).not.toContain('pi');
+    mkdirSync(join(fakeHome, '.pi', 'agent'), { recursive: true });
+    expect(detectInstalledEditors(testDir, fakeHome)).toContain('pi');
   });
 
   it('preserves EDITOR_TARGETS ordering in return value', async () => {

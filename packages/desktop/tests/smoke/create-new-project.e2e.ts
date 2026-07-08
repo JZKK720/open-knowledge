@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { _electron as electron } from '@playwright/test';
 import { typeProjectName } from './_helpers/create-new-dialog';
+import { clickNavCreateNew } from './_helpers/navigator-actions';
 import { expect, test } from './_helpers/smoke-test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -188,7 +189,7 @@ test.describe('Create-new-project smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
 
     const dialog = navigator.locator('[data-testid="create-project-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 15_000 });
@@ -246,7 +247,7 @@ test.describe('Create-new-project smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -291,7 +292,7 @@ test.describe('Create-new-project smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -386,7 +387,7 @@ test.describe('Create-new-project smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });
@@ -517,7 +518,7 @@ test.describe('Create-new-project smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-create-new"]').click();
+    await clickNavCreateNew(navigator);
     await expect(navigator.locator('[data-testid="create-project-dialog"]')).toBeVisible({
       timeout: 15_000,
     });

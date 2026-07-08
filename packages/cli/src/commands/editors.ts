@@ -198,6 +198,34 @@ foreach ($d in $dirs) {
 exit 127`;
 
 /**
+ * Version + ownership markers for Pi's managed bridge-extension file
+ * (`.pi/extensions/open-knowledge.ts`) — the `format: 'file'` sibling of the
+ * chain-entry sentinels above. The version sentinel is the whole first line of
+ * a published drop; the ownership marker is its version-agnostic prefix, so
+ * removal recognizes stale AND dev drops while the up-to-date check only
+ * passes the current version. Bump the suffix (`v2`, …) on any
+ * structurally-different generated bridge so reclaim rewrites stale files.
+ * Builders + recognizers live in `integrations/pi-extension.ts`; the constants
+ * live here so that module can depend on this one without a cycle.
+ */
+/** @internal */
+export const PI_EXTENSION_OWNERSHIP_MARKER = '// ok-pi-bridge';
+
+/** @internal */
+export const PI_EXTENSION_VERSION_SENTINEL = `${PI_EXTENSION_OWNERSHIP_MARKER}-v1`;
+
+/**
+ * `command` value of the SYNTHETIC entry `classifyExistingMcpEntry`
+ * fabricates for `format: 'file'` targets (the raw file text rides in
+ * `args[0]`). Lets the shared classify → `isEntryUpToDate` → rewrite/remove
+ * machinery treat the managed file like any config entry, with no per-host
+ * branches in the repair/reclaim consumers.
+ *
+ * @internal
+ */
+export const PI_MANAGED_FILE_ENTRY_COMMAND = 'ok-pi-managed-extension';
+
+/**
  * MCP install modes for `ok init`-written editor configs.
  *
  * - `'published'` (default) — the local platform's resilient chain shape:
@@ -301,6 +329,19 @@ export function isEntryUpToDate(entry: unknown): boolean {
       return typeof body === 'string' && body.includes(CHAIN_WIN_VERSION_SENTINEL);
     }
     return false;
+  }
+
+  // Pi managed-file shape (synthesized by `classifyExistingMcpEntry` for
+  // `format: 'file'` targets): `args[0]` carries the raw text of
+  // `.pi/extensions/open-knowledge.ts`. Up-to-date iff the file's FIRST LINE
+  // is the current version sentinel — first-line strict so a foreign file that
+  // merely mentions the marker in its body is never classified current, while
+  // body drift below line one keeps the same leave-alone tolerance as the
+  // chain shapes.
+  if (e.command === PI_MANAGED_FILE_ENTRY_COMMAND) {
+    if (!Array.isArray(e.args)) return false;
+    const text = e.args[0];
+    return typeof text === 'string' && text.startsWith(PI_EXTENSION_VERSION_SENTINEL);
   }
 
   return false;
@@ -568,14 +609,42 @@ export function resolveOpenClawConfigPath(options: AppSupportOptions = {}): stri
   return pathApiForPlatform(platformName).join(home, '.openclaw', 'openclaw.json');
 }
 
+/**
+ * Pi's coding-agent home dir — `~/.pi/agent/` (settings, global extensions,
+ * skills, sessions), overridable via `PI_CODING_AGENT_DIR` like Codex's
+ * `CODEX_HOME`. Detection-only for OK: Pi has no user-global MCP config
+ * surface at all (its `EDITOR_TARGETS` entry is project-scoped — see the
+ * registry comment), so this path is never written, only probed to answer
+ * "is Pi installed on this machine".
+ */
+export function resolvePiAgentDirPath(options: AppSupportOptions = {}): string {
+  const platformName = options.platformName ?? process.platform;
+  const home = options.home ?? homedir();
+  const env = options.env ?? process.env;
+  return env.PI_CODING_AGENT_DIR ?? pathApiForPlatform(platformName).join(home, '.pi', 'agent');
+}
+
 export interface EditorMcpTarget {
   id: EditorId;
   /** Human-friendly name for CLI output. */
   label: string;
-  /** Resolve the absolute path to the MCP config file. */
+  /**
+   * Resolve the absolute path to the MCP config file. Throws for an editor
+   * with NO user-global config surface on this platform (Claude Desktop on
+   * Linux; Pi everywhere — its integration is the project-scoped managed
+   * file). Every generic consumer already tolerates the throw (repair sweep,
+   * uninstall plan, classify) — it means "nothing to sweep at user scope".
+   */
   configPath: (cwd: string, home?: string) => string;
-  /** On-disk config format for this editor. */
-  format: 'json' | 'toml';
+  /**
+   * On-disk config format for this editor. `'json'` / `'toml'` entries go
+   * through the surgical entry upsert; `'file'` means OK owns the WHOLE file
+   * (Pi's bridge extension) — the write path drops
+   * `buildPiExtensionSource(...)` verbatim and classify/removal treat the raw
+   * text (via the synthetic `PI_MANAGED_FILE_ENTRY_COMMAND` entry) instead of
+   * parsing a server map. `topLevelKey` is inert for `'file'` targets.
+   */
+  format: 'json' | 'toml' | 'file';
   /** Top-level key that holds the server map. */
   topLevelKey: 'mcpServers' | 'servers' | 'mcp_servers' | 'mcp';
   /**
@@ -706,6 +775,44 @@ export const EDITOR_TARGETS: Record<EditorId, EditorMcpTarget> = {
     // Never write `~/.openclaw/openclaw.json` unless OpenClaw is actually
     // installed — gated on detection even under consent-flow skipAvailabilityCheck.
     offerOnlyWhenDetected: true,
+  },
+  pi: {
+    id: 'pi',
+    label: EDITOR_LABELS.pi,
+    // Pi has no MCP support and no MCP config file — not user-global, not
+    // project-local. The ONLY route is a Pi extension, so OK's integration is
+    // the managed bridge file at `projectConfigPath` (project-scoped;
+    // `scope: 'project'` below is the structural marker consumers gate
+    // user-scope surfaces on). Throwing here mirrors Claude Desktop on Linux:
+    // every generic consumer treats it as "no user-global surface to sweep".
+    configPath: () => {
+      throw new Error(
+        "Pi has no user-global MCP config; OK's integration is the project-scoped bridge extension at .pi/extensions/open-knowledge.ts (run `ok init` in the project).",
+      );
+    },
+    format: 'file',
+    // Inert for `format: 'file'` targets (no server map to key into); the
+    // interface requires a value, and `mcpServers` is the least surprising.
+    topLevelKey: 'mcpServers',
+    serverName: () => MCP_SERVER_NAME,
+    buildEntry: () => {
+      throw new Error(
+        'Pi has no MCP entry shape; the managed bridge file is built by buildPiExtensionSource (integrations/pi-extension.ts).',
+      );
+    },
+    scope: 'project',
+    detectPath: (_cwd, home) => resolvePiAgentDirPath({ home }),
+    // The dropped bridge extension IS the project config: its presence is the
+    // "project-configured" signal, and pointing `projectConfigPath` at it
+    // routes every generic project-scope consumer (repair sweep, desktop
+    // reclaim, sharing-mode exclude, deinit) at OK's own artifact. Second
+    // source for core's `EDITOR_PROJECT_CONFIG_PATH.pi` and must match it.
+    // OK never reads or writes `.pi/settings.json` — that file is the user's.
+    projectConfigPath: (cwd) => join(cwd, '.pi', 'extensions', 'open-knowledge.ts'),
+    // Pi scans `.pi/skills` natively (alongside `.agents/skills`), trust-gated
+    // like its extensions. Second source for core's
+    // `EDITOR_PROJECT_SKILL_ROOT.pi` and must match it.
+    projectSkillPath: (cwd) => join(cwd, '.pi', 'skills', 'open-knowledge', 'SKILL.md'),
   },
 };
 

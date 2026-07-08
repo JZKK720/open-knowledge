@@ -48,7 +48,7 @@ describe('getOkArtifactPaths', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('returns the canonical eleven-path artifact set when no config.yml exists', () => {
+  it('returns the canonical thirteen-path artifact set when no config.yml exists', () => {
     const paths = getOkArtifactPaths(dir);
     expect(paths).toContain(`${OK_DIR}/`);
     expect(paths).toContain('.okignore');
@@ -63,8 +63,12 @@ describe('getOkArtifactPaths', () => {
     // not a shared `.agents/skills/` write), so it adds a distinct skill path on
     // top of its `opencode.json` config.
     expect(paths).toContain('.opencode/skills/open-knowledge/');
+    // Pi has no MCP config — its project artifact is the managed bridge
+    // extension, plus its own `.pi/skills/` primary dir.
+    expect(paths).toContain('.pi/extensions/open-knowledge.ts');
+    expect(paths).toContain('.pi/skills/open-knowledge/');
     expect(paths).toContain('.claude/launch.json');
-    expect(paths).toHaveLength(11);
+    expect(paths).toHaveLength(13);
   });
 
   it('preserves a stable order so `ok config-sharing status` and unit-test snapshots are deterministic', () => {
@@ -87,9 +91,9 @@ describe('getOkArtifactPaths', () => {
     expect(paths).not.toContain('docs/.ok/');
     expect(paths).not.toContain('docs/.okignore');
     expect(paths.some((p) => p.includes('**'))).toBe(false);
-    // content.dir must not inflate the set — same eleven paths as the no-config
-    // case, just never `<contentDir>`-prefixed.
-    expect(paths).toHaveLength(11);
+    // content.dir must not inflate the set — same thirteen paths as the
+    // no-config case, just never `<contentDir>`-prefixed.
+    expect(paths).toHaveLength(13);
   });
 
   it('excludes each installed skill projection per the OF3 marker (PRD-6934 C9 fix)', () => {
@@ -133,7 +137,7 @@ describe('getOkArtifactPaths', () => {
     mkdirSync(join(dir, OK_DIR, 'local'), { recursive: true });
     writeFileSync(join(dir, OK_DIR, 'local', 'installed-skills.json'), '{ corrupt', 'utf-8');
     const paths = getOkArtifactPaths(dir);
-    expect(paths).toHaveLength(11); // corrupt marker → fail-soft, no per-skill paths
+    expect(paths).toHaveLength(13); // corrupt marker → fail-soft, no per-skill paths
   });
 });
 

@@ -570,6 +570,9 @@ describe('runCreateNew — installs the project-local skill (PRD-6733)', () => {
     expect(
       existsSync(join(result.projectDir, '.opencode', 'skills', 'open-knowledge', 'SKILL.md')),
     ).toBe(true);
+    expect(existsSync(join(result.projectDir, '.pi', 'skills', 'open-knowledge', 'SKILL.md'))).toBe(
+      true,
+    );
 
     // The result's `aiIntegrations` carries the per-(editor × integration)
     // outcomes — the project-skill writer ran and reported success for every
@@ -582,6 +585,7 @@ describe('runCreateNew — installs the project-local skill (PRD-6733)', () => {
       'codex',
       'cursor',
       'opencode',
+      'pi',
     ]);
   });
 });

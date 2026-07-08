@@ -43,7 +43,7 @@ A skill in OpenKnowledge is content, not a config file: authored in the WYSIWYG 
 .cap code{font-size:11.5px}
 </style>
 <script>
-var eds=["Claude Code","Cursor","Codex","OpenCode"],box=document.getElementById("eds"),inst=document.getElementById("inst"),chips=[];
+var eds=["Claude Code","Cursor","Codex","OpenCode","Pi"],box=document.getElementById("eds"),inst=document.getElementById("inst"),chips=[];
 eds.forEach(function(e){var c=document.createElement("div");c.className="chip";c.textContent=e;box.appendChild(c);chips.push(c);});
 var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 function run(){
@@ -62,7 +62,7 @@ A project skill is not a raw text file you hand-edit in a dotfile. It is a docum
 
 ## Write once, install everywhere
 
-`install` **symlinks** the skill into each editor's skills directory (Claude Code, Cursor, Codex, OpenCode). Every editor points at the one `.ok/skills/<name>` source, so nothing is copied and nothing drifts: edit the skill once and every agent has the change, with no re-install.
+`install` **symlinks** the skill into each editor's skills directory (Claude Code, Cursor, Codex, OpenCode, Pi). Every editor points at the one `.ok/skills/<name>` source, so nothing is copied and nothing drifts: edit the skill once and every agent has the change, with no re-install.
 
 ## Create and install a skill
 

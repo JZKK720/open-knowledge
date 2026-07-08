@@ -1,5 +1,5 @@
 {
   "title": "Integrations",
   "icon": "LuPlug",
-  "pages": ["claude-code", "cursor", "codex", "opencode", "openclaw"]
+  "pages": ["claude-code", "cursor", "codex", "opencode", "pi", "openclaw"]
 }

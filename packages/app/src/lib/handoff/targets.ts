@@ -64,6 +64,14 @@ export const KNOWN_TARGETS = [
     installUrl: 'https://opencode.ai',
     tagline: 'Open-source terminal coding agent; bring any local model.',
   },
+  {
+    // Terminal-only target, same carve-out as `opencode` above.
+    id: 'pi',
+    displayName: 'Pi',
+    schemes: [],
+    installUrl: 'https://pi.dev',
+    tagline: 'Minimal open-source terminal coding agent, extensible in TypeScript.',
+  },
 ] as const satisfies ReadonlyArray<TargetData>;
 
 // UI-visibility allow-list. `claude-cowork` is intentionally absent: dispatch
@@ -73,7 +81,7 @@ export const KNOWN_TARGETS = [
 // group, and the empty-state "Create with <agent>" composer.
 export const VISIBLE_TARGETS: ReadonlyArray<TargetData> = KNOWN_TARGETS.filter(
   // `claude-cowork`: dispatch-by-ID only, no render surface.
-  // `opencode`: terminal-only — surfaced via the terminal-CLI rows, not the
-  // GUI deep-link target list, so it must not appear as a dispatchable row.
-  (target) => target.id !== 'claude-cowork' && target.id !== 'opencode',
+  // `opencode` / `pi`: terminal-only — surfaced via the terminal-CLI rows, not
+  // the GUI deep-link target list, so they must not appear as dispatchable rows.
+  (target) => target.id !== 'claude-cowork' && target.id !== 'opencode' && target.id !== 'pi',
 );

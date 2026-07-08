@@ -7,6 +7,7 @@ import { McpIcon } from './mcp';
 import { ObsidianIcon } from './obsidian';
 import { OpenClawIcon } from './openclaw';
 import { OpenCodeIcon } from './opencode';
+import { PiIcon } from './pi';
 
 // Brand logos addressable from `meta.json` / page frontmatter via the
 // `custom/<Name>` icon string (resolved in `src/lib/source.ts`). Each entry is a
@@ -18,6 +19,7 @@ export const brandIcons = {
   Codex: CodexIcon,
   OpenCode: OpenCodeIcon,
   OpenClaw: OpenClawIcon,
+  Pi: PiIcon,
   GitHub: GitHubIcon,
   Obsidian: ObsidianIcon,
   MCP: McpIcon,

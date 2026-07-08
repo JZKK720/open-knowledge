@@ -23,8 +23,9 @@
  * config it doesn't own.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { atomicWriteFileSync } from '@inkeep/open-knowledge-core/server';
+import { isOwnPiManagedFileEntry } from '../integrations/pi-extension.ts';
 import { getTomlConfigEngine } from '../native/toml-config-engine.ts';
 import { type EditorMcpTarget, isEntryUpToDate, isOwnManagedEntry } from './editors.ts';
 import { classifyExistingMcpEntry, type McpDeclineReason, serverMapPath } from './init.ts';
@@ -74,9 +75,15 @@ export type McpRemoveOutcome =
  * signature that can't also match a foreign server, so they surface as
  * `left-foreign` (reported for manual removal) rather than risk deleting
  * someone else's config.
+ *
+ * `isOwnPiManagedFileEntry` covers `format: 'file'` targets (Pi's managed
+ * bridge extension, classified as a synthetic entry carrying the raw file
+ * text). Unlike the chain shapes, stale AND dev drops ARE removable there:
+ * the first-line ownership marker is an unambiguous OK signature a foreign
+ * file wouldn't carry, so version-agnostic removal is safe.
  */
 function isRemovableOwnEntry(entry: unknown): boolean {
-  return isEntryUpToDate(entry) || isOwnManagedEntry(entry);
+  return isEntryUpToDate(entry) || isOwnManagedEntry(entry) || isOwnPiManagedFileEntry(entry);
 }
 
 /**
@@ -126,6 +133,15 @@ export function removeOwnMcpEntry(
     return { kind: 'not-present' };
   }
   const serverName = target.serverName(cwd);
+
+  // `format: 'file'` targets (Pi): OK owns the whole managed file, so removal
+  // is whole-file — already gated above on the first-line ownership marker via
+  // `isOwnPiManagedFileEntry`, so a foreign file at the managed path is never
+  // deleted (`left-foreign`).
+  if (target.format === 'file') {
+    rmSync(configPath, { force: true });
+    return { kind: 'removed' };
+  }
 
   return target.format === 'toml'
     ? removeTomlEntry(configPath, serverName)

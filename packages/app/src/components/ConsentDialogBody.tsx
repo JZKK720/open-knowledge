@@ -416,10 +416,18 @@ function ConsentDialogForm({ payload, store, toast }: ConsentDialogFormProps) {
                           className="text-xs text-muted-foreground"
                           data-testid={`consent-editor-${editor.id}-scope`}
                         >
+                          {/* Absent hasUserConfig (older main process) reads as
+                              user-writable — every pre-Pi editor was. */}
                           {editor.hasProjectConfig ? (
-                            <Trans comment="Scope tag next to an AI tool — config is written at both project and user level">
-                              (project + user)
-                            </Trans>
+                            (editor.hasUserConfig ?? true) ? (
+                              <Trans comment="Scope tag next to an AI tool — config is written at both project and user level">
+                                (project + user)
+                              </Trans>
+                            ) : (
+                              <Trans comment="Scope tag next to an AI tool — config is written at project level only">
+                                (project-level only)
+                              </Trans>
+                            )
                           ) : (
                             <Trans comment="Scope tag next to an AI tool — config is written at user level only">
                               (user-level only)

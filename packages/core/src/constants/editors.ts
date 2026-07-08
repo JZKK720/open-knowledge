@@ -6,7 +6,14 @@
  * resolution lives in `packages/cli/src/commands/editors.ts:EDITOR_TARGETS`,
  * which now reads labels from this module to avoid drift.
  */
-export type EditorId = 'claude' | 'claude-desktop' | 'cursor' | 'codex' | 'opencode' | 'openclaw';
+export type EditorId =
+  | 'claude'
+  | 'claude-desktop'
+  | 'cursor'
+  | 'codex'
+  | 'opencode'
+  | 'openclaw'
+  | 'pi';
 
 export const ALL_EDITOR_IDS = [
   'claude',
@@ -15,6 +22,7 @@ export const ALL_EDITOR_IDS = [
   'codex',
   'opencode',
   'openclaw',
+  'pi',
 ] as const satisfies readonly EditorId[];
 
 /**
@@ -30,6 +38,7 @@ export const EDITOR_LABELS = {
   codex: 'Codex',
   opencode: 'OpenCode',
   openclaw: 'OpenClaw',
+  pi: 'Pi',
 } as const satisfies Record<EditorId, string>;
 
 /**
@@ -80,6 +89,12 @@ export const EDITOR_PROJECT_SKILL_ROOT = {
   // OpenClaw is a global agent gateway (config + skills live under the user's
   // home, e.g. `~/.agents/skills`); it has no project-scoped skill dir OK writes.
   openclaw: null,
+  // Pi implements the Agent Skills standard and scans `.pi/skills` natively
+  // (alongside `.agents/skills`); OK writes its own primary dir so
+  // install-on-Pi is honest and never shares another host's write. Project
+  // skill dirs are trust-gated in Pi: they load only after the user trusts
+  // the folder.
+  pi: '.pi/skills',
 } as const satisfies Record<EditorId, string | null>;
 
 /** Editor ids that have a project skill surface (valid install-projection targets). */
@@ -96,11 +111,18 @@ export const PROJECT_SKILL_EDITOR_IDS = ALL_EDITOR_IDS.filter(
  * `.claude` from `.claude/skills`) and the id set can never drift from the
  * canonical editor constants. Adding a project-skill editor to
  * `EDITOR_PROJECT_SKILL_ROOT` flows here automatically.
+ *
+ * Pi is the one carve-out: its user-global skills dir is `~/.pi/agent/skills`
+ * (the agent home is nested one level below the `.pi` dotdir), NOT the
+ * `~/<hostDir>/skills` layout this derivation assumes — and Pi natively reads
+ * the central `~/.agents/skills` hub, which the user-bundle installer already
+ * writes. Including it here would create a dead `~/.pi/skills/` dir nothing
+ * reads.
  */
 export const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   readonly hostDir: string;
   readonly editorId: EditorId;
-}> = PROJECT_SKILL_EDITOR_IDS.map((editorId) => ({
+}> = PROJECT_SKILL_EDITOR_IDS.filter((editorId) => editorId !== 'pi').map((editorId) => ({
   // `editorId` came from the non-null filter, so the root is a string.
   hostDir: (EDITOR_PROJECT_SKILL_ROOT[editorId] ?? '').split('/')[0],
   editorId,
@@ -119,6 +141,7 @@ export const EDITOR_SETUP_DOC_SLUG = {
   codex: 'codex',
   opencode: 'opencode',
   openclaw: 'openclaw',
+  pi: 'pi',
 } as const satisfies Record<EditorId, string>;
 
 /**
@@ -138,4 +161,11 @@ export const EDITOR_PROJECT_CONFIG_PATH = {
   // OpenClaw's MCP config is user-global (`~/.openclaw/openclaw.json`); no
   // project-local variant, so it is never detected as "project-configured".
   openclaw: null,
+  // Pi has no MCP config at all — OK's integration is a managed bridge
+  // EXTENSION file dropped at `.pi/extensions/open-knowledge.ts` (Pi loads
+  // project extensions after the user trusts the folder). That file is the
+  // project-configured signal AND the artifact every generic consumer
+  // (sharing-mode exclude, deinit, reclaim) must target, so it is the
+  // project-config path. OK never reads or writes `.pi/settings.json`.
+  pi: '.pi/extensions/open-knowledge.ts',
 } as const satisfies Record<EditorId, string | null>;

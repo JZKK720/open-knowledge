@@ -473,7 +473,12 @@ export function checkAndRepairMcpWiringOnStartup(
   if (!/\.app\/Contents\/MacOS\/[^/]+$/.test(executablePath)) {
     return Promise.resolve({ status: 'skipped', reason: 'bad-executable-path' });
   }
-  const selectedEditors = [...cli.allEditorIds];
+  // User-scope sweep: only editors with a user-global config surface.
+  // `scope: 'project'` targets (Pi) have nothing at user scope — their
+  // `configPath` throws by contract.
+  const selectedEditors = cli.allEditorIds.filter(
+    (id) => cli.editorTargets[id]?.scope === 'global',
+  );
   logger.event({ event: 'mcp-wiring-repair-check-started', editors: selectedEditors });
   if (selectedEditors.length === 0) return Promise.resolve({ status: 'ok', checkedEditors: [] });
 
@@ -694,7 +699,15 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringFirstLaunchOpts): Ru
   let detections: McpWiringEditorDetection[];
   try {
     const detectedIds = new Set<McpWiringEditorId>(cli.detectInstalledEditors('', home));
-    detections = cli.allEditorIds.map((id) => {
+    // This dialog consents USER-GLOBAL config writes; `scope: 'project'`
+    // targets (Pi) have no user-global surface (`configPath` throws), so a
+    // row for them could only ever produce a guaranteed-failed write — which
+    // defers the status marker and re-fires the dialog every launch. Their
+    // integration is written by the project-scope flows instead.
+    const globalScopeIds = cli.allEditorIds.filter(
+      (id) => cli.editorTargets[id]?.scope === 'global',
+    );
+    detections = globalScopeIds.map((id) => {
       const target = cli.editorTargets[id];
       if (!target) {
         throw new Error(`editorTargets missing entry for id=${id}`);

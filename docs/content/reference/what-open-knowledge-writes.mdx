@@ -83,8 +83,9 @@ When you initialize or open a project, the app scaffolds the same project files 
 | `.ok/`, `.ok/config.yml` | Project directory and its [config](/docs/reference/configuration) | In-project, committed |
 | `.ok/.gitignore` | Keeps machine-local runtime state (`local/`, `principal.json`, `server.lock`, …) out of git | In-project, committed |
 | `.okignore` | Paths excluded from the editor, search, and agents — see [Ignore patterns](/docs/features/ignore-patterns) | In-project, committed |
-| `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `opencode.json` | Project-scoped MCP registration for all four project-capable editors (Claude, Cursor, Codex, OpenCode), written regardless of what's installed so the repo is ready for teammates | In-project, committed |
-| `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/` | Project-local "rich" OpenKnowledge skill (`SKILL.md`) for the same four editors | In-project, committed |
+| `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `opencode.json` | Project-scoped MCP registration for the four MCP-capable project editors (Claude, Cursor, Codex, OpenCode), written regardless of what's installed so the repo is ready for teammates | In-project, committed |
+| `.pi/extensions/open-knowledge.ts` | Managed bridge extension connecting [Pi](/docs/integrations/pi) (which has no MCP support) to the project | In-project, committed |
+| `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/`, `.pi/skills/` | Project-local "rich" OpenKnowledge skill (`SKILL.md`) for the same five editors | In-project, committed |
 | `.ok/skill-targets.json` | Committed list of which editors receive skills, written when you customize the targets | In-project, committed |
 | `.claude/launch.json` | Configures Claude Code's preview pane to open the editor (on a local UI port, `39848`) | In-project, committed |
 | `~/.claude.json`, `~/Library/Application Support/Claude/claude_desktop_config.json`, `~/.cursor/mcp.json`, `~/.codex/config.toml`, `~/.config/opencode/opencode.json`, `~/.openclaw/openclaw.json` | User-level `open-knowledge` MCP registration, one per detected editor, so it's available in every project (`~/.openclaw/openclaw.json` only when `~/.openclaw/` exists) | Outside-project (editor config) |
@@ -160,8 +161,9 @@ The `postinstall` step is **non-fatal** (install always succeeds even if it fail
 | `.ok/.gitignore` | Keeps machine-local runtime state (`local/`, `principal.json`, `server.lock`, …) out of git | In-project, committed |
 | `.okignore` | Paths excluded from the editor, search, and agents — see [Ignore patterns](/docs/features/ignore-patterns) | In-project, committed |
 | `.gitignore` (project root) | Seeded (with `.DS_Store`) **only** when `ok init` creates a new git repo | In-project, committed |
-| `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `opencode.json` | Project-scoped MCP registration for all four project-capable editors (Claude, Cursor, Codex, OpenCode) regardless of what's installed — prepares the repo for teammates (with `--scope project` or `both`) | In-project, committed |
-| `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/` | Project-local "rich" OpenKnowledge skill (`SKILL.md`) for the same four editors | In-project, committed |
+| `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `opencode.json` | Project-scoped MCP registration for the four MCP-capable project editors (Claude, Cursor, Codex, OpenCode) regardless of what's installed — prepares the repo for teammates (with `--scope project` or `both`) | In-project, committed |
+| `.pi/extensions/open-knowledge.ts` | Managed bridge extension connecting [Pi](/docs/integrations/pi) (which has no MCP support) to the project | In-project, committed |
+| `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/`, `.pi/skills/` | Project-local "rich" OpenKnowledge skill (`SKILL.md`) for the same five editors | In-project, committed |
 | `.ok/skill-targets.json` | Committed list of which editors receive skills, written when you customize the targets | In-project, committed |
 | `.claude/launch.json` | Configures Claude Code's preview pane to open the editor (on a local UI port, `39848`) | In-project, committed |
 
@@ -175,6 +177,8 @@ With `--scope user` or `both` (the default), `ok init` also registers the `open-
 | `~/.codex/config.toml` | Codex | Outside-project (editor config) |
 | `~/.config/opencode/opencode.json` | OpenCode | Outside-project (editor config) |
 | `~/.openclaw/openclaw.json` | OpenClaw (only when `~/.openclaw/` exists) | Outside-project (editor config) |
+
+Pi is the exception: it has no user-level MCP config (it has no MCP support at all), so its integration is only ever the project-scoped bridge extension above.
 
 On Windows, Claude Desktop and OpenCode configs live under `%APPDATA%\Claude\` and `%APPDATA%\opencode\`, and the MCP entry is a PowerShell launcher.
 

@@ -2,18 +2,22 @@ import { describe, expect, test } from 'bun:test';
 import { KNOWN_TARGETS, VISIBLE_TARGETS } from './targets.ts';
 
 describe('KNOWN_TARGETS', () => {
-  test('has exactly five targets (four GUI + terminal-only OpenCode)', () => {
-    expect(KNOWN_TARGETS.length).toBe(5);
+  test('has exactly six targets (four GUI + terminal-only OpenCode and Pi)', () => {
+    expect(KNOWN_TARGETS.length).toBe(6);
   });
 
   test('ids cover the full HandoffTarget union', () => {
     const ids = new Set(KNOWN_TARGETS.map((t) => t.id));
-    expect(ids).toEqual(new Set(['claude-cowork', 'claude-code', 'codex', 'cursor', 'opencode']));
+    expect(ids).toEqual(
+      new Set(['claude-cowork', 'claude-code', 'codex', 'cursor', 'opencode', 'pi']),
+    );
   });
 
-  test('opencode is terminal-only — no URL scheme', () => {
+  test('opencode and pi are terminal-only — no URL scheme', () => {
     const opencode = KNOWN_TARGETS.find((t) => t.id === 'opencode');
     expect(opencode?.schemes).toEqual([]);
+    const pi = KNOWN_TARGETS.find((t) => t.id === 'pi');
+    expect(pi?.schemes).toEqual([]);
   });
 
   test('claude-cowork + claude-code share the claude: scheme (single install state)', () => {
@@ -43,6 +47,7 @@ describe('KNOWN_TARGETS', () => {
     expect(byId.get('codex')).toBe('Codex');
     expect(byId.get('cursor')).toBe('Cursor');
     expect(byId.get('opencode')).toBe('OpenCode');
+    expect(byId.get('pi')).toBe('Pi');
   });
 });
 
@@ -57,11 +62,12 @@ describe('VISIBLE_TARGETS (UI render allow-list)', () => {
     expect(ids.has('claude-cowork')).toBe(false);
   });
 
-  test('hides the terminal-only opencode target from the GUI deep-link list', () => {
-    // OpenCode surfaces as a terminal-CLI launch row (TERMINAL_CLI_IDS), not a
-    // GUI deep-link target, so it must not appear in VISIBLE_TARGETS.
+  test('hides the terminal-only opencode + pi targets from the GUI deep-link list', () => {
+    // OpenCode and Pi surface as terminal-CLI launch rows (TERMINAL_CLI_IDS),
+    // not GUI deep-link targets, so they must not appear in VISIBLE_TARGETS.
     const ids = new Set(VISIBLE_TARGETS.map((t) => t.id));
     expect(ids.has('opencode')).toBe(false);
+    expect(ids.has('pi')).toBe(false);
   });
 
   test('keeps the remaining three targets visible', () => {

@@ -448,6 +448,9 @@ interface OkOnboardingShowPayload {
     readonly id: OkMcpWiringEditorId;
     readonly label: string;
     readonly hasProjectConfig: boolean;
+    /** Optional for back-compat; absent reads as `true`. `false` = the editor
+     *  has no user-global config surface (Pi — project-scope only). */
+    readonly hasUserConfig?: boolean;
   }[];
 }
 

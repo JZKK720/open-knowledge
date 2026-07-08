@@ -301,6 +301,11 @@ export interface OnboardingShowPayload {
      *  in the consent dialog so the user can distinguish project-scoped vs
      *  user-only editors before clicking Start. */
     readonly hasProjectConfig: boolean;
+    /** True when this editor also has a user-global config surface. Optional
+     *  for back-compat with older payload producers; absent reads as `true`
+     *  (every pre-Pi editor was user-writable). Pi is the first
+     *  project-scope-only editor — `false` renders "(project-level only)". */
+    readonly hasUserConfig?: boolean;
   }[];
 }
 

@@ -979,8 +979,12 @@ describe('repairSkills — OK_RECLAIM_DISABLE env gate (AC-C1)', () => {
 
 describe('coverage meta-test (AC-D2): HOSTS_WITH_USER_SKILL_DIR ↔ EDITOR_TARGETS.projectSkillPath', () => {
   it('CLI host list matches the set of editor ids that declare a projectSkillPath', () => {
+    // Pi is the documented carve-out: it declares a projectSkillPath
+    // (`.pi/skills`) but has NO `~/.pi/skills` user dir — its user-global
+    // skills live at `~/.pi/agent/skills` and it reads the central
+    // `~/.agents/skills` hub natively, so the user host-dir sweep skips it.
     const hostsWithProjectSkillPath = Object.entries(EDITOR_TARGETS)
-      .filter(([, target]) => target.projectSkillPath !== undefined)
+      .filter(([id, target]) => target.projectSkillPath !== undefined && id !== 'pi')
       .map(([id]) => id)
       .sort();
 

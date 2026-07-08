@@ -1556,6 +1556,9 @@ async function openProject(
         id: id as McpWiringEditorId,
         label: EDITOR_TARGETS[id].label,
         hasProjectConfig: EDITOR_TARGETS[id].projectConfigPath !== undefined,
+        // Pi is the first project-scope-only editor; without the user-side
+        // signal the badge would misread as "(project + user)".
+        hasUserConfig: EDITOR_TARGETS[id].scope === 'global',
       })),
     };
     const decision = await requestUserConsent(

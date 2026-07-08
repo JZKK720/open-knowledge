@@ -174,4 +174,18 @@ describe('dispatchHandoff — runtime exhaustiveness guard', () => {
     expect(result.reason).toBe('invalid-payload');
     expect(result.detail ?? '').toContain('zed');
   });
+
+  test.each([
+    'opencode',
+    'pi',
+  ] as const)('terminal-only target %s is refused by the deep-link dispatcher (defensive)', async (target) => {
+    // No production caller routes terminal-only targets here (excluded from
+    // VISIBLE_TARGETS); the case exists so a programmatic dispatch fails
+    // loudly instead of hitting the exhaustiveness fallback.
+    const result = await dispatchHandoff({ ...BASE_PAYLOAD, target });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('invalid-payload');
+    expect(result.detail ?? '').toContain('terminal-only');
+  });
 });

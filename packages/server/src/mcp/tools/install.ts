@@ -34,11 +34,11 @@ import { resolveSkillName, SKILL_NAME_DESCRIBE, SkillScopeArg } from './verb-sch
 const DESCRIPTION = [
   '[Requires: Hocuspocus server] Install an authored SKILL into your editors — the deliberate Draft → Installed step.',
   '',
-  'Projects the skill source at `.ok/skills/<name>/` verbatim into the editor host dirs your project is configured for (`.claude/skills/<name>/`, `.cursor/skills/<name>/`, `.codex/skills/<name>/`, `.opencode/skills/<name>/`). The source is validated FIRST — a SKILL.md with git conflict markers, missing/invalid frontmatter, XML tags in name/description, or a reserved `open-knowledge*` name is refused (never projected into your agent context). Records the install so it survives a relaunch.',
+  'Projects the skill source at `.ok/skills/<name>/` verbatim into the editor host dirs your project is configured for (`.claude/skills/<name>/`, `.cursor/skills/<name>/`, `.codex/skills/<name>/`, `.opencode/skills/<name>/`, `.pi/skills/<name>/`). The source is validated FIRST — a SKILL.md with git conflict markers, missing/invalid frontmatter, XML tags in name/description, or a reserved `open-knowledge*` name is refused (never projected into your agent context). Records the install so it survives a relaunch.',
   '',
   '**Parameters:**',
   `- \`name\` — ${SKILL_NAME_DESCRIBE}`,
-  '- `targets` — Optional explicit editor ids (`claude` | `cursor` | `codex` | `opencode`). Omit to install into the editors this project is already configured for.',
+  '- `targets` — Optional explicit editor ids (`claude` | `cursor` | `codex` | `opencode` | `pi`). Omit to install into the editors this project is already configured for.',
   '- `scope` — `project` (default, shared via git) or `global` (user-global, installed into every editor on this machine).',
   '',
   'After editing a skill, run `install` again to push the new version. After `delete({skill})`, the projection is removed automatically (uninstall).',

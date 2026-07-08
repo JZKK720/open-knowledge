@@ -3,13 +3,20 @@
  * pure type surface consumable from Electron main, renderer, and server.
  */
 
-// `opencode` is a TERMINAL-ONLY target: it has no URL scheme / GUI app, so it
-// is carved out of the deep-link dispatch path (no `RECIPES` recipe, no
-// `dispatch.ts` URL case, excluded from `VISIBLE_TARGETS`). It is a member of
-// the union only so it can reuse the shared brand-icon + display-name metadata
-// that the terminal-CLI launch rows render. Reached exclusively via
-// `requestTerminalLaunch` / `TERMINAL_CLIS`, never `dispatchHandoff`.
-export type HandoffTarget = 'claude-cowork' | 'claude-code' | 'codex' | 'cursor' | 'opencode';
+// `opencode` and `pi` are TERMINAL-ONLY targets: they have no URL scheme /
+// GUI app, so they are carved out of the deep-link dispatch path (no `RECIPES`
+// recipe, no `dispatch.ts` URL case, excluded from `VISIBLE_TARGETS`). They
+// are members of the union only so they can reuse the shared brand-icon +
+// display-name metadata that the terminal-CLI launch rows render. Reached
+// exclusively via `requestTerminalLaunch` / `TERMINAL_CLIS`, never
+// `dispatchHandoff`.
+export type HandoffTarget =
+  | 'claude-cowork'
+  | 'claude-code'
+  | 'codex'
+  | 'cursor'
+  | 'opencode'
+  | 'pi';
 
 /**
  * Data carried from the UI to the URL builder. Minimal by construction: only

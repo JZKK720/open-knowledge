@@ -485,6 +485,9 @@ export interface OkOnboardingShowPayload {
      *  when only the user-level config is writable. Drives the per-row
      *  scope badge in the consent dialog. */
     readonly hasProjectConfig: boolean;
+    /** Optional for back-compat; absent reads as `true`. `false` = the editor
+     *  has no user-global config surface (Pi — project-scope only). */
+    readonly hasUserConfig?: boolean;
   }[];
 }
 

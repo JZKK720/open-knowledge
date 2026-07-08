@@ -158,7 +158,7 @@ install({ name: "<name>" })
 ```
 
 This fans the validated skill into the project's configured editors
-(`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/`). For a project skill,
+(`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.opencode/skills/`, `.pi/skills/`). For a project skill,
 commit `.ok/skills/<name>/` and the projections so teammates get it on pull. Edit
 later with `edit({ skill })` then `install` again; `delete({ skill })` removes it
 and uninstalls. Roll back a **project** skill with `history({ skill })` →

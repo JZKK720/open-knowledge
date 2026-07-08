@@ -36,6 +36,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { _electron as electron } from '@playwright/test';
+import { clickNavOpen } from './_helpers/navigator-actions';
 import { expect, test } from './_helpers/smoke-test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -198,7 +199,7 @@ test.describe('Consent-dialog smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-open"]').click();
+    await clickNavOpen(navigator);
     // content.dir now lives inside the collapsed "Advanced settings" section.
     await expandAdvancedSettings(navigator);
     const contentDir = navigator.locator('[data-testid="consent-content-dir"]');
@@ -238,7 +239,7 @@ test.describe('Consent-dialog smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-open"]').click();
+    await clickNavOpen(navigator);
     await expandAdvancedSettings(navigator);
 
     const contentDirInput = navigator.locator('[data-testid="consent-content-dir"]');
@@ -269,7 +270,7 @@ test.describe('Consent-dialog smoke', () => {
     captureStderrFor(app);
     const navigator = await findWindowByMode(app, 'navigator');
 
-    await navigator.locator('[data-testid="nav-open"]').click();
+    await clickNavOpen(navigator);
     await expandAdvancedSettings(navigator);
 
     // Dialog should render with git-root-promotion notice referencing the
