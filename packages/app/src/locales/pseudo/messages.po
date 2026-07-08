@@ -130,6 +130,16 @@ msgstr ""
 msgid "{0, plural, one {# use} other {# uses}}"
 msgstr ""
 
+#. placeholder {0}: fileRows.length
+#: src/components/CreatedItemsList.tsx
+msgid "{0, plural, one {File} other {Files}}"
+msgstr ""
+
+#. placeholder {0}: folderRows.length
+#: src/components/CreatedItemsList.tsx
+msgid "{0, plural, one {Folder} other {Folders}}"
+msgstr ""
+
 #. placeholder {0}: group.worktrees.length
 #: src/components/RecentProjectsMenu.tsx
 msgid "{0, plural, one {worktree} other {worktrees}}"
@@ -3028,10 +3038,6 @@ msgstr ""
 msgid "Files"
 msgstr ""
 
-#: src/components/CreatedItemsList.tsx
-msgid "Files & folders"
-msgstr ""
-
 #: src/lib/keyboard-shortcuts.ts
 msgid "Files sidebar"
 msgstr ""
@@ -3677,10 +3683,6 @@ msgstr ""
 #. placeholder {0}: index + 1
 #: src/components/ArrayOfObjectsWidget.tsx
 msgid "Item {0}"
-msgstr ""
-
-#: src/components/CreatedItemsList.tsx
-msgid "Items to be created"
 msgstr ""
 
 #: src/components/SubscribeCard.tsx

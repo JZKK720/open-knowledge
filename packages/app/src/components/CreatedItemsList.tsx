@@ -1,34 +1,29 @@
 import { plural } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ChevronDown, File, Folder, Hexagon } from 'lucide-react';
-import { Fragment, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { File, Folder, Hexagon, type LucideIcon } from 'lucide-react';
+import { Fragment } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { OkScaffoldPlan, OkSeedPackInfo } from '@/lib/desktop-bridge-types';
 import { skillDisplayName } from '@/lib/skill-scope';
-import { cn } from '@/lib/utils';
-
-interface CreatedItem {
-  kind: 'folder' | 'file';
-  name: string;
-}
 
 function basename(path: string): string {
   return path.split('/').pop() ?? path;
 }
 
 /**
- * A top-level folder to preview as a card. `templateCount` is the number of
+ * A top-level folder to preview as a row. `templateCount` is the number of
  * starter/extra templates the plan installs into `<folder>/.ok/templates/`.
  */
 interface FolderCard {
   path: string;
   summary: string;
   templateCount: number;
+  /** Basenames of the templates installed into this folder's `.ok/templates/`. */
+  templates: string[];
 }
 
 /**
- * One card per pack folder actually being scaffolded. `templateCount` is the
+ * One entry per pack folder actually being scaffolded. `templateCount` is the
  * number of templates the plan installs into that folder's `.ok/templates/`.
  * Derived from the plan we already fetched — no second round-trip — and honest
  * about re-scaffold: a fully-present folder (all in `skipped`) drops out.
@@ -44,11 +39,14 @@ function describeFolderCards(
     // share one lookup without a bare `includes` false-matching a folder whose
     // name is a suffix of another (`notes` vs `keynotes`).
     const templatesNeedle = `${folder.path}/.ok/templates/`;
-    const templateCount = plan.created.filter(
-      (e) =>
-        e.kind === 'file' &&
-        (e.path.startsWith(templatesNeedle) || e.path.includes(`/${templatesNeedle}`)),
-    ).length;
+    const templates = plan.created
+      .filter(
+        (e) =>
+          e.kind === 'file' &&
+          (e.path.startsWith(templatesNeedle) || e.path.includes(`/${templatesNeedle}`)),
+      )
+      .map((e) => basename(e.path));
+    const templateCount = templates.length;
     // A folder whose directory is being created OR whose templates are being
     // (re)installed is in-scope; one that's fully present (all in `skipped`)
     // isn't part of "what gets created", so it drops out.
@@ -56,7 +54,7 @@ function describeFolderCards(
       (e) => e.kind === 'folder' && (e.path === folder.path || e.path.endsWith(`/${folder.path}`)),
     );
     if (templateCount > 0 || folderCreated) {
-      folders.push({ path: folder.path, summary: folder.summary, templateCount });
+      folders.push({ path: folder.path, summary: folder.summary, templateCount, templates });
     }
   }
   return folders;
@@ -73,13 +71,27 @@ function describeFileCards(plan: OkScaffoldPlan): Array<{ path: string; name: st
     .map((e) => ({ path: e.path, name: basename(e.path) }));
 }
 
+/** One preview row — a folder, root file, or the pack skill. */
+interface PreviewRow {
+  key: string;
+  icon: LucideIcon;
+  name: string;
+  title?: string;
+  pill?: string;
+  /** When set, the pill reveals these names (the folder's templates) on hover/focus. */
+  pillTooltip?: string[];
+  description?: string;
+}
+
 /**
- * Renders `plan.created` as a card grid — folder / file / skill cards, each led
- * by its type icon (no badge; the icon plus the folder trailing-slash carry the
- * type). The summary line breaks the plan into the counts a user can actually
- * observe in the app — folders, files, skill, templates — keeping templates
- * distinct from files. The full nested layout lives behind a "Files & folders"
- * disclosure; the folder cards above carry the human-readable summaries.
+ * Renders `plan.created` grouped into typed sections — Folders, Files, Skill —
+ * each a scannable list of rows. A row leads with a full-height icon block
+ * (icon + folder trailing-slash carry the type — never color alone), then the
+ * name, an optional count pill (folders' template count), and the human-readable
+ * summary inline. The top summary header breaks the plan into the counts a user
+ * can actually observe in the app — folders, files, skill, templates. Only
+ * user-visible paths surface; `.ok/` internals (templates, frontmatter) never
+ * appear.
  */
 export function CreatedItemsList({
   plan,
@@ -89,14 +101,13 @@ export function CreatedItemsList({
   selectedPack: OkSeedPackInfo | undefined;
 }) {
   const { t } = useLingui();
-  const [treeOpen, setTreeOpen] = useState(false);
   const folders = describeFolderCards(plan, selectedPack);
   const files = describeFileCards(plan);
   const skill = plan.packSkill?.pending ? plan.packSkill : undefined;
-  // Derive the counts straight from the cards so the summary line always
+  // Derive the counts straight from the rows so the summary line always
   // matches what's rendered. Counting `plan.created` directly diverged in
   // subfolder mode, where the plan also creates the parent folder (e.g.
-  // `brain/`) — a real folder entry with no card, which read as one extra.
+  // `brain/`) — a real folder entry with no row, which read as one extra.
   const folderCount = folders.length;
   const fileCount = files.length;
   const templateCount = folders.reduce((sum, f) => sum + f.templateCount, 0);
@@ -155,13 +166,70 @@ export function CreatedItemsList({
       : null,
   ].filter((c): c is { key: string; n: number; label: string } => c !== null);
 
+  // Rows are grouped into their own sections (Folders / Files / Skill) rather
+  // than one flat list. Every row is a leaf the user will actually see in the
+  // sidebar; `.ok/` internals are filtered out upstream. `pill` is the count
+  // badge — folders carry their template count; files and the skill carry none
+  // (the section header already names the type, so a "Skill" pill is redundant).
+  const folderRows: PreviewRow[] = folders.map((folder) => ({
+    key: `folder:${folder.path}`,
+    icon: Folder,
+    name: `${basename(folder.path)}/`,
+    pill:
+      folder.templateCount > 0
+        ? t`${plural(folder.templateCount, { one: '# template', other: '# templates' })}`
+        : undefined,
+    pillTooltip: folder.templateCount > 0 ? folder.templates : undefined,
+    description: folder.summary || undefined,
+  }));
+  const fileRows: PreviewRow[] = files.map((file) => ({
+    key: `file:${file.path}`,
+    icon: File,
+    name: file.name,
+    title: file.name,
+    description: fileDescriptions[file.name],
+  }));
+  const skillRows: PreviewRow[] = skill
+    ? [
+        {
+          key: `skill:${skill.name}`,
+          icon: Hexagon,
+          // Drop the shared `open-knowledge-pack-` prefix (identical across
+          // packs, non-distinguishing) so the name reads + fits; full name
+          // stays on hover.
+          name: skillDisplayName(skill.name),
+          title: skill.name,
+          description: t`Guides your AI agents on how to work here.`,
+        },
+      ]
+    : [];
+
+  // Ordered, non-empty sections. Labels pluralize with their own count so a
+  // single item reads "Skill" / "File", not "Skills" / "Files".
+  const sections = [
+    {
+      key: 'folders',
+      label: t`${plural(folderRows.length, { one: 'Folder', other: 'Folders' })}`,
+      rows: folderRows,
+    },
+    {
+      key: 'files',
+      label: t`${plural(fileRows.length, { one: 'File', other: 'Files' })}`,
+      rows: fileRows,
+    },
+    {
+      // Only ever 0 or 1 pack skill, so no plural arm (the section is hidden
+      // when empty; when shown it's always exactly one).
+      key: 'skill',
+      label: t`Skill`,
+      rows: skillRows,
+    },
+  ].filter((s) => s.rows.length > 0);
+
   return (
-    <section className="@container/created space-y-2.5">
+    <section className="space-y-5">
       <div className="flex flex-wrap justify-between items-baseline gap-x-2 gap-y-0.5">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase font-mono tracking-wider text-primary">
-          <span aria-hidden="true" className="flex items-center justify-center">
-            ◇
-          </span>
+        <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase font-mono tracking-wider text-muted-foreground">
           <Trans>What gets created</Trans>
         </h3>
         {counts.length > 0 ? (
@@ -183,182 +251,75 @@ export function CreatedItemsList({
         ) : null}
       </div>
 
-      <div className="grid gap-3 @sm/created:grid-cols-2 @2xl/created:grid-cols-3">
-        {folders.map((folder) => (
-          <div
-            key={folder.path}
-            className="flex h-full min-w-0 flex-col gap-1.5 rounded-xl border border-border/60 bg-card p-3.5"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <Folder aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              <code className="min-w-0 truncate font-mono text-1sm font-medium text-foreground/90">
-                {basename(folder.path)}/
-              </code>
-              <span className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-                {t`${plural(folder.templateCount, { one: '# template', other: '# templates' })}`}
-              </span>
-            </div>
-            {folder.summary ? (
-              <p className="text-1sm leading-relaxed text-muted-foreground">{folder.summary}</p>
-            ) : null}
+      <div className="space-y-5">
+        {sections.map((section) => (
+          <div key={section.key} className="space-y-2.5">
+            <h4 className="flex items-baseline gap-2 text-xs font-medium uppercase font-mono tracking-wider text-muted-foreground">
+              <span>{section.label}</span>
+              <span className="text-muted-foreground/50">{section.rows.length}</span>
+            </h4>
+            <ul className="space-y-4">
+              {section.rows.map((row) => {
+                const Icon = row.icon;
+                return (
+                  <li key={row.key} className="flex items-center gap-3">
+                    {/* Type is
+                        carried by the icon + folder trailing-slash, never color
+                        alone. aria-hidden — the section header + name convey it. */}
+                    <div
+                      aria-hidden="true"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60"
+                    >
+                      <Icon className="size-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      {/* Name + pill share the top line (pill aligned to the
+                          name, at the row's right edge); the description drops
+                          below, spanning the full width under both. */}
+                      <div className="flex items-center gap-2">
+                        <code
+                          className="min-w-0 flex-1 truncate font-mono text-1sm text-foreground/90"
+                          title={row.title}
+                        >
+                          {row.name}
+                        </code>
+                        {row.pill ? (
+                          row.pillTooltip && row.pillTooltip.length > 0 ? (
+                            <Tooltip>
+                              {/* Default (button) trigger so the template names are
+                                  keyboard-reachable, not hover-only. cursor-help
+                                  signals there's more to see. */}
+                              <TooltipTrigger className="shrink-0 cursor-help rounded bg-transparent p-0 font-mono text-2xs uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground/70 focus-visible:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                                {row.pill}
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <ul className="space-y-0.5 text-left font-mono">
+                                  {row.pillTooltip.map((name) => (
+                                    <li key={name}>{name}</li>
+                                  ))}
+                                </ul>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="shrink-0 font-mono text-2xs uppercase tracking-wide text-muted-foreground">
+                              {row.pill}
+                            </span>
+                          )
+                        ) : null}
+                      </div>
+                      {row.description ? (
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                          {row.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         ))}
-
-        {files.map((file) => {
-          const description = fileDescriptions[file.name];
-          return (
-            <div
-              key={file.path}
-              className="flex h-full min-w-0 flex-col gap-1.5 rounded-xl border border-border/60 bg-card p-3.5"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <File aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                <code
-                  className="min-w-0 truncate font-mono text-1sm font-medium text-foreground/90"
-                  title={file.name}
-                >
-                  {file.name}
-                </code>
-              </div>
-              {description ? (
-                <p className="text-1sm leading-relaxed text-muted-foreground">{description}</p>
-              ) : null}
-            </div>
-          );
-        })}
-
-        {skill ? (
-          <div className="flex h-full min-w-0 flex-col gap-1.5 rounded-xl border border-border/60 bg-card p-3.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <Hexagon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              {/* Drop the shared `open-knowledge-pack-` prefix (the identical,
-                  non-distinguishing part) so the pack name reads + fits; full
-                  name stays on hover. The `Skill` pill mirrors the folder card's
-                  template-count pill so the type is unmistakable. */}
-              <code
-                className="min-w-0 truncate font-mono text-1sm font-medium text-foreground/90"
-                title={skill.name}
-              >
-                {skillDisplayName(skill.name)}
-              </code>
-              <span className="ml-auto shrink-0 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-                <Trans>Skill</Trans>
-              </span>
-            </div>
-            <p className="text-1sm leading-relaxed text-muted-foreground">
-              <Trans>Guides your AI agents on how to work here.</Trans>
-            </p>
-          </div>
-        ) : null}
       </div>
-
-      {plan.created.length > 0 ? (
-        <Collapsible
-          open={treeOpen}
-          onOpenChange={setTreeOpen}
-          className="overflow-hidden rounded-md border border-border/60 bg-muted/20"
-        >
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="link-muted"
-              size="sm"
-              className="h-auto w-full justify-between rounded-none px-3 py-2 font-mono text-xs uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
-            >
-              <Trans>Files & folders</Trans>
-              <ChevronDown
-                aria-hidden="true"
-                className={cn('size-3.5 transition-transform', treeOpen && 'rotate-180')}
-              />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t border-border/60">
-              <CreatedItemsTree plan={plan} />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      ) : null}
     </section>
-  );
-}
-
-function describeCreatedItems(plan: OkScaffoldPlan): CreatedItem[] {
-  const folders: CreatedItem[] = plan.created
-    .filter((e) => e.kind === 'folder')
-    .map((e) => ({ kind: 'folder', name: `${e.path}/` }));
-  const files: CreatedItem[] = plan.created
-    .filter((e) => e.kind === 'file')
-    .map((e) => ({ kind: 'file', name: e.path }));
-  return [...folders, ...files];
-}
-
-/**
- * The full indented file tree (folders + every `.ok/` internal), rendered
- * inside the "Show file tree" disclosure — the enclosing `Collapsible` owns the
- * border + background. Pure structure: folder purpose lives on the cards above.
- */
-function CreatedItemsTree({ plan }: { plan: OkScaffoldPlan }) {
-  const { t } = useLingui();
-  const items = describeCreatedItems(plan);
-
-  // Lex sort gives parent-before-children via string-prefix comparison.
-  const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
-
-  // Re-scaffold may put the parent in `plan.skipped`; anchoring depth +
-  // displayed name to PRESENT ancestors keeps guide bars from descending
-  // into rows that never render.
-  const presentPaths = new Set(sorted.map((i) => i.name.replace(/\/$/, '')));
-
-  return (
-    <ul aria-label={t`Items to be created`} className="py-1.5">
-      {sorted.map((item) => {
-        const pathKey = item.name.replace(/\/$/, '');
-        const segments = pathKey.split('/');
-        // Count present ancestors (= visual depth); the leaf name spans
-        // any absent intermediate segments so the row stays unambiguous.
-        let depth = 0;
-        let nearestPresentEnd = 0;
-        for (let i = 1; i < segments.length; i++) {
-          const ancestor = segments.slice(0, i).join('/');
-          if (presentPaths.has(ancestor)) {
-            depth++;
-            nearestPresentEnd = i;
-          }
-        }
-        const displayName =
-          segments.slice(nearestPresentEnd).join('/') + (item.kind === 'folder' ? '/' : '');
-        const isFolder = item.kind === 'folder';
-        return (
-          <li
-            key={item.name}
-            className="relative flex min-w-0 items-center gap-1.5 py-1 pr-3"
-            style={{ paddingLeft: `${12 + depth * 16}px` }}
-          >
-            {/* Vertical guides at each present-ancestor depth (`+8`
-                  centers the 1px line within the 16px icon column). */}
-            {Array.from({ length: depth }, (_, i) => (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: depth-slot index is the stable identity (ancestor paths may include skipped segments)
-                key={`guide:${i}`}
-                aria-hidden="true"
-                className="absolute top-0 bottom-0 w-px bg-border/50"
-                style={{ left: `${12 + i * 16 + 8}px` }}
-              />
-            ))}
-            {isFolder ? (
-              <Folder
-                aria-hidden="true"
-                className="size-3.5 shrink-0 text-muted-foreground"
-                strokeWidth={1.5}
-              />
-            ) : (
-              // Spacer keeps file names aligned with sibling folder names.
-              <span aria-hidden="true" className="size-3.5 shrink-0" />
-            )}
-            <code className="font-mono text-1sm shrink-0 text-foreground/80">{displayName}</code>
-          </li>
-        );
-      })}
-    </ul>
   );
 }

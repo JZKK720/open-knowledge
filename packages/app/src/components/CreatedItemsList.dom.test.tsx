@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { OkScaffoldPlan, OkSeedPackInfo } from '@/lib/desktop-bridge-types';
 import { renderLinguiTemplate } from '@/test-utils/lingui-mock';
 
@@ -27,7 +28,13 @@ function pack(folders: Array<{ path: string; summary: string }>): OkSeedPackInfo
 
 async function renderList(plan: OkScaffoldPlan, selectedPack: OkSeedPackInfo) {
   const { CreatedItemsList } = await import('./CreatedItemsList');
-  render(<CreatedItemsList plan={plan} selectedPack={selectedPack} />);
+  // Folder rows with templates render a tooltip trigger, which needs the
+  // TooltipProvider the app installs at its root (main.tsx).
+  render(
+    <TooltipProvider>
+      <CreatedItemsList plan={plan} selectedPack={selectedPack} />
+    </TooltipProvider>,
+  );
 }
 
 /** The folder-count summary span renders as `<n> <label>` (e.g. "3 folders"). */

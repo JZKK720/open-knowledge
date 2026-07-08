@@ -767,7 +767,6 @@
     "IInnZo": ["Conflict"],
     "IKoTAC": ["Keep disabled"],
     "IN4UX8": ["Search (", ["searchShortcut"], ")"],
-    "INEQsp": ["Items to be created"],
     "IQPyrD": ["Missing page — click to create"],
     "IRv9cH": ["Cloned ", ["repoName"], "."],
     "IWGfGF": ["Checking your GitHub connection"],
@@ -1403,6 +1402,7 @@
     "Zf0w-R": [
       "Take a piece of writing from a rough idea to a finished draft to something you're ready to share. Good for blog posts, essays, or anything you want to move through clear stages."
     ],
+    "ZgGuA4": [["0", "plural", { "one": ["File"], "other": ["Files"] }]],
     "ZhhOwV": ["Quote"],
     "ZjtgI-": ["Command palette"],
     "Zon_qG": ["Mirror source <0>", ["label"], "</0>"],
@@ -2048,6 +2048,7 @@
     "pajIrl": ["Could not turn off the terminal: ", ["0"]],
     "pbwTg6": [["seconds"], "s ago"],
     "pckX1A": [["0", "plural", { "one": ["#", " use"], "other": ["#", " uses"] }]],
+    "pcqlQu": [["0", "plural", { "one": ["Folder"], "other": ["Folders"] }]],
     "pgq_xf": [["0"], "/", ["1"], " ", ["2"]],
     "phM8Kh": ["Found the repo but could not open the project. Please try again."],
     "pha01Y": ["Project-level pages with no incoming graph edges."],
@@ -2415,7 +2416,6 @@
     "zLGXna": ["No starter packs available."],
     "zLak8b": ["Activate new tab"],
     "zQBg2C": ["Move the current block up or down one position."],
-    "zTHnl4": ["Files & folders"],
     "zUhPuR": ["Open containing folder, ", ["hint"]],
     "zXj1rA": ["Search by meaning"],
     "zZ_I5K": ["Open project menu"],

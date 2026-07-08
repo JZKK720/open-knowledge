@@ -437,26 +437,24 @@ function SeedDialogBody({
 }) {
   const { t } = useLingui();
   if (phase.kind === 'loading') {
-    // Card-sized skeleton blocks in the same grid as the real cards, so the
-    // plan swaps in without a layout jump. Count tracks the pack's folders (the
-    // dominant card kind). `role="status"` so assistive tech hears it loading.
-    const cardCount = selectedPack?.folders.length ?? 6;
+    // Skeleton rows matching the real `CreatedItemsList` row shape (size-8 icon
+    // block, centered, + name/description lines), so the plan swaps in without a
+    // layout jump. Count tracks the pack's folders (the dominant row kind).
+    // `role="status"` so assistive tech hears it loading.
+    const rowCount = selectedPack?.folders.length ?? 6;
     return (
-      <section
-        className="@container/created"
-        role="status"
-        aria-busy="true"
-        aria-label={t`Loading preview`}
-      >
-        <div className="grid gap-3 @sm/created:grid-cols-2 @2xl/created:grid-cols-3">
-          {Array.from({ length: cardCount }, (_, i) => i).map((i) => (
-            <div
-              key={`seed-skeleton-${i}`}
-              aria-hidden="true"
-              className="h-20 animate-pulse rounded-xl bg-muted"
-            />
+      <section role="status" aria-busy="true" aria-label={t`Loading preview`}>
+        <ul className="space-y-2">
+          {Array.from({ length: rowCount }, (_, i) => i).map((i) => (
+            <li key={`seed-skeleton-${i}`} aria-hidden="true" className="flex items-center gap-3">
+              <div className="size-8 shrink-0 animate-pulse rounded-lg bg-muted" />
+              <div className="min-w-0 flex-1 py-0.5">
+                <span className="block h-3.5 w-28 animate-pulse rounded bg-muted" />
+                <span className="mt-2 block h-3 w-4/5 animate-pulse rounded bg-muted" />
+              </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
     );
   }
