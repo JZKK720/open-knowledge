@@ -239,6 +239,63 @@ test.describe('M6b first-launch MCP-wiring smoke (US-010)', () => {
     }
   });
 
+  test('startup PATH toast is anchored bottom-left and never covers consent Add/Skip', async ({
+    captureStderrFor,
+  }) => {
+    const tmpHome = createTmpHome('toast-position');
+    seedEditorDetectionDirs(tmpHome, ['.claude']);
+    try {
+      const app = await launchApp({ tmpHome });
+      captureStderrFor(app);
+      const window = await waitForConsentDialog(app);
+
+      // Deterministically seed the real "Added ok to your PATH" startup toast
+      // through the same `ok:onboarding:toast` IPC the app fires on first
+      // launch (payload mirrors the startup-reclaim path-installed leg). On
+      // developer machines the CLI is already on PATH, so the natural toast
+      // never fires — seeding makes this collision test machine-independent.
+      // The original regression (#2387/#2396) only reproduced on fresh CI
+      // installs, which is exactly how it slipped past review.
+      await app.evaluate(
+        ({ BrowserWindow }, payload) => {
+          for (const w of BrowserWindow.getAllWindows()) {
+            w.webContents.send('ok:onboarding:toast', payload);
+          }
+        },
+        {
+          kind: 'startup-reclaim',
+          mcp: { status: 'none' },
+          path: { status: 'installed', summary: 'Added ok to your PATH' },
+        },
+      );
+
+      // Contract: this toast renders in a bottom-LEFT toaster region. The
+      // consent dialog's Add/Skip footer is bottom-right, so a default
+      // (bottom-right) toast overlaps and steals those clicks. Asserting the
+      // region position pins the fix regardless of window size — if the
+      // `position: 'bottom-left'` in install-onboarding-toast.ts is dropped,
+      // sonner falls back to bottom-right and this fails.
+      await expect(
+        window.locator(
+          '[data-sonner-toaster][data-y-position="bottom"][data-x-position="left"] [data-sonner-toast]',
+        ),
+      ).toBeVisible();
+
+      // Belt-and-suspenders: Add stays clickable with the toast present
+      // (Playwright throws "intercepts pointer events" if a toast covers it)
+      // and consent still completes.
+      await window.getByTestId('mcp-consent-add').click();
+      await expect
+        .poll(() => readMarker(tmpHome), {
+          timeout: 15_000,
+          message: 'marker not written after Add click with startup toast present',
+        })
+        .not.toBeNull();
+    } finally {
+      forceRemove([], tmpHome);
+    }
+  });
+
   test('skip — writes configured:false marker and no editor configs', async ({
     captureStderrFor,
   }) => {

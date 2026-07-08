@@ -61,6 +61,12 @@ export function installOnboardingToastListener(opts: {
       const pathTouched = payload.path.status !== 'none';
       sonnerToast[hasFailure ? 'error' : 'success'](message, {
         duration: hasFailure || pathTouched ? STICKY_TOAST_DURATION_MS : TOAST_DURATION_MS,
+        // Anchor this startup toast bottom-left so it never covers a modal's
+        // primary action. It fires concurrently with the first-launch MCP
+        // consent dialog, whose Add/Skip footer is bottom-right; a default
+        // (bottom-right) toast overlaps and steals those clicks. Scoped to this
+        // toast only — the global toaster position is unchanged.
+        position: 'bottom-left',
       });
       return;
     }
